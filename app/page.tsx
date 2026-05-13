@@ -10,7 +10,25 @@ import { getDashboardData } from '@/lib/dashboard';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  searchParams?: Promise<{
+    saved?: string | string[];
+    updated?: string | string[];
+  }>;
+};
+
+function pickFirst(value?: string | string[]) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  const params = searchParams ? await searchParams : undefined;
+  const saved = pickFirst(params?.saved);
+  const updated = pickFirst(params?.updated);
   const dashboard = await getDashboardData();
 
   if (!dashboard) {
@@ -19,8 +37,13 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <DefaultStartScreenRedirect />
+      <DefaultStartScreenRedirect disabled={Boolean(saved || updated)} />
       <div className="app-page app-screen-wide flex min-w-0 flex-col gap-6 py-6">
+      {saved || updated ? (
+        <section className={`rounded-[24px] border px-4 py-3 text-sm ${saved ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-sky-200 bg-sky-50 text-sky-800'}`}>
+          {saved ? 'Meal saved. Today’s totals updated right away.' : 'Meal updated. Your latest totals are reflected here.'}
+        </section>
+      ) : null}
       <section className="grid min-w-0 gap-6 xl:grid-cols-[1.35fr_0.95fr]">
         <div className="app-card min-w-0 rounded-[32px] p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">

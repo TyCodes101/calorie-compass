@@ -19,51 +19,11 @@ export function buildClarificationDecision(analysis: MealAnalysis): Clarificatio
     };
   }
 
-  if (/\bprotein shake\b/i.test(analysis.normalizedText)) {
+  if (/\b(protein shake|pasta|salad|sandwich|tacos?|bowl)\b/i.test(analysis.normalizedText)) {
     return {
-      needsClarification: true,
-      question: 'What went in the protein shake, and about how much did you have?',
-      reason: 'meal_type',
-    };
-  }
-
-  if (/\bpasta\b/i.test(analysis.normalizedText)) {
-    return {
-      needsClarification: true,
-      question: 'What kind of pasta was it, about how much did you have, and was there any sauce or protein with it?',
-      reason: 'portion',
-    };
-  }
-
-  if (/\bsalad\b/i.test(analysis.normalizedText)) {
-    return {
-      needsClarification: true,
-      question: 'What kind of salad was it, about how much dressing did you use, and did it include any protein like chicken or steak?',
-      reason: 'meal_type',
-    };
-  }
-
-  if (/\bsandwich\b/i.test(analysis.normalizedText)) {
-    return {
-      needsClarification: true,
-      question: 'What kind of sandwich was it, about how large was it, and were there any sauces or cheese on it?',
-      reason: 'meal_type',
-    };
-  }
-
-  if (/\btacos?\b/i.test(analysis.normalizedText)) {
-    return {
-      needsClarification: true,
-      question: 'How many tacos did you have, and what were the main fillings or toppings?',
-      reason: 'meal_type',
-    };
-  }
-
-  if (/\bbowl\b/i.test(analysis.normalizedText)) {
-    return {
-      needsClarification: true,
-      question: 'What kind of bowl was it, and what were the main ingredients?',
-      reason: 'meal_type',
+      needsClarification: false,
+      question: null,
+      reason: 'none',
     };
   }
 

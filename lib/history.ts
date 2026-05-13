@@ -2,7 +2,25 @@ import { prisma } from '@/lib/prisma';
 import { isoDay } from '@/lib/date';
 import { summarizeStoredItems } from '@/lib/trust';
 
-export async function getMealHistory() {
+export type MealHistoryEntry = {
+  id: string;
+  title: string;
+  mealType: string;
+  time: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  trustedCount: number;
+  estimatedCount: number;
+};
+
+export type MealHistoryGroup = {
+  date: string;
+  meals: MealHistoryEntry[];
+};
+
+export async function getMealHistory(): Promise<MealHistoryGroup[]> {
   const user = await prisma.user.findFirst({
     orderBy: { createdAt: 'asc' },
     select: { id: true },
@@ -19,21 +37,7 @@ export async function getMealHistory() {
     take: 40,
   });
 
-  const grouped = new Map<
-    string,
-    Array<{
-      id: string;
-      title: string;
-      mealType: string;
-      time: string;
-      totalCalories: number;
-      totalProtein: number;
-      totalCarbs: number;
-      totalFat: number;
-      trustedCount: number;
-      estimatedCount: number;
-    }>
-  >();
+  const grouped = new Map<string, MealHistoryEntry[]>();
 
   for (const meal of meals) {
     const key = isoDay(meal.date);

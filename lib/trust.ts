@@ -18,7 +18,7 @@ export function getItemSourceLabel(item: TrustItemLike) {
     return item.source_name === 'Generic nutrition reference' ? 'Generic reference' : item.source_name || 'Generic reference';
   }
 
-  return 'Generic estimate';
+  return 'Estimated nutrition';
 }
 
 export function summarizeParsedItems(items: TrustItemLike[]) {

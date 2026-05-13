@@ -25,11 +25,11 @@ const cases = [
     minItems: 1,
   },
   {
-    label: 'bare protein shake remains ambiguous',
+    label: 'bare protein shake gets a default estimate',
     text: 'protein shake',
     mealType: 'snack' as const,
-    expectClarification: true,
-    minItems: 0,
+    expectClarification: false,
+    minItems: 1,
   },
   {
     label: 'vague chicken and rice',
@@ -39,11 +39,11 @@ const cases = [
     minItems: 0,
   },
   {
-    label: 'vague salad',
+    label: 'vague salad gets an estimate-first review',
     text: 'I had a salad',
     mealType: 'lunch' as const,
-    expectClarification: true,
-    minItems: 0,
+    expectClarification: false,
+    minItems: 1,
   },
   {
     label: 'mcdonalds combo meal',

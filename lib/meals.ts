@@ -23,17 +23,7 @@ function toMealType(value: SaveMealPayload['meal_type']) {
   return value.toUpperCase() as MealType;
 }
 
-export async function saveConfirmedMeal(payload: SaveMealPayload) {
-  const user = await getCurrentUserWithProfile();
-
-  if (!user) {
-    throw new Error('No user found. Complete onboarding first.');
-  }
-
-  if (!payload.items.length) {
-    throw new Error('Meal must include at least one item.');
-  }
-
+async function normalizeMealPayload(payload: SaveMealPayload) {
   const date = startOfDayUtc(payload.date ?? new Date());
   const mealType = toMealType(payload.meal_type);
   const persistableCatalogFoodIds = await getPersistableCatalogFoodIds(payload.items.map((item) => item.catalog_food_id ?? null));
@@ -57,7 +47,26 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
     catalogFoodId: item.catalog_food_id && persistableCatalogFoodIds.has(item.catalog_food_id) ? item.catalog_food_id : null,
   }));
 
-  const totals = sumNutrition(normalizedItems);
+  return {
+    date,
+    mealType,
+    normalizedItems,
+    totals: sumNutrition(normalizedItems),
+  };
+}
+
+export async function saveConfirmedMeal(payload: SaveMealPayload) {
+  const user = await getCurrentUserWithProfile();
+
+  if (!user) {
+    throw new Error('No user found. Complete onboarding first.');
+  }
+
+  if (!payload.items.length) {
+    throw new Error('Meal must include at least one item.');
+  }
+
+  const { date, mealType, normalizedItems, totals } = await normalizeMealPayload(payload);
 
   logWriteStart('meal.save', {
     userId: user.id,
@@ -126,6 +135,176 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
       userId: user.id,
       mealType,
       itemCount: normalizedItems.length,
+    });
+    throw error;
+  }
+}
+
+export async function updateSavedMeal(mealId: string, payload: SaveMealPayload) {
+  const user = await getCurrentUserWithProfile();
+
+  if (!user) {
+    throw new Error('No user found. Complete onboarding first.');
+  }
+
+  if (!payload.items.length) {
+    throw new Error('Meal must include at least one item.');
+  }
+
+  const existingMeal = await prisma.meal.findFirst({
+    where: {
+      id: mealId,
+      userId: user.id,
+    },
+    select: {
+      id: true,
+      date: true,
+    },
+  });
+
+  if (!existingMeal) {
+    throw new Error('Meal not found.');
+  }
+
+  const { date, mealType, normalizedItems, totals } = await normalizeMealPayload({
+    ...payload,
+    date: payload.date ?? existingMeal.date.toISOString(),
+  });
+
+  logWriteStart('meal.update', {
+    userId: user.id,
+    mealId,
+    mealType,
+    itemCount: normalizedItems.length,
+  });
+
+  try {
+    await prisma.$connect();
+    logConnectionReady('meal.update', {
+      userId: user.id,
+      mealId,
+    });
+
+    const meal = await prisma.$transaction(async (tx) => {
+      const updatedMeal = await tx.meal.update({
+        where: { id: existingMeal.id },
+        data: {
+          mealType,
+          date,
+          rawText: payload.raw_text ?? null,
+          notes: payload.notes ?? null,
+          confidenceScore: sanitizeNumber(payload.confidence_score),
+          totalCalories: totals.calories,
+          totalProtein: totals.protein,
+          totalCarbs: totals.carbs,
+          totalFat: totals.fat,
+          totalFiber: totals.fiber,
+          totalSugar: totals.sugar,
+          totalSodium: totals.sodium,
+          items: {
+            deleteMany: {},
+            create: normalizedItems,
+          },
+        },
+        include: { items: true },
+      });
+
+      await upsertDailyLogForDate(user.id, existingMeal.date, tx);
+
+      if (existingMeal.date.getTime() !== date.getTime()) {
+        await upsertDailyLogForDate(user.id, date, tx);
+      }
+
+      if (payload.source_reusable_meal_id) {
+        await tx.reusableMeal.updateMany({
+          where: {
+            id: payload.source_reusable_meal_id,
+            userId: user.id,
+          },
+          data: {
+            lastUsedAt: new Date(),
+          },
+        });
+      }
+
+      return updatedMeal;
+    });
+
+    logWriteSuccess('meal.update', {
+      userId: user.id,
+      mealId: meal.id,
+      itemCount: meal.items.length,
+      totalCalories: meal.totalCalories,
+    });
+
+    return meal;
+  } catch (error) {
+    logWriteFailure('meal.update', error, {
+      userId: user.id,
+      mealId,
+      itemCount: normalizedItems.length,
+    });
+    throw error;
+  }
+}
+
+export async function deleteSavedMeal(mealId: string) {
+  const user = await getCurrentUserWithProfile();
+
+  if (!user) {
+    throw new Error('No user found. Complete onboarding first.');
+  }
+
+  const existingMeal = await prisma.meal.findFirst({
+    where: {
+      id: mealId,
+      userId: user.id,
+    },
+    select: {
+      id: true,
+      date: true,
+      rawText: true,
+    },
+  });
+
+  if (!existingMeal) {
+    throw new Error('Meal not found.');
+  }
+
+  logWriteStart('meal.delete', {
+    userId: user.id,
+    mealId,
+  });
+
+  try {
+    await prisma.$connect();
+    logConnectionReady('meal.delete', {
+      userId: user.id,
+      mealId,
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.meal.delete({
+        where: { id: existingMeal.id },
+      });
+
+      await upsertDailyLogForDate(user.id, existingMeal.date, tx);
+    });
+
+    logWriteSuccess('meal.delete', {
+      userId: user.id,
+      mealId,
+    });
+
+    return {
+      id: existingMeal.id,
+      rawText: existingMeal.rawText,
+      date: existingMeal.date,
+    };
+  } catch (error) {
+    logWriteFailure('meal.delete', error, {
+      userId: user.id,
+      mealId,
     });
     throw error;
   }

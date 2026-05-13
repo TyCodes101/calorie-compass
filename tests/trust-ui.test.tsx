@@ -38,7 +38,7 @@ describe('trust ui helpers', () => {
       source_type: 'AI_ESTIMATE',
       source_name: 'Fallback estimate',
       catalog_food_id: null,
-    })).toBe('Generic estimate');
+    })).toBe('Estimated nutrition');
   });
 
   it('summarizes verified versus estimated coverage in calm language', () => {

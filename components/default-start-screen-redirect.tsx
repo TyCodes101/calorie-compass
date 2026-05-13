@@ -12,12 +12,12 @@ const routeMap = {
   insights: '/insights',
 } as const;
 
-export function DefaultStartScreenRedirect() {
+export function DefaultStartScreenRedirect({ disabled = false }: { disabled?: boolean }) {
   const router = useRouter();
 
   useEffect(() => {
     try {
-      if (window.sessionStorage.getItem(sessionKey) === '1') {
+      if (disabled || window.location.search || window.sessionStorage.getItem(sessionKey) === '1') {
         return;
       }
 
@@ -33,7 +33,7 @@ export function DefaultStartScreenRedirect() {
     } catch {
       window.sessionStorage.setItem(sessionKey, '1');
     }
-  }, [router]);
+  }, [disabled, router]);
 
   return null;
 }

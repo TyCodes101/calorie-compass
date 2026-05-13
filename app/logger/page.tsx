@@ -5,6 +5,7 @@ type LoggerPageProps = {
   searchParams?: Promise<{
     mealId?: string | string[];
     favorite?: string | string[];
+    editMealId?: string | string[];
   }>;
 };
 
@@ -20,10 +21,12 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
   const params = searchParams ? await searchParams : undefined;
   const mealId = pickFirst(params?.mealId);
   const reusableMealId = pickFirst(params?.favorite);
+  const editMealId = pickFirst(params?.editMealId);
   const initialDraft = await getLoggerDraft({
     mealId,
     reusableMealId,
+    editMealId,
   });
 
-  return <MealLoggerClient key={reusableMealId ?? mealId ?? 'new'} initialDraft={initialDraft} />;
+  return <MealLoggerClient key={editMealId ?? reusableMealId ?? mealId ?? 'new'} initialDraft={initialDraft} />;
 }

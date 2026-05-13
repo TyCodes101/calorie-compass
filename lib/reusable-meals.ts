@@ -56,6 +56,18 @@ export type LoggerDraft = {
   confidenceScore: number;
   items: ParsedFoodItem[];
   sourceReusableMealId: string | null;
+  editingMealId: string | null;
+};
+
+export type FavoriteMealSummary = {
+  id: string;
+  title: string;
+  rawText: string | null;
+  mealType: MealTypeValue;
+  lastUsedAt: string | null;
+  totalCalories: number;
+  itemCount: number;
+  trustedCount: number;
 };
 
 function titleFromMeal(rawText: string | null | undefined, mealType: MealTypeValue) {
@@ -142,6 +154,7 @@ export function buildLoggerDraftFromMealRecord(record: {
     confidenceScore: record.confidenceScore ?? 0.82,
     items: record.items.map(toParsedFoodItem),
     sourceReusableMealId: null,
+    editingMealId: null,
   };
 }
 
@@ -162,10 +175,11 @@ export function buildLoggerDraftFromReusableMealRecord(record: {
     confidenceScore: record.confidenceScore ?? 0.82,
     items: record.items.map(toParsedFoodItem),
     sourceReusableMealId: record.id,
+    editingMealId: null,
   };
 }
 
-export async function getLoggerDraft(options: { mealId?: string | null; reusableMealId?: string | null }) {
+export async function getLoggerDraft(options: { mealId?: string | null; reusableMealId?: string | null; editMealId?: string | null }) {
   const user = await getCurrentUserWithProfile();
   if (!user) {
     return null;
@@ -182,6 +196,23 @@ export async function getLoggerDraft(options: { mealId?: string | null; reusable
 
     if (reusableMeal) {
       return buildLoggerDraftFromReusableMealRecord(reusableMeal);
+    }
+  }
+
+  if (options.editMealId) {
+    const meal = await prisma.meal.findFirst({
+      where: {
+        id: options.editMealId,
+        userId: user.id,
+      },
+      include: { items: true },
+    });
+
+    if (meal) {
+      return {
+        ...buildLoggerDraftFromMealRecord(meal),
+        editingMealId: meal.id,
+      };
     }
   }
 
@@ -320,7 +351,53 @@ export async function markReusableMealUsed(reusableMealId: string | null | undef
   });
 }
 
-export async function getFavoriteMeals() {
+export async function removeFavoriteMealTemplate(reusableMealId: string) {
+  const user = await getCurrentUserWithProfile();
+  if (!user) {
+    throw new Error('No user found. Complete onboarding first.');
+  }
+
+  logWriteStart('favorite.delete', {
+    userId: user.id,
+    reusableMealId,
+  });
+
+  try {
+    await prisma.$connect();
+    logConnectionReady('favorite.delete', {
+      userId: user.id,
+    });
+
+    const favorite = await prisma.reusableMeal.findFirst({
+      where: {
+        id: reusableMealId,
+        userId: user.id,
+      },
+      select: { id: true },
+    });
+
+    if (!favorite) {
+      throw new Error('Favorite meal not found.');
+    }
+
+    await prisma.reusableMeal.delete({
+      where: { id: favorite.id },
+    });
+
+    logWriteSuccess('favorite.delete', {
+      userId: user.id,
+      reusableMealId,
+    });
+  } catch (error) {
+    logWriteFailure('favorite.delete', error, {
+      userId: user.id,
+      reusableMealId,
+    });
+    throw error;
+  }
+}
+
+export async function getFavoriteMeals(): Promise<FavoriteMealSummary[]> {
   const user = await getCurrentUserWithProfile();
   if (!user) {
     return [];
