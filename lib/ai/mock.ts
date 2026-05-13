@@ -2,28 +2,9 @@ import { analyzeMealText } from '@/lib/ai/analyze';
 import { buildClarificationDecision } from '@/lib/ai/clarification';
 import { scoreMealConfidence } from '@/lib/ai/confidence';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
+import { finalizeParsedResponse, inferMealType, makeClarificationResponse } from '@/lib/ai/orchestrate';
 import { getRestaurantEstimate } from '@/lib/ai/restaurant';
 import type { ParsedMealResponse } from '@/lib/ai/types';
-
-function inferMealType(mealType?: string, text?: string) {
-  if (mealType && ['breakfast', 'lunch', 'dinner', 'snack'].includes(mealType)) return mealType;
-  const lower = (text ?? '').toLowerCase();
-  if (lower.includes('breakfast') || lower.includes('egg')) return 'breakfast';
-  if (lower.includes('dinner')) return 'dinner';
-  if (lower.includes('snack') || lower.includes('shake')) return 'snack';
-  return 'lunch';
-}
-
-function makeClarificationResponse(question: string, mealType: string, confidenceScore: number) {
-  return normalizeParsedMealResponse({
-    needs_clarification: true,
-    clarifying_question: question,
-    meal_type: mealType,
-    confidence_score: confidenceScore,
-    items: [],
-    totals: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 },
-  });
-}
 
 export function getMockParsedMeal(text: string, mealType?: string): ParsedMealResponse {
   const lower = text.toLowerCase();
@@ -77,11 +58,5 @@ export function getMockParsedMeal(text: string, mealType?: string): ParsedMealRe
     });
   }
 
-  return {
-    ...response,
-    confidence_score: scoreMealConfidence(analysis, {
-      itemCount: response.items.length,
-      clarificationNeeded: false,
-    }),
-  };
+  return finalizeParsedResponse(analysis, response);
 }

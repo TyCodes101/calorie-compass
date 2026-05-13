@@ -30,7 +30,14 @@ function detectBrand(text: string): KnownBrand {
 
 function detectCategory(text: string, brand: KnownBrand): MealCategory {
   if (brand) return 'restaurant';
-  if (/\b(shake|protein bar|banana|apple|yogurt|eggs?)\b/i.test(text) && !separatorRegex.test(text)) return 'simple';
+
+  const simpleMealPattern = /\b(protein shake|shake|smoothie|protein bar|banana|apple|yogurt|eggs?)\b/i;
+  const simpleAddonPattern = /\b(almond milk|milk|water|berries|banana|ice)\b/i;
+
+  if (simpleMealPattern.test(text) && (!separatorRegex.test(text) || simpleAddonPattern.test(text))) {
+    return 'simple';
+  }
+
   if (/\b(chicken|rice|pasta|salmon|beef|steak|potato|veggies|vegetables|omelet|sandwich|salad|bowl|tacos?)\b/i.test(text)) return 'home_cooked';
   return 'unknown';
 }
