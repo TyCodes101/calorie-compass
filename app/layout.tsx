@@ -16,15 +16,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body className={`${inter.className} antialiased`}>
-        <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(52,211,153,0.18),transparent_28%),radial-gradient(circle_at_right,_rgba(56,189,248,0.12),transparent_32%),linear-gradient(180deg,#020617_0%,#020617_42%,#06111f_100%)] pb-28 text-white">
-          <header className="border-b border-white/5">
+        <div className="app-shell pb-32 text-slate-900">
+          <header className="border-b border-slate-200/80 bg-white/70 backdrop-blur">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
               <div>
-                <p className="text-xs uppercase tracking-[0.35em] text-emerald-300">Calorie Compass</p>
-                <h1 className="mt-2 text-lg font-semibold text-white">AI nutrition tracking, built to feel calm and fast.</h1>
+                <p className="app-section-label">Calorie Compass</p>
+                <h1 className="mt-2 text-lg font-semibold text-slate-950">Nutrition tracking that feels calm, clear, and trustworthy.</h1>
               </div>
-              <div className="hidden rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 md:block">
-                Nutrition estimates are approximate.
+              <div className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm md:block">
+                Verified when trusted sources are available.
               </div>
             </div>
           </header>

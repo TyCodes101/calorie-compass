@@ -8,12 +8,12 @@ export default async function OnboardingPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
-      <section className="rounded-[32px] border border-white/10 bg-white/6 p-6 shadow-2xl shadow-emerald-950/20 backdrop-blur">
+      <section className="app-card rounded-[32px] p-6">
         <div className="mb-6 space-y-3">
-          <p className="text-xs uppercase tracking-[0.3em] text-emerald-300">Onboarding</p>
-          <h1 className="text-3xl font-semibold text-white">Set up your daily targets</h1>
-          <p className="max-w-2xl text-sm leading-6 text-slate-300">
-            Start simple. These basics make the dashboard useful right away, and you can fine-tune them later as Calorie Compass grows.
+          <p className="app-section-label">Onboarding</p>
+          <h1 className="text-3xl font-semibold text-slate-950">A lighter start for daily nutrition tracking</h1>
+          <p className="max-w-2xl text-sm leading-6 text-slate-600">
+            Start simple. These basics make the dashboard useful right away, and your first AI meal log is right on the other side.
           </p>
         </div>
         <OnboardingForm

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { addDaysUtc, getPastSevenDays, isoDay, startOfDayUtc } from '@/lib/date';
 import { calculateRemainingCalories, toProgressValue, zeroTotals } from '@/lib/nutrition';
+import { summarizeStoredItems } from '@/lib/trust';
 
 export async function upsertDailyLogForDate(userId: string, inputDate: Date | string) {
   const date = startOfDayUtc(inputDate);
@@ -105,6 +106,8 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
 
   const carbGoal = Math.round((profile.dailyCalorieGoal * 0.4) / 4);
   const fatGoal = Math.round((profile.dailyCalorieGoal * 0.3) / 9);
+  const todayItems = recentMeals.flatMap((meal) => meal.items);
+  const trustSummary = summarizeStoredItems(todayItems);
 
   return {
     user: {
@@ -134,18 +137,32 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       carbs: toProgressValue(dailyLog.carbs, carbGoal),
       fat: toProgressValue(dailyLog.fat, fatGoal),
     },
-    recentMeals: recentMeals.map((meal) => ({
-      id: meal.id,
-      mealType: meal.mealType.toLowerCase(),
-      rawText: meal.rawText,
-      totalCalories: Math.round(meal.totalCalories),
-      totalProtein: Math.round(meal.totalProtein),
-      totalCarbs: Math.round(meal.totalCarbs),
-      totalFat: Math.round(meal.totalFat),
-      confidenceScore: meal.confidenceScore,
-      itemCount: meal.items.length,
-      createdAt: meal.createdAt.toISOString(),
-    })),
+    trustSummary: {
+      ...trustSummary,
+      headline: trustSummary.totalCount ? `${trustSummary.coveragePercent}% of today’s foods verified` : 'No meals logged yet',
+      detail: trustSummary.totalCount
+        ? `${trustSummary.trustedCount} foods matched trusted nutrition sources`
+        : 'Log a meal to see verified coverage and source transparency.',
+    },
+    recentMeals: recentMeals.map((meal) => {
+      const summary = summarizeStoredItems(meal.items);
+
+      return {
+        id: meal.id,
+        mealType: meal.mealType.toLowerCase(),
+        rawText: meal.rawText,
+        totalCalories: Math.round(meal.totalCalories),
+        totalProtein: Math.round(meal.totalProtein),
+        totalCarbs: Math.round(meal.totalCarbs),
+        totalFat: Math.round(meal.totalFat),
+        confidenceScore: meal.confidenceScore,
+        itemCount: meal.items.length,
+        createdAt: meal.createdAt.toISOString(),
+        trustedCount: summary.trustedCount,
+        estimatedCount: summary.estimatedCount,
+        coverageSummary: summary.coverageSummary,
+      };
+    }),
     weeklyTrend,
     disclaimer: 'Nutrition estimates are approximate and are not medical or dietary advice.',
   };
