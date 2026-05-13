@@ -3,6 +3,8 @@ import { ActivityLevel, GoalType } from '@prisma/client';
 import { OnboardingForm } from '@/components/onboarding-form';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 
+export const dynamic = 'force-dynamic';
+
 export default async function OnboardingPage() {
   const user = await getCurrentUserWithProfile();
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { getDashboardData } from '@/lib/dashboard';
 import { saveConfirmedMeal } from '@/lib/meals';
+import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
 
 const parsedItemSchema = z.object({
   food_name: z.string().min(1),
@@ -41,12 +42,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ meal, dashboard });
   } catch (error) {
-    console.error('save meal error', error);
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Unable to save meal.',
-      },
-      { status: 400 }
-    );
+    logWriteFailure('meal.route', error);
+
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: getPersistenceErrorMessage('meal') }, { status: 400 });
+    }
+
+    if (isDatabaseWriteError(error)) {
+      return NextResponse.json({ error: getPersistenceErrorMessage('meal') }, { status: 500 });
+    }
+
+    return NextResponse.json({ error: getPersistenceErrorMessage('meal') }, { status: 500 });
   }
 }

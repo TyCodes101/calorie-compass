@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
 import { createFavoriteMealTemplate } from '@/lib/reusable-meals';
 
 const parsedItemSchema = z.object({
@@ -37,12 +38,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ favoriteMeal });
   } catch (error) {
-    console.error('save reusable meal error', error);
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Unable to save favorite meal.',
-      },
-      { status: 400 }
-    );
+    logWriteFailure('favorite.route', error);
+
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: getPersistenceErrorMessage('favorite') }, { status: 400 });
+    }
+
+    if (isDatabaseWriteError(error)) {
+      return NextResponse.json({ error: getPersistenceErrorMessage('favorite') }, { status: 500 });
+    }
+
+    return NextResponse.json({ error: getPersistenceErrorMessage('favorite') }, { status: 500 });
   }
 }

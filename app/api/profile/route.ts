@@ -2,6 +2,7 @@ import { ActivityLevel, GoalType } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
 import { saveProfile } from '@/lib/profile';
 
 const requestSchema = z.object({
@@ -22,7 +23,16 @@ export async function POST(request: Request) {
     const user = await saveProfile(payload);
     return NextResponse.json(user);
   } catch (error) {
-    console.error('save profile error', error);
-    return NextResponse.json({ error: 'Unable to save profile.' }, { status: 400 });
+    logWriteFailure('profile.route', error);
+
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: getPersistenceErrorMessage('profile') }, { status: 400 });
+    }
+
+    if (isDatabaseWriteError(error)) {
+      return NextResponse.json({ error: getPersistenceErrorMessage('profile') }, { status: 500 });
+    }
+
+    return NextResponse.json({ error: getPersistenceErrorMessage('profile') }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 # Calorie Compass
 
-Calorie Compass is a mobile-first AI-powered nutrition tracking app built with Next.js, TypeScript, Tailwind CSS, Prisma, SQLite, and the OpenAI API.
+Calorie Compass is a mobile-first AI-powered nutrition tracking app built with Next.js, TypeScript, Tailwind CSS, Prisma, Postgres, and the OpenAI API.
 
 ## Current MVP
 This first build focuses on the core loop:
@@ -15,14 +15,15 @@ This first build focuses on the core loop:
 - TypeScript
 - Tailwind CSS
 - Prisma
-- SQLite
+- Postgres
 - OpenAI API
 
 ## Environment variables
 Create a `.env` file in the project root:
 
 ```bash
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://user:password@host:5432/database?sslmode=require"
+DATABASE_URL_UNPOOLED="postgresql://user:password@host:5432/database?sslmode=require"
 OPENAI_API_KEY="your_openai_api_key"
 ```
 
@@ -45,6 +46,7 @@ Open the local URL shown by Next.js.
 ## Demo behavior
 - If `OPENAI_API_KEY` is present, the meal parsing route calls OpenAI.
 - If `OPENAI_API_KEY` is missing, the app falls back to a deterministic demo parser for local development.
+- Production persistence expects a writable Postgres database. Bundled SQLite files are not suitable for serverless writes.
 
 ## Demo user and sample meals
 The seed script creates a demo user named **Tyler** with example entries like:

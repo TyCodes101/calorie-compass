@@ -5,6 +5,8 @@ import { TrustBadge } from '@/components/trust-badge';
 import { getMealHistory } from '@/lib/history';
 import { getFavoriteMeals } from '@/lib/reusable-meals';
 
+export const dynamic = 'force-dynamic';
+
 export default async function HistoryPage() {
   const [history, favorites] = await Promise.all([getMealHistory(), getFavoriteMeals()]);
 

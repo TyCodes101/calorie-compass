@@ -7,6 +7,8 @@ import { TrustBadge } from '@/components/trust-badge';
 import { TrendChartPanel } from '@/components/trend-chart-panel';
 import { getDashboardData } from '@/lib/dashboard';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const dashboard = await getDashboardData();
 

@@ -1,14 +1,18 @@
+import { PrismaClient, type Prisma } from '@prisma/client';
+
 import { prisma } from '@/lib/prisma';
 import { addDaysUtc, startOfDayUtc } from '@/lib/date';
 import { buildWeeklyTrendFromMeals, sumMealTotals } from '@/lib/dashboard-aggregation';
 import { calculateRemainingCalories, toProgressValue } from '@/lib/nutrition';
 import { summarizeStoredItems } from '@/lib/trust';
 
-export async function upsertDailyLogForDate(userId: string, inputDate: Date | string) {
+type DashboardWriteClient = PrismaClient | Prisma.TransactionClient;
+
+export async function upsertDailyLogForDate(userId: string, inputDate: Date | string, db: DashboardWriteClient = prisma) {
   const date = startOfDayUtc(inputDate);
   const nextDay = addDaysUtc(date, 1);
 
-  const meals = await prisma.meal.findMany({
+  const meals = await db.meal.findMany({
     where: {
       userId,
       date: {
@@ -29,7 +33,7 @@ export async function upsertDailyLogForDate(userId: string, inputDate: Date | st
 
   const totals = sumMealTotals(meals);
 
-  return prisma.dailyLog.upsert({
+  return db.dailyLog.upsert({
     where: {
       userId_date: {
         userId,

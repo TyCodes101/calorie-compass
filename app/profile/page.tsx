@@ -3,6 +3,8 @@ import { Bell, ChevronRight, Dumbbell, Goal, Ruler, UserRound } from 'lucide-rea
 
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 
+export const dynamic = 'force-dynamic';
+
 const sections = [
   { label: 'Goals', icon: Goal },
   { label: 'Nutrition targets', icon: Dumbbell },

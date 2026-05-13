@@ -1,5 +1,6 @@
 import type { ParsedFoodItem } from '@/lib/ai/types';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
+import { logConnectionReady, logWriteFailure, logWriteStart, logWriteSuccess } from '@/lib/persistence';
 import { prisma } from '@/lib/prisma';
 
 type MealTypeValue = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -208,50 +209,88 @@ export async function createFavoriteMealTemplate(payload: TemplateInput & { reus
 
   const template = buildReusableMealTemplateInput(payload);
 
-  if (payload.reusable_meal_id) {
-    const existing = await prisma.reusableMeal.findFirst({
-      where: {
-        id: payload.reusable_meal_id,
-        userId: user.id,
-      },
-      select: { id: true },
+  logWriteStart('favorite.save', {
+    userId: user.id,
+    mealType: template.mealType,
+    itemCount: template.items.length,
+    existingFavoriteId: payload.reusable_meal_id ?? null,
+  });
+
+  try {
+    await prisma.$connect();
+    logConnectionReady('favorite.save', {
+      userId: user.id,
+      mealType: template.mealType,
     });
 
-    if (!existing) {
-      throw new Error('Favorite meal not found.');
+    if (payload.reusable_meal_id) {
+      const existing = await prisma.reusableMeal.findFirst({
+        where: {
+          id: payload.reusable_meal_id,
+          userId: user.id,
+        },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        throw new Error('Favorite meal not found.');
+      }
+
+      const updatedFavorite = await prisma.reusableMeal.update({
+        where: { id: existing.id },
+        data: {
+          title: template.title,
+          rawText: template.rawText,
+          mealType: template.mealType,
+          confidenceScore: template.confidenceScore,
+          isFavorite: true,
+          items: {
+            deleteMany: {},
+            create: template.items,
+          },
+        },
+        include: { items: true },
+      });
+
+      logWriteSuccess('favorite.save', {
+        userId: user.id,
+        favoriteId: updatedFavorite.id,
+        updated: true,
+      });
+
+      return updatedFavorite;
     }
 
-    return prisma.reusableMeal.update({
-      where: { id: existing.id },
+    const createdFavorite = await prisma.reusableMeal.create({
       data: {
+        userId: user.id,
         title: template.title,
         rawText: template.rawText,
         mealType: template.mealType,
         confidenceScore: template.confidenceScore,
         isFavorite: true,
         items: {
-          deleteMany: {},
           create: template.items,
         },
       },
       include: { items: true },
     });
-  }
 
-  return prisma.reusableMeal.create({
-    data: {
+    logWriteSuccess('favorite.save', {
       userId: user.id,
-      title: template.title,
-      rawText: template.rawText,
-      mealType: template.mealType,
-      confidenceScore: template.confidenceScore,
-      isFavorite: true,
-      items: {
-        create: template.items,
-      },
-    },
-    include: { items: true },
-  });
+      favoriteId: createdFavorite.id,
+      updated: false,
+    });
+
+    return createdFavorite;
+  } catch (error) {
+    logWriteFailure('favorite.save', error, {
+      userId: user.id,
+      existingFavoriteId: payload.reusable_meal_id ?? null,
+      itemCount: template.items.length,
+    });
+    throw error;
+  }
 }
 
 export async function markReusableMealUsed(reusableMealId: string | null | undefined) {

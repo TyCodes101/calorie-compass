@@ -103,58 +103,68 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
     setSaving(true);
     setError(null);
 
-    const response = await fetch('/api/meals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        meal_type: mealType,
-        confidence_score: confidenceScore,
-        raw_text: mealText,
-        source_reusable_meal_id: sourceReusableMealId,
-        items,
-      }),
-    });
+    try {
+      const response = await fetch('/api/meals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meal_type: mealType,
+          confidence_score: confidenceScore,
+          raw_text: mealText,
+          source_reusable_meal_id: sourceReusableMealId,
+          items,
+        }),
+      });
 
-    const data = await response.json();
+      const data = await response.json().catch(() => null);
 
-    if (!response.ok) {
+      if (!response.ok) {
+        setSaving(false);
+        setError(data?.error ?? 'We couldn’t save your meal right now. Please try again.');
+        return;
+      }
+
+      router.push('/?saved=1');
+      router.refresh();
+    } catch {
       setSaving(false);
-      setError(data.error ?? 'Could not save this meal.');
-      return;
+      setError('We couldn’t save your meal right now. Please try again.');
     }
-
-    router.push('/?saved=1');
-    router.refresh();
   }
 
   async function saveFavorite() {
     setFavoriteSaving(true);
     setError(null);
 
-    const response = await fetch('/api/reusable-meals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        reusable_meal_id: sourceReusableMealId,
-        meal_type: mealType,
-        confidence_score: confidenceScore,
-        raw_text: mealText,
-        items,
-      }),
-    });
+    try {
+      const response = await fetch('/api/reusable-meals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reusable_meal_id: sourceReusableMealId,
+          meal_type: mealType,
+          confidence_score: confidenceScore,
+          raw_text: mealText,
+          items,
+        }),
+      });
 
-    const data = await response.json();
+      const data = await response.json().catch(() => null);
 
-    if (!response.ok) {
+      if (!response.ok) {
+        setFavoriteSaving(false);
+        setError(data?.error ?? 'We couldn’t save your favorite right now. Please try again.');
+        return;
+      }
+
+      setSourceReusableMealId(data?.favoriteMeal?.id ?? sourceReusableMealId);
+      setFavoriteState('saved');
       setFavoriteSaving(false);
-      setError(data.error ?? 'Could not save this favorite meal.');
-      return;
+      router.refresh();
+    } catch {
+      setFavoriteSaving(false);
+      setError('We couldn’t save your favorite right now. Please try again.');
     }
-
-    setSourceReusableMealId(data.favoriteMeal?.id ?? sourceReusableMealId);
-    setFavoriteState('saved');
-    setFavoriteSaving(false);
-    router.refresh();
   }
 
   function updateItem(index: number, key: keyof ParsedFoodItem, value: string | number | null) {

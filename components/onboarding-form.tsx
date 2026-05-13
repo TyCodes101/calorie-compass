@@ -53,20 +53,27 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
     setSaving(true);
     setError(null);
 
-    const response = await fetch('/api/profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
 
-    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setSaving(false);
+        setError(data?.error ?? 'We couldn’t save your profile right now. Please try again.');
+        return;
+      }
+
+      router.push('/logger');
+      router.refresh();
+    } catch {
       setSaving(false);
-      setError('Could not save onboarding. Please check your details and try again.');
-      return;
+      setError('We couldn’t save your profile right now. Please try again.');
     }
-
-    router.push('/logger');
-    router.refresh();
   }
 
   return (
