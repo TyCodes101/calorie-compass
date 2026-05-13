@@ -7,13 +7,27 @@ export type NutritionSourceRecord = (typeof catalogData.sources)[number];
 export type CatalogFoodRecord = (typeof catalogData.foods)[number];
 
 const unitAliases: Record<string, string> = {
+  bottles: 'bottle',
+  bowls: 'bowl',
+  cans: 'can',
   cups: 'cup',
+  eggs: 'egg',
+  handfuls: 'handful',
   ounces: 'oz',
   ounce: 'oz',
-  slices: 'slice',
-  eggs: 'egg',
+  pieces: 'piece',
+  scoops: 'scoop',
   servings: 'serving',
+  slices: 'slice',
 };
+
+function normalizeSearchText(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function normalizeUnit(unit: string) {
   return unitAliases[unit.toLowerCase()] ?? unit.toLowerCase();
@@ -32,14 +46,46 @@ export function findCatalogFoodById(id: string) {
 }
 
 export function findCatalogFoodByAlias(alias: string, brand?: string | null) {
-  const normalized = alias.trim().toLowerCase();
+  const normalized = normalizeSearchText(alias);
   return (
     getCatalogFoods().find(
       (food) =>
-        (!brand || (food.brand ?? '').toLowerCase() === brand.toLowerCase()) &&
-        food.aliases.some((candidate) => candidate.toLowerCase() === normalized)
+        (!brand || normalizeSearchText(food.brand ?? '') === normalizeSearchText(brand)) &&
+        food.aliases.some((candidate) => normalizeSearchText(candidate) === normalized)
     ) ?? null
   );
+}
+
+export function findCatalogFoodByBestMatch(text: string, brand?: string | null) {
+  const normalized = normalizeSearchText(text);
+  if (!normalized) {
+    return null;
+  }
+
+  const candidates = getCatalogFoods()
+    .filter((food) => !brand || normalizeSearchText(food.brand ?? '') === normalizeSearchText(brand))
+    .flatMap((food) =>
+      food.aliases.map((alias) => {
+        const normalizedAlias = normalizeSearchText(alias);
+        const exact = normalizedAlias === normalized;
+        const includes = normalized.includes(normalizedAlias) || normalizedAlias.includes(normalized);
+        return {
+          food,
+          normalizedAlias,
+          exact,
+          includes,
+        };
+      })
+    )
+    .filter((candidate) => candidate.exact || candidate.includes)
+    .sort((left, right) => {
+      if (left.exact !== right.exact) {
+        return left.exact ? -1 : 1;
+      }
+      return right.normalizedAlias.length - left.normalizedAlias.length;
+    });
+
+  return candidates[0]?.food ?? null;
 }
 
 function formatSourceNote(food: CatalogFoodRecord) {
@@ -70,6 +116,21 @@ export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit
     source_type: (source?.sourceType as ParsedFoodItem['source_type']) ?? null,
     source_name: source?.name ?? null,
     catalog_food_id: food.id,
+  };
+}
+
+export function scaleParsedFoodItem(item: ParsedFoodItem, factor: number, unitOverride?: string): ParsedFoodItem {
+  return {
+    ...item,
+    quantity: Math.round(item.quantity * factor * 100) / 100,
+    unit: unitOverride ?? item.unit,
+    calories: Math.round(item.calories * factor * 100) / 100,
+    protein: Math.round(item.protein * factor * 100) / 100,
+    carbs: Math.round(item.carbs * factor * 100) / 100,
+    fat: Math.round(item.fat * factor * 100) / 100,
+    fiber: Math.round(item.fiber * factor * 100) / 100,
+    sugar: Math.round(item.sugar * factor * 100) / 100,
+    sodium: Math.round(item.sodium * factor * 100) / 100,
   };
 }
 

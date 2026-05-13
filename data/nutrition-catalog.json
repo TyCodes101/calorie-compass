@@ -39,6 +39,118 @@
       "brand": null,
       "citation": "Reference values for common foods and serving sizes",
       "notes": "Used for first-wave generic food matching"
+    },
+    {
+      "id": "pandaexpress_official",
+      "name": "Panda Express official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Panda Express",
+      "citation": "Panda Express standard menu nutrition reference",
+      "notes": "Used for balanced trust-core restaurant matching"
+    },
+    {
+      "id": "subway_official",
+      "name": "Subway official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Subway",
+      "citation": "Subway standard menu nutrition reference",
+      "notes": "Used for balanced trust-core restaurant matching"
+    },
+    {
+      "id": "tacobell_official",
+      "name": "Taco Bell official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Taco Bell",
+      "citation": "Taco Bell standard menu nutrition reference",
+      "notes": "Used for balanced trust-core restaurant matching"
+    },
+    {
+      "id": "wendys_official",
+      "name": "Wendy's official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Wendy's",
+      "citation": "Wendy's standard menu nutrition reference",
+      "notes": "Used for balanced trust-core restaurant matching"
+    },
+    {
+      "id": "cava_official",
+      "name": "CAVA official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "CAVA",
+      "citation": "CAVA standard menu nutrition reference",
+      "notes": "Used for balanced trust-core restaurant matching"
+    },
+    {
+      "id": "panera_official",
+      "name": "Panera official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Panera",
+      "citation": "Panera standard menu nutrition reference",
+      "notes": "Used for balanced trust-core restaurant matching"
+    },
+    {
+      "id": "fairlife_reference",
+      "name": "Fairlife nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Fairlife",
+      "citation": "Fairlife branded nutrition reference",
+      "notes": "Used for branded packaged food matching"
+    },
+    {
+      "id": "corepower_reference",
+      "name": "Core Power nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Core Power",
+      "citation": "Core Power branded nutrition reference",
+      "notes": "Used for branded packaged food matching"
+    },
+    {
+      "id": "quest_reference",
+      "name": "Quest nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Quest",
+      "citation": "Quest branded nutrition reference",
+      "notes": "Used for branded packaged food matching"
+    },
+    {
+      "id": "premierprotein_reference",
+      "name": "Premier Protein nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Premier Protein",
+      "citation": "Premier Protein branded nutrition reference",
+      "notes": "Used for branded packaged food matching"
+    },
+    {
+      "id": "gatorade_reference",
+      "name": "Gatorade nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Gatorade",
+      "citation": "Gatorade branded nutrition reference",
+      "notes": "Used for branded packaged food matching"
+    },
+    {
+      "id": "celsius_reference",
+      "name": "Celsius nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Celsius",
+      "citation": "Celsius branded nutrition reference",
+      "notes": "Used for branded packaged food matching"
+    },
+    {
+      "id": "cocacola_reference",
+      "name": "Coca-Cola nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Coca-Cola",
+      "citation": "Coca-Cola branded nutrition reference",
+      "notes": "Used for branded packaged food matching"
+    },
+    {
+      "id": "oikos_reference",
+      "name": "Oikos nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Oikos",
+      "citation": "Oikos branded nutrition reference",
+      "notes": "Used for branded packaged food matching"
     }
   ],
   "foods": [
@@ -57,7 +169,10 @@
       "sodium": 350,
       "sourceId": "chipotle_official",
       "active": true,
-      "aliases": ["chipotle white rice", "white rice"]
+      "aliases": [
+        "chipotle white rice",
+        "white rice"
+      ]
     },
     {
       "id": "chipotle_chicken",
@@ -74,7 +189,10 @@
       "sodium": 310,
       "sourceId": "chipotle_official",
       "active": true,
-      "aliases": ["chipotle chicken", "chicken"]
+      "aliases": [
+        "chipotle chicken",
+        "chicken"
+      ]
     },
     {
       "id": "chipotle_cheese",
@@ -91,7 +209,10 @@
       "sodium": 185,
       "sourceId": "chipotle_official",
       "active": true,
-      "aliases": ["chipotle cheese", "cheese"]
+      "aliases": [
+        "chipotle cheese",
+        "cheese"
+      ]
     },
     {
       "id": "chipotle_corn_salsa",
@@ -108,7 +229,11 @@
       "sodium": 330,
       "sourceId": "chipotle_official",
       "active": true,
-      "aliases": ["chipotle corn salsa", "corn salsa", "corn"]
+      "aliases": [
+        "chipotle corn salsa",
+        "corn salsa",
+        "corn"
+      ]
     },
     {
       "id": "chipotle_lettuce",
@@ -125,7 +250,10 @@
       "sodium": 5,
       "sourceId": "chipotle_official",
       "active": true,
-      "aliases": ["chipotle lettuce", "lettuce"]
+      "aliases": [
+        "chipotle lettuce",
+        "lettuce"
+      ]
     },
     {
       "id": "chipotle_green_salsa",
@@ -142,7 +270,11 @@
       "sodium": 260,
       "sourceId": "chipotle_official",
       "active": true,
-      "aliases": ["chipotle green salsa", "green salsa", "tomatillo green salsa"]
+      "aliases": [
+        "chipotle green salsa",
+        "green salsa",
+        "tomatillo green salsa"
+      ]
     },
     {
       "id": "starbucks_bacon_gouda",
@@ -159,7 +291,11 @@
       "sodium": 760,
       "sourceId": "starbucks_official",
       "active": true,
-      "aliases": ["starbucks bacon gouda sandwich", "bacon gouda", "bacon gouda sandwich"]
+      "aliases": [
+        "starbucks bacon gouda sandwich",
+        "bacon gouda",
+        "bacon gouda sandwich"
+      ]
     },
     {
       "id": "starbucks_latte_tall",
@@ -176,7 +312,11 @@
       "sodium": 115,
       "sourceId": "starbucks_official",
       "active": true,
-      "aliases": ["starbucks latte tall", "tall latte", "latte"]
+      "aliases": [
+        "starbucks latte tall",
+        "tall latte",
+        "latte"
+      ]
     },
     {
       "id": "starbucks_latte_grande",
@@ -193,7 +333,10 @@
       "sodium": 150,
       "sourceId": "starbucks_official",
       "active": true,
-      "aliases": ["starbucks latte grande", "grande latte"]
+      "aliases": [
+        "starbucks latte grande",
+        "grande latte"
+      ]
     },
     {
       "id": "starbucks_latte_venti",
@@ -210,7 +353,10 @@
       "sodium": 200,
       "sourceId": "starbucks_official",
       "active": true,
-      "aliases": ["starbucks latte venti", "venti latte"]
+      "aliases": [
+        "starbucks latte venti",
+        "venti latte"
+      ]
     },
     {
       "id": "chickfila_sandwich",
@@ -227,7 +373,11 @@
       "sodium": 1460,
       "sourceId": "chickfila_official",
       "active": true,
-      "aliases": ["chick-fil-a chicken sandwich", "chick fil a sandwich", "chicken sandwich"]
+      "aliases": [
+        "chick-fil-a chicken sandwich",
+        "chick fil a sandwich",
+        "chicken sandwich"
+      ]
     },
     {
       "id": "chickfila_nuggets_8",
@@ -244,7 +394,11 @@
       "sodium": 760,
       "sourceId": "chickfila_official",
       "active": true,
-      "aliases": ["chick-fil-a nuggets", "nuggets", "8 count nuggets"]
+      "aliases": [
+        "chick-fil-a nuggets",
+        "nuggets",
+        "8 count nuggets"
+      ]
     },
     {
       "id": "chickfila_nuggets_12",
@@ -261,7 +415,10 @@
       "sodium": 1140,
       "sourceId": "chickfila_official",
       "active": true,
-      "aliases": ["12 count nuggets", "12 ct nuggets"]
+      "aliases": [
+        "12 count nuggets",
+        "12 ct nuggets"
+      ]
     },
     {
       "id": "chickfila_waffle_fries",
@@ -278,7 +435,10 @@
       "sodium": 240,
       "sourceId": "chickfila_official",
       "active": true,
-      "aliases": ["waffle fries", "fries"]
+      "aliases": [
+        "waffle fries",
+        "fries"
+      ]
     },
     {
       "id": "mcdonalds_cheeseburger",
@@ -295,7 +455,11 @@
       "sodium": 720,
       "sourceId": "mcdonalds_official",
       "active": true,
-      "aliases": ["mcdonald's cheeseburger", "mcdonalds cheeseburger", "cheeseburger"]
+      "aliases": [
+        "mcdonald's cheeseburger",
+        "mcdonalds cheeseburger",
+        "cheeseburger"
+      ]
     },
     {
       "id": "mcdonalds_fries",
@@ -312,7 +476,11 @@
       "sodium": 260,
       "sourceId": "mcdonalds_official",
       "active": true,
-      "aliases": ["mcdonald's fries", "mcdonalds fries", "fries"]
+      "aliases": [
+        "mcdonald's fries",
+        "mcdonalds fries",
+        "fries"
+      ]
     },
     {
       "id": "mcdonalds_soft_drink",
@@ -329,7 +497,12 @@
       "sodium": 20,
       "sourceId": "mcdonalds_official",
       "active": true,
-      "aliases": ["coke", "sprite", "soft drink", "drink"]
+      "aliases": [
+        "coke",
+        "sprite",
+        "soft drink",
+        "drink"
+      ]
     },
     {
       "id": "generic_large_egg",
@@ -346,7 +519,11 @@
       "sodium": 70,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["egg", "eggs", "scrambled eggs"]
+      "aliases": [
+        "egg",
+        "eggs",
+        "scrambled eggs"
+      ]
     },
     {
       "id": "generic_cooked_white_rice",
@@ -363,7 +540,11 @@
       "sodium": 0,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["white rice", "cooked white rice", "rice"]
+      "aliases": [
+        "white rice",
+        "cooked white rice",
+        "rice"
+      ]
     },
     {
       "id": "generic_grilled_chicken_breast",
@@ -380,7 +561,12 @@
       "sodium": 25,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["grilled chicken breast", "chicken breast", "grilled chicken", "chicken"]
+      "aliases": [
+        "grilled chicken breast",
+        "chicken breast",
+        "grilled chicken",
+        "chicken"
+      ]
     },
     {
       "id": "generic_cooked_pasta",
@@ -397,7 +583,11 @@
       "sodium": 1,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["pasta", "cooked pasta", "noodles"]
+      "aliases": [
+        "pasta",
+        "cooked pasta",
+        "noodles"
+      ]
     },
     {
       "id": "generic_oats",
@@ -414,7 +604,10 @@
       "sodium": 0,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["oats", "oatmeal"]
+      "aliases": [
+        "oats",
+        "oatmeal"
+      ]
     },
     {
       "id": "generic_banana",
@@ -431,7 +624,9 @@
       "sodium": 1,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["banana"]
+      "aliases": [
+        "banana"
+      ]
     },
     {
       "id": "generic_whey_protein",
@@ -448,7 +643,11 @@
       "sodium": 120,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["whey protein", "protein powder", "protein shake"]
+      "aliases": [
+        "whey protein",
+        "protein powder",
+        "protein shake"
+      ]
     },
     {
       "id": "generic_almond_milk",
@@ -465,7 +664,9 @@
       "sodium": 170,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["almond milk"]
+      "aliases": [
+        "almond milk"
+      ]
     },
     {
       "id": "generic_bread",
@@ -482,7 +683,11 @@
       "sodium": 160,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["bread", "toast", "sourdough toast"]
+      "aliases": [
+        "bread",
+        "toast",
+        "sourdough toast"
+      ]
     },
     {
       "id": "generic_cheese",
@@ -499,7 +704,320 @@
       "sodium": 180,
       "sourceId": "generic_reference",
       "active": true,
-      "aliases": ["cheese", "slice of cheese"]
+      "aliases": [
+        "cheese",
+        "slice of cheese"
+      ]
+    },
+    {
+      "id": "chickfila_waffle_fries_large",
+      "canonicalName": "Chick-fil-A Waffle Potato Fries Large",
+      "brand": "Chick-fil-A",
+      "servingQuantity": 1,
+      "servingUnit": "large order",
+      "calories": 550,
+      "protein": 7,
+      "carbs": 64,
+      "fat": 27,
+      "fiber": 6,
+      "sugar": 1,
+      "sodium": 420,
+      "sourceId": "chickfila_official",
+      "active": true,
+      "aliases": [
+        "large chick-fil-a fries",
+        "large chick fil a fries",
+        "large waffle fries",
+        "large fries"
+      ]
+    },
+    {
+      "id": "pandaexpress_orange_chicken",
+      "canonicalName": "Panda Express Orange Chicken",
+      "brand": "Panda Express",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 490,
+      "protein": 25,
+      "carbs": 51,
+      "fat": 23,
+      "fiber": 2,
+      "sugar": 19,
+      "sodium": 820,
+      "sourceId": "pandaexpress_official",
+      "active": true,
+      "aliases": [
+        "panda express orange chicken",
+        "orange chicken"
+      ]
+    },
+    {
+      "id": "subway_turkey_6in",
+      "canonicalName": "Subway Turkey 6-Inch",
+      "brand": "Subway",
+      "servingQuantity": 1,
+      "servingUnit": "sub",
+      "calories": 280,
+      "protein": 18,
+      "carbs": 46,
+      "fat": 4,
+      "fiber": 5,
+      "sugar": 7,
+      "sodium": 760,
+      "sourceId": "subway_official",
+      "active": true,
+      "aliases": [
+        "subway turkey 6 inch",
+        "6 inch turkey sub",
+        "turkey sub"
+      ]
+    },
+    {
+      "id": "tacobell_crunchy_taco",
+      "canonicalName": "Taco Bell Crunchy Taco",
+      "brand": "Taco Bell",
+      "servingQuantity": 1,
+      "servingUnit": "taco",
+      "calories": 170,
+      "protein": 8,
+      "carbs": 13,
+      "fat": 9,
+      "fiber": 3,
+      "sugar": 1,
+      "sodium": 310,
+      "sourceId": "tacobell_official",
+      "active": true,
+      "aliases": [
+        "taco bell crunchy taco",
+        "crunchy taco"
+      ]
+    },
+    {
+      "id": "wendys_spicy_chicken_sandwich",
+      "canonicalName": "Wendy's Spicy Chicken Sandwich",
+      "brand": "Wendy's",
+      "servingQuantity": 1,
+      "servingUnit": "sandwich",
+      "calories": 490,
+      "protein": 28,
+      "carbs": 49,
+      "fat": 21,
+      "fiber": 2,
+      "sugar": 6,
+      "sodium": 1080,
+      "sourceId": "wendys_official",
+      "active": true,
+      "aliases": [
+        "wendy's spicy chicken sandwich",
+        "wendys spicy chicken sandwich",
+        "spicy chicken sandwich"
+      ]
+    },
+    {
+      "id": "cava_grilled_chicken",
+      "canonicalName": "CAVA Grilled Chicken",
+      "brand": "CAVA",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 240,
+      "protein": 28,
+      "carbs": 2,
+      "fat": 13,
+      "fiber": 0,
+      "sugar": 0,
+      "sodium": 440,
+      "sourceId": "cava_official",
+      "active": true,
+      "aliases": [
+        "cava grilled chicken",
+        "cava chicken",
+        "grilled chicken"
+      ]
+    },
+    {
+      "id": "panera_mac_cheese",
+      "canonicalName": "Panera Mac and Cheese",
+      "brand": "Panera",
+      "servingQuantity": 1,
+      "servingUnit": "bowl",
+      "calories": 480,
+      "protein": 17,
+      "carbs": 40,
+      "fat": 28,
+      "fiber": 2,
+      "sugar": 7,
+      "sodium": 1160,
+      "sourceId": "panera_official",
+      "active": true,
+      "aliases": [
+        "panera mac and cheese",
+        "panera mac cheese",
+        "mac and cheese"
+      ]
+    },
+    {
+      "id": "fairlife_protein_shake",
+      "canonicalName": "Fairlife Protein Shake",
+      "brand": "Fairlife",
+      "servingQuantity": 1,
+      "servingUnit": "bottle",
+      "calories": 150,
+      "protein": 30,
+      "carbs": 4,
+      "fat": 3,
+      "fiber": 0,
+      "sugar": 2,
+      "sodium": 190,
+      "sourceId": "fairlife_reference",
+      "active": true,
+      "aliases": [
+        "fairlife protein shake",
+        "fairlife shake",
+        "fairlife nutrition plan shake"
+      ]
+    },
+    {
+      "id": "corepower_protein_shake",
+      "canonicalName": "Core Power Protein Shake",
+      "brand": "Core Power",
+      "servingQuantity": 1,
+      "servingUnit": "bottle",
+      "calories": 170,
+      "protein": 26,
+      "carbs": 8,
+      "fat": 3.5,
+      "fiber": 0,
+      "sugar": 7,
+      "sodium": 230,
+      "sourceId": "corepower_reference",
+      "active": true,
+      "aliases": [
+        "core power",
+        "core power protein shake",
+        "fairlife core power"
+      ]
+    },
+    {
+      "id": "premier_protein_shake",
+      "canonicalName": "Premier Protein Shake",
+      "brand": "Premier Protein",
+      "servingQuantity": 1,
+      "servingUnit": "bottle",
+      "calories": 160,
+      "protein": 30,
+      "carbs": 5,
+      "fat": 3,
+      "fiber": 1,
+      "sugar": 1,
+      "sodium": 230,
+      "sourceId": "premierprotein_reference",
+      "active": true,
+      "aliases": [
+        "premier protein",
+        "premier protein shake"
+      ]
+    },
+    {
+      "id": "quest_protein_bar",
+      "canonicalName": "Quest Protein Bar",
+      "brand": "Quest",
+      "servingQuantity": 1,
+      "servingUnit": "bar",
+      "calories": 200,
+      "protein": 20,
+      "carbs": 22,
+      "fat": 8,
+      "fiber": 14,
+      "sugar": 1,
+      "sodium": 210,
+      "sourceId": "quest_reference",
+      "active": true,
+      "aliases": [
+        "quest bar",
+        "quest protein bar"
+      ]
+    },
+    {
+      "id": "gatorade_bottle",
+      "canonicalName": "Gatorade",
+      "brand": "Gatorade",
+      "servingQuantity": 1,
+      "servingUnit": "bottle",
+      "calories": 140,
+      "protein": 0,
+      "carbs": 36,
+      "fat": 0,
+      "fiber": 0,
+      "sugar": 34,
+      "sodium": 270,
+      "sourceId": "gatorade_reference",
+      "active": true,
+      "aliases": [
+        "gatorade",
+        "gatorade bottle"
+      ]
+    },
+    {
+      "id": "celsius_energy_drink",
+      "canonicalName": "Celsius Energy Drink",
+      "brand": "Celsius",
+      "servingQuantity": 1,
+      "servingUnit": "can",
+      "calories": 10,
+      "protein": 0,
+      "carbs": 2,
+      "fat": 0,
+      "fiber": 0,
+      "sugar": 0,
+      "sodium": 10,
+      "sourceId": "celsius_reference",
+      "active": true,
+      "aliases": [
+        "celsius",
+        "celsius energy drink"
+      ]
+    },
+    {
+      "id": "coke_zero_can",
+      "canonicalName": "Coke Zero",
+      "brand": "Coca-Cola",
+      "servingQuantity": 1,
+      "servingUnit": "can",
+      "calories": 0,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 0,
+      "fiber": 0,
+      "sugar": 0,
+      "sodium": 40,
+      "sourceId": "cocacola_reference",
+      "active": true,
+      "aliases": [
+        "coke zero",
+        "coke zero can",
+        "coca cola zero"
+      ]
+    },
+    {
+      "id": "oikos_triple_zero_yogurt",
+      "canonicalName": "Oikos Triple Zero Greek Yogurt",
+      "brand": "Oikos",
+      "servingQuantity": 1,
+      "servingUnit": "cup",
+      "calories": 90,
+      "protein": 15,
+      "carbs": 7,
+      "fat": 0,
+      "fiber": 6,
+      "sugar": 5,
+      "sodium": 65,
+      "sourceId": "oikos_reference",
+      "active": true,
+      "aliases": [
+        "oikos triple zero",
+        "oikos yogurt",
+        "oikos greek yogurt"
+      ]
     }
   ]
 }

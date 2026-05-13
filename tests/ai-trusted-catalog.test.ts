@@ -18,6 +18,20 @@ describe('trusted nutrition catalog matching', () => {
     expect(response?.totals.calories).toBe(780);
   });
 
+  it('normalizes half portions for restaurant bowls', () => {
+    const response = getTrustedCatalogEstimate(
+      'half a Chipotle bowl with white rice, chicken, cheese, corn salsa, lettuce, and green salsa',
+      'lunch'
+    );
+
+    expect(response).not.toBeNull();
+    expect(response?.items).toHaveLength(6);
+    expect(response?.items.every((item) => item.source_type === 'OFFICIAL_RESTAURANT')).toBe(true);
+    expect(response?.items.find((item) => /rice/i.test(item.food_name))?.quantity).toBe(0.5);
+    expect(response?.items.find((item) => /chicken/i.test(item.food_name))?.quantity).toBe(0.5);
+    expect(response?.totals.calories).toBe(300);
+  });
+
   it('matches generic foods with quantity scaling from the trusted catalog', () => {
     const response = getTrustedCatalogEstimate('3 scrambled eggs and 2 slices of toast', 'breakfast');
 
@@ -29,6 +43,17 @@ describe('trusted nutrition catalog matching', () => {
     expect(response?.totals.calories).toBe(390);
   });
 
+  it('matches packaged protein drinks to trusted branded entries', () => {
+    const response = getTrustedCatalogEstimate('Fairlife protein shake', 'snack');
+
+    expect(response).not.toBeNull();
+    expect(response?.items).toHaveLength(1);
+    expect(response?.items[0]?.is_trusted).toBe(true);
+    expect(response?.items[0]?.source_type).toBe('GENERIC_REFERENCE');
+    expect(response?.items[0]?.source_name).toMatch(/fairlife/i);
+    expect(response?.items[0]?.food_name).toMatch(/fairlife/i);
+  });
+
   it('supports mixed trusted and estimated outputs for partially matched meals', () => {
     const response = getTrustedCatalogEstimate('3 eggs and hash browns', 'breakfast');
 
@@ -36,6 +61,26 @@ describe('trusted nutrition catalog matching', () => {
     expect(response?.items.some((item) => item.is_trusted)).toBe(true);
     expect(response?.items.some((item) => item.source_type === 'AI_ESTIMATE')).toBe(true);
     expect(response?.totals.calories).toBeGreaterThan(210);
+  });
+
+  it('supports stronger portion-aware restaurant matching', () => {
+    const response = getTrustedCatalogEstimate('large Chick-fil-A fries', 'lunch');
+
+    expect(response).not.toBeNull();
+    expect(response?.items).toHaveLength(1);
+    expect(response?.items[0]?.is_trusted).toBe(true);
+    expect(response?.items[0]?.source_type).toBe('OFFICIAL_RESTAURANT');
+    expect(response?.items[0]?.unit).toMatch(/large/i);
+    expect(response?.totals.calories).toBeGreaterThan(450);
+  });
+
+  it('keeps homemade mixed meals usable with partial trusted matching', () => {
+    const response = getTrustedCatalogEstimate('homemade chicken Alfredo', 'dinner');
+
+    expect(response).not.toBeNull();
+    expect(response?.items.some((item) => item.is_trusted)).toBe(true);
+    expect(response?.items.some((item) => item.source_type === 'AI_ESTIMATE')).toBe(true);
+    expect(response?.totals.calories).toBeGreaterThan(400);
   });
 });
 
@@ -48,5 +93,14 @@ describe('trusted catalog integration', () => {
     expect(response.items.every((item) => item.is_trusted)).toBe(true);
     expect(response.items.every((item) => item.source_name)).toBeTruthy();
     expect(response.totals.calories).toBe(150);
+  });
+
+  it('prefers trusted branded matching over generic fallback for packaged drinks', () => {
+    const response = getMockParsedMeal('Fairlife protein shake', 'snack');
+
+    expect(response.needs_clarification).toBe(false);
+    expect(response.items).toHaveLength(1);
+    expect(response.items[0]?.is_trusted).toBe(true);
+    expect(response.items[0]?.food_name).toMatch(/fairlife/i);
   });
 });
