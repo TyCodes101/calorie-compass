@@ -7,20 +7,30 @@ import { getMockParsedMeal } from '@/lib/ai/mock';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import { finalizeParsedResponse, inferMealType, shouldUseDeterministicRestaurantEstimate } from '@/lib/ai/orchestrate';
 import { getRestaurantEstimate } from '@/lib/ai/restaurant';
-import { getTrustedCatalogEstimate } from '@/lib/ai/trusted';
+import { resolveNutritionEstimate, type NutritionLabelInput } from '@/lib/nutrition/resolver';
 import type { ParsedMealResponse } from '@/lib/ai/types';
 
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
 
-export async function parseMealText(text: string, mealType?: string): Promise<ParsedMealResponse> {
+export async function parseMealText(
+  text: string,
+  mealType?: string,
+  options?: { barcode?: string | null; nutritionLabel?: NutritionLabelInput | null }
+): Promise<ParsedMealResponse> {
   const analysis = analyzeMealText(text);
   const clarification = buildClarificationDecision(analysis);
   const inferredMealType = inferMealType(mealType, text);
 
   if (!clarification.needsClarification) {
-    const trustedEstimate = getTrustedCatalogEstimate(text, inferredMealType);
-    if (trustedEstimate) {
-      return finalizeParsedResponse(analysis, trustedEstimate);
+    const resolvedEstimate = await resolveNutritionEstimate({
+      text,
+      mealType: inferredMealType,
+      barcode: options?.barcode,
+      nutritionLabel: options?.nutritionLabel,
+    });
+
+    if (resolvedEstimate) {
+      return finalizeParsedResponse(analysis, resolvedEstimate);
     }
   }
 

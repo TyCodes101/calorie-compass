@@ -38,19 +38,20 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   return (
     <>
       <DefaultStartScreenRedirect disabled={Boolean(saved || updated)} />
-      <div className="app-page app-screen-wide flex min-w-0 flex-col gap-7 py-6 md:gap-8">
+      <div className="app-page app-screen-wide flex min-w-0 flex-col gap-8 py-6 md:gap-9">
         {saved || updated ? (
           <section
-            className={`app-card rounded-[26px] px-4 py-3 text-sm ${saved ? 'border-emerald-200 bg-emerald-50/90 text-emerald-800' : 'border-sky-200 bg-sky-50/90 text-sky-800'}`}
+            className={`app-card rounded-[26px] px-4 py-3 text-sm shadow-[0_16px_30px_rgba(15,23,42,0.06)] ${saved ? 'border-emerald-200 bg-emerald-50/92 text-emerald-800' : 'border-sky-200 bg-sky-50/92 text-sky-800'}`}
           >
             {saved ? 'Meal saved. Today’s totals updated right away.' : 'Meal updated. Your latest totals are reflected here.'}
           </section>
         ) : null}
 
-        <section className="grid min-w-0 gap-6 xl:grid-cols-[1.42fr_0.92fr]">
+        <section className="grid min-w-0 gap-6 rounded-[40px] border border-white/70 bg-white/34 p-1.5 shadow-[0_16px_44px_rgba(148,163,184,0.12)] xl:grid-cols-[1.42fr_0.92fr]">
           <div className="app-card relative min-w-0 overflow-hidden rounded-[36px] p-6 md:p-7">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-br from-teal-50 via-sky-50/70 to-white" />
-            <div className="pointer-events-none absolute right-[-4rem] top-[-3rem] h-32 w-32 rounded-full bg-teal-100/60 blur-3xl" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-br from-teal-50 via-sky-50/75 to-white" />
+            <div className="pointer-events-none absolute right-[-4rem] top-[-3rem] h-36 w-36 rounded-full bg-teal-100/70 blur-3xl" />
+            <div className="pointer-events-none absolute left-[-3rem] bottom-[-4rem] h-32 w-32 rounded-full bg-sky-100/55 blur-3xl" />
             <div className="relative">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 space-y-3">
@@ -109,6 +110,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
           <div className="app-card relative min-w-0 overflow-hidden rounded-[36px] p-6 md:p-7">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white to-transparent" />
+            <div className="pointer-events-none absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-slate-200/80 to-transparent" />
             <div className="relative">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -142,7 +144,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </div>
         </section>
 
-        <section className="grid min-w-0 gap-6 xl:grid-cols-[1.12fr_0.88fr]">
+        <section className="grid min-w-0 gap-6 rounded-[40px] border border-white/70 bg-white/28 p-1.5 shadow-[0_16px_44px_rgba(148,163,184,0.12)] xl:grid-cols-[1.12fr_0.88fr]">
           <div className="app-card min-w-0 overflow-hidden rounded-[36px] p-6 md:p-7">
             <div className="mb-5 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
@@ -154,7 +156,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 View history
               </Link>
             </div>
-            <div className="rounded-[30px] border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] md:p-5">
+            <div className="rounded-[30px] border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/90 p-4 shadow-[0_16px_28px_rgba(148,163,184,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] md:p-5">
               <TrendChartPanel data={dashboard.weeklyTrend} />
             </div>
           </div>

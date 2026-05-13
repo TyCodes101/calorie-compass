@@ -70,6 +70,26 @@ describe('trusted nutrition catalog matching', () => {
     expect(response?.items[0]?.food_name).toMatch(/fairlife/i);
   });
 
+  it('prefers the 42g Fairlife Core Power Elite product when the protein signal is explicit', () => {
+    const cases = [
+      '42g Fairlife shake',
+      'Fairlife protein shake 42g',
+      'Fairlife Core Power 42g',
+      'Fairlife Core Power Elite 42g',
+      'I drank a Fairlife 42 gram protein shake',
+    ];
+
+    for (const text of cases) {
+      const response = getTrustedCatalogEstimate(text, 'snack');
+
+      expect(response).not.toBeNull();
+      expect(response?.items[0]?.food_name).toMatch(/core power elite 42g/i);
+      expect(response?.items[0]?.calories).toBe(230);
+      expect(response?.items[0]?.protein).toBe(42);
+      expect(response?.items[0]?.notes).toMatch(/estimated as fairlife core power elite 42g protein shake/i);
+    }
+  });
+
   it('supports mixed trusted and estimated outputs for partially matched meals', () => {
     const response = getTrustedCatalogEstimate('3 eggs and hash browns', 'breakfast');
 

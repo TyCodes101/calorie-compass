@@ -9,7 +9,7 @@ import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { TrustBadge } from '@/components/trust-badge';
 import type { RecentMealQuickLog } from '@/lib/history';
 import { type FavoriteMealSummary, type LoggerDraft } from '@/lib/reusable-meals';
-import { getConfidenceCopy, getItemSourceLabel, summarizeParsedItems } from '@/lib/trust';
+import { getConfidenceCopy, getItemSourceLabel, getItemTrustPresentation, summarizeParsedItems } from '@/lib/trust';
 import { useOnlineStatus } from '@/lib/use-online-status';
 
 const mealTypeOptions = [
@@ -655,12 +655,28 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                 <h2 className="text-2xl font-semibold text-slate-950">{confidence.title}</h2>
                 <p className="max-w-2xl text-sm leading-6 text-slate-600">{confidence.description}</p>
                 <p className="text-sm leading-6 text-slate-600">Estimated foods are labeled below. You can adjust any item, macro, or calorie value before saving.</p>
+                <p className="text-sm leading-6 text-slate-500">Nutrition facts can vary by product and serving size.</p>
                 <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{trustSummary.coverageSummary}</span>
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{trustSummary.estimatedSummary}</span>
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{Math.round(confidenceScore * 100)}% confidence</span>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={saveMeal}
+                    disabled={!canSaveMeal}
+                    className="app-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {saving ? 'Saving meal...' : 'Looks right'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedIndex(0)}
+                    className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700 active:scale-[0.99]"
+                  >
+                    Edit items
+                  </button>
                   <button type="button" onClick={addManualItem} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700 active:scale-[0.99]">
                     <Plus className="h-4 w-4" />
                     Add custom item
@@ -691,7 +707,8 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
           <div className="space-y-3">
             {items.map((item, index) => {
               const expanded = expandedIndex === index;
-              const trusted = Boolean(item.is_trusted && item.source_type !== 'AI_ESTIMATE');
+              const trustPresentation = getItemTrustPresentation(item);
+              const trusted = trustPresentation.trusted;
               const sourceLabel = getItemSourceLabel(item);
 
               return (
@@ -704,8 +721,9 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-base font-semibold text-slate-950">{item.food_name}</p>
-                        <TrustBadge trusted={trusted} compact />
+                        <TrustBadge trusted={trusted} compact label={trustPresentation.badgeLabel} tone={trustPresentation.badgeTone} />
                       </div>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{trustPresentation.confidenceLabel}</p>
                       <p className="mt-1 text-sm text-slate-500">{sourceLabel}</p>
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{Math.round(item.calories)} cal</span>
@@ -723,7 +741,8 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                   {expanded ? (
                     <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4">
                       <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                        You can fine-tune this item before saving. Estimated entries are safe to adjust if the portion or brand looks off.
+                        <p>{trustPresentation.helperText}</p>
+                        <p className="mt-1">You can fine-tune this item before saving. Estimated entries are safe to adjust if the portion or brand looks off.</p>
                       </div>
 
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -742,6 +761,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                         <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
                           <p className="font-medium text-slate-700">Source</p>
                           <p className="mt-1">{sourceLabel}</p>
+                          <p className="mt-2 text-[11px] text-slate-500">{trustPresentation.confidenceLabel}</p>
                         </div>
                       </div>
 

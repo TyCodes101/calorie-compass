@@ -956,7 +956,7 @@
     },
     {
       "id": "fairlife_protein_shake",
-      "canonicalName": "Fairlife Protein Shake",
+      "canonicalName": "Fairlife Nutrition Plan Shake",
       "brand": "Fairlife",
       "servingQuantity": 1,
       "servingUnit": "bottle",
@@ -964,20 +964,22 @@
       "protein": 30,
       "carbs": 4,
       "fat": 3,
-      "fiber": 0,
+      "fiber": 1,
       "sugar": 2,
       "sodium": 190,
       "sourceId": "fairlife_reference",
       "active": true,
       "aliases": [
-        "fairlife protein shake",
-        "fairlife shake",
-        "fairlife nutrition plan shake"
+        "fairlife nutrition plan shake",
+        "fairlife shake 30g",
+        "fairlife 30g shake",
+        "fairlife protein shake 30g",
+        "fairlife shake"
       ]
     },
     {
       "id": "corepower_protein_shake",
-      "canonicalName": "Core Power Protein Shake",
+      "canonicalName": "Fairlife Core Power 26g Protein Shake",
       "brand": "Core Power",
       "servingQuantity": 1,
       "servingUnit": "bottle",
@@ -985,15 +987,18 @@
       "protein": 26,
       "carbs": 8,
       "fat": 3.5,
-      "fiber": 0,
+      "fiber": 1,
       "sugar": 7,
-      "sodium": 230,
+      "sodium": 250,
       "sourceId": "corepower_reference",
       "active": true,
       "aliases": [
         "core power",
-        "core power protein shake",
-        "fairlife core power"
+        "core power 26g",
+        "fairlife core power",
+        "fairlife core power 26g",
+        "fairlife protein shake 26g",
+        "core power protein shake"
       ]
     },
     {
@@ -1116,6 +1121,34 @@
         "oikos triple zero",
         "oikos yogurt",
         "oikos greek yogurt"
+      ]
+    },
+    {
+      "id": "corepower_elite_42g",
+      "canonicalName": "Fairlife Core Power Elite 42g Protein Shake",
+      "brand": "Core Power",
+      "servingQuantity": 1,
+      "servingUnit": "bottle",
+      "calories": 230,
+      "protein": 42,
+      "carbs": 8,
+      "fat": 3.5,
+      "fiber": 1,
+      "sugar": 7,
+      "sodium": 260,
+      "sourceId": "corepower_reference",
+      "active": true,
+      "aliases": [
+        "core power elite",
+        "core power elite 42g",
+        "fairlife core power elite",
+        "fairlife core power elite 42g",
+        "fairlife 42g shake",
+        "42g fairlife shake",
+        "fairlife protein shake 42g",
+        "fairlife 42 gram protein shake",
+        "fairlife protein shake 42 gram",
+        "42 gram fairlife shake"
       ]
     }
   ]

@@ -1,6 +1,7 @@
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import type { MealTypeValue } from '@/lib/ai/orchestrate';
 import {
+  findCatalogFoodMatch,
   findCatalogFoodByBestMatch,
   findCatalogFoodById,
   makeCatalogMealResponse,
@@ -49,8 +50,8 @@ function detectRestaurantBrand(text: string): KnownRestaurantBrand {
 }
 
 function detectPackagedBrand(text: string): KnownPackagedBrand {
-  if (text.includes('fairlife')) return 'Fairlife';
   if (text.includes('core power')) return 'Core Power';
+  if (text.includes('fairlife')) return 'Fairlife';
   if (text.includes('premier protein')) return 'Premier Protein';
   if (text.includes('quest')) return 'Quest';
   if (text.includes('gatorade')) return 'Gatorade';
@@ -222,23 +223,52 @@ function matchRestaurantSegment(segment: string, brand: Exclude<KnownRestaurantB
 }
 
 function extractPackagedQuantity(segment: string, unit: string) {
+  const quantityReadySegment = segment.replace(/\b\d+(?:\.\d+)?\s*(?:g|gram|grams)\b/g, '').trim();
+
   if (unit === 'bar') {
-    return quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:quest\s+)?(?:bar|bars)/, 1);
+    return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:quest\s+)?(?:bar|bars)/, 1);
   }
 
   if (unit === 'bottle') {
-    return quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:bottle|bottles|shake|shakes)/, 1);
+    return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:bottle|bottles|shake|shakes)/, 1);
   }
 
   if (unit === 'can') {
-    return quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:can|cans)/, 1);
+    return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:can|cans)/, 1);
   }
 
   if (unit === 'cup') {
-    return quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:cup|cups)/, 1);
+    return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:cup|cups)/, 1);
   }
 
   return 1;
+}
+
+function buildPackagedMatchNotes(segment: string, foodName: string) {
+  if (/\b\d+(?:\.\d+)?\s*(?:g|gram|grams)\b/.test(segment)) {
+    return `Estimated as ${foodName}. Adjust if needed.`;
+  }
+
+  if (segment.includes('fairlife') || segment.includes('core power') || segment.includes('premier protein')) {
+    return `Matched to ${foodName}. Adjust if your exact product or flavor differs.`;
+  }
+
+  return `Matched to ${foodName}.`;
+}
+
+function getPackagedBrandCandidates(brand: Exclude<KnownPackagedBrand, null>, segment: string) {
+  const hasProteinSignal = /\b(?:26|42)\s*(?:g|gram|grams)\b/.test(segment);
+  const mentionsCorePower = segment.includes('core power') || segment.includes('elite');
+
+  if (brand === 'Fairlife' && (hasProteinSignal || mentionsCorePower)) {
+    return ['Fairlife', 'Core Power'] as const;
+  }
+
+  if (brand === 'Core Power') {
+    return ['Core Power'] as const;
+  }
+
+  return [brand] as const;
 }
 
 function matchPackagedSegment(segment: string): ParsedFoodItem[] {
@@ -247,13 +277,28 @@ function matchPackagedSegment(segment: string): ParsedFoodItem[] {
     return [];
   }
 
-  const food = findCatalogFoodByBestMatch(segment, brand);
-  if (!food) {
+  const match = getPackagedBrandCandidates(brand, segment)
+    .map((candidateBrand) => findCatalogFoodMatch(segment, candidateBrand))
+    .filter((candidate): candidate is NonNullable<ReturnType<typeof findCatalogFoodMatch>> => Boolean(candidate))
+    .sort((left, right) => right.score - left.score)[0] ?? null;
+
+  if (!match) {
     return [];
   }
 
+  const food = match.food;
   const quantity = extractPackagedQuantity(segment, food.servingUnit);
-  return [scaleCatalogFood(food, quantity, food.servingUnit)];
+  const scaled = scaleCatalogFood(food, quantity, food.servingUnit);
+
+  return [
+    {
+      ...scaled,
+      notes: buildPackagedMatchNotes(segment, food.canonicalName),
+      source_name: match.exactProduct
+        ? `${scaled.source_name ?? 'Branded nutrition reference'} · high-confidence product match`
+        : scaled.source_name,
+    },
+  ];
 }
 
 function matchGenericSegment(segment: string): ParsedFoodItem[] {

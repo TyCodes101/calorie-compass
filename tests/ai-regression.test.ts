@@ -32,6 +32,13 @@ const cases = [
     minItems: 1,
   },
   {
+    label: 'fairlife 42g shake gets branded product matching',
+    text: '42g Fairlife shake',
+    mealType: 'snack' as const,
+    expectClarification: false,
+    minItems: 1,
+  },
+  {
     label: 'vague chicken and rice',
     text: 'Chicken and rice',
     mealType: 'dinner' as const,

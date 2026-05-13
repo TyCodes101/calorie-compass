@@ -5,6 +5,13 @@ import type { MealTypeValue } from '@/lib/ai/orchestrate';
 
 export type NutritionSourceRecord = (typeof catalogData.sources)[number];
 export type CatalogFoodRecord = (typeof catalogData.foods)[number];
+export type CatalogFoodMatch = {
+  food: CatalogFoodRecord;
+  score: number;
+  exactAlias: boolean;
+  exactProduct: boolean;
+  proteinSignal: number | null;
+};
 
 const unitAliases: Record<string, string> = {
   bottles: 'bottle',
@@ -33,6 +40,87 @@ function normalizeUnit(unit: string) {
   return unitAliases[unit.toLowerCase()] ?? unit.toLowerCase();
 }
 
+function tokenize(text: string) {
+  return normalizeSearchText(text)
+    .split(' ')
+    .filter(Boolean);
+}
+
+function countOverlap(left: string[], right: string[]) {
+  const rightSet = new Set(right);
+  return left.reduce((count, token) => count + (rightSet.has(token) ? 1 : 0), 0);
+}
+
+function extractProteinSignal(text: string) {
+  const match = normalizeSearchText(text).match(/\b(\d{2})\s*(?:g|gram|grams)\b/);
+  if (!match) {
+    return null;
+  }
+
+  const value = Number(match[1]);
+  return value >= 20 && value <= 50 ? value : null;
+}
+
+function scoreCatalogFoodMatch(food: CatalogFoodRecord, text: string, brand?: string | null): CatalogFoodMatch | null {
+  const normalized = normalizeSearchText(text);
+  const aliasScores = food.aliases.map((alias) => {
+    const normalizedAlias = normalizeSearchText(alias);
+    const exactAlias = normalizedAlias === normalized;
+    const includes = normalized.includes(normalizedAlias) || normalizedAlias.includes(normalized);
+    const aliasTokens = tokenize(alias);
+    const normalizedTokens = tokenize(normalized);
+    const overlap = countOverlap(normalizedTokens, aliasTokens);
+
+    let score = 0;
+    if (exactAlias) score += 130;
+    else if (includes) score += 82;
+    else if (overlap) score += overlap * 9;
+
+    if (brand && normalizeSearchText(food.brand ?? '') === normalizeSearchText(brand)) {
+      score += 18;
+    }
+
+    const canonicalTokens = tokenize(food.canonicalName);
+    score += countOverlap(normalizedTokens, canonicalTokens) * 6;
+
+    const proteinSignal = extractProteinSignal(normalized);
+    if (proteinSignal !== null) {
+      const proteinGap = Math.abs(proteinSignal - food.protein);
+      if (proteinGap <= 1.5) score += 74;
+      else if (proteinGap <= 4) score += 36;
+      else if (proteinGap >= 8) score -= 26;
+    }
+
+    if (normalized.includes('elite')) {
+      score += normalizeSearchText(food.canonicalName).includes('elite') ? 40 : -18;
+    }
+
+    if (normalized.includes('nutrition plan')) {
+      score += normalizeSearchText(food.canonicalName).includes('nutrition plan') ? 34 : -16;
+    }
+
+    if (normalized.includes('core power')) {
+      score += normalizeSearchText(food.canonicalName).includes('core power') ? 28 : -12;
+    }
+
+    if (/(?:shake|protein|bottle|drink)/.test(normalized)) {
+      score += 6;
+    }
+
+    return {
+      food,
+      score,
+      exactAlias,
+      exactProduct: exactAlias || (proteinSignal !== null && Math.abs(proteinSignal - food.protein) <= 1.5),
+      proteinSignal,
+    };
+  });
+
+  return aliasScores
+    .filter((candidate) => candidate.score >= 24)
+    .sort((left, right) => right.score - left.score || Number(right.exactAlias) - Number(left.exactAlias))[0] ?? null;
+}
+
 export function getNutritionSourceById(id: string) {
   return catalogData.sources.find((source) => source.id === id) ?? null;
 }
@@ -56,36 +144,23 @@ export function findCatalogFoodByAlias(alias: string, brand?: string | null) {
   );
 }
 
-export function findCatalogFoodByBestMatch(text: string, brand?: string | null) {
+export function findCatalogFoodMatch(text: string, brand?: string | null) {
   const normalized = normalizeSearchText(text);
   if (!normalized) {
     return null;
   }
 
-  const candidates = getCatalogFoods()
-    .filter((food) => !brand || normalizeSearchText(food.brand ?? '') === normalizeSearchText(brand))
-    .flatMap((food) =>
-      food.aliases.map((alias) => {
-        const normalizedAlias = normalizeSearchText(alias);
-        const exact = normalizedAlias === normalized;
-        const includes = normalized.includes(normalizedAlias) || normalizedAlias.includes(normalized);
-        return {
-          food,
-          normalizedAlias,
-          exact,
-          includes,
-        };
-      })
-    )
-    .filter((candidate) => candidate.exact || candidate.includes)
-    .sort((left, right) => {
-      if (left.exact !== right.exact) {
-        return left.exact ? -1 : 1;
-      }
-      return right.normalizedAlias.length - left.normalizedAlias.length;
-    });
+  return (
+    getCatalogFoods()
+      .filter((food) => !brand || normalizeSearchText(food.brand ?? '') === normalizeSearchText(brand))
+      .map((food) => scoreCatalogFoodMatch(food, normalized, brand))
+      .filter((candidate): candidate is CatalogFoodMatch => Boolean(candidate))
+      .sort((left, right) => right.score - left.score || Number(right.exactAlias) - Number(left.exactAlias))[0] ?? null
+  );
+}
 
-  return candidates[0]?.food ?? null;
+export function findCatalogFoodByBestMatch(text: string, brand?: string | null) {
+  return findCatalogFoodMatch(text, brand)?.food ?? null;
 }
 
 function formatSourceNote(food: CatalogFoodRecord) {
