@@ -31,7 +31,7 @@ function detectBrand(text: string): KnownBrand {
 function detectCategory(text: string, brand: KnownBrand): MealCategory {
   if (brand) return 'restaurant';
   if (/\b(shake|protein bar|banana|apple|yogurt|eggs?)\b/i.test(text) && !separatorRegex.test(text)) return 'simple';
-  if (/\b(chicken|rice|pasta|salmon|beef|steak|potato|veggies|vegetables|omelet|sandwich)\b/i.test(text)) return 'home_cooked';
+  if (/\b(chicken|rice|pasta|salmon|beef|steak|potato|veggies|vegetables|omelet|sandwich|salad|bowl|tacos?)\b/i.test(text)) return 'home_cooked';
   return 'unknown';
 }
 
@@ -61,7 +61,7 @@ export function analyzeMealText(input: string): MealAnalysis {
   const likelyNeedsClarification = Boolean(
     !brand &&
       category !== 'simple' &&
-      (specificity === 'low' || (!hasPortion && /\b(chicken and rice|pasta|bowl|salad|sandwich)\b/i.test(normalizedText)))
+      (specificity === 'low' || (!hasPortion && /\b(chicken and rice|pasta|bowl|salad|sandwich|tacos?)\b/i.test(normalizedText)))
   );
 
   return {

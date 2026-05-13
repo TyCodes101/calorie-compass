@@ -27,6 +27,22 @@ export function buildClarificationDecision(analysis: MealAnalysis): Clarificatio
     };
   }
 
+  if (/\bsalad\b/i.test(analysis.normalizedText)) {
+    return {
+      needsClarification: true,
+      question: 'What kind of salad was it, about how much dressing did you use, and did it include any protein like chicken or steak?',
+      reason: 'meal_type',
+    };
+  }
+
+  if (/\bsandwich\b/i.test(analysis.normalizedText)) {
+    return {
+      needsClarification: true,
+      question: 'What kind of sandwich was it, about how large was it, and were there any sauces, cheese, or sides with it?',
+      reason: 'meal_type',
+    };
+  }
+
   if (!analysis.hasPortion) {
     return {
       needsClarification: true,

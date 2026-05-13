@@ -28,6 +28,27 @@ function sumTotals(items: ParsedFoodItem[]) {
   );
 }
 
+function getConfidenceLabel(score: number) {
+  if (score >= 0.85) {
+    return {
+      title: 'High confidence',
+      description: 'Specific meal details or a recognized restaurant pattern made this estimate stronger.',
+    };
+  }
+
+  if (score >= 0.65) {
+    return {
+      title: 'Moderate confidence',
+      description: 'This estimate looks reasonable, but a few portions or ingredients may still be approximated.',
+    };
+  }
+
+  return {
+    title: 'Low confidence',
+    description: 'This meal likely needs more detail before the estimate is truly trustworthy.',
+  };
+}
+
 export function MealLoggerClient() {
   const router = useRouter();
   const [mealText, setMealText] = useState('I had a Chipotle bowl with white rice, double chicken, cheese, corn salsa, lettuce, and green salsa.');
@@ -42,6 +63,7 @@ export function MealLoggerClient() {
   const [activeResult, setActiveResult] = useState<ParsedMealResponse | null>(null);
 
   const totals = useMemo(() => sumTotals(items), [items]);
+  const confidence = getConfidenceLabel(confidenceScore);
 
   async function parseMeal() {
     setLoading(true);
@@ -181,7 +203,7 @@ export function MealLoggerClient() {
             <div className="flex items-start gap-3">
               <TriangleAlert className="mt-1 h-5 w-5 text-amber-300" />
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-white">Quick follow-up</p>
+                <p className="text-sm font-semibold text-white">One useful follow-up</p>
                 <p className="text-sm text-amber-100">{clarifyingQuestion}</p>
                 <input
                   value={clarificationAnswer}
@@ -212,7 +234,10 @@ export function MealLoggerClient() {
               <h2 className="mt-2 text-2xl font-semibold text-white">Review the estimate before saving</h2>
             </div>
             <div className="rounded-3xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-300">
-              Confidence score <span className="ml-2 font-semibold text-white">{Math.round(confidenceScore * 100)}%</span>
+              <p>
+                {confidence.title} <span className="ml-2 font-semibold text-white">{Math.round(confidenceScore * 100)}%</span>
+              </p>
+              <p className="mt-1 max-w-sm text-xs leading-5 text-slate-400">{confidence.description}</p>
             </div>
           </div>
 
