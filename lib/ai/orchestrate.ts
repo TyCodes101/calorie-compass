@@ -29,11 +29,16 @@ export function makeClarificationResponse(question: string, mealType: MealTypeVa
 }
 
 export function finalizeParsedResponse(analysis: MealAnalysis, response: ParsedMealResponse) {
+  const trustedItemCount = response.items.filter((item) => item.is_trusted).length;
+  const estimatedItemCount = response.items.length - trustedItemCount;
+
   return {
     ...response,
     confidence_score: scoreMealConfidence(analysis, {
       itemCount: response.items.length,
       clarificationNeeded: response.needs_clarification,
+      trustedItemCount,
+      estimatedItemCount,
     }),
   };
 }

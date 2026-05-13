@@ -27,6 +27,12 @@ enum MealType {
   SNACK
 }
 
+enum NutritionSourceType {
+  OFFICIAL_RESTAURANT
+  GENERIC_REFERENCE
+  AI_ESTIMATE
+}
+
 model User {
   id            String        @id @default(cuid())
   name          String
@@ -82,6 +88,7 @@ model Meal {
 model FoodItem {
   id               String   @id @default(cuid())
   mealId           String
+  catalogFoodId    String?
   foodName         String
   quantity         Float
   unit             String
@@ -96,9 +103,12 @@ model FoodItem {
   date             DateTime
   confidenceScore  Float?
   notes            String?
+  nutritionSourceType NutritionSourceType?
+  nutritionSourceName String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   meal             Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  catalogFood      CatalogFood? @relation(fields: [catalogFoodId], references: [id], onDelete: SetNull)
 }
 
 model DailyLog {
@@ -129,4 +139,59 @@ model WeightEntry {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, date])
+}
+
+model NutritionSource {
+  id         String              @id
+  name       String
+  sourceType NutritionSourceType
+  brand      String?
+  citation   String?
+  notes      String?
+  active     Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  foods      CatalogFood[]
+
+  @@index([sourceType])
+  @@index([brand])
+}
+
+model CatalogFood {
+  id              String           @id
+  sourceId        String
+  canonicalName   String
+  brand           String?
+  servingQuantity Float
+  servingUnit     String
+  calories        Float            @default(0)
+  protein         Float            @default(0)
+  carbs           Float            @default(0)
+  fat             Float            @default(0)
+  fiber           Float            @default(0)
+  sugar           Float            @default(0)
+  sodium          Float            @default(0)
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  source          NutritionSource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  aliases         CatalogAlias[]
+  foodItems       FoodItem[]
+
+  @@index([brand])
+  @@index([sourceId])
+}
+
+model CatalogAlias {
+  id              String      @id @default(cuid())
+  foodId          String
+  alias           String
+  normalizedAlias String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  food            CatalogFood @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@index([foodId])
+  @@index([normalizedAlias])
+  @@unique([foodId, normalizedAlias])
 }

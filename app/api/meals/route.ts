@@ -16,6 +16,10 @@ const parsedItemSchema = z.object({
   sugar: z.number().nonnegative(),
   sodium: z.number().nonnegative(),
   notes: z.string().nullable().optional(),
+  is_trusted: z.boolean().optional(),
+  source_type: z.enum(['OFFICIAL_RESTAURANT', 'GENERIC_REFERENCE', 'AI_ESTIMATE']).nullable().optional(),
+  source_name: z.string().nullable().optional(),
+  catalog_food_id: z.string().nullable().optional(),
 });
 
 const requestSchema = z.object({

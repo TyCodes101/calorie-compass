@@ -14,6 +14,11 @@ function normalizeItem(item: Record<string, unknown>) {
     sugar: sanitizeNumber(item.sugar),
     sodium: sanitizeNumber(item.sodium),
     notes: item.notes ? String(item.notes) : null,
+    is_trusted: Boolean(item.is_trusted ?? item.isTrusted ?? false),
+    source_type: item.source_type ? String(item.source_type) : item.sourceType ? String(item.sourceType) : null,
+    source_name: item.source_name ? String(item.source_name) : item.sourceName ? String(item.sourceName) : null,
+    catalog_food_id:
+      item.catalog_food_id ? String(item.catalog_food_id) : item.catalogFoodId ? String(item.catalogFoodId) : null,
   };
 }
 

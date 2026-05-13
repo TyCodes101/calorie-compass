@@ -5,6 +5,8 @@ export function scoreMealConfidence(
   options: {
     itemCount: number;
     clarificationNeeded: boolean;
+    trustedItemCount?: number;
+    estimatedItemCount?: number;
   }
 ) {
   let score = 0.58;
@@ -21,6 +23,15 @@ export function scoreMealConfidence(
   if (options.itemCount >= 2) score += 0.03;
   if (options.itemCount === 0) score -= 0.15;
   if (options.clarificationNeeded) score -= 0.22;
+
+  const trustedItemCount = options.trustedItemCount ?? 0;
+  const estimatedItemCount = options.estimatedItemCount ?? Math.max(0, options.itemCount - trustedItemCount);
+
+  if (trustedItemCount > 0 && trustedItemCount === options.itemCount) score += 0.08;
+  else if (trustedItemCount > 0) score += 0.03;
+
+  if (estimatedItemCount > 0 && trustedItemCount > 0) score -= 0.03;
+  if (estimatedItemCount > 0 && trustedItemCount === 0) score -= 0.06;
 
   return Math.max(0.2, Math.min(0.95, Math.round(score * 100) / 100));
 }

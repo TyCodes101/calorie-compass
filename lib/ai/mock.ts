@@ -4,6 +4,7 @@ import { scoreMealConfidence } from '@/lib/ai/confidence';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import { finalizeParsedResponse, inferMealType, makeClarificationResponse } from '@/lib/ai/orchestrate';
 import { getRestaurantEstimate } from '@/lib/ai/restaurant';
+import { getTrustedCatalogEstimate } from '@/lib/ai/trusted';
 import type { ParsedMealResponse } from '@/lib/ai/types';
 
 export function getMockParsedMeal(text: string, mealType?: string): ParsedMealResponse {
@@ -21,6 +22,12 @@ export function getMockParsedMeal(text: string, mealType?: string): ParsedMealRe
   }
 
   let response: ParsedMealResponse;
+
+  const trustedEstimate = getTrustedCatalogEstimate(text, inferredMealType);
+
+  if (trustedEstimate) {
+    return finalizeParsedResponse(analysis, trustedEstimate);
+  }
 
   const restaurantEstimate = getRestaurantEstimate(text, inferredMealType);
 

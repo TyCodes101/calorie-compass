@@ -12,6 +12,10 @@ export const parsedFoodItemSchema = z.object({
   sugar: z.number().nonnegative().default(0),
   sodium: z.number().nonnegative().default(0),
   notes: z.string().nullable().optional(),
+  is_trusted: z.boolean().optional(),
+  source_type: z.enum(['OFFICIAL_RESTAURANT', 'GENERIC_REFERENCE', 'AI_ESTIMATE']).nullable().optional(),
+  source_name: z.string().nullable().optional(),
+  catalog_food_id: z.string().nullable().optional(),
 });
 
 export const parsedMealResponseSchema = z.object({

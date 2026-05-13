@@ -15,7 +15,7 @@ export type MealAnalysis = {
   likelyNeedsClarification: boolean;
 };
 
-const portionRegex = /(\b\d+(?:\.\d+)?\b\s?(?:cup|cups|oz|ounce|ounces|serving|servings|piece|pieces|slice|slices|bowl|bowls|plate|plates|scoop|scoops|tbsp|tsp|grams|g)\b)/i;
+const portionRegex = /(\b\d+(?:\.\d+)?\b\s?(?:cup|cups|oz|ounce|ounces|serving|servings|piece|pieces|slice|slices|bowl|bowls|plate|plates|scoop|scoops|tbsp|tsp|grams|g|egg|eggs|banana|bananas|count)\b)/i;
 const cookingStyleRegex = /\b(grilled|fried|baked|roasted|blackened|crispy|sauced|sauteed|broiled)\b/i;
 const sauceRegex = /\b(sauce|salsa|dressing|oil|gravy|marinade|mayo|aioli)\b/i;
 const separatorRegex = /(,| and | with )/i;

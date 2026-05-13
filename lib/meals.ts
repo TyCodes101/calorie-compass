@@ -48,6 +48,9 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
     date,
     confidenceScore: sanitizeNumber(payload.confidence_score),
     notes: item.notes ?? null,
+    nutritionSourceType: item.source_type ?? null,
+    nutritionSourceName: item.source_name ?? null,
+    catalogFoodId: item.catalog_food_id ?? null,
   }));
 
   const totals = sumNutrition(normalizedItems);
