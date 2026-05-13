@@ -1,20 +1,27 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { Bell, ChevronRight, Dumbbell, Goal, Ruler, UserRound } from 'lucide-react';
 
+import { GoalsPreviewCard, NotificationsPreviewCard, PreferencesPreviewCard } from '@/components/profile-settings-client';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
+import { profileSections } from '@/lib/profile-sections';
 
 export const dynamic = 'force-dynamic';
 
-const sections = [
-  { label: 'Goals', icon: Goal },
-  { label: 'Nutrition targets', icon: Dumbbell },
-  { label: 'Units and preferences', icon: Ruler },
-  { label: 'Notifications', icon: Bell },
-  { label: 'Account', icon: UserRound },
-];
+const sectionIcons = {
+  goals: Goal,
+  'nutrition-targets': Dumbbell,
+  preferences: Ruler,
+  notifications: Bell,
+  account: UserRound,
+} as const;
 
 export default async function ProfilePage() {
   const user = await getCurrentUserWithProfile();
+
+  if (!user) {
+    redirect('/onboarding');
+  }
 
   return (
     <div className="app-page app-screen-narrow flex min-w-0 flex-col gap-6 py-6">
@@ -24,11 +31,11 @@ export default async function ProfilePage() {
           <div>
             <h1 className="text-3xl font-semibold text-slate-950">Settings and goals</h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
-              Keep your targets simple, visible, and easy to adjust as your routine changes.
+              Every settings row now routes somewhere real, so the profile area feels like a shipped product instead of a mockup.
             </p>
           </div>
           <Link href="/onboarding" className="app-button-secondary inline-flex w-full items-center justify-center px-4 py-3 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700 sm:w-auto">
-            Edit profile
+            Edit onboarding basics
           </Link>
         </div>
       </section>
@@ -38,29 +45,44 @@ export default async function ProfilePage() {
           <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Daily calories</p>
             <p className="mt-3 text-3xl font-semibold text-slate-950">{user?.profile?.dailyCalorieGoal ?? 0}</p>
+            <p className="mt-2 text-sm text-slate-500">Current steady target</p>
           </div>
           <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Protein target</p>
             <p className="mt-3 text-3xl font-semibold text-slate-950">{user?.profile?.proteinGoal ?? 0}g</p>
+            <p className="mt-2 text-sm text-slate-500">Used across dashboard and review flows</p>
           </div>
         </div>
       </section>
 
       <section className="app-card min-w-0 rounded-[32px] p-2">
-        {sections.map((section) => {
-          const Icon = section.icon;
+        {profileSections.map((section) => {
+          const Icon = sectionIcons[section.slug];
           return (
-            <div key={section.label} className="flex items-center justify-between rounded-[24px] px-4 py-4 transition hover:bg-slate-50">
-              <div className="flex items-center gap-3">
+            <Link
+              key={section.slug}
+              href={`/profile/${section.slug}`}
+              className="flex items-center justify-between gap-4 rounded-[24px] px-4 py-4 transition hover:bg-slate-50 active:scale-[0.99]"
+            >
+              <div className="flex min-w-0 items-start gap-3">
                 <div className="rounded-2xl bg-slate-100 p-2 text-slate-700">
                   <Icon className="h-4 w-4" />
                 </div>
-                <span className="text-sm font-medium text-slate-900">{section.label}</span>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-slate-900">{section.label}</span>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">{section.description}</p>
+                </div>
               </div>
-              <ChevronRight className="h-4 w-4 text-slate-400" />
-            </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+            </Link>
           );
         })}
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <GoalsPreviewCard />
+        <PreferencesPreviewCard />
+        <NotificationsPreviewCard />
       </section>
     </div>
   );

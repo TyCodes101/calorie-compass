@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowRight, CheckCircle2, Flame, Sparkles, Target } from 'lucide-react';
 
+import { DefaultStartScreenRedirect } from '@/components/default-start-screen-redirect';
 import { MacroProgress } from '@/components/macro-progress';
 import { TrustBadge } from '@/components/trust-badge';
 import { TrendChartPanel } from '@/components/trend-chart-panel';
@@ -17,7 +18,9 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="app-page app-screen-wide flex min-w-0 flex-col gap-6 py-6">
+    <>
+      <DefaultStartScreenRedirect />
+      <div className="app-page app-screen-wide flex min-w-0 flex-col gap-6 py-6">
       <section className="grid min-w-0 gap-6 xl:grid-cols-[1.35fr_0.95fr]">
         <div className="app-card min-w-0 rounded-[32px] p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -136,6 +139,7 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
-    </div>
+      </div>
+    </>
   );
 }

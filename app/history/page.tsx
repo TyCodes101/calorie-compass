@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function HistoryPage() {
   const [history, favorites] = await Promise.all([getMealHistory(), getFavoriteMeals()]);
   const hasHistory = history.some((group) => group.meals.length > 0);
+  const totalMeals = history.reduce((count, group) => count + group.meals.length, 0);
 
   return (
     <div className="app-page app-screen flex min-w-0 flex-col gap-6 py-6">
@@ -24,7 +25,7 @@ export default async function HistoryPage() {
           </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
             <Search className="h-4 w-4" />
-            Filters later
+            {favorites.length} favorites, {totalMeals} logged meals
           </div>
         </div>
       </section>

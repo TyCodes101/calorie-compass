@@ -5,9 +5,9 @@ import { prisma } from '@/lib/prisma';
 
 export type ProfileInput = {
   name: string;
-  age?: number;
-  heightCm?: number;
-  weightLbs?: number;
+  age?: number | null;
+  heightCm?: number | null;
+  weightLbs?: number | null;
   goal: keyof typeof GoalType;
   activityLevel: keyof typeof ActivityLevel;
   dailyCalorieGoal: number;
