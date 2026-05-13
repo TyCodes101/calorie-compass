@@ -34,7 +34,10 @@ function NavItem({ href, label, icon: Icon, active }: { href: string; label: str
       aria-current={active ? 'page' : undefined}
       className={clsx('mobile-nav-item', active && 'mobile-nav-item-active')}
     >
-      <Icon className="mobile-nav-item-icon" />
+      <span className="mobile-nav-item-indicator" aria-hidden="true" />
+      <span className="mobile-nav-item-icon-wrap" aria-hidden="true">
+        <Icon className="mobile-nav-item-icon" />
+      </span>
       <span className="mobile-nav-item-label">{label}</span>
     </Link>
   );
