@@ -34,14 +34,15 @@ enum NutritionSourceType {
 }
 
 model User {
-  id            String        @id @default(cuid())
+  id            String         @id @default(cuid())
   name          String
-  email         String?       @unique
-  demo          Boolean       @default(false)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  email         String?        @unique
+  demo          Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   profile       UserProfile?
   meals         Meal[]
+  reusableMeals ReusableMeal[]
   dailyLogs     DailyLog[]
   weightEntries WeightEntry[]
 }
@@ -63,52 +64,100 @@ model UserProfile {
 }
 
 model Meal {
-  id              String    @id @default(cuid())
-  userId          String
-  mealType        MealType
-  date            DateTime
-  rawText         String?
-  notes           String?
-  confidenceScore Float?
-  totalCalories   Float     @default(0)
-  totalProtein    Float     @default(0)
-  totalCarbs      Float     @default(0)
-  totalFat        Float     @default(0)
-  totalFiber      Float     @default(0)
-  totalSugar      Float     @default(0)
-  totalSodium     Float     @default(0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items           FoodItem[]
+  id                String         @id @default(cuid())
+  userId            String
+  mealType          MealType
+  date              DateTime
+  rawText           String?
+  notes             String?
+  confidenceScore   Float?
+  totalCalories     Float          @default(0)
+  totalProtein      Float          @default(0)
+  totalCarbs        Float          @default(0)
+  totalFat          Float          @default(0)
+  totalFiber        Float          @default(0)
+  totalSugar        Float          @default(0)
+  totalSodium       Float          @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items             FoodItem[]
+  sourceReusableMeals ReusableMeal[] @relation("SourceMealReusableMeals")
 
   @@index([userId, date])
 }
 
 model FoodItem {
-  id               String   @id @default(cuid())
-  mealId           String
-  catalogFoodId    String?
-  foodName         String
-  quantity         Float
-  unit             String
-  calories         Float    @default(0)
-  protein          Float    @default(0)
-  carbs            Float    @default(0)
-  fat              Float    @default(0)
-  fiber            Float    @default(0)
-  sugar            Float    @default(0)
-  sodium           Float    @default(0)
-  mealType         MealType
-  date             DateTime
-  confidenceScore  Float?
-  notes            String?
+  id                  String              @id @default(cuid())
+  mealId              String
+  catalogFoodId       String?
+  foodName            String
+  quantity            Float
+  unit                String
+  calories            Float               @default(0)
+  protein             Float               @default(0)
+  carbs               Float               @default(0)
+  fat                 Float               @default(0)
+  fiber               Float               @default(0)
+  sugar               Float               @default(0)
+  sodium              Float               @default(0)
+  mealType            MealType
+  date                DateTime
+  confidenceScore     Float?
+  notes               String?
   nutritionSourceType NutritionSourceType?
   nutritionSourceName String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  meal             Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
-  catalogFood      CatalogFood? @relation(fields: [catalogFoodId], references: [id], onDelete: SetNull)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  meal                Meal                @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  catalogFood         CatalogFood?        @relation(fields: [catalogFoodId], references: [id], onDelete: SetNull)
+}
+
+model ReusableMeal {
+  id              String             @id @default(cuid())
+  userId          String
+  sourceMealId    String?
+  title           String
+  rawText         String?
+  mealType        MealType
+  confidenceScore Float?
+  isFavorite      Boolean            @default(true)
+  lastUsedAt      DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceMeal      Meal?              @relation("SourceMealReusableMeals", fields: [sourceMealId], references: [id], onDelete: SetNull)
+  items           ReusableMealItem[]
+
+  @@index([userId, isFavorite])
+  @@index([userId, lastUsedAt])
+  @@unique([userId, sourceMealId])
+}
+
+model ReusableMealItem {
+  id            String              @id @default(cuid())
+  reusableMealId String
+  catalogFoodId String?
+  foodName      String
+  quantity      Float
+  unit          String
+  calories      Float               @default(0)
+  protein       Float               @default(0)
+  carbs         Float               @default(0)
+  fat           Float               @default(0)
+  fiber         Float               @default(0)
+  sugar         Float               @default(0)
+  sodium        Float               @default(0)
+  notes         String?
+  isTrusted     Boolean             @default(false)
+  sourceType    NutritionSourceType?
+  sourceName    String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  reusableMeal  ReusableMeal        @relation(fields: [reusableMealId], references: [id], onDelete: Cascade)
+  catalogFood   CatalogFood?        @relation(fields: [catalogFoodId], references: [id], onDelete: SetNull)
+
+  @@index([reusableMealId])
 }
 
 model DailyLog {
@@ -158,25 +207,26 @@ model NutritionSource {
 }
 
 model CatalogFood {
-  id              String           @id
-  sourceId        String
-  canonicalName   String
-  brand           String?
-  servingQuantity Float
-  servingUnit     String
-  calories        Float            @default(0)
-  protein         Float            @default(0)
-  carbs           Float            @default(0)
-  fat             Float            @default(0)
-  fiber           Float            @default(0)
-  sugar           Float            @default(0)
-  sodium          Float            @default(0)
-  active          Boolean          @default(true)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  source          NutritionSource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  aliases         CatalogAlias[]
-  foodItems       FoodItem[]
+  id                String             @id
+  sourceId          String
+  canonicalName     String
+  brand             String?
+  servingQuantity   Float
+  servingUnit       String
+  calories          Float              @default(0)
+  protein           Float              @default(0)
+  carbs             Float              @default(0)
+  fat               Float              @default(0)
+  fiber             Float              @default(0)
+  sugar             Float              @default(0)
+  sodium            Float              @default(0)
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  source            NutritionSource    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  aliases           CatalogAlias[]
+  foodItems         FoodItem[]
+  reusableMealItems ReusableMealItem[]
 
   @@index([brand])
   @@index([sourceId])

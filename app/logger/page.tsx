@@ -1,5 +1,29 @@
 import { MealLoggerClient } from '@/components/meal-logger-client';
+import { getLoggerDraft } from '@/lib/reusable-meals';
 
-export default function LoggerPage() {
-  return <MealLoggerClient />;
+type LoggerPageProps = {
+  searchParams?: Promise<{
+    mealId?: string | string[];
+    favorite?: string | string[];
+  }>;
+};
+
+function pickFirst(value?: string | string[]) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
+export default async function LoggerPage({ searchParams }: LoggerPageProps) {
+  const params = searchParams ? await searchParams : undefined;
+  const mealId = pickFirst(params?.mealId);
+  const reusableMealId = pickFirst(params?.favorite);
+  const initialDraft = await getLoggerDraft({
+    mealId,
+    reusableMealId,
+  });
+
+  return <MealLoggerClient key={reusableMealId ?? mealId ?? 'new'} initialDraft={initialDraft} />;
 }

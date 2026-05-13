@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { getDashboardData } from '@/lib/dashboard';
-import { saveConfirmedMeal } from '@/lib/meals';
+import { createFavoriteMealTemplate } from '@/lib/reusable-meals';
 
 const parsedItemSchema = z.object({
   food_name: z.string().min(1),
@@ -23,12 +22,10 @@ const parsedItemSchema = z.object({
 });
 
 const requestSchema = z.object({
+  reusable_meal_id: z.string().nullable().optional(),
   meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack']),
   confidence_score: z.number().min(0).max(1),
   raw_text: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
-  date: z.string().optional(),
-  source_reusable_meal_id: z.string().nullable().optional(),
   items: z.array(parsedItemSchema).min(1),
 });
 
@@ -36,15 +33,14 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const payload = requestSchema.parse(body);
-    const meal = await saveConfirmedMeal(payload);
-    const dashboard = await getDashboardData(payload.date ?? new Date());
+    const favoriteMeal = await createFavoriteMealTemplate(payload);
 
-    return NextResponse.json({ meal, dashboard });
+    return NextResponse.json({ favoriteMeal });
   } catch (error) {
-    console.error('save meal error', error);
+    console.error('save reusable meal error', error);
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Unable to save meal.',
+        error: error instanceof Error ? error.message : 'Unable to save favorite meal.',
       },
       { status: 400 }
     );

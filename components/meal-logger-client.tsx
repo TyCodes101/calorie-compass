@@ -6,6 +6,7 @@ import { ChevronDown, LoaderCircle, ShieldCheck, Sparkles, TriangleAlert, X } fr
 
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { TrustBadge } from '@/components/trust-badge';
+import { type LoggerDraft } from '@/lib/reusable-meals';
 import { getConfidenceCopy, getItemSourceLabel, summarizeParsedItems } from '@/lib/trust';
 
 const mealTypeOptions = [
@@ -36,19 +37,22 @@ function sumTotals(items: ParsedFoodItem[]) {
   );
 }
 
-export function MealLoggerClient() {
+export function MealLoggerClient({ initialDraft = null }: { initialDraft?: LoggerDraft | null }) {
   const router = useRouter();
-  const [mealText, setMealText] = useState('Chipotle bowl with white rice, double chicken, cheese, corn salsa, lettuce, and green salsa');
-  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
+  const [mealText, setMealText] = useState(initialDraft?.rawText ?? 'Chipotle bowl with white rice, double chicken, cheese, corn salsa, lettuce, and green salsa');
+  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(initialDraft?.mealType ?? 'lunch');
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [clarificationAnswer, setClarificationAnswer] = useState('');
-  const [items, setItems] = useState<ParsedFoodItem[]>([]);
-  const [confidenceScore, setConfidenceScore] = useState(0.82);
+  const [items, setItems] = useState<ParsedFoodItem[]>(initialDraft?.items ?? []);
+  const [confidenceScore, setConfidenceScore] = useState(initialDraft?.confidenceScore ?? 0.82);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [favoriteSaving, setFavoriteSaving] = useState(false);
+  const [favoriteState, setFavoriteState] = useState<'idle' | 'saved'>(initialDraft?.sourceReusableMealId ? 'saved' : 'idle');
   const [activeResult, setActiveResult] = useState<ParsedMealResponse | null>(null);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [sourceReusableMealId, setSourceReusableMealId] = useState<string | null>(initialDraft?.sourceReusableMealId ?? null);
 
   const totals = useMemo(() => sumTotals(items), [items]);
   const trustSummary = useMemo(() => summarizeParsedItems(items), [items]);
@@ -106,6 +110,7 @@ export function MealLoggerClient() {
         meal_type: mealType,
         confidence_score: confidenceScore,
         raw_text: mealText,
+        source_reusable_meal_id: sourceReusableMealId,
         items,
       }),
     });
@@ -119,6 +124,36 @@ export function MealLoggerClient() {
     }
 
     router.push('/?saved=1');
+    router.refresh();
+  }
+
+  async function saveFavorite() {
+    setFavoriteSaving(true);
+    setError(null);
+
+    const response = await fetch('/api/reusable-meals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reusable_meal_id: sourceReusableMealId,
+        meal_type: mealType,
+        confidence_score: confidenceScore,
+        raw_text: mealText,
+        items,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setFavoriteSaving(false);
+      setError(data.error ?? 'Could not save this favorite meal.');
+      return;
+    }
+
+    setSourceReusableMealId(data.favoriteMeal?.id ?? sourceReusableMealId);
+    setFavoriteState('saved');
+    setFavoriteSaving(false);
     router.refresh();
   }
 
@@ -210,6 +245,9 @@ export function MealLoggerClient() {
                   <p className="mt-1 text-sm leading-6 text-slate-600">
                     Verified items will show trusted source labels. Estimated items stay clearly marked so you can adjust them fast.
                   </p>
+                  {sourceReusableMealId ? (
+                    <p className="mt-2 text-xs font-medium text-teal-700">Loaded from a saved favorite. Saving logs a fresh meal without changing your past entries.</p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -379,17 +417,27 @@ export function MealLoggerClient() {
                   <p className="text-sm font-semibold text-slate-950">Ready to save this meal</p>
                   <p className="text-sm text-slate-500">{trustSummary.coverageSummary}. {trustSummary.estimatedSummary}.</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
                     onClick={() => {
                       setItems([]);
                       setActiveResult(null);
                       setExpandedIndex(null);
+                      setSourceReusableMealId(null);
+                      setFavoriteState('idle');
                     }}
                     className="app-button-secondary px-4 py-3 text-sm font-medium"
                   >
                     Start over
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveFavorite}
+                    disabled={favoriteSaving}
+                    className="app-button-secondary px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {favoriteSaving ? 'Saving favorite...' : favoriteState === 'saved' ? 'Favorite saved' : 'Save as favorite'}
                   </button>
                   <button
                     type="button"

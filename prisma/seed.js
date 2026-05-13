@@ -47,6 +47,8 @@ async function seedNutritionCatalog() {
 }
 
 async function main() {
+  await prisma.reusableMealItem.deleteMany();
+  await prisma.reusableMeal.deleteMany();
   await prisma.foodItem.deleteMany();
   await prisma.meal.deleteMany();
   await prisma.dailyLog.deleteMany();
@@ -160,6 +162,8 @@ async function main() {
     },
   ];
 
+  const createdMeals = [];
+
   for (const meal of meals) {
     const totals = meal.items.reduce(
       (acc, item) => ({
@@ -174,7 +178,7 @@ async function main() {
       { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 }
     );
 
-    await prisma.meal.create({
+    const createdMeal = await prisma.meal.create({
       data: {
         userId: user.id,
         mealType: meal.mealType,
@@ -207,6 +211,44 @@ async function main() {
             notes: item.notes,
             nutritionSourceType: item.nutritionSourceType,
             nutritionSourceName: item.nutritionSourceName,
+            catalogFoodId: item.catalogFoodId,
+          })),
+        },
+      },
+      include: { items: true },
+    });
+
+    createdMeals.push(createdMeal);
+  }
+
+  const breakfastMeal = createdMeals.find((meal) => meal.mealType === MealType.BREAKFAST);
+  if (breakfastMeal) {
+    await prisma.reusableMeal.create({
+      data: {
+        userId: user.id,
+        sourceMealId: breakfastMeal.id,
+        title: 'Quick eggs and toast',
+        rawText: breakfastMeal.rawText,
+        mealType: breakfastMeal.mealType,
+        confidenceScore: breakfastMeal.confidenceScore,
+        isFavorite: true,
+        lastUsedAt: today,
+        items: {
+          create: breakfastMeal.items.map((item) => ({
+            foodName: item.foodName,
+            quantity: item.quantity,
+            unit: item.unit,
+            calories: item.calories,
+            protein: item.protein,
+            carbs: item.carbs,
+            fat: item.fat,
+            fiber: item.fiber,
+            sugar: item.sugar,
+            sodium: item.sodium,
+            notes: item.notes,
+            isTrusted: item.nutritionSourceType !== 'AI_ESTIMATE',
+            sourceType: item.nutritionSourceType,
+            sourceName: item.nutritionSourceName,
             catalogFoodId: item.catalogFoodId,
           })),
         },

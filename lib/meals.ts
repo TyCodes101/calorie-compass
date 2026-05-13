@@ -6,6 +6,7 @@ import { upsertDailyLogForDate } from '@/lib/dashboard';
 import { prisma } from '@/lib/prisma';
 import { sanitizeNumber, sumNutrition } from '@/lib/nutrition';
 import { startOfDayUtc } from '@/lib/date';
+import { markReusableMealUsed } from '@/lib/reusable-meals';
 
 export type SaveMealPayload = {
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -13,6 +14,7 @@ export type SaveMealPayload = {
   raw_text?: string | null;
   notes?: string | null;
   date?: string;
+  source_reusable_meal_id?: string | null;
   items: ParsedFoodItem[];
 };
 
@@ -78,6 +80,7 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
   });
 
   await upsertDailyLogForDate(user.id, date);
+  await markReusableMealUsed(payload.source_reusable_meal_id);
 
   return meal;
 }

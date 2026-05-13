@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { Clock3, Search } from 'lucide-react';
+import { Clock3, Search, Star } from 'lucide-react';
 
 import { TrustBadge } from '@/components/trust-badge';
 import { getMealHistory } from '@/lib/history';
+import { getFavoriteMeals } from '@/lib/reusable-meals';
 
 export default async function HistoryPage() {
-  const history = await getMealHistory();
+  const [history, favorites] = await Promise.all([getMealHistory(), getFavoriteMeals()]);
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -24,6 +25,42 @@ export default async function HistoryPage() {
           </div>
         </div>
       </section>
+
+      {favorites.length ? (
+        <section className="app-card rounded-[32px] p-6">
+          <div className="flex items-center gap-2">
+            <Star className="h-5 w-5 text-amber-500" />
+            <div>
+              <p className="app-section-label">Favorites</p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950">Quick repeat meals</h2>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {favorites.map((favorite) => (
+              <Link
+                key={favorite.id}
+                href={`/logger?favorite=${favorite.id}`}
+                className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 shadow-sm transition hover:border-teal-200 hover:bg-white"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-950">{favorite.title}</p>
+                    <p className="mt-1 text-sm capitalize text-slate-500">{favorite.mealType}</p>
+                  </div>
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                    Favorite
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{favorite.totalCalories} cal</span>
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{favorite.itemCount} items</span>
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{favorite.trustedCount} verified</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {history.map((group) => (
         <section key={group.date} className="space-y-3">
@@ -56,7 +93,7 @@ export default async function HistoryPage() {
                     <Clock3 className="h-4 w-4" />
                     {meal.trustedCount} verified, {meal.estimatedCount} estimated
                   </div>
-                  <Link href="/logger" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-teal-200 hover:text-teal-700">
+                  <Link href={`/logger?mealId=${meal.id}`} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-teal-200 hover:text-teal-700">
                     Log again
                   </Link>
                 </div>
@@ -68,4 +105,3 @@ export default async function HistoryPage() {
     </div>
   );
 }
-
