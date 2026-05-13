@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Clock3, House, MoreHorizontal, Plus, UserRound } from 'lucide-react';
+import { BarChart3, Clock3, House, Plus, UserRound } from 'lucide-react';
 import clsx from 'clsx';
 
 const items = [
   { href: '/', label: 'Dashboard', icon: House },
   { href: '/history', label: 'History', icon: Clock3 },
+  { href: '/insights', label: 'Insights', icon: BarChart3 },
   { href: '/profile', label: 'Profile', icon: UserRound },
 ] as const;
 
@@ -41,7 +42,7 @@ function NavItem({ href, label, icon: Icon, active }: { href: string; label: str
 
 export function MobileNav() {
   const pathname = usePathname();
-  const [dashboard, history, profile] = items;
+  const [dashboard, history, insights, profile] = items;
   const loggerActive = pathname.startsWith('/logger');
 
   return (
@@ -49,16 +50,7 @@ export function MobileNav() {
       <NavItem {...dashboard} active={matchesPath(pathname, dashboard.href)} />
       <NavItem {...history} active={matchesPath(pathname, history.href)} />
       <span className="mobile-nav-center-spacer" aria-hidden="true" />
-      <button
-        type="button"
-        aria-label="More, coming soon"
-        aria-disabled="true"
-        onClick={triggerHapticFeedback}
-        className="mobile-nav-item mobile-nav-item-placeholder"
-      >
-        <MoreHorizontal className="mobile-nav-item-icon" />
-        <span className="mobile-nav-item-label">More</span>
-      </button>
+      <NavItem {...insights} active={matchesPath(pathname, insights.href)} />
       <NavItem {...profile} active={matchesPath(pathname, profile.href)} />
 
       <Link

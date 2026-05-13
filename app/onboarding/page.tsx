@@ -9,8 +9,8 @@ export default async function OnboardingPage() {
   const user = await getCurrentUserWithProfile();
 
   return (
-    <div className="app-page mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
-      <section className="app-card rounded-[32px] p-6">
+    <div className="app-page app-screen-narrow min-w-0 space-y-6 py-6">
+      <section className="app-card min-w-0 rounded-[32px] p-6">
         <div className="mb-6 space-y-3">
           <p className="app-section-label">Onboarding</p>
           <h1 className="text-3xl font-semibold text-slate-950">A lighter start for daily nutrition tracking</h1>

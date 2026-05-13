@@ -196,9 +196,9 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
   }
 
   return (
-    <div className="app-page-with-action-bar mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
-      <section className="app-card rounded-[32px] p-6">
-        <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-start">
+    <div className="app-page-with-action-bar app-screen-wide flex min-w-0 flex-col gap-6 py-6">
+      <section className="app-card min-w-0 rounded-[32px] p-6">
+        <div className="grid min-w-0 gap-6 xl:grid-cols-[1.25fr_0.75fr] xl:items-start">
           <div className="space-y-5">
             <div>
               <p className="app-section-label">Log Meal</p>
@@ -230,7 +230,7 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
             </div>
           </div>
 
-          <div className="space-y-4 rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
+          <div className="min-w-0 space-y-4 rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
             <label className="block space-y-2 text-sm text-slate-600">
               <span>Meal type</span>
               <select

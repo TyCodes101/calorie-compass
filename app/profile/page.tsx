@@ -17,8 +17,8 @@ export default async function ProfilePage() {
   const user = await getCurrentUserWithProfile();
 
   return (
-    <div className="app-page mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
-      <section className="app-card rounded-[32px] p-6">
+    <div className="app-page app-screen-narrow flex min-w-0 flex-col gap-6 py-6">
+      <section className="app-card min-w-0 rounded-[32px] p-6">
         <p className="app-section-label">Profile</p>
         <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -33,7 +33,7 @@ export default async function ProfilePage() {
         </div>
       </section>
 
-      <section className="app-card rounded-[32px] p-6">
+      <section className="app-card min-w-0 rounded-[32px] p-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Daily calories</p>
@@ -46,7 +46,7 @@ export default async function ProfilePage() {
         </div>
       </section>
 
-      <section className="app-card rounded-[32px] p-2">
+      <section className="app-card min-w-0 rounded-[32px] p-2">
         {sections.map((section) => {
           const Icon = section.icon;
           return (

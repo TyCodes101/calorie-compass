@@ -17,11 +17,11 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="app-page mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
-      <section className="grid gap-6 lg:grid-cols-[1.35fr_0.95fr]">
-        <div className="app-card rounded-[32px] p-6">
+    <div className="app-page app-screen-wide flex min-w-0 flex-col gap-6 py-6">
+      <section className="grid min-w-0 gap-6 xl:grid-cols-[1.35fr_0.95fr]">
+        <div className="app-card min-w-0 rounded-[32px] p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-3">
+            <div className="min-w-0 space-y-3">
               <p className="app-section-label">Today</p>
               <h2 className="text-3xl font-semibold text-slate-950">Welcome back, {dashboard.user.name}</h2>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
@@ -38,17 +38,17 @@ export default async function DashboardPage() {
           </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <div className="app-muted-card rounded-[28px] p-5">
+            <div className="app-muted-card min-w-0 rounded-[28px] p-5">
               <div className="flex items-center gap-3 text-amber-500"><Flame className="h-5 w-5" /><span className="text-sm font-medium">Calories eaten</span></div>
               <p className="mt-4 text-4xl font-semibold text-slate-950">{dashboard.totals.calories}</p>
               <p className="mt-2 text-sm text-slate-500">Goal {dashboard.macroGoals.calories}</p>
             </div>
-            <div className="app-muted-card rounded-[28px] p-5">
+            <div className="app-muted-card min-w-0 rounded-[28px] p-5">
               <div className="flex items-center gap-3 text-sky-500"><Target className="h-5 w-5" /><span className="text-sm font-medium">Remaining</span></div>
               <p className="mt-4 text-4xl font-semibold text-slate-950">{dashboard.remainingCalories}</p>
               <p className="mt-2 text-sm text-slate-500">Keep meals realistic, not perfect.</p>
             </div>
-            <div className="app-muted-card rounded-[28px] p-5">
+            <div className="app-muted-card min-w-0 rounded-[28px] p-5">
               <div className="flex items-center gap-3 text-teal-600"><Sparkles className="h-5 w-5" /><span className="text-sm font-medium">Trust summary</span></div>
               <p className="mt-4 text-2xl font-semibold text-slate-950">{dashboard.trustSummary.headline}</p>
               <p className="mt-2 text-sm text-slate-500">{dashboard.trustSummary.estimatedSummary}</p>
@@ -56,7 +56,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="app-card rounded-[32px] p-6">
+        <div className="app-card min-w-0 rounded-[32px] p-6">
           <p className="app-section-label">Goal progress</p>
           <div className="mt-5 space-y-4">
             <MacroProgress label="Protein" current={dashboard.totals.protein} goal={dashboard.macroGoals.protein} percent={dashboard.macroProgress.protein} colorClass="bg-teal-500" />
@@ -75,10 +75,10 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="app-card rounded-[32px] p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
+      <section className="grid min-w-0 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="app-card min-w-0 rounded-[32px] p-6">
+          <div className="mb-5 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="app-section-label">Weekly trend</p>
               <h3 className="mt-2 text-2xl font-semibold text-slate-950">Calorie trend vs goal</h3>
             </div>
@@ -87,9 +87,9 @@ export default async function DashboardPage() {
           <TrendChartPanel data={dashboard.weeklyTrend} />
         </div>
 
-        <div className="app-card rounded-[32px] p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
+        <div className="app-card min-w-0 rounded-[32px] p-6">
+          <div className="mb-5 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="app-section-label">Recent meals</p>
               <h3 className="mt-2 text-2xl font-semibold text-slate-950">Today’s log</h3>
             </div>
@@ -101,9 +101,9 @@ export default async function DashboardPage() {
           <div className="space-y-3">
             {dashboard.recentMeals.length ? (
               dashboard.recentMeals.map((meal) => (
-                <div key={meal.id} className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
+                <div key={meal.id} className="min-w-0 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium capitalize text-slate-950">{meal.mealType}</p>
                         <TrustBadge trusted={meal.estimatedCount === 0} compact />

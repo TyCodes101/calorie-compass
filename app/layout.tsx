@@ -18,7 +18,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className={`${inter.className} antialiased`}>
         <div className="app-shell pb-[calc(9.5rem+env(safe-area-inset-bottom))] text-slate-900 md:pb-32">
           <header className="border-b border-slate-200/80 bg-white/70 backdrop-blur">
-            <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
+            <div className="app-screen-wide flex min-w-0 items-center justify-between py-5">
               <div>
                 <p className="app-section-label">Calorie Compass</p>
                 <h1 className="mt-2 text-lg font-semibold text-slate-950">Nutrition tracking that feels calm, clear, and trustworthy.</h1>
@@ -28,7 +28,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               </div>
             </div>
           </header>
-          <main>{children}</main>
+          <main className="min-w-0">{children}</main>
           <MobileNav />
         </div>
       </body>
