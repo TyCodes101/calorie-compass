@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import { addDaysUtc, getPastSevenDays, isoDay, startOfDayUtc } from '@/lib/date';
-import { calculateRemainingCalories, toProgressValue, zeroTotals } from '@/lib/nutrition';
+import { addDaysUtc, startOfDayUtc } from '@/lib/date';
+import { buildWeeklyTrendFromMeals, sumMealTotals } from '@/lib/dashboard-aggregation';
+import { calculateRemainingCalories, toProgressValue } from '@/lib/nutrition';
 import { summarizeStoredItems } from '@/lib/trust';
 
 export async function upsertDailyLogForDate(userId: string, inputDate: Date | string) {
@@ -26,18 +27,7 @@ export async function upsertDailyLogForDate(userId: string, inputDate: Date | st
     },
   });
 
-  const totals = meals.reduce(
-    (acc, meal) => ({
-      calories: acc.calories + meal.totalCalories,
-      protein: acc.protein + meal.totalProtein,
-      carbs: acc.carbs + meal.totalCarbs,
-      fat: acc.fat + meal.totalFat,
-      fiber: acc.fiber + meal.totalFiber,
-      sugar: acc.sugar + meal.totalSugar,
-      sodium: acc.sodium + meal.totalSodium,
-    }),
-    zeroTotals()
-  );
+  const totals = sumMealTotals(meals);
 
   return prisma.dailyLog.upsert({
     where: {
@@ -68,9 +58,8 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
   const profile = user.profile;
   const date = startOfDayUtc(inputDate);
   const nextDay = addDaysUtc(date, 1);
-  const dailyLog = await upsertDailyLogForDate(user.id, date);
 
-  const recentMeals = await prisma.meal.findMany({
+  const todayMeals = await prisma.meal.findMany({
     where: {
       userId: user.id,
       date: {
@@ -80,33 +69,34 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
     },
     include: { items: true },
     orderBy: { createdAt: 'desc' },
-    take: 5,
   });
 
-  const weeklyLogs = await prisma.dailyLog.findMany({
+  const dailyTotals = sumMealTotals(todayMeals);
+
+  const weeklyMeals = await prisma.meal.findMany({
     where: {
       userId: user.id,
       date: {
-        gte: getPastSevenDays(date)[0],
+        gte: addDaysUtc(date, -6),
         lt: nextDay,
       },
     },
-    orderBy: { date: 'asc' },
+    select: {
+      date: true,
+      totalCalories: true,
+      totalProtein: true,
+      totalCarbs: true,
+      totalFat: true,
+      totalFiber: true,
+      totalSugar: true,
+      totalSodium: true,
+    },
   });
 
-  const trendMap = new Map(weeklyLogs.map((entry) => [isoDay(entry.date), entry]));
-  const weeklyTrend = getPastSevenDays(date).map((day) => {
-    const entry = trendMap.get(isoDay(day));
-    return {
-      date: isoDay(day),
-      calories: Math.round(entry?.calories ?? 0),
-      goal: profile.dailyCalorieGoal,
-    };
-  });
-
+  const weeklyTrend = buildWeeklyTrendFromMeals(weeklyMeals, date, profile.dailyCalorieGoal);
   const carbGoal = Math.round((profile.dailyCalorieGoal * 0.4) / 4);
   const fatGoal = Math.round((profile.dailyCalorieGoal * 0.3) / 9);
-  const todayItems = recentMeals.flatMap((meal) => meal.items);
+  const todayItems = todayMeals.flatMap((meal) => meal.items);
   const trustSummary = summarizeStoredItems(todayItems);
 
   return {
@@ -115,17 +105,17 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       name: user.name,
     },
     profile,
-    date: isoDay(date),
+    date: date.toISOString().slice(0, 10),
     totals: {
-      calories: Math.round(dailyLog.calories),
-      protein: Math.round(dailyLog.protein),
-      carbs: Math.round(dailyLog.carbs),
-      fat: Math.round(dailyLog.fat),
-      fiber: Math.round(dailyLog.fiber),
-      sugar: Math.round(dailyLog.sugar),
-      sodium: Math.round(dailyLog.sodium),
+      calories: Math.round(dailyTotals.calories),
+      protein: Math.round(dailyTotals.protein),
+      carbs: Math.round(dailyTotals.carbs),
+      fat: Math.round(dailyTotals.fat),
+      fiber: Math.round(dailyTotals.fiber),
+      sugar: Math.round(dailyTotals.sugar),
+      sodium: Math.round(dailyTotals.sodium),
     },
-    remainingCalories: calculateRemainingCalories(dailyLog.calories, profile.dailyCalorieGoal),
+    remainingCalories: calculateRemainingCalories(dailyTotals.calories, profile.dailyCalorieGoal),
     macroGoals: {
       calories: profile.dailyCalorieGoal,
       protein: profile.proteinGoal,
@@ -133,9 +123,9 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       fat: fatGoal,
     },
     macroProgress: {
-      protein: toProgressValue(dailyLog.protein, profile.proteinGoal),
-      carbs: toProgressValue(dailyLog.carbs, carbGoal),
-      fat: toProgressValue(dailyLog.fat, fatGoal),
+      protein: toProgressValue(dailyTotals.protein, profile.proteinGoal),
+      carbs: toProgressValue(dailyTotals.carbs, carbGoal),
+      fat: toProgressValue(dailyTotals.fat, fatGoal),
     },
     trustSummary: {
       ...trustSummary,
@@ -144,7 +134,7 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
         ? `${trustSummary.trustedCount} foods matched trusted nutrition sources`
         : 'Log a meal to see verified coverage and source transparency.',
     },
-    recentMeals: recentMeals.map((meal) => {
+    recentMeals: todayMeals.slice(0, 5).map((meal) => {
       const summary = summarizeStoredItems(meal.items);
 
       return {
