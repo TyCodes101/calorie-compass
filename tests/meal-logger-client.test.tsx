@@ -129,6 +129,26 @@ describe('meal logger client', () => {
     expect(refreshMock).toHaveBeenCalled();
   });
 
+  it('responds conversationally to greetings instead of trying to parse a meal', async () => {
+    const fetchMock = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} userName="Tyler Cox" />);
+
+    expect(screen.getByRole('combobox', { name: /meal type/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'hi' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Hey Tyler, I'm ready when you are. Tell me what you ate and I'll estimate it.")).toBeInTheDocument();
+    expect(screen.queryByText(/assistant estimate ready/i)).not.toBeInTheDocument();
+  });
+
   it('supports barcode lookup for packaged foods', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

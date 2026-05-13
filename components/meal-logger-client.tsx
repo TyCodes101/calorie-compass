@@ -24,6 +24,7 @@ import {
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { TrustBadge } from '@/components/trust-badge';
 import type { RecentMealQuickLog } from '@/lib/history';
+import { buildLoggerIntentReply, detectLoggerIntent } from '@/lib/logger-intent';
 import { type FavoriteMealSummary, type LoggerDraft } from '@/lib/reusable-meals';
 import { getConfidenceCopy, getItemSourceLabel, getItemTrustPresentation, summarizeParsedItems } from '@/lib/trust';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -53,6 +54,7 @@ type QuickLogProps = {
   favoriteMeals?: FavoriteMealSummary[];
   recentMeals?: RecentMealQuickLog[];
   nutritionPreferences?: string | null;
+  userName?: string | null;
 };
 
 type EntryMode = 'chat' | 'barcode' | 'label';
@@ -211,6 +213,24 @@ function buildNutritionLabelPayload(label: NutritionLabelDraft) {
   };
 }
 
+function getDefaultMealType() {
+  const hour = new Date().getHours();
+
+  if (hour >= 5 && hour < 11) {
+    return 'breakfast' as const;
+  }
+
+  if (hour >= 11 && hour < 16) {
+    return 'lunch' as const;
+  }
+
+  if (hour >= 16 && hour < 22) {
+    return 'dinner' as const;
+  }
+
+  return 'snack' as const;
+}
+
 function NoticeBanner({ notice }: { notice: Notice }) {
   return (
     <div className={`rounded-[24px] border px-4 py-3 text-sm ${notice.tone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-sky-200 bg-sky-50 text-sky-800'}`}>
@@ -237,7 +257,7 @@ function ChatBubble({
           'chat-bubble max-w-[92%] rounded-[28px] px-4 py-3 shadow-sm sm:max-w-[85%]',
           compact && 'px-3.5 py-2.5',
           role === 'assistant' && tone === 'default' && 'chat-bubble-assistant',
-          role === 'assistant' && tone === 'warning' && 'border border-amber-200 bg-amber-50 text-amber-900',
+          role === 'assistant' && tone === 'warning' && 'chat-bubble-assistant-warning',
           role === 'assistant' && tone === 'success' && 'border border-emerald-200 bg-emerald-50 text-emerald-900',
           role === 'user' && 'chat-bubble-user',
         )}
@@ -338,14 +358,16 @@ function ConversationQuickStarts({
   );
 }
 
-export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], recentMeals = [], nutritionPreferences = null }: QuickLogProps) {
+export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], recentMeals = [], nutritionPreferences = null, userName = null }: QuickLogProps) {
   const router = useRouter();
   const [entryMode, setEntryMode] = useState<EntryMode>('chat');
   const [composerText, setComposerText] = useState(initialDraft?.items?.length ? '' : initialDraft?.rawText ?? '');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [nutritionLabelDraft, setNutritionLabelDraft] = useState<NutritionLabelDraft>(() => defaultNutritionLabelDraft());
-  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(initialDraft?.mealType ?? 'lunch');
+  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(() => initialDraft?.mealType ?? getDefaultMealType());
   const [activePrompt, setActivePrompt] = useState(initialDraft?.rawText ?? '');
+  const [displayUserMessage, setDisplayUserMessage] = useState(initialDraft?.rawText ?? '');
+  const [assistantChatReply, setAssistantChatReply] = useState<string | null>(null);
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [lastClarificationReply, setLastClarificationReply] = useState('');
   const [items, setItems] = useState<ParsedFoodItem[]>(initialDraft?.items ?? []);
@@ -388,7 +410,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
   const canSaveFavorite = items.length > 0 && !favoriteSaving && !(sourceReusableMealId && favoriteState === 'saved') && isOnline;
   const canSend = composerText.trim().length > 0 && !loading && isOnline;
   const canLookupBarcode = barcodeInput.replace(/\D/g, '').length >= 8 && !loading && isOnline;
-  const conversationPrompt = activePrompt || initialDraft?.rawText || '';
+  const conversationPrompt = displayUserMessage || activePrompt || initialDraft?.rawText || '';
   const assistantEstimateCopy = items.length
     ? buildAssistantEstimateCopy(conversationPrompt, totals.calories, trustSummary.estimatedCount === 0)
     : null;
@@ -404,7 +426,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [activePrompt, clarifyingQuestion, lastClarificationReply, items, loading, error, notice, saveMessage, expandedIndex, entryMode]);
+  }, [activePrompt, displayUserMessage, assistantChatReply, clarifyingQuestion, lastClarificationReply, items, loading, error, notice, saveMessage, expandedIndex, entryMode]);
 
   function clearFeedback() {
     setError(null);
@@ -429,6 +451,8 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     setBarcodeInput('');
     setNutritionLabelDraft(defaultNutritionLabelDraft());
     setActivePrompt('');
+    setDisplayUserMessage('');
+    setAssistantChatReply(null);
     setItems([]);
     setClarifyingQuestion(null);
     setLastClarificationReply('');
@@ -479,11 +503,13 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     setNotice(null);
     setSaveMessage(null);
     setLastParseOptions(options ?? null);
+    setAssistantChatReply(null);
 
     const fullText = isClarification ? `${prompt}\nAdditional detail: ${nextInput}` : prompt;
 
     if (!isClarification) {
       setActivePrompt(prompt);
+      setDisplayUserMessage(prompt);
     } else {
       setLastClarificationReply(nextInput);
     }
@@ -517,7 +543,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
         setItems([]);
         setExpandedIndex(null);
         setComposerText('');
-        setNotice({ tone: 'info', text: 'I only need one quick detail before I lock in the estimate.' });
+        setNotice(null);
         return;
       }
 
@@ -785,6 +811,38 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
   }
 
   function submitComposer() {
+    const message = composerText.trim();
+
+    if (!message || loading) {
+      return;
+    }
+
+    if (clarifyingQuestion) {
+      parseMeal();
+      return;
+    }
+
+    const intent = detectLoggerIntent(message);
+
+    if (intent !== 'food_log') {
+      clearFeedback();
+      setLastParseOptions(null);
+      setEntryMode('chat');
+      setComposerText('');
+
+      if (!items.length) {
+        setDisplayUserMessage(message);
+      }
+
+      setAssistantChatReply(
+        buildLoggerIntentReply(intent, {
+          userName,
+          hasActiveMeal: items.length > 0,
+        }),
+      );
+      return;
+    }
+
     parseMeal();
   }
 
@@ -818,17 +876,17 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
       {notice ? <NoticeBanner notice={notice} /> : null}
 
       <section className="app-card min-w-0 overflow-hidden rounded-[32px] p-4 md:p-6">
-        <div className="flex min-w-0 flex-col gap-4 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex min-w-0 flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <p className="app-section-label">AI meal assistant</p>
-            <h1 className="mt-2 text-3xl font-semibold text-slate-950">Talk through your meals naturally</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+            <h1 className="mt-2 text-[1.85rem] font-semibold leading-tight text-slate-950 sm:text-3xl">Talk through your meals naturally</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
               Calorie Compass now behaves more like a nutrition assistant than a form. Send a natural message, get an estimate first, and edit only if something looks off.
             </p>
           </div>
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600 shadow-sm md:max-w-sm">
+          <div className="rounded-[22px] border border-slate-200 bg-slate-50/75 px-4 py-3 text-sm text-slate-600 shadow-sm md:max-w-sm">
             <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-5 w-5 text-teal-600" />
+              <ShieldCheck className="mt-0.5 h-4 w-4 text-teal-600" />
               <div>
                 <p className="font-medium text-slate-900">Trust stays visible</p>
                 <p className="mt-1 leading-6">Trusted sources come first. Estimates stay labeled, and you can correct anything before it saves.</p>
@@ -837,7 +895,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
           </div>
         </div>
 
-        <div className="chat-thread mt-6 space-y-4">
+        <div className="chat-thread mt-5 space-y-4">
           <ChatBubble role="assistant">
             <div className="space-y-2 text-sm leading-6 text-slate-700">
               <p className="font-semibold text-slate-950">{editingMealId ? 'I loaded your saved meal.' : sourceReusableMealId ? 'I loaded that favorite.' : 'Tell me what you ate.'}</p>
@@ -1027,11 +1085,17 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
             </ChatBubble>
           ) : null}
 
+          {assistantChatReply ? (
+            <ChatBubble role="assistant" compact>
+              <p className="text-sm leading-6 text-slate-700">{assistantChatReply}</p>
+            </ChatBubble>
+          ) : null}
+
           {clarifyingQuestion ? (
-            <ChatBubble role="assistant" tone="warning">
+            <ChatBubble role="assistant" compact>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                  <TriangleAlert className="h-4 w-4 text-amber-600" />
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  <TriangleAlert className="h-3.5 w-3.5 text-teal-600" />
                   One quick follow-up
                 </div>
                 <p className="text-sm leading-6 text-slate-700">{clarifyingQuestion}</p>
@@ -1291,46 +1355,73 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
       <div className="app-chat-composer-shell">
         <div className="app-chat-composer-inner">
           <div className="app-chat-composer-card">
-            <div className="flex flex-wrap gap-2 pb-3">
-              {mealTypeOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setMealType(option.value)}
-                  className={clsx(
-                    'chat-meal-type-pill',
-                    mealType === option.value && 'chat-meal-type-pill-active',
-                  )}
+            <div className="flex items-center justify-between gap-3 pb-2.5">
+              <label className="chat-meal-type-field">
+                <span className="chat-meal-type-label">Meal type</span>
+                <select
+                  aria-label="Meal type"
+                  value={mealType}
+                  onChange={(event) => setMealType(event.target.value as 'breakfast' | 'lunch' | 'dinner' | 'snack')}
+                  className="chat-meal-type-select"
                 >
-                  {option.label}
+                  {mealTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="chat-helper-actions">
+                <button
+                  type="button"
+                  onClick={() => openEntryMode('barcode')}
+                  className={clsx('chat-helper-action', entryMode === 'barcode' && 'chat-helper-action-active')}
+                >
+                  Barcode
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => openEntryMode('label')}
+                  className={clsx('chat-helper-action', entryMode === 'label' && 'chat-helper-action-active')}
+                >
+                  Label
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setComposerText(promptExamples[0])}
+                  className="chat-helper-action"
+                >
+                  Example
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-end gap-3">
-              <textarea
-                ref={composerRef}
-                value={composerText}
-                onChange={(event) => setComposerText(event.target.value)}
-                rows={1}
-                className="chat-composer-textarea"
-                placeholder={clarifyingQuestion ? 'Type the one detail that would make the estimate more accurate' : 'Tell the assistant what you ate'}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    submitComposer();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={submitComposer}
-                disabled={!canSend}
-                className="chat-send-button"
-                aria-label={clarifyingQuestion ? 'Send clarification' : 'Send meal'}
-              >
-                {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
-              </button>
+            <div className="chat-composer-row">
+              <div className="chat-composer-input-shell">
+                <textarea
+                  ref={composerRef}
+                  value={composerText}
+                  onChange={(event) => setComposerText(event.target.value)}
+                  rows={1}
+                  className="chat-composer-textarea"
+                  placeholder={clarifyingQuestion ? 'Type the one detail that would make the estimate more accurate' : 'Tell the assistant what you ate'}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      submitComposer();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={submitComposer}
+                  disabled={!canSend}
+                  className="chat-send-button"
+                  aria-label={clarifyingQuestion ? 'Send clarification' : 'Send meal'}
+                >
+                  {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
@@ -1345,30 +1436,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                     ? 'Press enter to send. Use shift + enter for a new line.'
                     : 'Estimate first, edit only if needed.'}
               </p>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => openEntryMode('barcode')}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 transition hover:text-teal-600"
-                >
-                  Barcode
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openEntryMode('label')}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 transition hover:text-teal-600"
-                >
-                  Nutrition label
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setComposerText(promptExamples[0])}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 transition hover:text-teal-600"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Use an example
-                </button>
-              </div>
+              <span className="text-[11px] font-medium text-slate-400">Chat-style logging, review before save</span>
             </div>
           </div>
         </div>
