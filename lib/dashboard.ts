@@ -102,6 +102,29 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
   const fatGoal = Math.round((profile.dailyCalorieGoal * 0.3) / 9);
   const todayItems = todayMeals.flatMap((meal) => meal.items);
   const trustSummary = summarizeStoredItems(todayItems);
+  const remainingCalories = calculateRemainingCalories(dailyTotals.calories, profile.dailyCalorieGoal);
+  const proteinRemaining = Math.max(0, Math.round(profile.proteinGoal - dailyTotals.protein));
+
+  const dailySummary = todayMeals.length === 0
+    ? {
+        title: 'Nothing logged yet today',
+        description: 'Start with one natural message and the assistant will build the rest around it.',
+      }
+    : remainingCalories >= 0
+      ? {
+          title: remainingCalories === 0 ? 'Right on target so far' : `${remainingCalories} calories remaining`,
+          description:
+            proteinRemaining > 0
+              ? `${proteinRemaining}g of protein left to hit your target without forcing the rest of the day.`
+              : 'Protein is already in a strong place today. Keep the rest steady and realistic.',
+        }
+      : {
+          title: `${Math.abs(remainingCalories)} calories over target`,
+          description:
+            proteinRemaining > 0
+              ? `You are over on calories, but still have about ${proteinRemaining}g of protein left if dinner needs to be lighter.`
+              : 'You are a bit over target, but the day is still useful data. Small adjustments beat starting over tomorrow.',
+        };
 
   return {
     user: {
@@ -119,7 +142,8 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       sugar: Math.round(dailyTotals.sugar),
       sodium: Math.round(dailyTotals.sodium),
     },
-    remainingCalories: calculateRemainingCalories(dailyTotals.calories, profile.dailyCalorieGoal),
+    remainingCalories,
+    dailySummary,
     macroGoals: {
       calories: profile.dailyCalorieGoal,
       protein: profile.proteinGoal,

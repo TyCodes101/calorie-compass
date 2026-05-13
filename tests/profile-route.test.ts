@@ -29,6 +29,7 @@ describe('profile PATCH route', () => {
         activityLevel: 'MODERATE',
         dailyCalorieGoal: 2200,
         proteinGoal: 160,
+        aiPreferenceNotes: 'high protein',
       },
     });
     saveProfile.mockResolvedValue({ id: 'user_1' });
@@ -53,6 +54,30 @@ describe('profile PATCH route', () => {
       activityLevel: 'MODERATE',
       dailyCalorieGoal: 2400,
       proteinGoal: 160,
+      nutritionPreferences: 'high protein',
+    });
+  });
+
+  it('accepts nutrition preference updates in partial patches', async () => {
+    const request = new Request('http://localhost/api/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nutritionPreferences: 'high protein, quick breakfast' }),
+    });
+
+    const response = await PATCH(request);
+
+    expect(response.status).toBe(200);
+    expect(saveProfile).toHaveBeenCalledWith({
+      name: 'Tyler',
+      age: 21,
+      heightCm: 180,
+      weightLbs: 180,
+      goal: 'MAINTAIN',
+      activityLevel: 'MODERATE',
+      dailyCalorieGoal: 2200,
+      proteinGoal: 160,
+      nutritionPreferences: 'high protein, quick breakfast',
     });
   });
 

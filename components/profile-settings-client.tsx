@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { type ReactNode, useMemo, useState } from 'react';
 import { ArrowLeft, BellRing, CheckCircle2, ChevronRight, LoaderCircle, MoonStar, Sparkles } from 'lucide-react';
 
@@ -584,17 +585,22 @@ export function NotificationsSettingsForm() {
 }
 
 export function AccountSettingsForm({ initial }: { initial: ProfileSettingsSnapshot }) {
+  const router = useRouter();
   const [name, setName] = useState(initial.name);
+  const [nutritionPreferences, setNutritionPreferences] = useState(initial.nutritionPreferences ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [dataActionNotice, setDataActionNotice] = useState<string | null>(null);
 
   async function save() {
     setSaving(true);
     setError(null);
 
     try {
-      await saveProfilePatch({ name });
+      await saveProfilePatch({ name, nutritionPreferences });
       setSaved(true);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'We couldn’t save your settings right now. Please try again.');
@@ -603,10 +609,64 @@ export function AccountSettingsForm({ initial }: { initial: ProfileSettingsSnaps
     }
   }
 
+  async function exportData() {
+    setExporting(true);
+    setDataActionNotice(null);
+
+    try {
+      const response = await fetch('/api/profile/export');
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload) {
+        throw new Error('We couldn’t export your data right now. Please try again.');
+      }
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `calorie-compass-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setDataActionNotice('Export ready. Your meal history snapshot downloaded as JSON.');
+    } catch {
+      setDataActionNotice('We couldn’t export your data right now. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function resetDemoData() {
+    if (!window.confirm('Reset meal history, favorites, and demo logs? Your profile and targets will stay in place.')) {
+      return;
+    }
+
+    setResetting(true);
+    setDataActionNotice(null);
+
+    try {
+      const response = await fetch('/api/profile/reset', { method: 'POST' });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'We couldn’t reset your demo data right now. Please try again.');
+      }
+
+      setDataActionNotice('Demo data reset. Your profile stayed intact, and the app is ready for a clean logging pass.');
+      router.refresh();
+    } catch {
+      setDataActionNotice('We couldn’t reset your demo data right now. Please try again.');
+    } finally {
+      setResetting(false);
+    }
+  }
+
   return (
     <SectionLayout
       title="Account"
-      description="Keep your display name and account basics clean without cluttering this area with settings you do not need every day."
+      description="Keep your display name, nutrition preferences, and data controls tidy without cluttering this area with settings you do not need every day."
       badge={<SaveState saving={saving} savedLabel={saved ? 'Saved' : 'Unsaved'} error={error} />}
     >
       <section className="app-card min-w-0 rounded-[32px] p-6">
@@ -622,12 +682,24 @@ export function AccountSettingsForm({ initial }: { initial: ProfileSettingsSnaps
               className="app-input px-4 py-3"
             />
           </label>
+          <label className="space-y-2 text-sm text-slate-600">
+            <span>Nutrition preferences</span>
+            <textarea
+              value={nutritionPreferences}
+              onChange={(event) => {
+                setNutritionPreferences(event.target.value);
+                setSaved(false);
+              }}
+              className="app-textarea min-h-28 px-4 py-3"
+              placeholder="Example: high protein, avoid heavy dairy, quick breakfasts on weekdays"
+            />
+          </label>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Profile status</p>
               <p className="mt-3 text-base font-semibold text-slate-950">Ready for everyday use</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Your name and nutrition settings feed the live dashboard, logger, and history flows across the app.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Your name and nutrition preferences feed the live dashboard, logger, and history flows across the app.</p>
             </div>
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Data handling</p>
@@ -652,6 +724,26 @@ export function AccountSettingsForm({ initial }: { initial: ProfileSettingsSnaps
               {saving ? 'Saving...' : 'Save account changes'}
             </button>
           </div>
+
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+            <p className="font-semibold text-slate-900">Privacy and data note</p>
+            <p className="mt-2 leading-6">Meal history, favorites, and profile values stay inside your Calorie Compass account data. Export gives you a JSON backup, and reset clears demo logging data while keeping your profile and targets.</p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button type="button" onClick={exportData} disabled={exporting || resetting} className="app-button-secondary inline-flex items-center justify-center gap-2 rounded-[20px] px-4 py-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">
+              {exporting ? 'Preparing export...' : 'Export meal history'}
+            </button>
+            <button type="button" onClick={resetDemoData} disabled={resetting || exporting} className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-4 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60">
+              {resetting ? 'Resetting...' : 'Reset demo data'}
+            </button>
+          </div>
+
+          {dataActionNotice ? (
+            <div className={`rounded-[20px] border px-4 py-3 text-sm ${dataActionNotice.includes('couldn’t') ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-sky-200 bg-sky-50 text-sky-800'}`}>
+              {dataActionNotice}
+            </div>
+          ) : null}
         </div>
       </section>
     </SectionLayout>

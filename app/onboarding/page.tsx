@@ -28,6 +28,7 @@ export default async function OnboardingPage() {
             activityLevel: (user?.profile?.activityLevel as keyof typeof ActivityLevel | undefined) ?? 'MODERATE',
             dailyCalorieGoal: user?.profile?.dailyCalorieGoal,
             proteinGoal: user?.profile?.proteinGoal,
+            nutritionPreferences: user?.profile?.aiPreferenceNotes,
           }}
         />
       </section>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { parseMealText } from '@/lib/ai/openai';
+import { getCurrentUserWithProfile } from '@/lib/current-user';
 
 const requestSchema = z.object({
   text: z.string().min(3),
@@ -27,7 +28,12 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { text, mealType, barcode, nutritionLabel } = requestSchema.parse(body);
-    const parsed = await parseMealText(text, mealType, { barcode, nutritionLabel });
+    const user = await getCurrentUserWithProfile();
+    const parsed = await parseMealText(text, mealType, {
+      barcode,
+      nutritionLabel,
+      userPreferences: user?.profile?.aiPreferenceNotes ?? null,
+    });
     return NextResponse.json(parsed);
   } catch (error) {
     console.error('parse-meal error', error);

@@ -2,7 +2,17 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GoalsSettingsForm, PreferencesSettingsForm } from '@/components/profile-settings-client';
+import { AccountSettingsForm, GoalsSettingsForm, PreferencesSettingsForm } from '@/components/profile-settings-client';
+
+const pushMock = vi.fn();
+const refreshMock = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: pushMock,
+    refresh: refreshMock,
+  }),
+}));
 
 vi.mock('next/link', () => ({
   default: ({
@@ -27,6 +37,8 @@ describe('profile settings client flows', () => {
     window.localStorage.clear();
     window.sessionStorage.clear();
     vi.restoreAllMocks();
+    pushMock.mockReset();
+    refreshMock.mockReset();
   });
 
   it('saves preferences to device storage', async () => {
@@ -66,6 +78,7 @@ describe('profile settings client flows', () => {
           activityLevel: 'MODERATE',
           dailyCalorieGoal: 2200,
           proteinGoal: 160,
+          nutritionPreferences: 'high protein',
         }}
       />,
     );
@@ -91,5 +104,48 @@ describe('profile settings client flows', () => {
         }),
       }),
     );
+  });
+
+  it('saves nutrition preferences through the account settings PATCH flow', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AccountSettingsForm
+        initial={{
+          name: 'Tyler',
+          age: 21,
+          heightCm: 180,
+          weightLbs: 180,
+          goal: 'MAINTAIN',
+          activityLevel: 'MODERATE',
+          dailyCalorieGoal: 2200,
+          proteinGoal: 160,
+          nutritionPreferences: 'high protein',
+        }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Nutrition preferences'), {
+      target: { value: 'high protein, quick breakfast' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save account changes' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/profile',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: 'Tyler',
+            nutritionPreferences: 'high protein, quick breakfast',
+          }),
+        }),
+      );
+    });
   });
 });

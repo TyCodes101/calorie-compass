@@ -1,4 +1,5 @@
 import { MealLoggerClient } from '@/components/meal-logger-client';
+import { getCurrentUserWithProfile } from '@/lib/current-user';
 import { getRecentMealsForQuickLog } from '@/lib/history';
 import { getFavoriteMeals, getLoggerDraft } from '@/lib/reusable-meals';
 
@@ -23,7 +24,7 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
   const mealId = pickFirst(params?.mealId);
   const reusableMealId = pickFirst(params?.favorite);
   const editMealId = pickFirst(params?.editMealId);
-  const [initialDraft, favoriteMeals, recentMeals] = await Promise.all([
+  const [initialDraft, favoriteMeals, recentMeals, user] = await Promise.all([
     getLoggerDraft({
       mealId,
       reusableMealId,
@@ -31,6 +32,7 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
     }),
     getFavoriteMeals(),
     getRecentMealsForQuickLog(),
+    getCurrentUserWithProfile(),
   ]);
 
   return (
@@ -39,6 +41,7 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
       initialDraft={initialDraft}
       favoriteMeals={favoriteMeals}
       recentMeals={recentMeals}
+      nutritionPreferences={user?.profile?.aiPreferenceNotes ?? null}
     />
   );
 }

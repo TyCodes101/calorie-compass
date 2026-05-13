@@ -16,6 +16,7 @@ const requestSchema = z.object({
   activityLevel: z.nativeEnum(ActivityLevel),
   dailyCalorieGoal: z.number().int().positive(),
   proteinGoal: z.number().int().positive(),
+  nutritionPreferences: z.string().max(500).nullable().optional(),
 });
 
 const patchSchema = requestSchema

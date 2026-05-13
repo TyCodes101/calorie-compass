@@ -12,6 +12,7 @@ export type ProfileInput = {
   activityLevel: keyof typeof ActivityLevel;
   dailyCalorieGoal: number;
   proteinGoal: number;
+  nutritionPreferences?: string | null;
 };
 
 export async function saveProfile(input: ProfileInput) {
@@ -43,6 +44,7 @@ export async function saveProfile(input: ProfileInput) {
               activityLevel: input.activityLevel,
               dailyCalorieGoal: input.dailyCalorieGoal,
               proteinGoal: input.proteinGoal,
+              aiPreferenceNotes: input.nutritionPreferences?.trim() || null,
             },
           },
         },
@@ -71,6 +73,7 @@ export async function saveProfile(input: ProfileInput) {
               activityLevel: input.activityLevel,
               dailyCalorieGoal: input.dailyCalorieGoal,
               proteinGoal: input.proteinGoal,
+              aiPreferenceNotes: input.nutritionPreferences?.trim() || null,
             },
             update: {
               age: input.age,
@@ -80,6 +83,7 @@ export async function saveProfile(input: ProfileInput) {
               activityLevel: input.activityLevel,
               dailyCalorieGoal: input.dailyCalorieGoal,
               proteinGoal: input.proteinGoal,
+              aiPreferenceNotes: input.nutritionPreferences?.trim() || null,
             },
           },
         },

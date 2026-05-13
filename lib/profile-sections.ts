@@ -22,7 +22,7 @@ export const profileSections = [
   {
     slug: 'account',
     label: 'Account',
-    description: 'Keep your name and account details tidy in one simple place.',
+    description: 'Keep your name, nutrition preferences, and data controls tidy in one simple place.',
   },
 ] as const;
 

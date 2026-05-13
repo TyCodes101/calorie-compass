@@ -9,6 +9,7 @@ export type ProfileSettingsSnapshot = {
   activityLevel: ActivityLevel;
   dailyCalorieGoal: number;
   proteinGoal: number;
+  nutritionPreferences?: string | null;
 };
 
 type CurrentUserLike = {
@@ -21,6 +22,7 @@ type CurrentUserLike = {
     activityLevel?: ActivityLevel | null;
     dailyCalorieGoal?: number | null;
     proteinGoal?: number | null;
+    aiPreferenceNotes?: string | null;
   } | null;
 } | null;
 
@@ -33,6 +35,7 @@ export const defaultProfileSettings: ProfileSettingsSnapshot = {
   activityLevel: ActivityLevel.MODERATE,
   dailyCalorieGoal: 2200,
   proteinGoal: 160,
+  nutritionPreferences: null,
 };
 
 export function buildProfileSettingsSnapshot(user: CurrentUserLike): ProfileSettingsSnapshot {
@@ -45,5 +48,6 @@ export function buildProfileSettingsSnapshot(user: CurrentUserLike): ProfileSett
     activityLevel: user?.profile?.activityLevel ?? defaultProfileSettings.activityLevel,
     dailyCalorieGoal: user?.profile?.dailyCalorieGoal ?? defaultProfileSettings.dailyCalorieGoal,
     proteinGoal: user?.profile?.proteinGoal ?? defaultProfileSettings.proteinGoal,
+    nutritionPreferences: user?.profile?.aiPreferenceNotes ?? defaultProfileSettings.nutritionPreferences,
   };
 }

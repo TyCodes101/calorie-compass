@@ -13,6 +13,7 @@ type OnboardingInitial = {
   activityLevel?: 'LOW' | 'MODERATE' | 'HIGH' | 'VERY_HIGH';
   dailyCalorieGoal?: number;
   proteinGoal?: number;
+  nutritionPreferences?: string | null;
 };
 
 const steps = ['Welcome', 'Goal', 'Targets', 'Basics', 'Start'];
@@ -35,6 +36,7 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
     activityLevel: initial?.activityLevel ?? 'MODERATE',
     dailyCalorieGoal: initial?.dailyCalorieGoal ?? 2300,
     proteinGoal: initial?.proteinGoal ?? 180,
+    nutritionPreferences: initial?.nutritionPreferences ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +68,10 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
         setSaving(false);
         setError(data?.error ?? 'We couldn’t save your profile right now. Please try again.');
         return;
+      }
+
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('calorie-compass.onboarding-complete', 'true');
       }
 
       router.push('/logger');
@@ -192,6 +198,15 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
                 <option value="VERY_HIGH">Very high</option>
               </select>
             </label>
+            <label className="space-y-2 text-sm text-slate-600 sm:col-span-2">
+              <span>Nutrition preferences, optional</span>
+              <textarea
+                value={form.nutritionPreferences}
+                onChange={(event) => setForm((current) => ({ ...current, nutritionPreferences: event.target.value }))}
+                className="app-textarea min-h-28 px-4 py-3"
+                placeholder="Example: high protein, lactose-light when possible, usually eat a quick breakfast"
+              />
+            </label>
           </div>
         </section>
       ) : null}
@@ -207,6 +222,9 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
           <div className="rounded-[24px] border border-white bg-white/90 p-4 text-sm text-slate-600 shadow-sm">
             <p><span className="font-medium text-slate-900">Goal:</span> {goalOptions.find((option) => option.value === form.goal)?.label}</p>
             <p className="mt-1"><span className="font-medium text-slate-900">Targets:</span> {form.dailyCalorieGoal} calories, {form.proteinGoal}g protein</p>
+            {form.nutritionPreferences.trim() ? (
+              <p className="mt-1"><span className="font-medium text-slate-900">Preferences:</span> {form.nutritionPreferences.trim()}</p>
+            ) : null}
           </div>
         </section>
       ) : null}

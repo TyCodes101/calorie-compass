@@ -15,11 +15,25 @@ const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
 export async function parseMealText(
   text: string,
   mealType?: string,
-  options?: { barcode?: string | null; nutritionLabel?: NutritionLabelInput | null }
+  options?: { barcode?: string | null; nutritionLabel?: NutritionLabelInput | null; userPreferences?: string | null }
 ): Promise<ParsedMealResponse> {
   const analysis = analyzeMealText(text);
   const clarification = buildClarificationDecision(analysis);
   const inferredMealType = inferMealType(mealType, text);
+  const hasDirectNutritionInput = Boolean(options?.barcode || options?.nutritionLabel);
+
+  if (hasDirectNutritionInput) {
+    const resolvedEstimate = await resolveNutritionEstimate({
+      text,
+      mealType: inferredMealType,
+      barcode: options?.barcode,
+      nutritionLabel: options?.nutritionLabel,
+    });
+
+    if (resolvedEstimate) {
+      return finalizeParsedResponse(analysis, resolvedEstimate);
+    }
+  }
 
   if (!clarification.needsClarification) {
     const resolvedEstimate = await resolveNutritionEstimate({
@@ -48,13 +62,14 @@ export async function parseMealText(
       {
         role: 'system',
         content:
-          'You are a nutrition estimation engine. Return only valid JSON. Be conservative and honest. If the meal is too vague, you may signal that clarification is needed, but do not ask more than one short follow-up question. If the meal is specific enough, estimate immediately. Prefer estimation first when a reasonable default exists, then let the user adjust. Generic meals like protein shakes, sandwiches, salads, pasta, tacos, and bowls should usually be estimated instead of blocked by a follow-up unless there is no reasonable baseline at all. Prefer itemized outputs, preserve restaurant or brand information in notes when helpful, and never invent precision you do not have. Recognize common restaurant meals from brands like Chipotle, Starbucks, Chick-fil-A, and McDonald\'s when the user gives clear menu-like details. If the meal is a simple countable food with an explicit quantity, like bananas, eggs, apples, bagels, yogurt, rice cakes, toast, or protein bars, do not ask a follow-up question. Use a reasonable trusted default serving and go straight to review. Only ask about sauces, oils, or toppings when the food actually makes that relevant. Output keys: needs_clarification, clarifying_question, meal_type, confidence_score, items, totals. Items must include food_name, quantity, unit, calories, protein, carbs, fat, fiber, sugar, sodium, notes. Totals must include calories, protein, carbs, fat, fiber, sugar, sodium. Nutrition estimates are approximate and not medical advice.',
+          'You are a nutrition estimation engine. Return only valid JSON. Be conservative and honest. If the meal is too vague, you may signal that clarification is needed, but do not ask more than one short follow-up question. If the meal is specific enough, estimate immediately. Prefer estimation first when a reasonable default exists, then let the user adjust. Generic meals like protein shakes, sandwiches, salads, pasta, tacos, and bowls should usually be estimated instead of blocked by a follow-up unless there is no reasonable baseline at all. Prefer itemized outputs, preserve restaurant or brand information in notes when helpful, and never invent precision you do not have. Recognize common restaurant meals from brands like Chipotle, Starbucks, Chick-fil-A, and McDonald\'s when the user gives clear menu-like details. If the meal is a simple countable food with an explicit quantity, like bananas, eggs, apples, bagels, yogurt, rice cakes, toast, or protein bars, do not ask a follow-up question. Use a reasonable trusted default serving and go straight to review. Only ask about sauces, oils, or toppings when the food actually makes that relevant. If user preferences are provided, use them only as soft context for assumptions and phrasing. Never let them override the explicit meal description. Output keys: needs_clarification, clarifying_question, meal_type, confidence_score, items, totals. Items must include food_name, quantity, unit, calories, protein, carbs, fat, fiber, sugar, sodium, notes. Totals must include calories, protein, carbs, fat, fiber, sugar, sodium. Nutrition estimates are approximate and not medical advice.',
       },
       {
         role: 'user',
         content: JSON.stringify({
           meal_text: text,
           suggested_meal_type: mealType ?? null,
+          user_preferences: options?.userPreferences ?? null,
           analysis_hints: {
             detected_brand: analysis.brand,
             category: analysis.category,

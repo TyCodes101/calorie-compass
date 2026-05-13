@@ -59,8 +59,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                   <h2 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950 md:text-[2rem]">Welcome back, {dashboard.user.name}</h2>
                   <p className="max-w-2xl text-sm leading-6 text-slate-600 md:text-[0.95rem]">
                     You have logged <span className="font-semibold text-slate-950">{dashboard.totals.calories} calories</span> today and have{' '}
-                    <span className="font-semibold text-slate-950">{dashboard.remainingCalories} calories</span> remaining.
+                    <span className="font-semibold text-slate-950">{Math.abs(dashboard.remainingCalories)} calories</span>{' '}
+                    {dashboard.remainingCalories >= 0 ? 'remaining' : 'over target'}.
                   </p>
+                  <p className="max-w-2xl text-sm leading-6 text-slate-500 md:text-[0.95rem]">{dashboard.dailySummary.description}</p>
                 </div>
                 <Link
                   href="/logger"
@@ -90,8 +92,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     </div>
                     <span className="text-sm font-medium text-slate-700">Remaining</span>
                   </div>
-                  <p className="mt-4 text-[2rem] font-semibold tracking-[-0.03em] text-slate-950">{dashboard.remainingCalories}</p>
-                  <p className="mt-2 text-sm text-slate-500">Keep meals realistic, not perfect.</p>
+                  <p className={`mt-4 text-[2rem] font-semibold tracking-[-0.03em] ${dashboard.remainingCalories >= 0 ? 'text-slate-950' : 'text-rose-600'}`}>
+                    {dashboard.remainingCalories >= 0 ? dashboard.remainingCalories : `+${Math.abs(dashboard.remainingCalories)}`}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">{dashboard.dailySummary.title}</p>
                 </div>
 
                 <div className="app-muted-card rounded-[28px] p-5">
