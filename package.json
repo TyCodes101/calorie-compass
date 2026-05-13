@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "catalog:sync": "node scripts/sync-nutrition-catalog.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {

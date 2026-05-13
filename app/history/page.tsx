@@ -9,11 +9,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function HistoryPage() {
   const [history, favorites] = await Promise.all([getMealHistory(), getFavoriteMeals()]);
+  const hasHistory = history.some((group) => group.meals.length > 0);
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6">
+    <div className="app-page mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6">
       <section className="app-card rounded-[32px] p-6">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="app-section-label">History</p>
             <h1 className="mt-2 text-3xl font-semibold text-slate-950">Your meal timeline</h1>
@@ -21,7 +22,7 @@ export default async function HistoryPage() {
               Scroll recent meals, relog favorites fast, and keep a calm view of what you actually ate.
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
             <Search className="h-4 w-4" />
             Filters later
           </div>
@@ -61,6 +62,16 @@ export default async function HistoryPage() {
               </Link>
             ))}
           </div>
+        </section>
+      ) : null}
+
+      {!favorites.length && !hasHistory ? (
+        <section className="app-empty-state rounded-[28px] p-6 text-sm text-slate-600">
+          <p className="font-semibold text-slate-900">No meals saved yet</p>
+          <p className="mt-2 leading-6">This is where your recent meals, favorites, and quick repeat options will show up once you log a few meals.</p>
+          <Link href="/logger" className="mt-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-4 py-2 font-medium text-teal-700 transition hover:border-teal-300 hover:text-teal-600">
+            Log a meal
+          </Link>
         </section>
       ) : null}
 

@@ -345,6 +345,39 @@ function matchGenericSegment(segment: string): ParsedFoodItem[] {
     if (banana) items.push(scaleCatalogFood(banana, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:banana|bananas)/, 1), 'banana'));
   }
 
+  if (segment.includes('apple')) {
+    const apple = findCatalogFoodById('generic_apple');
+    if (apple) items.push(scaleCatalogFood(apple, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:apple|apples)/, 1), 'apple'));
+  }
+
+  if (segment.includes('rice cake')) {
+    const riceCake = findCatalogFoodById('generic_rice_cake');
+    if (riceCake) items.push(scaleCatalogFood(riceCake, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:rice cake|rice cakes)/, 1), 'cake'));
+  }
+
+  if (segment.includes('bagel')) {
+    const bagel = findCatalogFoodById('generic_bagel');
+    if (bagel) items.push(scaleCatalogFood(bagel, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:bagel|bagels)/, 1), 'bagel'));
+  }
+
+  if (segment.includes('protein bar')) {
+    const proteinBar = findCatalogFoodById('generic_protein_bar');
+    if (proteinBar) items.push(scaleCatalogFood(proteinBar, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:protein bar|protein bars)/, 1), 'bar'));
+  }
+
+  if (segment.includes('greek yogurt') || (/\byogurt\b/.test(segment) && !detectPackagedBrand(segment))) {
+    const greekYogurt = findCatalogFoodById('generic_greek_yogurt');
+    if (greekYogurt) {
+      items.push(
+        scaleCatalogFood(
+          greekYogurt,
+          quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:greek\s+)?(?:yogurt|yogurts|cup|cups|container|containers)/, 1),
+          'cup',
+        ),
+      );
+    }
+  }
+
   if (segment.includes('cheese')) {
     const cheese = findCatalogFoodById('generic_cheese');
     if (cheese) items.push(scaleCatalogFood(cheese, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:slice|slices)\s+(?:of\s+)?cheese/, 1), 'slice'));

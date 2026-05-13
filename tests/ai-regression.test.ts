@@ -18,6 +18,20 @@ const cases = [
     minItems: 1,
   },
   {
+    label: 'countable simple snack with quantity',
+    text: '2 rice cakes',
+    mealType: 'snack' as const,
+    expectClarification: false,
+    minItems: 1,
+  },
+  {
+    label: 'bare protein shake remains ambiguous',
+    text: 'protein shake',
+    mealType: 'snack' as const,
+    expectClarification: true,
+    minItems: 0,
+  },
+  {
     label: 'vague chicken and rice',
     text: 'Chicken and rice',
     mealType: 'dinner' as const,

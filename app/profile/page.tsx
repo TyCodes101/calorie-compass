@@ -17,17 +17,17 @@ export default async function ProfilePage() {
   const user = await getCurrentUserWithProfile();
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
+    <div className="app-page mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
       <section className="app-card rounded-[32px] p-6">
         <p className="app-section-label">Profile</p>
-        <div className="mt-3 flex items-start justify-between gap-4">
+        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-semibold text-slate-950">Settings and goals</h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
               Keep your targets simple, visible, and easy to adjust as your routine changes.
             </p>
           </div>
-          <Link href="/onboarding" className="app-button-secondary px-4 py-2 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700">
+          <Link href="/onboarding" className="app-button-secondary inline-flex w-full items-center justify-center px-4 py-3 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700 sm:w-auto">
             Edit profile
           </Link>
         </div>

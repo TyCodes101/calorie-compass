@@ -38,7 +38,7 @@ export async function parseMealText(text: string, mealType?: string): Promise<Pa
       {
         role: 'system',
         content:
-          'You are a nutrition estimation engine. Return only valid JSON. Be conservative and honest. If the meal is too vague, you may signal that clarification is needed, but do not ask more than one short follow-up question. If the meal is specific enough, estimate immediately. Prefer itemized outputs, preserve restaurant or brand information in notes when helpful, and never invent precision you do not have. Recognize common restaurant meals from brands like Chipotle, Starbucks, Chick-fil-A, and McDonald\'s when the user gives clear menu-like details. Output keys: needs_clarification, clarifying_question, meal_type, confidence_score, items, totals. Items must include food_name, quantity, unit, calories, protein, carbs, fat, fiber, sugar, sodium, notes. Totals must include calories, protein, carbs, fat, fiber, sugar, sodium. Nutrition estimates are approximate and not medical advice.',
+          'You are a nutrition estimation engine. Return only valid JSON. Be conservative and honest. If the meal is too vague, you may signal that clarification is needed, but do not ask more than one short follow-up question. If the meal is specific enough, estimate immediately. Prefer itemized outputs, preserve restaurant or brand information in notes when helpful, and never invent precision you do not have. Recognize common restaurant meals from brands like Chipotle, Starbucks, Chick-fil-A, and McDonald\'s when the user gives clear menu-like details. If the meal is a simple countable food with an explicit quantity, like bananas, eggs, apples, bagels, yogurt, rice cakes, toast, or protein bars, do not ask a follow-up question. Use a reasonable trusted default serving and go straight to review. Only ask about sauces, oils, or toppings when the food actually makes that relevant. Output keys: needs_clarification, clarifying_question, meal_type, confidence_score, items, totals. Items must include food_name, quantity, unit, calories, protein, carbs, fat, fiber, sugar, sodium, notes. Totals must include calories, protein, carbs, fat, fiber, sugar, sodium. Nutrition estimates are approximate and not medical advice.',
       },
       {
         role: 'user',
@@ -50,6 +50,8 @@ export async function parseMealText(text: string, mealType?: string): Promise<Pa
             category: analysis.category,
             specificity: analysis.specificity,
             has_portion: analysis.hasPortion,
+            has_explicit_countable_quantity: analysis.hasExplicitCountableQuantity,
+            looks_like_simple_countable_meal: analysis.looksLikeSimpleCountableMeal,
             has_cooking_style: analysis.hasCookingStyle,
             has_sauce_signal: analysis.hasSauceSignal,
           },

@@ -16,7 +16,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body className={`${inter.className} antialiased`}>
-        <div className="app-shell pb-[calc(8.5rem+env(safe-area-inset-bottom))] text-slate-900 md:pb-40">
+        <div className="app-shell pb-[calc(9.5rem+env(safe-area-inset-bottom))] text-slate-900 md:pb-32">
           <header className="border-b border-slate-200/80 bg-white/70 backdrop-blur">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
               <div>

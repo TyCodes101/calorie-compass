@@ -1,4 +1,5 @@
 import type { ParsedFoodItem } from '@/lib/ai/types';
+import { getPersistableCatalogFoodIds } from '@/lib/catalog-persistence';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 import { logConnectionReady, logWriteFailure, logWriteStart, logWriteSuccess } from '@/lib/persistence';
 import { prisma } from '@/lib/prisma';
@@ -208,11 +209,16 @@ export async function createFavoriteMealTemplate(payload: TemplateInput & { reus
   }
 
   const template = buildReusableMealTemplateInput(payload);
+  const persistableCatalogFoodIds = await getPersistableCatalogFoodIds(template.items.map((item) => item.catalogFoodId ?? null));
+  const persistableItems = template.items.map((item) => ({
+    ...item,
+    catalogFoodId: item.catalogFoodId && persistableCatalogFoodIds.has(item.catalogFoodId) ? item.catalogFoodId : null,
+  }));
 
   logWriteStart('favorite.save', {
     userId: user.id,
     mealType: template.mealType,
-    itemCount: template.items.length,
+    itemCount: persistableItems.length,
     existingFavoriteId: payload.reusable_meal_id ?? null,
   });
 
@@ -246,7 +252,7 @@ export async function createFavoriteMealTemplate(payload: TemplateInput & { reus
           isFavorite: true,
           items: {
             deleteMany: {},
-            create: template.items,
+            create: persistableItems,
           },
         },
         include: { items: true },
@@ -270,7 +276,7 @@ export async function createFavoriteMealTemplate(payload: TemplateInput & { reus
         confidenceScore: template.confidenceScore,
         isFavorite: true,
         items: {
-          create: template.items,
+          create: persistableItems,
         },
       },
       include: { items: true },

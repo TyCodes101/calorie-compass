@@ -629,6 +629,105 @@
       ]
     },
     {
+      "id": "generic_apple",
+      "canonicalName": "Apple",
+      "brand": null,
+      "servingQuantity": 1,
+      "servingUnit": "apple",
+      "calories": 95,
+      "protein": 0.5,
+      "carbs": 25,
+      "fat": 0.3,
+      "fiber": 4.4,
+      "sugar": 19,
+      "sodium": 2,
+      "sourceId": "generic_reference",
+      "active": true,
+      "aliases": [
+        "apple"
+      ]
+    },
+    {
+      "id": "generic_rice_cake",
+      "canonicalName": "Rice cake",
+      "brand": null,
+      "servingQuantity": 1,
+      "servingUnit": "cake",
+      "calories": 35,
+      "protein": 0.7,
+      "carbs": 7.3,
+      "fat": 0.3,
+      "fiber": 0.3,
+      "sugar": 0,
+      "sodium": 15,
+      "sourceId": "generic_reference",
+      "active": true,
+      "aliases": [
+        "rice cake",
+        "rice cakes"
+      ]
+    },
+    {
+      "id": "generic_bagel",
+      "canonicalName": "Bagel",
+      "brand": null,
+      "servingQuantity": 1,
+      "servingUnit": "bagel",
+      "calories": 250,
+      "protein": 9,
+      "carbs": 49,
+      "fat": 1.5,
+      "fiber": 2,
+      "sugar": 6,
+      "sodium": 450,
+      "sourceId": "generic_reference",
+      "active": true,
+      "aliases": [
+        "bagel",
+        "plain bagel"
+      ]
+    },
+    {
+      "id": "generic_protein_bar",
+      "canonicalName": "Protein bar",
+      "brand": null,
+      "servingQuantity": 1,
+      "servingUnit": "bar",
+      "calories": 200,
+      "protein": 20,
+      "carbs": 23,
+      "fat": 7,
+      "fiber": 8,
+      "sugar": 4,
+      "sodium": 210,
+      "sourceId": "generic_reference",
+      "active": true,
+      "aliases": [
+        "protein bar",
+        "protein bars"
+      ]
+    },
+    {
+      "id": "generic_greek_yogurt",
+      "canonicalName": "Greek yogurt",
+      "brand": null,
+      "servingQuantity": 1,
+      "servingUnit": "cup",
+      "calories": 100,
+      "protein": 17,
+      "carbs": 6,
+      "fat": 0,
+      "fiber": 0,
+      "sugar": 6,
+      "sodium": 65,
+      "sourceId": "generic_reference",
+      "active": true,
+      "aliases": [
+        "greek yogurt",
+        "yogurt"
+      ]
+    },
+    {
       "id": "generic_whey_protein",
       "canonicalName": "Whey protein",
       "brand": null,

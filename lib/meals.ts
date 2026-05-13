@@ -1,6 +1,7 @@
 import { MealType } from '@prisma/client';
 
 import type { ParsedFoodItem } from '@/lib/ai/types';
+import { getPersistableCatalogFoodIds } from '@/lib/catalog-persistence';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 import { upsertDailyLogForDate } from '@/lib/dashboard';
 import { startOfDayUtc } from '@/lib/date';
@@ -35,6 +36,7 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
 
   const date = startOfDayUtc(payload.date ?? new Date());
   const mealType = toMealType(payload.meal_type);
+  const persistableCatalogFoodIds = await getPersistableCatalogFoodIds(payload.items.map((item) => item.catalog_food_id ?? null));
   const normalizedItems = payload.items.map((item) => ({
     foodName: item.food_name,
     quantity: sanitizeNumber(item.quantity || 1),
@@ -52,7 +54,7 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
     notes: item.notes ?? null,
     nutritionSourceType: item.source_type ?? null,
     nutritionSourceName: item.source_name ?? null,
-    catalogFoodId: item.catalog_food_id ?? null,
+    catalogFoodId: item.catalog_food_id && persistableCatalogFoodIds.has(item.catalog_food_id) ? item.catalog_food_id : null,
   }));
 
   const totals = sumNutrition(normalizedItems);

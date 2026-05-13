@@ -213,24 +213,24 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
 
       {error ? <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p> : null}
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button
           type="button"
           onClick={goBack}
           disabled={step === 0 || saving}
-          className="app-button-secondary inline-flex items-center gap-2 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          className="app-button-secondary inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           <ChevronLeft className="h-4 w-4" />
           Back
         </button>
 
         {step < steps.length - 1 ? (
-          <button type="button" onClick={goNext} className="app-button-primary inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold">
+          <button type="button" onClick={goNext} className="app-button-primary inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold sm:w-auto">
             Continue
             <ArrowRight className="h-4 w-4" />
           </button>
         ) : (
-          <button type="button" onClick={finish} disabled={saving} className="app-button-primary inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70">
+          <button type="button" onClick={finish} disabled={saving} className="app-button-primary inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto">
             {saving ? 'Saving...' : 'Start logging'}
             <ArrowRight className="h-4 w-4" />
           </button>

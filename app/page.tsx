@@ -17,7 +17,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
+    <div className="app-page mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
       <section className="grid gap-6 lg:grid-cols-[1.35fr_0.95fr]">
         <div className="app-card rounded-[32px] p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
             </div>
             <Link
               href="/logger"
-              className="app-button-primary inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold transition"
+              className="app-button-primary inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold transition sm:w-auto"
             >
               Log a meal
               <ArrowRight className="h-4 w-4" />
@@ -99,29 +99,40 @@ export default async function DashboardPage() {
           </div>
 
           <div className="space-y-3">
-            {dashboard.recentMeals.map((meal) => (
-              <div key={meal.id} className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium capitalize text-slate-950">{meal.mealType}</p>
-                      <TrustBadge trusted={meal.estimatedCount === 0} compact />
+            {dashboard.recentMeals.length ? (
+              dashboard.recentMeals.map((meal) => (
+                <div key={meal.id} className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium capitalize text-slate-950">{meal.mealType}</p>
+                        <TrustBadge trusted={meal.estimatedCount === 0} compact />
+                      </div>
+                      <p className="mt-1 text-sm text-slate-500">{meal.rawText || `${meal.itemCount} item meal`}</p>
+                      <p className="mt-2 text-xs text-slate-400">{meal.coverageSummary}</p>
                     </div>
-                    <p className="mt-1 text-sm text-slate-500">{meal.rawText || `${meal.itemCount} item meal`}</p>
-                    <p className="mt-2 text-xs text-slate-400">{meal.coverageSummary}</p>
+                    <div className="text-right">
+                      <p className="text-lg font-semibold text-slate-950">{meal.totalCalories} cal</p>
+                      <p className="text-xs text-slate-400">{new Date(meal.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-semibold text-slate-950">{meal.totalCalories} cal</p>
-                    <p className="text-xs text-slate-400">{new Date(meal.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Protein {meal.totalProtein}g</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Carbs {meal.totalCarbs}g</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Fat {meal.totalFat}g</span>
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Protein {meal.totalProtein}g</span>
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Carbs {meal.totalCarbs}g</span>
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Fat {meal.totalFat}g</span>
-                </div>
+              ))
+            ) : (
+              <div className="app-empty-state rounded-[24px] p-5 text-sm text-slate-600">
+                <p className="font-semibold text-slate-900">No meals logged yet today</p>
+                <p className="mt-2 leading-6">Once you log something, today’s calories, trust coverage, and recent meals will show up here right away.</p>
+                <Link href="/logger" className="mt-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-4 py-2 font-medium text-teal-700 transition hover:border-teal-300 hover:text-teal-600">
+                  Log your first meal
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </section>

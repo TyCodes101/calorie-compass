@@ -39,7 +39,7 @@ function sumTotals(items: ParsedFoodItem[]) {
 
 export function MealLoggerClient({ initialDraft = null }: { initialDraft?: LoggerDraft | null }) {
   const router = useRouter();
-  const [mealText, setMealText] = useState(initialDraft?.rawText ?? 'Chipotle bowl with white rice, double chicken, cheese, corn salsa, lettuce, and green salsa');
+  const [mealText, setMealText] = useState(initialDraft?.rawText ?? '');
   const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(initialDraft?.mealType ?? 'lunch');
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [clarificationAnswer, setClarificationAnswer] = useState('');
@@ -61,42 +61,51 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
   async function parseMeal() {
     setLoading(true);
     setError(null);
+    setClarifyingQuestion(null);
 
     const fullText = clarificationAnswer
       ? `${mealText}\nAdditional detail: ${clarificationAnswer}`
       : mealText;
 
-    const response = await fetch('/api/ai/parse-meal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: fullText, mealType }),
-    });
+    try {
+      const response = await fetch('/api/ai/parse-meal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: fullText, mealType }),
+      });
 
-    const data = await response.json();
+      const data = await response.json().catch(() => null);
 
-    if (!response.ok) {
-      setLoading(false);
-      setError(data.error ?? 'Could not estimate that meal right now.');
-      return;
-    }
+      if (!response.ok) {
+        setError(data?.error ?? 'We could not estimate that meal right now. Please try again.');
+        return;
+      }
 
-    const parsed = data as ParsedMealResponse;
-    setActiveResult(parsed);
-    setConfidenceScore(parsed.confidence_score);
+      const parsed = data as ParsedMealResponse;
+      setActiveResult(parsed);
+      setConfidenceScore(parsed.confidence_score);
 
-    if (parsed.needs_clarification) {
-      setClarifyingQuestion(parsed.clarifying_question);
-      setItems([]);
+      if (parsed.needs_clarification) {
+        setClarifyingQuestion(parsed.clarifying_question);
+        setItems([]);
+        setExpandedIndex(null);
+        return;
+      }
+
+      if (!parsed.items.length) {
+        setError('We could not estimate that meal right now. Please try again.');
+        return;
+      }
+
+      setClarifyingQuestion(null);
+      setItems(parsed.items);
       setExpandedIndex(null);
+      setClarificationAnswer('');
+    } catch {
+      setError('We could not estimate that meal right now. Please try again.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setClarifyingQuestion(null);
-    setItems(parsed.items);
-    setExpandedIndex(null);
-    setClarificationAnswer('');
-    setLoading(false);
   }
 
   async function saveMeal() {
@@ -187,7 +196,7 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
   }
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6 pb-40 sm:px-6">
+    <div className="app-page-with-action-bar mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
       <section className="app-card rounded-[32px] p-6">
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-start">
           <div className="space-y-5">
@@ -195,15 +204,15 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
               <p className="app-section-label">Log Meal</p>
               <h1 className="mt-2 text-3xl font-semibold text-slate-950">Describe your meal naturally</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                We’ll parse it, show what looks verified versus estimated, and let you confirm everything before anything saves.
+                We’ll parse it, skip unnecessary follow-ups when the quantity is already clear, and take you straight to review before anything saves.
               </p>
             </div>
 
             <textarea
               value={mealText}
               onChange={(event) => setMealText(event.target.value)}
-              rows={6}
-              className="app-textarea min-h-44 px-4 py-4 text-sm"
+              rows={5}
+              className="app-textarea min-h-40 px-4 py-4 text-sm"
               placeholder="Try: 3 scrambled eggs and 2 slices of toast"
             />
 
@@ -253,7 +262,7 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
                 <div>
                   <p className="font-medium text-slate-900">Trust comes before saving</p>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Verified items will show trusted source labels. Estimated items stay clearly marked so you can adjust them fast.
+                    Verified items show trusted source labels. Simple foods with clear quantities go straight to review, and estimated items stay clearly marked so you can adjust them fast.
                   </p>
                   {sourceReusableMealId ? (
                     <p className="mt-2 text-xs font-medium text-teal-700">Loaded from a saved favorite. Saving logs a fresh meal without changing your past entries.</p>
@@ -290,6 +299,18 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
         ) : null}
 
         {error ? <p className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p> : null}
+
+        {loading ? (
+          <div className="mt-6 rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
+            <div className="flex items-start gap-3">
+              <LoaderCircle className="mt-0.5 h-5 w-5 animate-spin text-teal-600" />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Reviewing your meal</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">Checking trusted matches first, then filling in anything that still needs an estimate.</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {items.length ? (
@@ -420,24 +441,28 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
             })}
           </div>
 
-          <div className="fixed inset-x-0 bottom-20 z-40 mx-auto max-w-5xl px-4 sm:px-6">
-            <div className="rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-[0_20px_40px_rgba(15,23,42,0.12)] backdrop-blur">
+          <div className="app-floating-action-bar">
+            <div className="app-floating-action-bar-inner rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-[0_20px_40px_rgba(15,23,42,0.12)] backdrop-blur">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-slate-950">Ready to save this meal</p>
                   <p className="text-sm text-slate-500">{trustSummary.coverageSummary}. {trustSummary.estimatedSummary}.</p>
                 </div>
-                <div className="flex flex-wrap gap-3">
+                <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
+                      setMealText('');
                       setItems([]);
                       setActiveResult(null);
+                      setClarifyingQuestion(null);
+                      setClarificationAnswer('');
                       setExpandedIndex(null);
                       setSourceReusableMealId(null);
                       setFavoriteState('idle');
+                      setError(null);
                     }}
-                    className="app-button-secondary px-4 py-3 text-sm font-medium"
+                    className="app-button-secondary w-full px-4 py-3 text-sm font-medium sm:w-auto"
                   >
                     Start over
                   </button>
@@ -445,7 +470,7 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
                     type="button"
                     onClick={saveFavorite}
                     disabled={favoriteSaving}
-                    className="app-button-secondary px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-70"
+                    className="app-button-secondary w-full px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                   >
                     {favoriteSaving ? 'Saving favorite...' : favoriteState === 'saved' ? 'Favorite saved' : 'Save as favorite'}
                   </button>
@@ -453,7 +478,7 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
                     type="button"
                     onClick={saveMeal}
                     disabled={saving}
-                    className="app-button-primary px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70"
+                    className="app-button-primary w-full px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                   >
                     {saving ? 'Saving meal...' : 'Confirm and save'}
                   </button>
@@ -463,8 +488,11 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
           </div>
         </section>
       ) : activeResult && !activeResult.needs_clarification ? null : (
-        <section className="rounded-[28px] border border-dashed border-slate-300 bg-white/60 p-6 text-sm text-slate-500">
-          Try a meal like “Protein shake with almond milk” or “3 scrambled eggs and 2 slices of toast” to see the confirmation flow.
+        <section className="app-empty-state rounded-[28px] p-6 text-sm text-slate-500">
+          <p className="font-semibold text-slate-900">Start with a quick natural description</p>
+          <p className="mt-2 leading-6">
+            Try something like “2 rice cakes”, “1 Greek yogurt”, or “3 scrambled eggs and 2 slices of toast” to go straight from input to review.
+          </p>
         </section>
       )}
     </div>

@@ -9,7 +9,7 @@ const items = [
   { href: '/', label: 'Dashboard', icon: House },
   { href: '/history', label: 'History', icon: Clock3 },
   { href: '/profile', label: 'Profile', icon: UserRound },
-];
+] as const;
 
 function matchesPath(pathname: string, href: string) {
   if (href === '/') {
@@ -25,34 +25,41 @@ function triggerHapticFeedback() {
   }
 }
 
+function NavItem({ href, label, icon: Icon, active }: { href: string; label: string; icon: typeof House; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      onClick={triggerHapticFeedback}
+      aria-current={active ? 'page' : undefined}
+      className={clsx('mobile-nav-item', active && 'mobile-nav-item-active')}
+    >
+      <Icon className="mobile-nav-item-icon" />
+      <span className="mobile-nav-item-label">{label}</span>
+    </Link>
+  );
+}
+
 export function MobileNav() {
   const pathname = usePathname();
   const [dashboard, history, profile] = items;
   const loggerActive = pathname.startsWith('/logger');
-  const ProfileIcon = profile.icon;
 
   return (
     <nav className="mobile-nav" aria-label="Primary">
-      {[dashboard, history].map((item) => {
-        const Icon = item.icon;
-        const active = matchesPath(pathname, item.href);
+      <div className="mobile-nav-side mobile-nav-side-left">
+        <NavItem {...dashboard} active={matchesPath(pathname, dashboard.href)} />
+        <NavItem {...history} active={matchesPath(pathname, history.href)} />
+      </div>
 
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={triggerHapticFeedback}
-            className={clsx('mobile-nav-item', active && 'mobile-nav-item-active')}
-          >
-            <Icon className="mobile-nav-item-icon" />
-            <span className="mobile-nav-item-label">{item.label}</span>
-          </Link>
-        );
-      })}
+      <div className="mobile-nav-side mobile-nav-side-right">
+        <span className="mobile-nav-item-spacer" aria-hidden="true" />
+        <NavItem {...profile} active={matchesPath(pathname, profile.href)} />
+      </div>
 
       <Link
         href="/logger"
         aria-label="Log Meal"
+        aria-current={loggerActive ? 'page' : undefined}
         onClick={triggerHapticFeedback}
         className={clsx('mobile-nav-fab', loggerActive && 'mobile-nav-fab-active')}
       >
@@ -61,15 +68,6 @@ export function MobileNav() {
           <Plus className="h-5 w-5" />
         </span>
         <span className="mobile-nav-fab-label">Log Meal</span>
-      </Link>
-
-      <Link
-        href={profile.href}
-        onClick={triggerHapticFeedback}
-        className={clsx('mobile-nav-item', matchesPath(pathname, profile.href) && 'mobile-nav-item-active')}
-      >
-        <ProfileIcon className="mobile-nav-item-icon" />
-        <span className="mobile-nav-item-label">{profile.label}</span>
       </Link>
     </nav>
   );

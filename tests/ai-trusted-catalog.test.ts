@@ -43,6 +43,22 @@ describe('trusted nutrition catalog matching', () => {
     expect(response?.totals.calories).toBe(390);
   });
 
+  it('matches countable simple foods with trusted defaults instead of requiring follow-up', () => {
+    const riceCakes = getTrustedCatalogEstimate('2 rice cakes', 'snack');
+    const proteinBar = getTrustedCatalogEstimate('1 protein bar', 'snack');
+    const yogurt = getTrustedCatalogEstimate('1 Greek yogurt', 'breakfast');
+    const apples = getTrustedCatalogEstimate('2 apples', 'snack');
+    const bagel = getTrustedCatalogEstimate('1 bagel', 'breakfast');
+
+    expect(riceCakes?.items[0]?.food_name).toMatch(/rice cake/i);
+    expect(riceCakes?.items[0]?.quantity).toBe(2);
+    expect(proteinBar?.items[0]?.food_name).toMatch(/protein bar/i);
+    expect(yogurt?.items[0]?.food_name).toMatch(/greek yogurt/i);
+    expect(apples?.items[0]?.quantity).toBe(2);
+    expect(bagel?.items[0]?.food_name).toMatch(/bagel/i);
+    expect([riceCakes, proteinBar, yogurt, apples, bagel].every((response) => response?.items.every((item) => item.is_trusted))).toBe(true);
+  });
+
   it('matches packaged protein drinks to trusted branded entries', () => {
     const response = getTrustedCatalogEstimate('Fairlife protein shake', 'snack');
 
