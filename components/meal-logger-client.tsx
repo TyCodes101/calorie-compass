@@ -1,13 +1,16 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, LoaderCircle, RotateCcw, ShieldCheck, Sparkles, TriangleAlert, X } from 'lucide-react';
+import { ChevronDown, LoaderCircle, Plus, RotateCcw, ShieldCheck, Sparkles, TriangleAlert, WifiOff, X } from 'lucide-react';
 
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { TrustBadge } from '@/components/trust-badge';
-import { type LoggerDraft } from '@/lib/reusable-meals';
+import type { RecentMealQuickLog } from '@/lib/history';
+import { type FavoriteMealSummary, type LoggerDraft } from '@/lib/reusable-meals';
 import { getConfidenceCopy, getItemSourceLabel, summarizeParsedItems } from '@/lib/trust';
+import { useOnlineStatus } from '@/lib/use-online-status';
 
 const mealTypeOptions = [
   { value: 'breakfast', label: 'Breakfast' },
@@ -27,6 +30,12 @@ type ActionKind = 'parse' | 'save' | 'favorite' | 'removeFavorite';
 type Notice = {
   tone: 'success' | 'info';
   text: string;
+};
+
+type QuickLogProps = {
+  initialDraft?: LoggerDraft | null;
+  favoriteMeals?: FavoriteMealSummary[];
+  recentMeals?: RecentMealQuickLog[];
 };
 
 function sumTotals(items: ParsedFoodItem[]) {
@@ -60,7 +69,27 @@ function NoticeBanner({ notice }: { notice: Notice }) {
   );
 }
 
-export function MealLoggerClient({ initialDraft = null }: { initialDraft?: LoggerDraft | null }) {
+function buildManualItem(): ParsedFoodItem {
+  return {
+    food_name: 'Custom item',
+    quantity: 1,
+    unit: 'serving',
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    fiber: 0,
+    sugar: 0,
+    sodium: 0,
+    notes: 'Added manually before saving.',
+    is_trusted: false,
+    source_type: 'AI_ESTIMATE',
+    source_name: 'Manual adjustment',
+    catalog_food_id: null,
+  };
+}
+
+export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], recentMeals = [] }: QuickLogProps) {
   const router = useRouter();
   const [mealText, setMealText] = useState(initialDraft?.rawText ?? '');
   const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(initialDraft?.mealType ?? 'lunch');
@@ -86,13 +115,19 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
   const [sourceReusableMealId, setSourceReusableMealId] = useState<string | null>(initialDraft?.sourceReusableMealId ?? null);
   const [editingMealId] = useState<string | null>(initialDraft?.editingMealId ?? null);
   const [isFieldFocused, setIsFieldFocused] = useState(false);
+  const isOnline = useOnlineStatus();
 
   const totals = useMemo(() => sumTotals(items), [items]);
   const trustSummary = useMemo(() => summarizeParsedItems(items), [items]);
   const confidence = getConfidenceCopy(confidenceScore);
   const saveButtonLabel = editingMealId ? 'Save changes' : 'Confirm and save';
-  const canSaveMeal = items.length > 0 && !saving;
-  const canSaveFavorite = items.length > 0 && !favoriteSaving && !(sourceReusableMealId && favoriteState === 'saved');
+  const canSaveMeal = items.length > 0 && !saving && isOnline;
+  const canSaveFavorite = items.length > 0 && !favoriteSaving && !(sourceReusableMealId && favoriteState === 'saved') && isOnline;
+  const quickFavorites = favoriteMeals.slice(0, 4);
+  const quickRecentMeals = recentMeals
+    .filter((meal) => meal.id !== editingMealId)
+    .filter((meal, index, collection) => collection.findIndex((entry) => entry.id === meal.id) === index)
+    .slice(0, 4);
 
   function clearFeedback() {
     setError(null);
@@ -110,6 +145,12 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
 
   async function parseMeal() {
     if (loading || mealText.trim().length < 3) {
+      return;
+    }
+
+    if (!isOnline) {
+      setError('You appear to be offline. Reconnect to estimate this meal.');
+      setErrorAction('parse');
       return;
     }
 
@@ -175,6 +216,10 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
 
   async function saveMeal() {
     if (!canSaveMeal) {
+      if (!isOnline) {
+        setError('You appear to be offline. Reconnect to save this meal.');
+        setErrorAction('save');
+      }
       return;
     }
 
@@ -218,6 +263,10 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
 
   async function saveFavorite() {
     if (!canSaveFavorite) {
+      if (!isOnline) {
+        setError('You appear to be offline. Reconnect to save this favorite.');
+        setErrorAction('favorite');
+      }
       return;
     }
 
@@ -265,6 +314,12 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
 
   async function removeFavorite() {
     if (!sourceReusableMealId || favoriteSaving) {
+      return;
+    }
+
+    if (!isOnline) {
+      setError('You appear to be offline. Reconnect to remove this favorite.');
+      setErrorAction('removeFavorite');
       return;
     }
 
@@ -353,6 +408,14 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
     setFavoriteState('idle');
   }
 
+  function addManualItem() {
+    const nextIndex = items.length;
+    markDraftChanged();
+    setItems((current) => [...current, buildManualItem()]);
+    setExpandedIndex(nextIndex);
+    setNotice({ tone: 'info', text: 'Custom item added. You can fill in calories and macros before saving.' });
+  }
+
   return (
     <div
       className="app-page-with-action-bar app-screen-wide flex min-w-0 flex-col gap-6 py-6"
@@ -369,7 +432,78 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
         });
       }}
     >
+      {!isOnline ? (
+        <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="flex items-start gap-3">
+            <WifiOff className="mt-0.5 h-4 w-4" />
+            <div>
+              <p className="font-medium text-slate-900">You are offline right now.</p>
+              <p className="mt-1 text-sm leading-6 text-slate-700">You can still review recent meals and edit draft values, but estimating and saving need a connection.</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {notice ? <NoticeBanner notice={notice} /> : null}
+
+      {!items.length && (quickFavorites.length || quickRecentMeals.length) ? (
+        <section className="app-card min-w-0 rounded-[32px] p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="app-section-label">Quick start</p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950">Repeat something familiar faster</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Use a saved favorite or reload a recent meal, then make a quick correction instead of starting from scratch.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-900">Favorites</p>
+                <Link href="/history" className="text-xs font-medium text-teal-700 hover:text-teal-600">View all</Link>
+              </div>
+              {quickFavorites.length ? quickFavorites.map((favorite) => (
+                <Link key={favorite.id} href={`/logger?favorite=${favorite.id}`} className="block rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 transition hover:border-teal-200 hover:bg-white active:scale-[0.99]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-950">{favorite.title}</p>
+                      <p className="mt-1 text-sm capitalize text-slate-500">{favorite.mealType}</p>
+                    </div>
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700">Favorite</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{favorite.totalCalories} cal</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{favorite.itemCount} items</span>
+                  </div>
+                </Link>
+              )) : (
+                <div className="rounded-[24px] border border-dashed border-slate-200 bg-white/70 px-4 py-4 text-sm text-slate-600">Save a meal as a favorite after review and it will appear here for one-tap repeat logging.</div>
+              )}
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-900">Recent meals</p>
+                <Link href="/history" className="text-xs font-medium text-teal-700 hover:text-teal-600">Open history</Link>
+              </div>
+              {quickRecentMeals.length ? quickRecentMeals.map((meal) => (
+                <Link key={meal.id} href={`/logger?mealId=${meal.id}`} className="block rounded-[24px] border border-slate-200 bg-white p-4 transition hover:border-teal-200 hover:bg-slate-50 active:scale-[0.99]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-950">{meal.title}</p>
+                      <p className="mt-1 text-sm capitalize text-slate-500">{meal.mealType}</p>
+                    </div>
+                    <span className="text-xs font-medium text-slate-400">{new Date(meal.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{meal.totalCalories} cal</span>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Log again</span>
+                  </div>
+                </Link>
+              )) : (
+                <div className="rounded-[24px] border border-dashed border-slate-200 bg-white/70 px-4 py-4 text-sm text-slate-600">Your latest meals will show up here once you start logging regularly.</div>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="app-card min-w-0 rounded-[32px] p-6">
         <div className="grid min-w-0 gap-6 xl:grid-cols-[1.25fr_0.75fr] xl:items-start">
@@ -432,7 +566,7 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
             <button
               type="button"
               onClick={parseMeal}
-              disabled={loading || mealText.trim().length < 3}
+              disabled={loading || mealText.trim().length < 3 || !isOnline}
               className="app-button-primary flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
@@ -525,6 +659,12 @@ export function MealLoggerClient({ initialDraft = null }: { initialDraft?: Logge
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{trustSummary.coverageSummary}</span>
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{trustSummary.estimatedSummary}</span>
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{Math.round(confidenceScore * 100)}% confidence</span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button type="button" onClick={addManualItem} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700 active:scale-[0.99]">
+                    <Plus className="h-4 w-4" />
+                    Add custom item
+                  </button>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

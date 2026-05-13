@@ -3,11 +3,12 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { Clock3, Search, Star, Trash2 } from 'lucide-react';
+import { Clock3, Star, Trash2, WifiOff } from 'lucide-react';
 
 import { TrustBadge } from '@/components/trust-badge';
 import type { MealHistoryGroup } from '@/lib/history';
 import type { FavoriteMealSummary } from '@/lib/reusable-meals';
+import { useOnlineStatus } from '@/lib/use-online-status';
 
 type Notice = {
   tone: 'success' | 'error';
@@ -106,12 +107,18 @@ export function HistoryClient({
   const [notice, setNotice] = useState<Notice | null>(initialNotice);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const isOnline = useOnlineStatus();
 
   const totalMeals = useMemo(() => flattenMealCount(history), [history]);
   const hasHistory = totalMeals > 0;
 
   async function handleConfirm() {
     if (!confirmState || actionLoading) {
+      return;
+    }
+
+    if (!isOnline) {
+      setNotice({ tone: 'error', text: 'You appear to be offline. Reconnect to delete or remove items.' });
       return;
     }
 
@@ -155,6 +162,17 @@ export function HistoryClient({
   return (
     <>
       <div className="app-page app-screen flex min-w-0 flex-col gap-6 py-6">
+        {!isOnline ? (
+          <section className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="flex items-start gap-3">
+              <WifiOff className="mt-0.5 h-4 w-4" />
+              <div>
+                <p className="font-medium text-slate-900">You are offline right now.</p>
+                <p className="mt-1 text-sm leading-6 text-slate-700">History is still visible, but edit, delete, and favorite changes need a connection.</p>
+              </div>
+            </div>
+          </section>
+        ) : null}
         {notice ? <NoticeBanner notice={notice} /> : null}
 
         <section className="app-card min-w-0 rounded-[32px] p-6">
@@ -166,8 +184,7 @@ export function HistoryClient({
                 Scroll recent meals, relog fast, edit saved entries cleanly, and keep a calm view of what you actually ate.
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
-              <Search className="h-4 w-4" />
+            <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
               {favorites.length} favorites, {totalMeals} logged meals
             </div>
           </div>
@@ -189,6 +206,7 @@ export function HistoryClient({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-950">{favorite.title}</p>
                       <p className="mt-1 text-sm capitalize text-slate-500">{favorite.mealType}</p>
+                      <p className="mt-2 text-xs text-slate-400">{favorite.lastUsedAt ? `Last used ${new Date(favorite.lastUsedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Ready for quick repeat logging'}</p>
                     </div>
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
                       Favorite
@@ -208,8 +226,9 @@ export function HistoryClient({
                     </Link>
                     <button
                       type="button"
+                      disabled={!isOnline}
                       onClick={() => setConfirmState({ kind: 'favorite', id: favorite.id, title: favorite.title })}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Trash2 className="h-4 w-4" />
                       Remove
@@ -276,8 +295,9 @@ export function HistoryClient({
                       </Link>
                       <button
                         type="button"
+                        disabled={!isOnline}
                         onClick={() => setConfirmState({ kind: 'meal', id: meal.id, title: meal.title })}
-                        className="inline-flex items-center justify-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+                        className="inline-flex items-center justify-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Trash2 className="h-4 w-4" />
                         Delete

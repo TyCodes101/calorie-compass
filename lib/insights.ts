@@ -1,24 +1,24 @@
-import { ActivityLevel } from '@prisma/client';
+import { ActivityLevel, type NutritionSourceType } from '@prisma/client';
 
 import { getPastSevenDays, isoDay, startOfDayUtc } from '@/lib/date';
 import { sumMealTotals } from '@/lib/dashboard-aggregation';
-import { toProgressValue } from '@/lib/nutrition';
+import { calculateRemainingCalories, toProgressValue } from '@/lib/nutrition';
 import { prisma } from '@/lib/prisma';
+import { summarizeTrustCounts } from '@/lib/trust';
 
 type MealLike = {
   date: Date;
+  mealType: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
   totalCalories: number;
   totalProtein: number;
   totalCarbs: number;
   totalFat: number;
-  totalFiber?: number;
-  totalSugar?: number;
-  totalSodium?: number;
-};
-
-type WeightLike = {
-  date: Date;
-  weightLbs: number;
+  totalFiber: number;
+  totalSugar: number;
+  totalSodium: number;
+  items?: Array<{
+    nutritionSourceType: NutritionSourceType | null;
+  }>;
 };
 
 type ProfileLike = {
@@ -27,67 +27,77 @@ type ProfileLike = {
   activityLevel: ActivityLevel;
 };
 
-type InsightCardTone = 'live' | 'preview' | 'tip';
+type PatternCardTone = 'live' | 'guide';
 
-const ACTIVITY_BURN_BASELINE: Record<ActivityLevel, number> = {
-  LOW: 160,
-  MODERATE: 260,
-  HIGH: 360,
-  VERY_HIGH: 460,
+type WeeklyDay = {
+  date: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  loggedMeals: number;
+  trustedCount: number;
+  estimatedCount: number;
+  mealTypeCounts: Record<'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK', number>;
+  logged: boolean;
 };
 
-function buildDaysWithTotals(meals: MealLike[], inputDate: Date | string) {
-  const totalsByDay = new Map<string, ReturnType<typeof sumMealTotals>>();
+function emptyMealTypeCounts() {
+  return {
+    BREAKFAST: 0,
+    LUNCH: 0,
+    DINNER: 0,
+    SNACK: 0,
+  };
+}
+
+function buildDaysWithTotals(meals: MealLike[], inputDate: Date | string): WeeklyDay[] {
+  const totalsByDay = new Map<string, WeeklyDay>();
 
   for (const day of getPastSevenDays(inputDate)) {
-    totalsByDay.set(isoDay(day), sumMealTotals([]));
+    totalsByDay.set(isoDay(day), {
+      date: isoDay(day),
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      loggedMeals: 0,
+      trustedCount: 0,
+      estimatedCount: 0,
+      mealTypeCounts: emptyMealTypeCounts(),
+      logged: false,
+    });
   }
 
   for (const meal of meals) {
     const key = isoDay(meal.date);
-    const current = totalsByDay.get(key) ?? sumMealTotals([]);
+    const current = totalsByDay.get(key);
 
-    totalsByDay.set(key, {
-      calories: current.calories + meal.totalCalories,
-      protein: current.protein + meal.totalProtein,
-      carbs: current.carbs + meal.totalCarbs,
-      fat: current.fat + meal.totalFat,
-      fiber: current.fiber,
-      sugar: current.sugar,
-      sodium: current.sodium,
-    });
+    if (!current) {
+      continue;
+    }
+
+    const trustedCount = meal.items?.filter((item) => item.nutritionSourceType && item.nutritionSourceType !== 'AI_ESTIMATE').length ?? 0;
+    const estimatedCount = (meal.items?.length ?? 0) - trustedCount;
+
+    current.calories += meal.totalCalories;
+    current.protein += meal.totalProtein;
+    current.carbs += meal.totalCarbs;
+    current.fat += meal.totalFat;
+    current.loggedMeals += 1;
+    current.trustedCount += trustedCount;
+    current.estimatedCount += estimatedCount;
+    current.mealTypeCounts[meal.mealType] += 1;
+    current.logged = true;
   }
 
-  return getPastSevenDays(inputDate).map((day) => {
-    const key = isoDay(day);
-    const totals = totalsByDay.get(key) ?? sumMealTotals([]);
-
-    return {
-      date: key,
-      ...totals,
-      logged: totals.calories > 0,
-    };
-  });
-}
-
-function sumInsightMealTotals(meals: MealLike[]) {
-  return meals.reduce(
-    (acc, meal) => ({
-      calories: acc.calories + meal.totalCalories,
-      protein: acc.protein + meal.totalProtein,
-      carbs: acc.carbs + meal.totalCarbs,
-      fat: acc.fat + meal.totalFat,
-      fiber: acc.fiber + (meal.totalFiber ?? 0),
-      sugar: acc.sugar + (meal.totalSugar ?? 0),
-      sodium: acc.sodium + (meal.totalSodium ?? 0),
-    }),
-    sumMealTotals([]),
-  );
-}
-
-function formatSignedCalories(value: number) {
-  if (value === 0) return 'On target';
-  return `${value > 0 ? '+' : ''}${value} kcal/day`;
+  return getPastSevenDays(inputDate).map((day) => totalsByDay.get(isoDay(day))!).map((day) => ({
+    ...day,
+    calories: Math.round(day.calories),
+    protein: Math.round(day.protein),
+    carbs: Math.round(day.carbs),
+    fat: Math.round(day.fat),
+  }));
 }
 
 function computeMacroBalanceLabel(calories: number, protein: number, carbs: number, fat: number) {
@@ -116,7 +126,7 @@ function computeMacroBalanceLabel(calories: number, protein: number, carbs: numb
   return 'Balanced enough for a normal day';
 }
 
-function computeLoggingStreak(days: Array<{ logged: boolean }>) {
+function computeLoggingStreak(days: WeeklyDay[]) {
   let streak = 0;
 
   for (let index = days.length - 1; index >= 0; index -= 1) {
@@ -130,62 +140,62 @@ function computeLoggingStreak(days: Array<{ logged: boolean }>) {
   return streak;
 }
 
-function buildInsightCards(days: Array<{ date: string; calories: number; protein: number; logged: boolean }>, profile: ProfileLike, todayNetCalories: number) {
-  const weekdayDays = days.filter((day) => {
-    const weekday = new Date(day.date).getUTCDay();
-    return weekday >= 1 && weekday <= 5 && day.logged;
-  });
-  const weekendDays = days.filter((day) => {
-    const weekday = new Date(day.date).getUTCDay();
-    return (weekday === 0 || weekday === 6) && day.logged;
-  });
-  const weekdayProteinAverage = weekdayDays.length
-    ? Math.round(weekdayDays.reduce((sum, day) => sum + day.protein, 0) / weekdayDays.length)
-    : 0;
-  const weekendProteinAverage = weekendDays.length
-    ? Math.round(weekendDays.reduce((sum, day) => sum + day.protein, 0) / weekendDays.length)
-    : 0;
-  const hitCalorieTargetDays = days.filter((day) => day.logged && Math.abs(day.calories - profile.dailyCalorieGoal) <= profile.dailyCalorieGoal * 0.12).length;
+function getTopMealType(days: WeeklyDay[]) {
+  const totals = emptyMealTypeCounts();
+
+  for (const day of days) {
+    totals.BREAKFAST += day.mealTypeCounts.BREAKFAST;
+    totals.LUNCH += day.mealTypeCounts.LUNCH;
+    totals.DINNER += day.mealTypeCounts.DINNER;
+    totals.SNACK += day.mealTypeCounts.SNACK;
+  }
+
+  const ordered = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  const top = ordered[0];
+
+  if (!top || top[1] === 0) {
+    return 'No repeat meal pattern yet';
+  }
+
+  return `${top[0].toLowerCase()} is your most-logged meal`;
+}
+
+function buildPatternCards(days: WeeklyDay[], profile: ProfileLike, todayRemainingCalories: number) {
+  const loggedDays = days.filter((day) => day.logged);
+  const proteinConsistencyDays = days.filter((day) => day.logged && day.protein >= profile.proteinGoal * 0.85).length;
+  const trustTotals = loggedDays.reduce(
+    (acc, day) => ({
+      trusted: acc.trusted + day.trustedCount,
+      estimated: acc.estimated + day.estimatedCount,
+    }),
+    { trusted: 0, estimated: 0 },
+  );
+  const trustSummary = summarizeTrustCounts(trustTotals.trusted, trustTotals.estimated);
 
   return [
-    weekdayDays.length && weekendDays.length
-      ? {
-          title: 'Protein pattern',
-          detail:
-            weekdayProteinAverage > weekendProteinAverage
-              ? 'You average higher protein on weekdays.'
-              : 'Your protein stays steadier than expected across the week.',
-          supporting: `${weekdayProteinAverage}g average on weekdays vs ${weekendProteinAverage}g on weekends.`,
-          tone: 'live' as InsightCardTone,
-        }
-      : {
-          title: 'Protein pattern preview',
-          detail: 'You average higher protein on weekdays.',
-          supporting: 'Preview card. This becomes live once there is enough weekday and weekend logging history.',
-          tone: 'preview' as InsightCardTone,
-        },
     {
-      title: 'Activity pattern preview',
-      detail: 'Your activity drops on weekends.',
-      supporting: 'Preview card. This will turn into a real insight once steps or workouts are connected.',
-      tone: 'preview' as InsightCardTone,
+      title: 'Logging rhythm',
+      detail: `${loggedDays.length} of the last 7 days have meals logged.`,
+      supporting: loggedDays.length >= 5 ? 'That is strong daily-use momentum for a calm logging routine.' : 'A steadier rhythm usually matters more than a perfect day.',
+      tone: 'live' as PatternCardTone,
     },
     {
-      title: 'Calorie target rhythm',
-      detail: `You hit your calorie target ${hitCalorieTargetDays} of the last 7 days.`,
-      supporting: hitCalorieTargetDays
-        ? 'Consistency is usually more useful than chasing a perfect day.'
-        : 'As your week fills in, this card will call out stronger calorie consistency.',
-      tone: 'live' as InsightCardTone,
+      title: 'Protein pace',
+      detail: `${proteinConsistencyDays} of 7 days landed near your protein target.`,
+      supporting: proteinConsistencyDays > 0 ? 'That usually makes the next correction smaller and easier.' : 'A small protein-focused repeat meal can improve consistency quickly.',
+      tone: 'live' as PatternCardTone,
     },
     {
-      title: 'Daily suggestion',
-      detail: 'A short walk today could help balance your net calories.',
-      supporting:
-        todayNetCalories > profile.dailyCalorieGoal
-          ? `Your current estimated net is ${todayNetCalories} calories, which is running above target.`
-          : 'Even a short walk can keep the day feeling lighter without turning the app into a fitness tracker first.',
-      tone: 'tip' as InsightCardTone,
+      title: 'Trust coverage',
+      detail: trustSummary.totalCount ? `${trustSummary.coveragePercent}% of this week’s foods matched trusted sources.` : 'No trust coverage yet.',
+      supporting: trustSummary.totalCount ? trustSummary.estimatedSummary : 'Once meals are logged, this area will explain how much was verified versus estimated.',
+      tone: 'live' as PatternCardTone,
+    },
+    {
+      title: 'Next best step',
+      detail: todayRemainingCalories > 0 ? `You still have about ${todayRemainingCalories} calories remaining today.` : 'Today is already at or above your current calorie target.',
+      supporting: todayRemainingCalories > 0 ? 'A familiar repeat meal can close the day faster than starting from scratch.' : 'Logging the next meal cleanly still matters more than chasing a perfect number.',
+      tone: 'guide' as PatternCardTone,
     },
   ];
 }
@@ -195,102 +205,58 @@ export function buildInsightsViewModel({
   profile,
   todayMeals,
   weeklyMeals,
-  weightEntries = [],
 }: {
   currentDate?: Date | string;
   profile: ProfileLike;
   todayMeals: MealLike[];
   weeklyMeals: MealLike[];
-  weightEntries?: WeightLike[];
+  weightEntries?: Array<{ date: Date; weightLbs: number }>;
 }) {
   const today = startOfDayUtc(currentDate);
-  const todayTotals = sumInsightMealTotals(todayMeals);
+  const todayTotals = sumMealTotals(todayMeals);
   const weeklyDays = buildDaysWithTotals(weeklyMeals, today);
-  const estimatedBurnedCalories = ACTIVITY_BURN_BASELINE[profile.activityLevel] ?? ACTIVITY_BURN_BASELINE.MODERATE;
-  const netCalories = Math.round(todayTotals.calories - estimatedBurnedCalories);
+  const loggedDays = weeklyDays.filter((day) => day.logged);
+  const loggingStreak = computeLoggingStreak(weeklyDays);
+  const averageCalories = loggedDays.length ? Math.round(loggedDays.reduce((sum, day) => sum + day.calories, 0) / loggedDays.length) : 0;
+  const averageProtein = loggedDays.length ? Math.round(loggedDays.reduce((sum, day) => sum + day.protein, 0) / loggedDays.length) : 0;
+  const averageMealsPerDay = loggedDays.length ? Math.round((loggedDays.reduce((sum, day) => sum + day.loggedMeals, 0) / loggedDays.length) * 10) / 10 : 0;
   const calorieConsistencyDays = weeklyDays.filter((day) => day.logged && Math.abs(day.calories - profile.dailyCalorieGoal) <= profile.dailyCalorieGoal * 0.12).length;
   const proteinConsistencyDays = weeklyDays.filter((day) => day.logged && day.protein >= profile.proteinGoal * 0.85).length;
-  const averageCalories = Math.round(
-    weeklyDays.reduce((sum, day) => sum + day.calories, 0) / Math.max(weeklyDays.length, 1),
-  );
-  const deficitOrSurplus = averageCalories - profile.dailyCalorieGoal;
-  const loggingStreak = computeLoggingStreak(weeklyDays);
-  const latestWeight = weightEntries[0]?.weightLbs ?? null;
-  const priorWeight = weightEntries[1]?.weightLbs ?? null;
-  const weightDelta = latestWeight !== null && priorWeight !== null ? Math.round((latestWeight - priorWeight) * 10) / 10 : null;
+  const todayTrustedCount = todayMeals.reduce((sum, meal) => sum + (meal.items?.filter((item) => item.nutritionSourceType && item.nutritionSourceType !== 'AI_ESTIMATE').length ?? 0), 0);
+  const todayEstimatedCount = todayMeals.reduce((sum, meal) => sum + ((meal.items?.length ?? 0) - (meal.items?.filter((item) => item.nutritionSourceType && item.nutritionSourceType !== 'AI_ESTIMATE').length ?? 0)), 0);
+  const trustSummary = summarizeTrustCounts(todayTrustedCount, todayEstimatedCount);
+  const remainingCalories = calculateRemainingCalories(todayTotals.calories, profile.dailyCalorieGoal);
 
   return {
     dailyOverview: {
-      steps: 0,
       caloriesEaten: Math.round(todayTotals.calories),
-      estimatedBurnedCalories,
-      netCalories,
+      remainingCalories,
+      mealsLogged: todayMeals.length,
       proteinProgress: {
         current: Math.round(todayTotals.protein),
         goal: profile.proteinGoal,
         percent: toProgressValue(todayTotals.protein, profile.proteinGoal),
       },
+      trustCoverage: {
+        percent: trustSummary.coveragePercent,
+        totalCount: trustSummary.totalCount,
+        summary: trustSummary.totalCount ? trustSummary.coverageSummary : 'No meals logged yet',
+        estimatedSummary: trustSummary.estimatedSummary,
+      },
       macroBalance: computeMacroBalanceLabel(todayTotals.calories, todayTotals.protein, todayTotals.carbs, todayTotals.fat),
-      waterIntake: {
-        current: 0,
-        goal: 8,
-      },
-      activeStreaks: {
-        movementDays: 0,
-        trackingDays: loggingStreak,
-      },
+      loggingStreak,
     },
     weeklyTrends: {
-      chart: weeklyDays.map((day) => ({ date: day.date, calories: Math.round(day.calories), goal: profile.dailyCalorieGoal })),
+      chart: weeklyDays.map((day) => ({ date: day.date, calories: day.calories, goal: profile.dailyCalorieGoal })),
+      loggingDays: `${loggedDays.length} of 7 days logged`,
       calorieConsistency: `${calorieConsistencyDays} of 7 days near target`,
       proteinConsistency: `${proteinConsistencyDays} of 7 days near protein target`,
-      workoutFrequency: '0 of 7 days logged',
-      stepAverage: '0 steps/day connected',
-      estimatedDeficitOrSurplus: formatSignedCalories(deficitOrSurplus),
-      weightTrend: latestWeight !== null
-        ? weightDelta !== null
-          ? `${latestWeight} lb (${weightDelta > 0 ? '+' : ''}${weightDelta} lb)`
-          : `${latestWeight} lb`
-        : 'Placeholder until weigh-ins are added',
+      averageCalories: loggedDays.length ? `${averageCalories} avg calories` : 'No weekly average yet',
+      averageProtein: loggedDays.length ? `${averageProtein}g avg protein` : 'No protein trend yet',
+      averageMealsPerDay: loggedDays.length ? `${averageMealsPerDay} meals per logged day` : 'No repeat pace yet',
+      topMealType: getTopMealType(weeklyDays),
     },
-    movementTracking: [
-      {
-        title: 'Step tracking scaffold',
-        metric: '0 connected steps',
-        detail: 'Ready for Apple Health or Google Fit step imports once movement syncing is turned on.',
-      },
-      {
-        title: 'Workout logging scaffold',
-        metric: '0 workouts logged',
-        detail: 'Cardio and strength entries can slot here without changing nutrition as the primary action.',
-      },
-      {
-        title: 'Cardio sessions',
-        metric: '0 this week',
-        detail: 'Use this space later for walks, runs, cycling, and active energy summaries.',
-      },
-      {
-        title: 'Strength training entries',
-        metric: '0 this week',
-        detail: 'Future sets, lifts, and volume tracking can support recovery and protein context.',
-      },
-      {
-        title: 'Estimated active calories',
-        metric: `${estimatedBurnedCalories} kcal`,
-        detail: 'Current baseline estimate uses your selected activity level until step and workout data are connected.',
-      },
-    ],
-    integrations: [
-      {
-        title: 'Apple Health ready',
-        fields: ['Steps', 'Workouts', 'Calories burned', 'Heart rate', 'Active energy'],
-      },
-      {
-        title: 'Google Fit ready',
-        fields: ['Steps', 'Workouts', 'Calories burned', 'Heart rate', 'Active energy'],
-      },
-    ],
-    insightCards: buildInsightCards(weeklyDays, profile, netCalories),
+    patternCards: buildPatternCards(weeklyDays, profile, remainingCalories),
   };
 }
 
@@ -307,7 +273,7 @@ export async function getInsightsData(inputDate: Date | string = new Date()) {
   const date = startOfDayUtc(inputDate);
   const sevenDaysAgo = getPastSevenDays(date)[0] ?? date;
 
-  const [todayMeals, weeklyMeals, weightEntries] = await Promise.all([
+  const [todayMeals, weeklyMeals] = await Promise.all([
     prisma.meal.findMany({
       where: {
         userId: user.id,
@@ -315,10 +281,19 @@ export async function getInsightsData(inputDate: Date | string = new Date()) {
       },
       select: {
         date: true,
+        mealType: true,
         totalCalories: true,
         totalProtein: true,
         totalCarbs: true,
         totalFat: true,
+        totalFiber: true,
+        totalSugar: true,
+        totalSodium: true,
+        items: {
+          select: {
+            nutritionSourceType: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     }),
@@ -332,21 +307,21 @@ export async function getInsightsData(inputDate: Date | string = new Date()) {
       },
       select: {
         date: true,
+        mealType: true,
         totalCalories: true,
         totalProtein: true,
         totalCarbs: true,
         totalFat: true,
+        totalFiber: true,
+        totalSugar: true,
+        totalSodium: true,
+        items: {
+          select: {
+            nutritionSourceType: true,
+          },
+        },
       },
       orderBy: { date: 'asc' },
-    }),
-    prisma.weightEntry.findMany({
-      where: { userId: user.id },
-      orderBy: { date: 'desc' },
-      take: 2,
-      select: {
-        date: true,
-        weightLbs: true,
-      },
     }),
   ]);
 
@@ -358,14 +333,9 @@ export async function getInsightsData(inputDate: Date | string = new Date()) {
     profile: user.profile,
     ...buildInsightsViewModel({
       currentDate: date,
-      profile: {
-        dailyCalorieGoal: user.profile.dailyCalorieGoal,
-        proteinGoal: user.profile.proteinGoal,
-        activityLevel: user.profile.activityLevel,
-      },
+      profile: user.profile,
       todayMeals,
       weeklyMeals,
-      weightEntries,
     }),
   };
 }

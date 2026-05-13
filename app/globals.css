@@ -24,6 +24,7 @@ html {
   scroll-behavior: smooth;
   width: 100%;
   overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -58,6 +59,12 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+button,
+a,
+[role='button'] {
+  touch-action: manipulation;
 }
 
 ::selection {
@@ -314,6 +321,21 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, calc(100% + env(safe-area-inset-bottom)));
+}
+
+@media (max-width: 767px) {
+  .app-input,
+  .app-select,
+  .app-textarea,
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .app-card {
+    border-radius: 28px;
+  }
 }
 
 @media (min-width: 768px) {

@@ -39,12 +39,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     <>
       <DefaultStartScreenRedirect disabled={Boolean(saved || updated)} />
       <div className="app-page app-screen-wide flex min-w-0 flex-col gap-6 py-6">
-      {saved || updated ? (
-        <section className={`rounded-[24px] border px-4 py-3 text-sm ${saved ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-sky-200 bg-sky-50 text-sky-800'}`}>
-          {saved ? 'Meal saved. Today’s totals updated right away.' : 'Meal updated. Your latest totals are reflected here.'}
-        </section>
-      ) : null}
-      <section className="grid min-w-0 gap-6 xl:grid-cols-[1.35fr_0.95fr]">
+        {saved || updated ? (
+          <section className={`rounded-[24px] border px-4 py-3 text-sm ${saved ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-sky-200 bg-sky-50 text-sky-800'}`}>
+            {saved ? 'Meal saved. Today’s totals updated right away.' : 'Meal updated. Your latest totals are reflected here.'}
+          </section>
+        ) : null}
+        <section className="grid min-w-0 gap-6 xl:grid-cols-[1.35fr_0.95fr]">
         <div className="app-card min-w-0 rounded-[32px] p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0 space-y-3">
@@ -147,6 +147,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Carbs {meal.totalCarbs}g</span>
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Fat {meal.totalFat}g</span>
                   </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    <Link href={`/logger?mealId=${meal.id}`} className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-teal-200 hover:text-teal-700">
+                      Log again
+                    </Link>
+                    <Link href={`/logger?editMealId=${meal.id}`} className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-teal-200 hover:text-teal-700">
+                      Edit meal
+                    </Link>
+                  </div>
                 </div>
               ))
             ) : (
@@ -161,7 +169,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             )}
           </div>
         </div>
-      </section>
+        </section>
       </div>
     </>
   );

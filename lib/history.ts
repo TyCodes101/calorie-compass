@@ -1,3 +1,4 @@
+import { getCurrentUserId } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { isoDay } from '@/lib/date';
 import { summarizeStoredItems } from '@/lib/trust';
@@ -20,18 +21,23 @@ export type MealHistoryGroup = {
   meals: MealHistoryEntry[];
 };
 
-export async function getMealHistory(): Promise<MealHistoryGroup[]> {
-  const user = await prisma.user.findFirst({
-    orderBy: { createdAt: 'asc' },
-    select: { id: true },
-  });
+export type RecentMealQuickLog = {
+  id: string;
+  title: string;
+  mealType: string;
+  totalCalories: number;
+  createdAt: string;
+};
 
-  if (!user) {
+export async function getMealHistory(): Promise<MealHistoryGroup[]> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
     return [];
   }
 
   const meals = await prisma.meal.findMany({
-    where: { userId: user.id },
+    where: { userId },
     include: { items: true },
     orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     take: 40,
@@ -65,6 +71,38 @@ export async function getMealHistory(): Promise<MealHistoryGroup[]> {
   return Array.from(grouped.entries()).map(([date, mealsForDay]) => ({
     date,
     meals: mealsForDay,
+  }));
+}
+
+export async function getRecentMealsForQuickLog(limit = 6): Promise<RecentMealQuickLog[]> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return [];
+  }
+
+  const meals = await prisma.meal.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      mealType: true,
+      rawText: true,
+      totalCalories: true,
+      createdAt: true,
+      items: {
+        select: { id: true },
+      },
+    },
+  });
+
+  return meals.map((meal) => ({
+    id: meal.id,
+    title: meal.rawText || `${meal.items.length} item meal`,
+    mealType: meal.mealType.toLowerCase(),
+    totalCalories: Math.round(meal.totalCalories),
+    createdAt: meal.createdAt.toISOString(),
   }));
 }
 

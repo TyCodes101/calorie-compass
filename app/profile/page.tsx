@@ -31,7 +31,7 @@ export default async function ProfilePage() {
           <div>
             <h1 className="text-3xl font-semibold text-slate-950">Settings and goals</h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
-              Every settings row now routes somewhere real, so the profile area feels like a shipped product instead of a mockup.
+              Keep your goals, defaults, reminders, and account details cleanly tuned without leaving the calm day-to-day logging flow.
             </p>
           </div>
           <Link href="/onboarding" className="app-button-secondary inline-flex w-full items-center justify-center px-4 py-3 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700 sm:w-auto">

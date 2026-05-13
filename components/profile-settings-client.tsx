@@ -451,7 +451,7 @@ export function PreferencesSettingsForm() {
         </div>
 
         <div className="mt-5 rounded-[24px] border border-sky-100 bg-sky-50/70 p-4 text-sm text-slate-600">
-          These preferences save on the current device for now, which keeps the UX stable while account sync stays intentionally lightweight.
+          These preferences apply to the current phone or browser, so your default screen and unit choices stay consistent where you use the app most.
         </div>
 
         <div className="mt-6 flex justify-end">
@@ -570,7 +570,7 @@ export function NotificationsSettingsForm() {
         </div>
 
         <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
-          Current notification settings are stored locally until account syncing grows beyond MVP scope. That keeps every control working now instead of feeling fake.
+          Notification settings stay on this device so the behavior you choose here matches the phone or browser you actually use day to day.
         </div>
 
         <div className="mt-6 flex justify-end">
@@ -606,7 +606,7 @@ export function AccountSettingsForm({ initial }: { initial: ProfileSettingsSnaps
   return (
     <SectionLayout
       title="Account"
-      description="Tidy up your identity and account context without surfacing half-built account management controls."
+      description="Keep your display name and account basics clean without cluttering this area with settings you do not need every day."
       badge={<SaveState saving={saving} savedLabel={saved ? 'Saved' : 'Unsaved'} error={error} />}
     >
       <section className="app-card min-w-0 rounded-[32px] p-6">
@@ -625,13 +625,13 @@ export function AccountSettingsForm({ initial }: { initial: ProfileSettingsSnaps
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Account mode</p>
-              <p className="mt-3 text-base font-semibold text-slate-950">MVP demo profile</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Accounts are intentionally lightweight while the product foundation is being hardened.</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Profile status</p>
+              <p className="mt-3 text-base font-semibold text-slate-950">Ready for everyday use</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Your name and nutrition settings feed the live dashboard, logger, and history flows across the app.</p>
             </div>
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Data handling</p>
-              <p className="mt-3 text-base font-semibold text-slate-950">Nutrition data persists</p>
+              <p className="mt-3 text-base font-semibold text-slate-950">Meal data saves live</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">Your meal history, favorites, and profile values continue to save through the live database-backed flow.</p>
             </div>
           </div>
@@ -665,7 +665,7 @@ export function NotificationsPreviewCard() {
         <BellRing className="h-4 w-4 text-slate-500" />
         <p className="font-semibold">Notification behavior stays calm by default</p>
       </div>
-      <p className="mt-2 leading-6">You can keep reminders useful without cluttering the product with unfinished push-permission prompts.</p>
+      <p className="mt-2 leading-6">Tune reminders and quiet hours without turning the app into a stream of noisy nudges.</p>
     </div>
   );
 }
@@ -675,9 +675,9 @@ export function PreferencesPreviewCard() {
     <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
       <div className="flex items-center gap-2 text-slate-900">
         <MoonStar className="h-4 w-4 text-slate-500" />
-        <p className="font-semibold">Preferences now feel real instead of decorative</p>
+        <p className="font-semibold">Preferences stay consistent on this device</p>
       </div>
-      <p className="mt-2 leading-6">Device-side settings persist immediately, so these controls support the current MVP instead of pretending backend sync already exists.</p>
+      <p className="mt-2 leading-6">Your start screen and unit choices stick where you actually use the app, which keeps the daily flow feeling steady.</p>
     </div>
   );
 }
@@ -687,9 +687,9 @@ export function GoalsPreviewCard() {
     <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
       <div className="flex items-center gap-2 text-slate-900">
         <Sparkles className="h-4 w-4 text-slate-500" />
-        <p className="font-semibold">Settings now route and save cleanly</p>
+        <p className="font-semibold">Goals stay connected to the rest of the app</p>
       </div>
-      <p className="mt-2 leading-6">Every visible settings row now leads somewhere real, so the profile area feels intentional instead of prototype-like.</p>
+      <p className="mt-2 leading-6">Your goal and activity choices shape targets across the dashboard, logger, and nutrition summaries.</p>
     </div>
   );
 }

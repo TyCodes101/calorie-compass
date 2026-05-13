@@ -17,12 +17,12 @@ export const profileSections = [
   {
     slug: 'notifications',
     label: 'Notifications',
-    description: 'Control reminders, summaries, and quiet hours with polished device-side defaults.',
+    description: 'Control reminders, summaries, and quiet hours without making the app noisy.',
   },
   {
     slug: 'account',
     label: 'Account',
-    description: 'Keep your name and account details tidy while the app is still in MVP mode.',
+    description: 'Keep your name and account details tidy in one simple place.',
   },
 ] as const;
 
