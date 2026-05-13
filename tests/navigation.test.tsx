@@ -31,6 +31,7 @@ describe('mobile navigation', () => {
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByText('History')).toBeInTheDocument();
+    expect(screen.getByText('More')).toBeInTheDocument();
     expect(screen.getByText('Profile')).toBeInTheDocument();
     expect(screen.getByText('Log Meal')).toBeInTheDocument();
   });
@@ -47,5 +48,13 @@ describe('mobile navigation', () => {
 
     const logMealLink = screen.getByRole('link', { name: /log meal/i });
     expect(logMealLink.className).toMatch(/mobile-nav-fab/);
+  });
+
+  it('renders a placeholder future tab on the right side of the logger action', () => {
+    render(<MobileNav />);
+
+    const moreButton = screen.getByRole('button', { name: /more, coming soon/i });
+    expect(moreButton.className).toMatch(/mobile-nav-item-placeholder/);
+    expect(moreButton).toHaveAttribute('aria-disabled', 'true');
   });
 });

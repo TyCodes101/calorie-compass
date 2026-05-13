@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Clock3, House, Plus, UserRound } from 'lucide-react';
+import { Clock3, House, MoreHorizontal, Plus, UserRound } from 'lucide-react';
 import clsx from 'clsx';
 
 const items = [
@@ -46,15 +46,20 @@ export function MobileNav() {
 
   return (
     <nav className="mobile-nav" aria-label="Primary">
-      <div className="mobile-nav-side mobile-nav-side-left">
-        <NavItem {...dashboard} active={matchesPath(pathname, dashboard.href)} />
-        <NavItem {...history} active={matchesPath(pathname, history.href)} />
-      </div>
-
-      <div className="mobile-nav-side mobile-nav-side-right">
-        <span className="mobile-nav-item-spacer" aria-hidden="true" />
-        <NavItem {...profile} active={matchesPath(pathname, profile.href)} />
-      </div>
+      <NavItem {...dashboard} active={matchesPath(pathname, dashboard.href)} />
+      <NavItem {...history} active={matchesPath(pathname, history.href)} />
+      <span className="mobile-nav-center-spacer" aria-hidden="true" />
+      <button
+        type="button"
+        aria-label="More, coming soon"
+        aria-disabled="true"
+        onClick={triggerHapticFeedback}
+        className="mobile-nav-item mobile-nav-item-placeholder"
+      >
+        <MoreHorizontal className="mobile-nav-item-icon" />
+        <span className="mobile-nav-item-label">More</span>
+      </button>
+      <NavItem {...profile} active={matchesPath(pathname, profile.href)} />
 
       <Link
         href="/logger"
@@ -65,7 +70,7 @@ export function MobileNav() {
       >
         <span className="mobile-nav-fab-glow" aria-hidden="true" />
         <span className="mobile-nav-fab-icon">
-          <Plus className="h-5 w-5" />
+          <Plus className="h-[18px] w-[18px]" />
         </span>
         <span className="mobile-nav-fab-label">Log Meal</span>
       </Link>
