@@ -4,6 +4,7 @@ import { Bell, ChevronRight, Dumbbell, Goal, Ruler, UserRound } from 'lucide-rea
 
 import { GoalsPreviewCard, NotificationsPreviewCard, PreferencesPreviewCard } from '@/components/profile-settings-client';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
+import { buildProfileSettingsSnapshot } from '@/lib/profile-settings';
 import { profileSections } from '@/lib/profile-sections';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ const sectionIcons = {
 
 export default async function ProfilePage() {
   const user = await getCurrentUserWithProfile();
+  const profile = buildProfileSettingsSnapshot(user);
 
   if (!user) {
     redirect('/onboarding');
@@ -44,12 +46,12 @@ export default async function ProfilePage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Daily calories</p>
-            <p className="mt-3 text-3xl font-semibold text-slate-950">{user?.profile?.dailyCalorieGoal ?? 0}</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{profile.dailyCalorieGoal}</p>
             <p className="mt-2 text-sm text-slate-500">Current steady target</p>
           </div>
           <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Protein target</p>
-            <p className="mt-3 text-3xl font-semibold text-slate-950">{user?.profile?.proteinGoal ?? 0}g</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{profile.proteinGoal}g</p>
             <p className="mt-2 text-sm text-slate-500">Used across dashboard and review flows</p>
           </div>
         </div>

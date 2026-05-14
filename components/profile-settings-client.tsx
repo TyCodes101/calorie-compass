@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { type ReactNode, useMemo, useState } from 'react';
 import { ArrowLeft, BellRing, CheckCircle2, ChevronRight, LoaderCircle, MoonStar, Sparkles } from 'lucide-react';
 
+import type { AccountFoundationSnapshot } from '@/lib/auth-session';
 import type { ProfileSettingsSnapshot } from '@/lib/profile-settings';
 
 type PreferencesState = {
@@ -584,7 +585,7 @@ export function NotificationsSettingsForm() {
   );
 }
 
-export function AccountSettingsForm({ initial }: { initial: ProfileSettingsSnapshot }) {
+export function AccountSettingsForm({ initial, account }: { initial: ProfileSettingsSnapshot; account?: AccountFoundationSnapshot }) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   const [nutritionPreferences, setNutritionPreferences] = useState(initial.nutritionPreferences ?? '');
@@ -698,15 +699,27 @@ export function AccountSettingsForm({ initial }: { initial: ProfileSettingsSnaps
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Profile status</p>
-              <p className="mt-3 text-base font-semibold text-slate-950">Ready for everyday use</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Your name and nutrition preferences feed the live dashboard, logger, and history flows across the app.</p>
+              <p className="mt-3 text-base font-semibold text-slate-950">{account?.title ?? 'Ready for everyday use'}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{account?.description ?? 'Your name and nutrition preferences feed the live dashboard, logger, and history flows across the app.'}</p>
             </div>
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Data handling</p>
-              <p className="mt-3 text-base font-semibold text-slate-950">Meal data saves live</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Persistence</p>
+              <p className="mt-3 text-base font-semibold text-slate-950">{account?.persistenceLabel ?? 'Meal data saves live'}</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">Your meal history, favorites, and profile values continue to save through the live database-backed flow.</p>
             </div>
           </div>
+
+          {account ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {account.providers.map((provider) => (
+                <div key={provider.id} className="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <p className="text-sm font-semibold text-slate-950">{provider.label}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{provider.detail}</p>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{provider.status === 'planned' ? 'planned provider architecture' : provider.status}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <Link href="/onboarding" className="app-button-secondary inline-flex items-center justify-between rounded-[20px] px-4 py-4 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700">

@@ -5,6 +5,7 @@ import { addDaysUtc, startOfDayUtc } from '@/lib/date';
 import { buildWeeklyTrendFromMeals, sumMealTotals } from '@/lib/dashboard-aggregation';
 import { calculateRemainingCalories, toProgressValue } from '@/lib/nutrition';
 import { summarizeStoredItems } from '@/lib/trust';
+import { getCurrentUserWithProfile } from '@/lib/current-user';
 
 type DashboardWriteClient = PrismaClient | Prisma.TransactionClient;
 
@@ -50,10 +51,7 @@ export async function upsertDailyLogForDate(userId: string, inputDate: Date | st
 }
 
 export async function getDashboardData(inputDate: Date | string = new Date()) {
-  const user = await prisma.user.findFirst({
-    orderBy: { createdAt: 'asc' },
-    include: { profile: true },
-  });
+  const user = await getCurrentUserWithProfile();
 
   if (!user || !user.profile) {
     return null;

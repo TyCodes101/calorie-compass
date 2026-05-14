@@ -139,6 +139,99 @@ describe('meal logger client', () => {
     expect(screen.getByText(/assistant/i)).toBeInTheDocument();
   });
 
+  it('hydrates assistant memory from server-seeded saved meals', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => buildAssistantResponse(),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <MealLoggerClient
+        favoriteMeals={[]}
+        recentMeals={[]}
+        seedAssistantMemory={{
+          version: 1,
+          syncStatus: 'local',
+          updatedAt: '2026-05-14T19:00:00.000Z',
+          recurringMeals: [
+            {
+              id: 'snack:fairlife elite 42g shake',
+              title: 'Fairlife Elite 42g shake',
+              rawText: 'Fairlife Elite 42g shake',
+              mealType: 'snack',
+              totalCalories: 230,
+              confidenceScore: 0.96,
+              source: 'saved',
+              createdAt: '2026-05-14T19:00:00.000Z',
+              lastUsedAt: '2026-05-14T19:00:00.000Z',
+              count: 2,
+              items: [buildItem()],
+            },
+          ],
+          recurringFoods: [],
+          commonRestaurants: [],
+          commonBrands: [],
+          preferredServingSizes: [],
+          commonCorrections: [],
+          mealTiming: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/fairlife elite 42g shake/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+      target: { value: 'same as usual' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    const request = fetchMock.mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body ?? '{}'));
+    expect(body.context.assistantMemory.recurringMeals[0]).toMatchObject({
+      title: 'Fairlife Elite 42g shake',
+      mealType: 'snack',
+    });
+  });
+
+  it('adds a gentle consistency note on first load when recent logging is steady', () => {
+    render(
+      <MealLoggerClient
+        favoriteMeals={[]}
+        recentMeals={[
+          buildRecentMeal({ id: 'recent-1', createdAt: new Date(Date.now() - 86400000).toISOString() }),
+          buildRecentMeal({ id: 'recent-2', createdAt: new Date(Date.now() - 2 * 86400000).toISOString() }),
+          buildRecentMeal({ id: 'recent-3', createdAt: new Date(Date.now() - 3 * 86400000).toISOString() }),
+          buildRecentMeal({ id: 'recent-4', createdAt: new Date(Date.now() - 4 * 86400000).toISOString() }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/what'd you eat today\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/pretty steady lately/i)).toBeInTheDocument();
+  });
+
+  it('surfaces the week check-in quick action when enough recent meals exist', () => {
+    render(
+      <MealLoggerClient
+        favoriteMeals={[]}
+        recentMeals={[
+          buildRecentMeal({ id: 'recent-1' }),
+          buildRecentMeal({ id: 'recent-2', createdAt: new Date(Date.now() - 86400000).toISOString() }),
+          buildRecentMeal({ id: 'recent-3', createdAt: new Date(Date.now() - 2 * 86400000).toISOString() }),
+          buildRecentMeal({ id: 'recent-4', createdAt: new Date(Date.now() - 3 * 86400000).toISOString() }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/week check-in/i)).toBeInTheDocument();
+  });
+
   it('can send a quick suggestion as a one-tap assistant prompt', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -193,6 +286,38 @@ describe('meal logger client', () => {
     await waitFor(() => {
       expect(screen.getByText(/52g of protein left today/i)).toBeInTheDocument();
     });
+  });
+
+  it('opens barcode mode from a natural conversational request without calling the assistant API', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+      target: { value: 'scan a barcode' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await screen.findByText(/barcode mode is open/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/barcode digits/i)).toBeInTheDocument();
+  });
+
+  it('handles voice logging requests gracefully without breaking the chat flow', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+      target: { value: 'can I log by voice?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await screen.findByText(/voice logging is next up/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/barcode digits/i)).not.toBeInTheDocument();
   });
 
   it('uses the meal-assistant route for conversational logging and still saves the reviewed meal', async () => {
@@ -253,7 +378,7 @@ describe('meal logger client', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/saved it\. want to log anything else\?/i)).toBeInTheDocument();
+      expect(screen.getByText(/saved it\. want to log anything else\?|all set, that one is logged\.|got it saved\. want to keep going\?/i)).toBeInTheDocument();
     });
 
     expect(refreshMock).toHaveBeenCalled();
@@ -458,7 +583,7 @@ describe('meal logger client', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/saved\. anything else\?/i)).toBeInTheDocument();
+      expect(screen.getByText(/saved\. anything else\?|all set, that one is logged\.|got it saved\. want to keep going\?|that one is in\. anything else\?/i)).toBeInTheDocument();
     });
 
     expect(refreshMock).toHaveBeenCalled();

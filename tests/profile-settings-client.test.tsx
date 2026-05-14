@@ -148,4 +148,47 @@ describe('profile settings client flows', () => {
       );
     });
   });
+
+  it('shows guest account foundation messaging and planned auth providers', () => {
+    render(
+      <AccountSettingsForm
+        initial={{
+          name: 'Tyler',
+          age: 21,
+          heightCm: 180,
+          weightLbs: 180,
+          goal: 'MAINTAIN',
+          activityLevel: 'MODERATE',
+          dailyCalorieGoal: 2200,
+          proteinGoal: 160,
+          nutritionPreferences: 'high protein',
+        }}
+        account={{
+          mode: 'guest',
+          title: 'Guest mode is active',
+          description: 'Meals and profile data stay tied to this device session right now.',
+          persistenceLabel: 'Live guest session with saved history',
+          providers: [
+            {
+              id: 'apple',
+              label: 'Continue with Apple',
+              status: 'planned',
+              detail: 'Architecture is ready for Apple sign-in wiring when provider credentials are added.',
+            },
+            {
+              id: 'google',
+              label: 'Continue with Google',
+              status: 'planned',
+              detail: 'Architecture is ready for Google sign-in wiring when provider credentials are added.',
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/guest mode is active/i)).toBeInTheDocument();
+    expect(screen.getByText(/live guest session with saved history/i)).toBeInTheDocument();
+    expect(screen.getByText(/continue with apple/i)).toBeInTheDocument();
+    expect(screen.getByText(/continue with google/i)).toBeInTheDocument();
+  });
 });

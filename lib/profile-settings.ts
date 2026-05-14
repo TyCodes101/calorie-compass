@@ -1,5 +1,7 @@
 import { ActivityLevel, GoalType } from '@prisma/client';
 
+import { getPreferredUserName } from '@/lib/auth-session';
+
 export type ProfileSettingsSnapshot = {
   name: string;
   age?: number | null;
@@ -14,6 +16,8 @@ export type ProfileSettingsSnapshot = {
 
 type CurrentUserLike = {
   name: string;
+  email?: string | null;
+  demo?: boolean | null;
   profile?: {
     age?: number | null;
     heightCm?: number | null;
@@ -40,7 +44,7 @@ export const defaultProfileSettings: ProfileSettingsSnapshot = {
 
 export function buildProfileSettingsSnapshot(user: CurrentUserLike): ProfileSettingsSnapshot {
   return {
-    name: user?.name ?? defaultProfileSettings.name,
+    name: getPreferredUserName(user) ?? defaultProfileSettings.name,
     age: user?.profile?.age ?? defaultProfileSettings.age,
     heightCm: user?.profile?.heightCm ?? defaultProfileSettings.heightCm,
     weightLbs: user?.profile?.weightLbs ?? defaultProfileSettings.weightLbs,

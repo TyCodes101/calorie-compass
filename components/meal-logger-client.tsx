@@ -23,6 +23,7 @@ import type { MealAssistantContext, MealAssistantResponse, MealAssistantState } 
 import {
   assistantMemoryStorageKey,
   createEmptyAssistantMemory,
+  mergeAssistantMemorySnapshots,
   parseAssistantMemory,
   rememberAssistantCorrection,
   rememberAssistantMeal,
@@ -49,12 +50,20 @@ const promptExamples = [
   '3 scrambled eggs and 2 slices of toast',
 ];
 
+type LocalAssistantAction =
+  | { kind: 'none' }
+  | { kind: 'barcode'; reply: string }
+  | { kind: 'label'; reply: string }
+  | { kind: 'voice'; reply: string }
+  | { kind: 'photo'; reply: string };
+
 type ActionKind = 'parse' | 'save' | 'favorite' | 'removeFavorite';
 
 type QuickLogProps = {
   initialDraft?: LoggerDraft | null;
   favoriteMeals?: FavoriteMealSummary[];
   recentMeals?: RecentMealQuickLog[];
+  seedAssistantMemory?: AssistantMemorySnapshot | null;
   nutritionPreferences?: string | null;
   userName?: string | null;
   proteinGoal?: number | null;
@@ -162,6 +171,49 @@ function buildCorrectionReference(prompt: string, items: ParsedFoodItem[]) {
   return buildMealReference(prompt, items);
 }
 
+function getUtcDayStamp(timestamp: string) {
+  const parsed = Date.parse(timestamp);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  const date = new Date(parsed);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function getRecentLoggingStreak(recentMeals: RecentMealQuickLog[]) {
+  const uniqueDays = Array.from(
+    new Set(
+      recentMeals
+        .map((meal) => getUtcDayStamp(meal.createdAt))
+        .filter((value): value is number => value !== null),
+    ),
+  ).sort((left, right) => right - left);
+
+  if (!uniqueDays.length) {
+    return 0;
+  }
+
+  const today = new Date();
+  const todayStamp = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const firstDay = uniqueDays[0];
+  const normalizedDays = firstDay === todayStamp || firstDay === todayStamp - 86400000 ? uniqueDays : [todayStamp - 86400000, ...uniqueDays];
+
+  let streak = 0;
+  let expected = normalizedDays[0];
+
+  for (const day of normalizedDays) {
+    if (day !== expected) {
+      break;
+    }
+
+    streak += 1;
+    expected -= 86400000;
+  }
+
+  return streak;
+}
+
 function buildTrustSentence(items: ParsedFoodItem[], estimatedCount: number) {
   if (!items.length) {
     return 'You can tweak it before saving.';
@@ -239,6 +291,20 @@ function buildShortcutPrompt(text: string | null | undefined) {
   return `same ${concise}`;
 }
 
+function hashClientText(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+
+  return Math.abs(hash);
+}
+
+function chooseClientPhrase(seed: string, variants: string[]) {
+  return variants[hashClientText(seed) % variants.length] ?? variants[0] ?? '';
+}
+
 function buildTypingCopy(message: string) {
   if (/\b(?:suggest|recommend|idea|lighter|healthier|sweet|dessert|snack)\b/i.test(message)) {
     return {
@@ -272,6 +338,48 @@ function buildTypingCopy(message: string) {
     title: 'Give me a second',
     subtitle: 'I’m checking the closest match.',
   };
+}
+
+function buildTypingSequence(message: string) {
+  const first = buildTypingCopy(message);
+
+  if (/\b(?:suggest|recommend|idea|lighter|healthier|sweet|dessert|snack)\b/i.test(message)) {
+    return [
+      first,
+      { title: 'Still thinking', subtitle: 'Keeping it practical and easy to say yes to.' },
+      { title: 'Almost there', subtitle: 'Landing on the option that fits best.' },
+    ];
+  }
+
+  if (/\b(?:what about|how about|carbs?|fat|protein|compare|versus|vs\b)\b/i.test(message)) {
+    return [
+      first,
+      { title: 'Still on it', subtitle: 'Holding the meal and today’s context together.' },
+      { title: 'Almost there', subtitle: 'Making sure the answer stays on the same thread.' },
+    ];
+  }
+
+  if (/\b(?:same|usual|again|repeat|yesterday)\b/i.test(message)) {
+    return [
+      first,
+      { title: 'Checking your patterns', subtitle: 'Looking through your recent meals and usual picks.' },
+      { title: 'Almost there', subtitle: 'Pulling back the closest match.' },
+    ];
+  }
+
+  if (/\b(?:protein|calories|on track|tonight|snack)\b/i.test(message)) {
+    return [
+      first,
+      { title: 'Still checking', subtitle: 'Using today’s goals and what you’ve logged so far.' },
+      { title: 'Almost there', subtitle: 'Keeping the answer short and useful.' },
+    ];
+  }
+
+  return [
+    first,
+    { title: 'Still on it', subtitle: 'Matching the meal and smoothing the details.' },
+    { title: 'Almost there', subtitle: 'Getting this into a clean log.' },
+  ];
 }
 
 function buildQuickSuggestions(args: {
@@ -326,6 +434,10 @@ function buildQuickSuggestions(args: {
     pushSuggestion('Repeat yesterday', `repeat yesterday${yesterdayMeal.mealType ? ` ${yesterdayMeal.mealType}` : ''}`.trim());
   }
 
+  if (args.recentMeals.length >= 4) {
+    pushSuggestion('Week check-in', "how's this week going?");
+  }
+
   if (args.remainingProtein !== null && args.remainingProtein !== undefined) {
     pushSuggestion('Protein left?', 'how much protein do I have left?');
   }
@@ -335,6 +447,44 @@ function buildQuickSuggestions(args: {
   }
 
   return suggestions.slice(0, 4);
+}
+
+function detectLocalAssistantAction(message: string): LocalAssistantAction {
+  const normalized = message.trim().toLowerCase();
+
+  if (!normalized) {
+    return { kind: 'none' };
+  }
+
+  if ((/\b(?:scan|use|open|check)\b.*\bbarcode\b/i.test(normalized) || /^barcode\b/i.test(normalized)) && !/\d{8,}/.test(normalized)) {
+    return {
+      kind: 'barcode',
+      reply: 'Barcode mode is open. Scan it or type the digits and I’ll check the packaged-food match first.',
+    };
+  }
+
+  if (/\b(?:scan|use|open|read|enter)\b.*\b(?:nutrition label|label)\b/i.test(normalized) || /^nutrition label\b/i.test(normalized)) {
+    return {
+      kind: 'label',
+      reply: 'Label mode is open. Drop in the numbers and I’ll turn it into a clean packaged-food entry.',
+    };
+  }
+
+  if (/\b(?:voice|log by voice|voice log|speak instead|talk instead)\b/i.test(normalized)) {
+    return {
+      kind: 'voice',
+      reply: 'Voice logging is next up. For now, just text it naturally and I’ll keep the flow moving.',
+    };
+  }
+
+  if (/\b(?:photo|picture|image|camera|snap)\b/i.test(normalized) && /\b(?:meal|food|label|this)\b/i.test(normalized)) {
+    return {
+      kind: 'photo',
+      reply: 'Photo logging is on deck. Right now, barcode or label gets you the closest packaged-food match.',
+    };
+  }
+
+  return { kind: 'none' };
 }
 
 function waitForAssistantBeat(ms: number) {
@@ -361,6 +511,8 @@ function buildInitialAssistantMessage(options: {
   firstName?: string | null;
   editingMealId?: string | null;
   sourceReusableMealId?: string | null;
+  recentMeals?: RecentMealQuickLog[];
+  todayMealCount?: number | null;
 }) {
   if (options.editingMealId) {
     return 'I pulled up that saved meal. Make any changes you want, then save it again.';
@@ -370,7 +522,22 @@ function buildInitialAssistantMessage(options: {
     return 'I pulled up that favorite. You can log it as-is or tweak it first.';
   }
 
-  return `Hey${options.firstName ? ` ${options.firstName}` : ''}, what'd you eat today?`;
+  const streak = getRecentLoggingStreak(options.recentMeals ?? []);
+  const intro = `Hey${options.firstName ? ` ${options.firstName}` : ''}, what'd you eat today?`;
+
+  if ((options.todayMealCount ?? 0) >= 1) {
+    return `${intro} You’re already checked in today, so we can just keep building from there.`;
+  }
+
+  if (streak >= 4) {
+    return `${intro} You’ve been pretty steady lately, so let’s keep this one easy.`;
+  }
+
+  if ((options.recentMeals ?? []).length >= 4) {
+    return `${intro} I can keep the week-level patterns light and helpful while you log.`;
+  }
+
+  return intro;
 }
 
 function buildInitialAssistantState(args: {
@@ -563,6 +730,7 @@ export function MealLoggerClient({
   initialDraft = null,
   favoriteMeals = [],
   recentMeals = [],
+  seedAssistantMemory = null,
   nutritionPreferences = null,
   userName = null,
   proteinGoal = null,
@@ -590,10 +758,10 @@ export function MealLoggerClient({
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() =>
     initialDraft?.rawText
       ? [
-          createChatMessage('assistant', buildInitialAssistantMessage({ firstName, editingMealId: initialDraft?.editingMealId ?? null, sourceReusableMealId: initialDraft?.sourceReusableMealId ?? null })),
+          createChatMessage('assistant', buildInitialAssistantMessage({ firstName, editingMealId: initialDraft?.editingMealId ?? null, sourceReusableMealId: initialDraft?.sourceReusableMealId ?? null, recentMeals, todayMealCount })),
           createChatMessage('user', initialDraft.rawText, { compact: false }),
         ]
-      : [createChatMessage('assistant', buildInitialAssistantMessage({ firstName, editingMealId: initialDraft?.editingMealId ?? null, sourceReusableMealId: initialDraft?.sourceReusableMealId ?? null }))],
+      : [createChatMessage('assistant', buildInitialAssistantMessage({ firstName, editingMealId: initialDraft?.editingMealId ?? null, sourceReusableMealId: initialDraft?.sourceReusableMealId ?? null, recentMeals, todayMealCount }))],
   );
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [items, setItems] = useState<ParsedFoodItem[]>(initialDraft?.items ?? []);
@@ -621,15 +789,11 @@ export function MealLoggerClient({
     }),
   );
   const [assistantMemory, setAssistantMemory] = useState<AssistantMemorySnapshot>(() => {
-    if (typeof window === 'undefined') {
-      return createEmptyAssistantMemory();
-    }
+    const localMemory = typeof window === 'undefined'
+      ? createEmptyAssistantMemory()
+      : parseAssistantMemory(window.localStorage.getItem(assistantMemoryStorageKey));
 
-    try {
-      return parseAssistantMemory(window.localStorage.getItem(assistantMemoryStorageKey));
-    } catch {
-      return createEmptyAssistantMemory();
-    }
+    return mergeAssistantMemorySnapshots(localMemory, seedAssistantMemory);
   });
   const [typingCopy, setTypingCopy] = useState(() => buildTypingCopy(initialDraft?.rawText ?? ''));
   const isOnline = useOnlineStatus();
@@ -704,6 +868,28 @@ export function MealLoggerClient({
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [chatHistory, clarifyingQuestion, items, loading, error, saveMessage, expandedIndex, entryMode, utilityMenuOpen]);
+
+  useEffect(() => {
+    if (!loading) {
+      return;
+    }
+
+    const sequence = buildTypingSequence(lastAssistantMessage ?? activePrompt ?? '');
+
+    if (sequence.length <= 1 || process.env.NODE_ENV === 'test') {
+      return;
+    }
+
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index = Math.min(index + 1, sequence.length - 1);
+      setTypingCopy(sequence[index] ?? sequence[sequence.length - 1] ?? buildTypingCopy(lastAssistantMessage ?? activePrompt ?? ''));
+    }, 850);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [loading, lastAssistantMessage, activePrompt]);
 
   function appendChatMessage(role: ChatMessage['role'], text: string, options?: Pick<ChatMessage, 'tone' | 'compact'>) {
     const trimmed = text.trim();
@@ -910,7 +1096,7 @@ export function MealLoggerClient({
       editingMealId: null,
     });
     if (!options?.preserveThread) {
-      setChatHistory([createChatMessage('assistant', buildInitialAssistantMessage({ firstName }))]);
+      setChatHistory([createChatMessage('assistant', buildInitialAssistantMessage({ firstName, recentMeals, todayMealCount }))]);
     }
   }
 
@@ -991,6 +1177,38 @@ export function MealLoggerClient({
     const trimmedMessage = message.trim();
 
     if (!trimmedMessage || loading) {
+      return;
+    }
+
+    const localAction = detectLocalAssistantAction(trimmedMessage);
+    if (localAction.kind !== 'none') {
+      clearFeedback();
+      setUtilityMenuOpen(false);
+      setLastAssistantMessage(trimmedMessage);
+
+      if (!options?.retry) {
+        appendChatMessage('user', trimmedMessage, { compact: items.length > 0 || Boolean(clarifyingQuestion) });
+        setComposerText('');
+      }
+
+      if (localAction.kind === 'barcode') {
+        openEntryMode('barcode');
+      } else if (localAction.kind === 'label') {
+        openEntryMode('label');
+      } else {
+        setEntryMode('chat');
+      }
+
+      setAssistantState((current) => ({
+        ...current,
+        activeTopic: localAction.kind === 'voice' || localAction.kind === 'photo' ? 'casual' : 'meal',
+        activeMode: localAction.kind === 'voice' || localAction.kind === 'photo' ? 'casual_conversation' : 'logging_mode',
+        activeQuestion: trimmedMessage,
+        previousIntent: 'casual_message',
+        previousUserMessage: trimmedMessage,
+        lastAssistantReply: localAction.reply,
+      }));
+      appendChatMessage('assistant', localAction.reply, { compact: true });
       return;
     }
 
@@ -1300,9 +1518,12 @@ export function MealLoggerClient({
       }
 
       await waitForAssistantBeat(180);
+      const saveReply = editingMealId
+        ? chooseClientPhrase(`save:update:${activePrompt}:${items.length}`, ['Saved the update.', 'Alright, that update is saved.', 'Done, I saved the changes.'])
+        : chooseClientPhrase(`save:new:${activePrompt}:${items.length}`, ['Saved it. Want to log anything else?', 'All set, that one is logged.', 'Got it saved. Want to keep going?']);
       setSaving(false);
       setHasSavedCurrentDraft(true);
-      setSaveMessage(editingMealId ? 'Updated it.' : 'Saved it. Want to log anything else?');
+      setSaveMessage(saveReply);
       setAssistantState((current) => ({
         ...current,
         currentMealItems: items,
@@ -1317,7 +1538,7 @@ export function MealLoggerClient({
         editingMealId,
       }));
       rememberMealLocally({ source: 'saved' });
-      appendChatMessage('assistant', editingMealId ? 'Updated it.' : 'Saved it. Want to log anything else?', { tone: 'success' });
+      appendChatMessage('assistant', saveReply, { tone: 'success' });
       router.refresh();
     } catch {
       setSaving(false);
@@ -1363,6 +1584,9 @@ export function MealLoggerClient({
 
       await waitForAssistantBeat(150);
       const nextReusableMealId = data?.favoriteMeal?.id ?? sourceReusableMealId;
+      const favoriteReply = sourceReusableMealId
+        ? chooseClientPhrase(`favorite:update:${activePrompt}:${items.length}`, ['Updated your favorite.', 'Alright, I refreshed that favorite.', 'Done, your favorite is updated.'])
+        : chooseClientPhrase(`favorite:new:${activePrompt}:${items.length}`, ['Saved that as a favorite.', 'Nice, I saved that to your favorites.', 'Alright, that one is in favorites now.']);
       setSourceReusableMealId(nextReusableMealId);
       setAssistantState((current) => ({
         ...current,
@@ -1371,7 +1595,7 @@ export function MealLoggerClient({
       rememberMealLocally({ source: 'favorite' });
       setFavoriteState('saved');
       setFavoriteSaving(false);
-      appendChatMessage('assistant', sourceReusableMealId ? 'Updated your favorite.' : 'Saved that as a favorite.', { tone: 'success' });
+      appendChatMessage('assistant', favoriteReply, { tone: 'success' });
       router.refresh();
     } catch {
       setFavoriteSaving(false);
@@ -1410,6 +1634,11 @@ export function MealLoggerClient({
       }
 
       await waitForAssistantBeat(120);
+      const removeFavoriteReply = chooseClientPhrase(`favorite:remove:${activePrompt}:${items.length}`, [
+        'Removed the favorite. The meal is still here if you want it.',
+        'Okay, I took it out of favorites. The meal is still here.',
+        'Favorite removed. I kept the meal in place in case you still want it.',
+      ]);
       setSourceReusableMealId(null);
       setAssistantState((current) => ({
         ...current,
@@ -1417,7 +1646,7 @@ export function MealLoggerClient({
       }));
       setFavoriteState('idle');
       setFavoriteSaving(false);
-      appendChatMessage('assistant', 'Removed the favorite. The meal is still here if you want it.', { tone: 'success' });
+      appendChatMessage('assistant', removeFavoriteReply, { tone: 'success' });
       router.refresh();
     } catch {
       setFavoriteSaving(false);

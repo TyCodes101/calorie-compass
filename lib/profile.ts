@@ -1,5 +1,6 @@
 import { ActivityLevel, GoalType } from '@prisma/client';
 
+import { getCurrentUserWithProfile } from '@/lib/current-user';
 import { logConnectionReady, logWriteFailure, logWriteStart, logWriteSuccess } from '@/lib/persistence';
 import { prisma } from '@/lib/prisma';
 
@@ -28,7 +29,7 @@ export async function saveProfile(input: ProfileInput) {
       goal: input.goal,
     });
 
-    const existingUser = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' } });
+    const existingUser = await getCurrentUserWithProfile();
 
     if (!existingUser) {
       const createdUser = await prisma.user.create({

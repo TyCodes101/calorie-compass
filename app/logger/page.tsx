@@ -1,4 +1,6 @@
 import { MealLoggerClient } from '@/components/meal-logger-client';
+import { getPreferredUserName } from '@/lib/auth-session';
+import { seedAssistantMemoryFromSavedMeals } from '@/lib/assistant-memory';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 import { getDashboardData } from '@/lib/dashboard';
 import { getRecentMealsForQuickLog } from '@/lib/history';
@@ -36,6 +38,7 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
     getCurrentUserWithProfile(),
     getDashboardData(),
   ]);
+  const seedAssistantMemory = seedAssistantMemoryFromSavedMeals({ favoriteMeals, recentMeals });
 
   return (
     <MealLoggerClient
@@ -43,8 +46,9 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
       initialDraft={initialDraft}
       favoriteMeals={favoriteMeals}
       recentMeals={recentMeals}
+      seedAssistantMemory={seedAssistantMemory}
       nutritionPreferences={user?.profile?.aiPreferenceNotes ?? null}
-      userName={user?.name ?? null}
+      userName={getPreferredUserName(user)}
       proteinGoal={user?.profile?.proteinGoal ?? null}
       dailyCalorieGoal={user?.profile?.dailyCalorieGoal ?? null}
       todayProtein={dashboard?.totals.protein ?? 0}

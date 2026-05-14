@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import { parsedFoodItemSchema, type ParsedFoodItem } from '@/lib/ai/types';
+import type { RecentMealQuickLog } from '@/lib/history';
+import type { FavoriteMealSummary } from '@/lib/reusable-meals';
 
 export const assistantMemoryStorageKey = 'calorie-compass.assistant-memory';
 const mealTypeSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
@@ -61,6 +63,11 @@ export const assistantMemorySchema = z.object({
 
 export type AssistantMemoryMeal = z.infer<typeof assistantMemoryMealSchema>;
 export type AssistantMemorySnapshot = z.infer<typeof assistantMemorySchema>;
+
+type AssistantMemorySeedInput = {
+  favoriteMeals?: FavoriteMealSummary[];
+  recentMeals?: RecentMealQuickLog[];
+};
 
 type AssistantMemoryMealInput = {
   title: string;
@@ -351,4 +358,81 @@ export function rememberAssistantCorrection(memory: AssistantMemorySnapshot, tex
     updatedAt: occurredAt,
     commonCorrections: rankByUsage(nextCorrections).slice(0, 16),
   };
+}
+
+export function seedAssistantMemoryFromSavedMeals(input: AssistantMemorySeedInput): AssistantMemorySnapshot {
+  let nextMemory = createEmptyAssistantMemory();
+
+  for (const meal of input.favoriteMeals ?? []) {
+    if (!meal.items?.length) {
+      continue;
+    }
+
+    nextMemory = rememberAssistantMeal(nextMemory, {
+      title: meal.title,
+      rawText: meal.rawText,
+      mealType: meal.mealType,
+      items: meal.items,
+      confidenceScore: meal.confidenceScore ?? 0.82,
+      source: 'favorite',
+      occurredAt: meal.lastUsedAt ?? new Date().toISOString(),
+    });
+  }
+
+  for (const meal of input.recentMeals ?? []) {
+    if (!meal.items.length) {
+      continue;
+    }
+
+    nextMemory = rememberAssistantMeal(nextMemory, {
+      title: meal.title,
+      rawText: meal.rawText,
+      mealType: meal.mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+      items: meal.items,
+      confidenceScore: meal.confidenceScore ?? 0.82,
+      source: 'recent',
+      occurredAt: meal.createdAt,
+    });
+  }
+
+  return nextMemory;
+}
+
+export function mergeAssistantMemorySnapshots(base: AssistantMemorySnapshot, seed: AssistantMemorySnapshot | null | undefined): AssistantMemorySnapshot {
+  if (!seed) {
+    return base;
+  }
+
+  let nextMemory = base;
+  const existingMealIds = new Set(base.recurringMeals.map((entry) => entry.id));
+  const existingCorrections = new Set(base.commonCorrections.map((entry) => normalizeText(entry.text)));
+
+  for (const meal of seed.recurringMeals) {
+    if (existingMealIds.has(meal.id) || !meal.items.length) {
+      continue;
+    }
+
+    existingMealIds.add(meal.id);
+    nextMemory = rememberAssistantMeal(nextMemory, {
+      title: meal.title,
+      rawText: meal.rawText,
+      mealType: meal.mealType,
+      items: meal.items,
+      confidenceScore: meal.confidenceScore,
+      source: meal.source,
+      occurredAt: meal.lastUsedAt ?? meal.createdAt ?? undefined,
+    });
+  }
+
+  for (const correction of seed.commonCorrections) {
+    const normalized = normalizeText(correction.text);
+    if (!normalized || existingCorrections.has(normalized)) {
+      continue;
+    }
+
+    existingCorrections.add(normalized);
+    nextMemory = rememberAssistantCorrection(nextMemory, correction.text, correction.lastUsedAt ?? undefined);
+  }
+
+  return nextMemory;
 }

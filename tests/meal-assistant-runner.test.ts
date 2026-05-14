@@ -164,7 +164,7 @@ describe('runMealAssistant', () => {
 
     expect(response.clarification_question).toBeNull();
     expect(response.meal.items[0]?.food_name).toBe('Quaker White Cheddar Rice Cakes');
-    expect(response.assistant_reply).toMatch(/updated that/i);
+    expect(response.assistant_reply).toMatch(/updated|updating|got you|that makes sense/i);
     expect(response.assistant_reply).not.toMatch(/was that rice or rice cakes/i);
   });
 
@@ -193,7 +193,7 @@ describe('runMealAssistant', () => {
 
     expect(saveMeal).toHaveBeenCalledTimes(1);
     expect(response.next_state.saved).toBe(true);
-    expect(response.assistant_reply).toBe('Saved. Anything else?');
+    expect(response.assistant_reply).toMatch(/saved|logged|that one is in/i);
   });
 
   it('preserves branded packaged-food details for lookup resolution', async () => {

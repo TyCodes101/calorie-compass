@@ -7,6 +7,7 @@ import {
   NutritionTargetsForm,
   PreferencesSettingsForm,
 } from '@/components/profile-settings-client';
+import { buildAccountFoundationSnapshot } from '@/lib/auth-session';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 import { buildProfileSettingsSnapshot } from '@/lib/profile-settings';
 import { profileSections, type ProfileSectionSlug } from '@/lib/profile-sections';
@@ -31,6 +32,7 @@ export default async function ProfileSectionPage({ params }: { params: Promise<{
   }
 
   const initial = buildProfileSettingsSnapshot(user);
+  const account = buildAccountFoundationSnapshot(user);
 
   switch (section) {
     case 'goals':
@@ -42,7 +44,7 @@ export default async function ProfileSectionPage({ params }: { params: Promise<{
     case 'notifications':
       return <NotificationsSettingsForm />;
     case 'account':
-      return <AccountSettingsForm initial={initial} />;
+      return <AccountSettingsForm initial={initial} account={account} />;
     default:
       notFound();
   }

@@ -545,6 +545,72 @@ describe('meal assistant conversational coverage', () => {
     expect(responses[2]?.meal.items).toHaveLength(0);
   });
 
+  it('adds a low-pressure proactive note when a meal still leaves protein well short', async () => {
+    const [response] = await runConversation(['toast'], {
+      context: buildContext({
+        remainingProtein: 62,
+      }),
+    });
+
+    expect(response.intent).toBe('new_food_item');
+    expect(response.assistant_reply).toMatch(/toast/i);
+    expect(response.assistant_reply).toMatch(/low on protein today/i);
+  });
+
+  it('can give a lightweight weekly summary without turning into an analytics dashboard', async () => {
+    const [response] = await runConversation(["how's this week going?"], {
+      context: buildContext({
+        recentMeals: [
+          {
+            id: 'week-1',
+            title: 'Chipotle chicken bowl',
+            rawText: 'Chipotle chicken bowl',
+            mealType: 'dinner',
+            totalCalories: 760,
+            confidenceScore: 0.96,
+            createdAt: new Date(Date.now() - 86400000).toISOString(),
+            items: [createItem({ food_name: 'Chipotle Chicken Bowl', unit: 'bowl', calories: 760, protein: 58, carbs: 62, fat: 24, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Chipotle official nutrition' })],
+          },
+          {
+            id: 'week-2',
+            title: 'Fairlife shake',
+            rawText: 'Fairlife shake',
+            mealType: 'snack',
+            totalCalories: 150,
+            confidenceScore: 0.96,
+            createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+            items: [createItem({ food_name: 'Fairlife Chocolate Protein Shake', unit: 'bottle', calories: 150, protein: 30, carbs: 4, fat: 2 })],
+          },
+          {
+            id: 'week-3',
+            title: 'Chipotle chicken bowl',
+            rawText: 'Chipotle chicken bowl',
+            mealType: 'dinner',
+            totalCalories: 760,
+            confidenceScore: 0.96,
+            createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+            items: [createItem({ food_name: 'Chipotle Chicken Bowl', unit: 'bowl', calories: 760, protein: 58, carbs: 62, fat: 24, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Chipotle official nutrition' })],
+          },
+          {
+            id: 'week-4',
+            title: 'Eggs and toast',
+            rawText: 'Eggs and toast',
+            mealType: 'breakfast',
+            totalCalories: 320,
+            confidenceScore: 0.9,
+            createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+            items: [createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 }), createItem({ food_name: 'Toast', unit: 'slice', calories: 100, carbs: 19, protein: 4, fat: 1 })],
+          },
+        ],
+      }),
+    });
+
+    expect(response.intent).toBe('nutrition_guidance');
+    expect(response.assistant_reply).toMatch(/week/i);
+    expect(response.assistant_reply).toMatch(/go-tos|steady|consistent|protein-forward/i);
+    expect(response.assistant_reply).not.toMatch(/dashboard|analytics/i);
+  });
+
   it('handles a mixed log-plus-question turn without losing either intent', async () => {
     const [response] = await runConversation(['2 eggs and also how much protein do I have left?'], {
       context: buildContext({
@@ -571,6 +637,26 @@ describe('meal assistant conversational coverage', () => {
     expect(response.intent).toBe('macro_question');
     expect(response.assistant_reply).toMatch(/62g carbs/i);
     expect(response.next_state.activeMode).toBe('macro_discussion');
+  });
+
+  it('recovers naturally when an ambiguous follow-up could mean the meal or the day overall', async () => {
+    const [response] = await runConversation(['what about that then?'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Chipotle Chicken Bowl', unit: 'bowl', calories: 760, protein: 58, carbs: 62, fat: 24, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Chipotle official nutrition' })],
+        currentMealText: 'Chipotle Chicken Bowl',
+        activeTopic: 'nutrition',
+        activeMode: 'macro_discussion',
+        previousIntent: 'macro_question',
+      }),
+      context: buildContext({
+        remainingProtein: 58,
+        remainingCalories: 760,
+      }),
+    });
+
+    expect(response.intent).toBe('casual_message');
+    expect(response.assistant_reply).toMatch(/lost track/i);
+    expect(response.assistant_reply).toMatch(/meal|today/i);
   });
 
   it('answers carbs remaining after a protein-left question thread', async () => {
@@ -842,9 +928,33 @@ describe('meal assistant conversational coverage', () => {
     });
 
     expect(saveMeal).toHaveBeenCalledTimes(1);
-    expect(response.assistant_reply).toMatch(/saved/i);
+    expect(response.assistant_reply).toMatch(/saved|logged|that one is in/i);
     expect(response.assistant_reply).not.toMatch(/hey|what did you eat|what'd you eat/i);
     expect(response.next_state.saved).toBe(true);
+  });
+
+  it('keeps joke requests light and still anchored to the meal flow', async () => {
+    const [response] = await runConversation(['tell me a joke'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 })],
+        currentMealText: '2 Eggs',
+      }),
+    });
+
+    expect(response.assistant_reply).toMatch(/joke|meal|calories|stand-up|keep going/i);
+    expect(response.meal.items[0]?.food_name).toBe('Eggs');
+  });
+
+  it('softens correction replies when the user sounds frustrated', async () => {
+    const [response] = await runConversation(['ugh i meant 2 eggs'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 3, unit: 'egg', calories: 210, protein: 18, fat: 15 })],
+        currentMealText: '3 Eggs',
+      }),
+    });
+
+    expect(response.assistant_reply).toMatch(/no worries|all good|corrected|fixed|cleaned that up/i);
+    expect(response.meal.items[0]?.quantity).toBe(2);
   });
 
   it.each(['how’s your day', "how's your day", 'tell me a joke'])('politely redirects off-topic prompts without breaking meal state: %s', async (prompt) => {
@@ -858,7 +968,7 @@ describe('meal assistant conversational coverage', () => {
 
     expect(response.meal.items).toHaveLength(1);
     expect(response.meal.items[0]?.food_name).toBe('Eggs');
-    expect(response.assistant_reply).toMatch(/keep working on this meal|send the next food|help log meals/i);
+    expect(response.assistant_reply).toMatch(/keep working on this meal|send the next food|help log meals|still holding this meal|keep going|keep building it/i);
     expect(response.next_state.currentMealText).toContain('Eggs');
   });
 

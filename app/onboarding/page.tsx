@@ -1,6 +1,7 @@
 import { ActivityLevel, GoalType } from '@prisma/client';
 
 import { OnboardingForm } from '@/components/onboarding-form';
+import { getPreferredUserName } from '@/lib/auth-session';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,7 @@ export default async function OnboardingPage() {
         </div>
         <OnboardingForm
           initial={{
-            name: user?.name,
+            name: getPreferredUserName(user) ?? undefined,
             age: user?.profile?.age,
             heightCm: user?.profile?.heightCm,
             weightLbs: user?.profile?.weightLbs,

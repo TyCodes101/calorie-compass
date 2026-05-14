@@ -5,6 +5,7 @@ import { sumMealTotals } from '@/lib/dashboard-aggregation';
 import { calculateRemainingCalories, toProgressValue } from '@/lib/nutrition';
 import { prisma } from '@/lib/prisma';
 import { summarizeTrustCounts } from '@/lib/trust';
+import { getCurrentUserWithProfile } from '@/lib/current-user';
 
 type MealLike = {
   date: Date;
@@ -261,10 +262,7 @@ export function buildInsightsViewModel({
 }
 
 export async function getInsightsData(inputDate: Date | string = new Date()) {
-  const user = await prisma.user.findFirst({
-    orderBy: { createdAt: 'asc' },
-    include: { profile: true },
-  });
+  const user = await getCurrentUserWithProfile();
 
   if (!user || !user.profile) {
     return null;
