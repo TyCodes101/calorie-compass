@@ -10,7 +10,7 @@ export type LoggerIntent =
   | 'recommendation_request'
   | 'casual'
   | 'unknown';
-export type LoggerCommand = 'save' | 'start_over' | 'favorite' | 'remove_favorite' | 'repeat_last_meal' | 'none';
+export type LoggerCommand = 'save' | 'start_over' | 'favorite' | 'remove_favorite' | 'repeat_last_meal' | 'edit' | 'none';
 
 const greetingRegex = /^(hi|hello|hey|yo|sup|what'?s up|good morning|good afternoon|good evening|how are you|how'?s it going)(?:\b|[!.?,]|$)/i;
 const casualRegex = /^(ok|okay|kk|cool|nice|got it|sounds good|thanks|thank you|thx|lol|lmao|bet|hmm|huh|yep|yup)(?:\b|[!.?,]|$)/i;
@@ -26,6 +26,7 @@ const startOverCommandRegex = /^(start over|reset|new meal|clear this|try again|
 const favoriteCommandRegex = /^(save favorite|favorite this|save as favorite)\b/i;
 const removeFavoriteCommandRegex = /^(remove favorite|unfavorite this|delete favorite)\b/i;
 const repeatLastMealCommandRegex = /^(repeat (my )?(last meal|last thing|last one)|same as (last time|usual)|load my last meal)\b/i;
+const editCommandRegex = /^(edit( it| this| that)?|adjust( it| this| that)?|review (it|this|that)|show me the meal)\b/i;
 const foodSignalRegex = /\b(chipotle|starbucks|mcdonald'?s?|chick-?fil-?a|burger|fries|pizza|taco|burrito|sandwich|salad|bowl|rice|chicken|beef|steak|salmon|shrimp|pasta|noodles|egg|eggs|toast|bagel|oatmeal|yogurt|banana|apple|shake|smoothie|protein|latte|coffee|coke|soda|fairlife|quest|premier|bar|cookie|ice cream|frappuccino|mcdouble|mcchicken)\b/i;
 
 export function detectLoggerIntent(input: string, options?: { hasActiveMeal?: boolean }): LoggerIntent {
@@ -143,6 +144,10 @@ export function detectLoggerCommand(input: string, options?: { hasActiveMeal?: b
     return 'none';
   }
 
+  if (startOverCommandRegex.test(normalized)) {
+    return 'start_over';
+  }
+
   if (options?.hasRecentMeal && repeatLastMealCommandRegex.test(normalized)) {
     return 'repeat_last_meal';
   }
@@ -155,16 +160,16 @@ export function detectLoggerCommand(input: string, options?: { hasActiveMeal?: b
     return 'save';
   }
 
-  if (startOverCommandRegex.test(normalized)) {
-    return 'start_over';
-  }
-
   if (favoriteCommandRegex.test(normalized)) {
     return 'favorite';
   }
 
   if (options.hasFavorite && removeFavoriteCommandRegex.test(normalized)) {
     return 'remove_favorite';
+  }
+
+  if (editCommandRegex.test(normalized)) {
+    return 'edit';
   }
 
   return 'none';
@@ -184,6 +189,10 @@ export function buildLoggerQuestionReply(
   },
 ) {
   const normalized = input.trim().toLowerCase();
+
+  if (assistantQuestionRegex.test(normalized)) {
+    return 'Just text me the meal like you would in a chat. You can also say things like “actually it was two,” “remove fries,” “save it,” or “how much protein do I have left?”';
+  }
 
   if (/protein/.test(normalized) && /(should i eat|should i have|goal|target|aim)/.test(normalized) && options?.proteinGoal) {
     return `You're aiming for about ${Math.round(options.proteinGoal)}g of protein today. I can help you log meals toward that without making it a whole thing.`;
@@ -214,15 +223,30 @@ export function buildLoggerGoalReply(
     remainingProtein?: number | null;
     remainingCalories?: number | null;
     todayMealCount?: number | null;
+    currentMealProtein?: number | null;
+    currentMealCalories?: number | null;
   },
 ) {
   const normalized = input.trim().toLowerCase();
 
   if (/protein/.test(normalized) && options?.proteinGoal != null && options?.remainingProtein != null && options?.todayProtein != null) {
+    if (options.currentMealProtein != null && options.currentMealProtein > 0) {
+      const projectedProtein = options.todayProtein + options.currentMealProtein;
+      const projectedRemaining = Math.max(0, Math.round(options.proteinGoal - projectedProtein));
+      return `You’ve logged about ${Math.round(options.todayProtein)}g so far. If you save this meal, you’d be around ${Math.round(projectedProtein)}g, so about ${projectedRemaining}g short of your ${Math.round(options.proteinGoal)}g goal.`;
+    }
+
     return `You’ve logged about ${Math.round(options.todayProtein)}g so far, so you have roughly ${Math.max(0, Math.round(options.remainingProtein))}g left to hit your ${Math.round(options.proteinGoal)}g goal.`;
   }
 
   if (/calor/.test(normalized) && options?.dailyCalorieGoal != null && options?.todayCalories != null && options?.remainingCalories != null) {
+    if (options.currentMealCalories != null && options.currentMealCalories > 0) {
+      const projectedCalories = options.todayCalories + options.currentMealCalories;
+      const projectedRemaining = options.dailyCalorieGoal - projectedCalories;
+      const projectedText = projectedRemaining >= 0 ? `${Math.round(projectedRemaining)} calories left` : `${Math.abs(Math.round(projectedRemaining))} calories over target`;
+      return `You’ve logged about ${Math.round(options.todayCalories)} calories so far. If you save this meal, you’d be around ${Math.round(projectedCalories)} calories total, which puts you ${projectedText}.`;
+    }
+
     const remainingText = options.remainingCalories >= 0 ? `${Math.round(options.remainingCalories)} calories left` : `${Math.abs(Math.round(options.remainingCalories))} calories over target`;
     return `You’ve logged about ${Math.round(options.todayCalories)} calories so far, so you’re ${remainingText} against your ${Math.round(options.dailyCalorieGoal)} calorie goal.`;
   }

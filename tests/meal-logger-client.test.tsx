@@ -375,6 +375,85 @@ describe('meal logger client', () => {
     expect(screen.getByText(/780 calories total/i)).toBeInTheDocument();
   });
 
+  it('removes a matching item locally when the user says remove fries', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        needs_clarification: false,
+        clarifying_question: null,
+        meal_type: 'lunch',
+        confidence_score: 0.94,
+        items: [
+          {
+            food_name: "McDonald's McDouble",
+            quantity: 1,
+            unit: 'burger',
+            calories: 390,
+            protein: 22,
+            carbs: 33,
+            fat: 18,
+            fiber: 2,
+            sugar: 7,
+            sodium: 850,
+            notes: 'Restaurant match.',
+            is_trusted: true,
+            source_type: 'OFFICIAL_RESTAURANT',
+            source_name: "McDonald's official nutrition",
+            catalog_food_id: 'mcdouble',
+          },
+          {
+            food_name: "McDonald's small fries",
+            quantity: 1,
+            unit: 'order',
+            calories: 230,
+            protein: 3,
+            carbs: 29,
+            fat: 11,
+            fiber: 3,
+            sugar: 0,
+            sodium: 180,
+            notes: 'Restaurant match.',
+            is_trusted: true,
+            source_type: 'OFFICIAL_RESTAURANT',
+            source_name: "McDonald's official nutrition",
+            catalog_food_id: 'mcdonalds_small_fries',
+          },
+        ],
+        totals: {
+          calories: 620,
+          protein: 25,
+          carbs: 62,
+          fat: 29,
+          fiber: 5,
+          sugar: 7,
+          sodium: 1030,
+        },
+      }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: "mcdouble and fries from mcdonald's" },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    await screen.findByText(/620 calories/i);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'remove fries' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/390 calories total/i)).toBeInTheDocument();
+    expect(screen.queryByText(/small fries/i)).not.toBeInTheDocument();
+  });
+
   it('updates meal type locally when the user changes it', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

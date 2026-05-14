@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildLoggerIntentReply, buildLoggerGoalReply, detectLoggerCommand, detectLoggerIntent } from '@/lib/logger-intent';
+import { buildLoggerIntentReply, buildLoggerGoalReply, buildLoggerQuestionReply, detectLoggerCommand, detectLoggerIntent } from '@/lib/logger-intent';
 
 describe('logger intent detection', () => {
   it('detects greetings before nutrition parsing', () => {
@@ -38,12 +38,16 @@ describe('logger intent detection', () => {
 
   it('detects repeat-last-meal commands and builds goal replies', () => {
     expect(detectLoggerCommand('repeat my last meal', { hasRecentMeal: true })).toBe('repeat_last_meal');
+    expect(detectLoggerCommand('cancel')).toBe('start_over');
+    expect(detectLoggerCommand('edit it', { hasActiveMeal: true })).toBe('edit');
     expect(
       buildLoggerGoalReply('how much protein do I have left?', {
         proteinGoal: 195,
         todayProtein: 120,
         remainingProtein: 75,
+        currentMealProtein: 42,
       }),
-    ).toMatch(/75g left/i);
+    ).toMatch(/162g/i);
+    expect(buildLoggerQuestionReply('what can you do?')).toMatch(/save it/i);
   });
 });

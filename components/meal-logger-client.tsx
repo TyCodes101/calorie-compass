@@ -269,6 +269,15 @@ function buildMemoryCue(prompt: string, favoriteMeals: FavoriteMealSummary[], re
   return match.kind === 'favorite' ? `Looks like one of your saved go-tos.` : `Looks similar to something you've logged recently.`;
 }
 
+function normalizeIngredientText(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(the|a|an|my|some|extra)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function buildHistoryReply(message: string, recentMeals: RecentMealQuickLog[]) {
   const normalized = message.trim().toLowerCase();
 
@@ -1277,6 +1286,53 @@ export function MealLoggerClient({
     return true;
   }
 
+  function applyIngredientRemovalCorrection(message: string) {
+    if (!items.length) {
+      return false;
+    }
+
+    const match = message.trim().toLowerCase().match(/^(?:remove|without|no|hold the|skip the)\s+(.+)$/i);
+    const ingredientText = normalizeIngredientText(match?.[1] ?? '');
+
+    if (!ingredientText) {
+      return false;
+    }
+
+    const exactFilteredItems = items.filter((item) => !normalizeIngredientText(item.food_name).includes(ingredientText));
+    const nextItems = exactFilteredItems.length !== items.length
+      ? exactFilteredItems
+      : items.filter((item) => {
+          const normalizedName = normalizeIngredientText(item.food_name);
+          return !ingredientText.split(' ').some((token) => token.length > 2 && normalizedName.includes(token));
+        });
+
+    if (nextItems.length === items.length || !nextItems.length) {
+      return false;
+    }
+
+    markDraftChanged();
+    setLatestUserReply(message);
+    setAssistantChatReply(null);
+    setClarifyingQuestion(null);
+    appendChatMessage('user', message, { compact: true });
+    setItems(nextItems);
+    setAssistantEstimateMode('correction');
+    setComposerText('');
+    appendChatMessage(
+      'assistant',
+      buildAssistantEstimateCopy({
+        prompt: conversationPrompt,
+        items: nextItems,
+        totalCalories: sumTotals(nextItems).calories,
+        totalProtein: sumTotals(nextItems).protein,
+        estimatedCount: summarizeParsedItems(nextItems).estimatedCount,
+        mode: 'correction',
+        memoryCue,
+      }),
+    );
+    return true;
+  }
+
   function submitComposer() {
     const message = composerText.trim();
     const hasActiveMeal = items.length > 0;
@@ -1314,8 +1370,19 @@ export function MealLoggerClient({
       }
 
       if (command === 'start_over') {
+        if (!hasActiveMeal) {
+          appendChatMessage('assistant', "Nothing's open right now. Just send the meal when you're ready.");
+          return;
+        }
+
         appendChatMessage('assistant', 'Okay, I cleared that. What do you want to log instead?');
         startAnotherMeal();
+        return;
+      }
+
+      if (command === 'edit') {
+        setExpandedIndex((current) => current ?? 0);
+        appendChatMessage('assistant', 'Sure. You can tweak the items below, or just tell me what to change.');
         return;
       }
 
@@ -1339,6 +1406,10 @@ export function MealLoggerClient({
 
     if (intent === 'correction' && hasActiveMeal) {
       if (applySimpleQuantityCorrection(message)) {
+        return;
+      }
+
+      if (applyIngredientRemovalCorrection(message)) {
         return;
       }
 
@@ -1409,6 +1480,8 @@ export function MealLoggerClient({
         remainingProtein,
         remainingCalories,
         todayMealCount,
+        currentMealProtein: totals.protein,
+        currentMealCalories: totals.calories,
       });
       setAssistantChatReply(reply);
       appendChatMessage('assistant', reply);
