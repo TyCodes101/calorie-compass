@@ -1,22 +1,13 @@
-import { prisma } from '@/lib/prisma';
 import type { ParsedFoodItem } from '@/lib/ai/types';
-import type { MealTypeValue } from '@/lib/ai/orchestrate';
-import { getTrustedCatalogEstimate } from '@/lib/ai/trusted';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
+import type { MealTypeValue } from '@/lib/ai/orchestrate';
 import { getCurrentUserId } from '@/lib/current-user';
+import { lookupNutrition } from '@/lib/nutrition/nutritionLookup';
+import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
+import type { NutritionLabelInput } from '@/lib/nutrition/types';
+import { prisma } from '@/lib/prisma';
 
-export type NutritionLabelInput = {
-  name?: string | null;
-  servingQuantity?: number | null;
-  servingUnit?: string | null;
-  calories: number;
-  protein?: number | null;
-  carbs?: number | null;
-  fat?: number | null;
-  fiber?: number | null;
-  sugar?: number | null;
-  sodium?: number | null;
-};
+export type { NutritionLabelInput } from '@/lib/nutrition/types';
 
 export type NutritionResolverInput = {
   text: string;
@@ -42,26 +33,6 @@ function buildMealResponse(mealType: MealTypeValue, items: ParsedFoodItem[], con
     confidence_score: confidenceScore,
     items,
   });
-}
-
-function makeLabelItem(label: NutritionLabelInput): ParsedFoodItem {
-  return {
-    food_name: label.name?.trim() || 'Nutrition label entry',
-    quantity: label.servingQuantity ?? 1,
-    unit: label.servingUnit?.trim() || 'serving',
-    calories: Number(label.calories || 0),
-    protein: Number(label.protein || 0),
-    carbs: Number(label.carbs || 0),
-    fat: Number(label.fat || 0),
-    fiber: Number(label.fiber || 0),
-    sugar: Number(label.sugar || 0),
-    sodium: Number(label.sodium || 0),
-    notes: 'Matched to a nutrition label you provided. Adjust if your serving size differs.',
-    is_trusted: true,
-    source_type: 'GENERIC_REFERENCE',
-    source_name: 'User-provided nutrition label',
-    catalog_food_id: null,
-  };
 }
 
 function extractBarcode(text: string) {
@@ -162,6 +133,11 @@ async function resolveFromSavedCorrection(text: string, mealType: MealTypeValue)
       is_trusted: item.nutritionSourceType ? item.nutritionSourceType !== 'AI_ESTIMATE' : false,
       source_type: item.nutritionSourceType,
       source_name: item.nutritionSourceName,
+      confidence_label: item.nutritionSourceType && item.nutritionSourceType !== 'AI_ESTIMATE' ? 'Verified' : 'Estimated',
+      matched_query: text,
+      original_user_text: text,
+      provider_used: item.nutritionSourceType && item.nutritionSourceType !== 'AI_ESTIMATE' ? 'saved-correction' : 'ai-estimate-fallback',
+      used_ai_fallback: item.nutritionSourceType === 'AI_ESTIMATE',
       catalog_food_id: item.catalogFoodId,
     }));
 
@@ -244,6 +220,11 @@ async function resolveFromOpenFoodFacts(barcode: string, mealType: MealTypeValue
         is_trusted: true,
         source_type: 'GENERIC_REFERENCE',
         source_name: 'Open Food Facts barcode match',
+        confidence_label: 'Verified',
+        matched_query: barcode,
+        original_user_text: barcode,
+        provider_used: 'open-food-facts',
+        used_ai_fallback: false,
         catalog_food_id: null,
       },
     ],
@@ -251,137 +232,9 @@ async function resolveFromOpenFoodFacts(barcode: string, mealType: MealTypeValue
   );
 }
 
-type UsdaSearchResponse = {
-  foods?: Array<{
-    description?: string;
-    brandOwner?: string;
-    servingSize?: number;
-    servingSizeUnit?: string;
-    foodNutrients?: Array<{ nutrientName?: string; value?: number }>;
-  }>;
-};
-
-function findUsdaNutrient(
-  food: NonNullable<UsdaSearchResponse['foods']>[number],
-  names: string[],
-) {
-  const nutrient = food.foodNutrients?.find((entry) => names.includes(entry.nutrientName ?? ''));
-  return nutrient?.value ?? 0;
-}
-
-async function resolveFromUsda(text: string, mealType: MealTypeValue) {
-  const apiKey = process.env.FDC_API_KEY;
-  if (!apiKey) {
-    return null;
-  }
-
-  const payload = await fetchJson<UsdaSearchResponse>('https://api.nal.usda.gov/fdc/v1/foods/search?api_key=' + apiKey, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: text, pageSize: 1 }),
-  });
-
-  const food = payload?.foods?.[0];
-  if (!food) {
-    return null;
-  }
-
-  return buildMealResponse(
-    mealType,
-    [
-      {
-        food_name: food.brandOwner ? `${food.brandOwner} ${food.description ?? ''}`.trim() : food.description?.trim() || 'USDA match',
-        quantity: food.servingSize ?? 1,
-        unit: food.servingSizeUnit?.trim() || 'serving',
-        calories: findUsdaNutrient(food, ['Energy']),
-        protein: findUsdaNutrient(food, ['Protein']),
-        carbs: findUsdaNutrient(food, ['Carbohydrate, by difference']),
-        fat: findUsdaNutrient(food, ['Total lipid (fat)']),
-        fiber: findUsdaNutrient(food, ['Fiber, total dietary']),
-        sugar: findUsdaNutrient(food, ['Sugars, total including NLEA']),
-        sodium: findUsdaNutrient(food, ['Sodium, Na']),
-        notes: `Matched to USDA FoodData Central for ${food.description?.trim() || 'this food'}.`,
-        is_trusted: true,
-        source_type: 'GENERIC_REFERENCE',
-        source_name: 'USDA FoodData Central',
-        catalog_food_id: null,
-      },
-    ],
-    0.82,
-  );
-}
-
-type NutritionixResponse = {
-  foods?: Array<{
-    food_name?: string;
-    serving_qty?: number;
-    serving_unit?: string;
-    nf_calories?: number;
-    nf_protein?: number;
-    nf_total_carbohydrate?: number;
-    nf_total_fat?: number;
-    nf_dietary_fiber?: number;
-    nf_sugars?: number;
-    nf_sodium?: number;
-    brand_name?: string;
-  }>;
-};
-
-async function resolveFromNutritionix(text: string, mealType: MealTypeValue) {
-  const appId = process.env.NUTRITIONIX_APP_ID;
-  const apiKey = process.env.NUTRITIONIX_API_KEY;
-  if (!appId || !apiKey) {
-    return null;
-  }
-
-  const payload = await fetchJson<NutritionixResponse>('https://trackapi.nutritionix.com/v2/natural/nutrients', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-app-id': appId,
-      'x-app-key': apiKey,
-    },
-    body: JSON.stringify({ query: text }),
-  });
-
-  const food = payload?.foods?.[0];
-  if (!food) {
-    return null;
-  }
-
-  return buildMealResponse(
-    mealType,
-    [
-      {
-        food_name: [food.brand_name, food.food_name].filter(Boolean).join(' ').trim() || 'Nutritionix match',
-        quantity: food.serving_qty ?? 1,
-        unit: food.serving_unit?.trim() || 'serving',
-        calories: food.nf_calories ?? 0,
-        protein: food.nf_protein ?? 0,
-        carbs: food.nf_total_carbohydrate ?? 0,
-        fat: food.nf_total_fat ?? 0,
-        fiber: food.nf_dietary_fiber ?? 0,
-        sugar: food.nf_sugars ?? 0,
-        sodium: food.nf_sodium ?? 0,
-        notes: `Matched to Nutritionix for ${[food.brand_name, food.food_name].filter(Boolean).join(' ').trim() || 'this item'}.`,
-        is_trusted: true,
-        source_type: 'GENERIC_REFERENCE',
-        source_name: 'Nutritionix branded database',
-        catalog_food_id: null,
-      },
-    ],
-    0.8,
-  );
-}
-
 export async function resolveNutritionEstimate({ text, mealType, nutritionLabel = null, barcode = null }: NutritionResolverInput) {
   if (nutritionLabel) {
-    return buildMealResponse(mealType, [makeLabelItem(nutritionLabel)], 0.98);
-  }
-
-  const savedCorrection = await resolveFromSavedCorrection(text, mealType);
-  if (savedCorrection) {
-    return savedCorrection;
+    return lookupNutrition({ text, mealType, nutritionLabel, barcode });
   }
 
   const detectedBarcode = barcode || extractBarcode(text);
@@ -392,20 +245,15 @@ export async function resolveNutritionEstimate({ text, mealType, nutritionLabel 
     }
   }
 
-  const trustedCatalogResult = getTrustedCatalogEstimate(text, mealType);
-  if (trustedCatalogResult) {
-    return trustedCatalogResult;
+  const savedCorrection = await resolveFromSavedCorrection(text, mealType);
+  if (savedCorrection) {
+    return savedCorrection;
   }
 
-  const usdaResult = await resolveFromUsda(text, mealType);
-  if (usdaResult) {
-    return usdaResult;
-  }
-
-  const nutritionixResult = await resolveFromNutritionix(text, mealType);
-  if (nutritionixResult) {
-    return nutritionixResult;
-  }
-
-  return null;
+  return lookupNutrition(
+    { text, mealType, nutritionLabel, barcode },
+    {
+      providers: [localVerifiedCatalogProvider],
+    },
+  );
 }

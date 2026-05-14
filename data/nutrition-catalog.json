@@ -441,6 +441,29 @@
       ]
     },
     {
+      "id": "mcdonalds_mcdouble",
+      "canonicalName": "McDonald's McDouble",
+      "brand": "McDonald's",
+      "servingQuantity": 1,
+      "servingUnit": "burger",
+      "calories": 390,
+      "protein": 22,
+      "carbs": 33,
+      "fat": 20,
+      "fiber": 2,
+      "sugar": 7,
+      "sodium": 920,
+      "sourceId": "mcdonalds_official",
+      "active": true,
+      "aliases": [
+        "mcdonald's mcdouble",
+        "mcdonalds mcdouble",
+        "mcdouble",
+        "mc double",
+        "mcdoubles"
+      ]
+    },
+    {
       "id": "mcdonalds_cheeseburger",
       "canonicalName": "McDonald's Cheeseburger",
       "brand": "McDonald's",
@@ -888,7 +911,9 @@
       "active": true,
       "aliases": [
         "taco bell crunchy taco",
-        "crunchy taco"
+        "taco bell taco",
+        "crunchy taco",
+        "crunchy tacos"
       ]
     },
     {

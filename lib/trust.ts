@@ -2,7 +2,7 @@ import type { ParsedFoodItem } from '@/lib/ai/types';
 
 type TrustItemLike = Pick<
   ParsedFoodItem,
-  'is_trusted' | 'source_type' | 'source_name' | 'food_name' | 'notes'
+  'is_trusted' | 'source_type' | 'source_name' | 'food_name' | 'notes' | 'confidence_label' | 'matched_query'
 >;
 
 export type ItemTrustPresentation = {
@@ -35,11 +35,11 @@ export function getItemSourceLabel(item: TrustItemLike) {
   }
 
   if (textIncludes(item.source_name, ['nutritionix'])) {
-    return 'Nutritionix branded database';
+    return 'Nutritionix';
   }
 
   if (textIncludes(item.source_name, ['usda'])) {
-    return 'USDA food reference';
+    return 'USDA FoodData Central';
   }
 
   if (item.source_type === 'OFFICIAL_RESTAURANT') {
@@ -56,9 +56,11 @@ export function getItemSourceLabel(item: TrustItemLike) {
 export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresentation {
   const sourceLabel = getItemSourceLabel(item);
 
+  const explicitConfidence = item.confidence_label ?? null;
+
   if (item.source_type === 'AI_ESTIMATE' || !item.is_trusted) {
     return {
-      badgeLabel: 'AI estimate',
+      badgeLabel: explicitConfidence ?? 'Estimated',
       badgeTone: 'estimated',
       sourceLabel,
       confidenceLabel: 'Estimated, please review',
@@ -73,34 +75,56 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
     textIncludes(item.notes, ['barcode match'])
   ) {
     return {
-      badgeLabel: 'Verified product match',
+      badgeLabel: 'Verified',
       badgeTone: 'verified',
       sourceLabel,
-      confidenceLabel: 'High confidence source match',
+      confidenceLabel: explicitConfidence ?? 'Verified match',
       helperText: 'Nutrition facts can vary slightly by serving size or product version.',
+      trusted: true,
+    };
+  }
+
+  if (textIncludes(item.source_name, ['usda'])) {
+    return {
+      badgeLabel: 'USDA',
+      badgeTone: 'generic',
+      sourceLabel,
+      confidenceLabel: explicitConfidence ?? 'High confidence database match',
+      helperText: 'This came from USDA FoodData Central. Adjust if your portion differed.',
+      trusted: true,
+    };
+  }
+
+  if (textIncludes(item.source_name, ['nutritionix'])) {
+    return {
+      badgeLabel: 'Branded database',
+      badgeTone: 'branded',
+      sourceLabel,
+      confidenceLabel: explicitConfidence ?? 'High confidence database match',
+      helperText: 'This came from a branded food database match. Adjust if your product version differs.',
       trusted: true,
     };
   }
 
   if (
     item.source_type === 'GENERIC_REFERENCE' &&
-    !textIncludes(item.source_name, ['generic nutrition reference', 'usda'])
+    !textIncludes(item.source_name, ['generic nutrition reference'])
   ) {
     return {
-      badgeLabel: 'Branded food match',
+      badgeLabel: 'Branded database',
       badgeTone: 'branded',
       sourceLabel,
-      confidenceLabel: 'Branded database match',
-      helperText: 'This is the closest branded match we found. Adjust if your product version differs.',
+      confidenceLabel: explicitConfidence ?? 'High confidence match',
+      helperText: 'This is the closest trusted product match we found. Adjust if your version differs.',
       trusted: true,
     };
   }
 
   return {
-    badgeLabel: 'Generic estimate',
+    badgeLabel: explicitConfidence ?? 'Verified',
     badgeTone: 'generic',
     sourceLabel,
-    confidenceLabel: 'Reference database match',
+    confidenceLabel: explicitConfidence ?? 'High confidence match',
     helperText: 'Nutrition facts can vary by recipe and portion size.',
     trusted: true,
   };

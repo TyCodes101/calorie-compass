@@ -184,6 +184,11 @@ function matchChickFilASegment(segment: string, factor: number): ParsedFoodItem[
 }
 
 function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[] {
+  if (segment.includes('mcdouble') || segment.includes('mc double')) {
+    const food = findCatalogFoodById('mcdonalds_mcdouble');
+    return food ? scaleItems([scaleCatalogFood(food, 1, 'burger')], factor) : [];
+  }
+
   if (segment.includes('cheeseburger')) {
     const food = findCatalogFoodById('mcdonalds_cheeseburger');
     return food ? scaleItems([scaleCatalogFood(food, 1, 'burger')], factor) : [];

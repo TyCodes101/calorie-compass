@@ -62,8 +62,8 @@ describe('trust ui helpers', () => {
       catalog_food_id: 'corepower_elite_42g',
     });
 
-    expect(presentation.badgeLabel).toBe('Branded food match');
-    expect(presentation.confidenceLabel).toBe('Branded database match');
+    expect(presentation.badgeLabel).toBe('Branded database');
+    expect(presentation.confidenceLabel).toBe('High confidence match');
   });
 
   it('summarizes verified versus estimated coverage in calm language', () => {
@@ -137,7 +137,7 @@ describe('TrustBadge', () => {
   });
 
   it('renders custom badge copy when provided', () => {
-    render(<TrustBadge trusted compact label="Branded food match" tone="branded" />);
-    expect(screen.getByText('Branded food match')).toBeInTheDocument();
+    render(<TrustBadge trusted compact label="Branded database" tone="branded" />);
+    expect(screen.getByText('Branded database')).toBeInTheDocument();
   });
 });

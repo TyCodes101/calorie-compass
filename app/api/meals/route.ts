@@ -20,6 +20,11 @@ const parsedItemSchema = z.object({
   is_trusted: z.boolean().optional(),
   source_type: z.enum(['OFFICIAL_RESTAURANT', 'GENERIC_REFERENCE', 'AI_ESTIMATE']).nullable().optional(),
   source_name: z.string().nullable().optional(),
+  confidence_label: z.enum(['Verified', 'High confidence', 'Estimated']).nullable().optional(),
+  matched_query: z.string().nullable().optional(),
+  original_user_text: z.string().nullable().optional(),
+  provider_used: z.string().nullable().optional(),
+  used_ai_fallback: z.boolean().nullable().optional(),
   catalog_food_id: z.string().nullable().optional(),
 });
 

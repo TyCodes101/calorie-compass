@@ -23,6 +23,24 @@ function toMealType(value: SaveMealPayload['meal_type']) {
   return value.toUpperCase() as MealType;
 }
 
+function buildStoredItemNotes(item: ParsedFoodItem) {
+  const baseNotes = item.notes?.trim() || '';
+  const traceParts = [
+    item.original_user_text ? `input=${item.original_user_text}` : null,
+    item.matched_query ? `matched=${item.matched_query}` : null,
+    item.provider_used ? `provider=${item.provider_used}` : null,
+    item.confidence_label ? `confidence=${item.confidence_label}` : null,
+    typeof item.used_ai_fallback === 'boolean' ? `aiFallback=${item.used_ai_fallback ? 'yes' : 'no'}` : null,
+  ].filter(Boolean);
+
+  if (!traceParts.length) {
+    return baseNotes || null;
+  }
+
+  const traceText = `Trace: ${traceParts.join(' | ')}`;
+  return baseNotes ? `${baseNotes}\n\n${traceText}` : traceText;
+}
+
 async function normalizeMealPayload(payload: SaveMealPayload) {
   const date = startOfDayUtc(payload.date ?? new Date());
   const mealType = toMealType(payload.meal_type);
@@ -41,7 +59,7 @@ async function normalizeMealPayload(payload: SaveMealPayload) {
     mealType,
     date,
     confidenceScore: sanitizeNumber(payload.confidence_score),
-    notes: item.notes ?? null,
+    notes: buildStoredItemNotes(item),
     nutritionSourceType: item.source_type ?? null,
     nutritionSourceName: item.source_name ?? null,
     catalogFoodId: item.catalog_food_id && persistableCatalogFoodIds.has(item.catalog_food_id) ? item.catalog_food_id : null,

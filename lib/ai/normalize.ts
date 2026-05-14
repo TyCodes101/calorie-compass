@@ -17,6 +17,24 @@ function normalizeItem(item: Record<string, unknown>) {
     is_trusted: Boolean(item.is_trusted ?? item.isTrusted ?? false),
     source_type: item.source_type ? String(item.source_type) : item.sourceType ? String(item.sourceType) : null,
     source_name: item.source_name ? String(item.source_name) : item.sourceName ? String(item.sourceName) : null,
+    confidence_label: item.confidence_label
+      ? String(item.confidence_label)
+      : item.confidenceLabel
+        ? String(item.confidenceLabel)
+        : null,
+    matched_query: item.matched_query ? String(item.matched_query) : item.matchedQuery ? String(item.matchedQuery) : null,
+    original_user_text: item.original_user_text
+      ? String(item.original_user_text)
+      : item.originalUserText
+        ? String(item.originalUserText)
+        : null,
+    provider_used: item.provider_used ? String(item.provider_used) : item.providerUsed ? String(item.providerUsed) : null,
+    used_ai_fallback:
+      typeof item.used_ai_fallback === 'boolean'
+        ? item.used_ai_fallback
+        : typeof item.usedAiFallback === 'boolean'
+          ? item.usedAiFallback
+          : null,
     catalog_food_id:
       item.catalog_food_id ? String(item.catalog_food_id) : item.catalogFoodId ? String(item.catalogFoodId) : null,
   };

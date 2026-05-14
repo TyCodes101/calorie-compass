@@ -5,8 +5,8 @@ import { buildClarificationDecision } from '@/lib/ai/clarification';
 import { scoreMealConfidence } from '@/lib/ai/confidence';
 import { getMockParsedMeal } from '@/lib/ai/mock';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
-import { finalizeParsedResponse, inferMealType, shouldUseDeterministicRestaurantEstimate } from '@/lib/ai/orchestrate';
-import { getRestaurantEstimate } from '@/lib/ai/restaurant';
+import { finalizeParsedResponse, inferMealType } from '@/lib/ai/orchestrate';
+import { hydrateParsedMealWithProviders } from '@/lib/nutrition/nutritionLookup';
 import { resolveNutritionEstimate, type NutritionLabelInput } from '@/lib/nutrition/resolver';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 
@@ -29,6 +29,11 @@ function buildEffectiveMealText(text: string, conversation?: ConversationContext
   }
 
   return text;
+}
+
+async function finalizeDatabaseFirstResponse(analysis: ReturnType<typeof analyzeMealText>, response: ParsedMealResponse) {
+  const hydrated = await hydrateParsedMealWithProviders(response);
+  return finalizeParsedResponse(analysis, hydrated);
 }
 
 export async function parseMealText(
@@ -75,7 +80,7 @@ export async function parseMealText(
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return getMockParsedMeal(effectiveText, mealType);
+    return finalizeDatabaseFirstResponse(analysis, getMockParsedMeal(effectiveText, mealType));
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -145,14 +150,8 @@ export async function parseMealText(
       };
     }
 
-    const restaurantEstimate = getRestaurantEstimate(effectiveText, inferredMealType);
-
-    if (restaurantEstimate && shouldUseDeterministicRestaurantEstimate(analysis)) {
-      return finalizeParsedResponse(analysis, restaurantEstimate);
-    }
-
-    return finalizeParsedResponse(analysis, normalized);
+    return finalizeDatabaseFirstResponse(analysis, normalized);
   } catch {
-    return getMockParsedMeal(effectiveText, mealType);
+    return finalizeDatabaseFirstResponse(analysis, getMockParsedMeal(effectiveText, mealType));
   }
 }
