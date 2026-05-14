@@ -236,6 +236,20 @@ function buildShortcutPrompt(text: string | null | undefined) {
 }
 
 function buildTypingCopy(message: string) {
+  if (/\b(?:suggest|recommend|idea|lighter|healthier|sweet|dessert|snack)\b/i.test(message)) {
+    return {
+      title: 'Thinking this through',
+      subtitle: 'Lining up something that fits the moment.',
+    };
+  }
+
+  if (/\b(?:what about|how about|carbs?|fat|protein|compare|versus|vs\b)\b/i.test(message)) {
+    return {
+      title: 'Staying on that thread',
+      subtitle: 'Using the current meal and conversation context.',
+    };
+  }
+
   if (/\b(?:same|usual|again|repeat|yesterday)\b/i.test(message)) {
     return {
       title: 'Pulling that back in',
@@ -527,7 +541,11 @@ function TypingBubble({ title = 'Give me a second', subtitle = 'I’m checking t
   return (
     <ChatBubble role="assistant" compact>
       <div className="flex items-center gap-3 text-sm text-slate-600">
-        <LoaderCircle className="h-4 w-4 animate-spin text-teal-600" />
+        <div className="chat-typing-dots" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
         <div>
           <p className="font-medium text-slate-900">{title}</p>
           <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
@@ -630,6 +648,33 @@ export function MealLoggerClient({
       }),
     [assistantMemory, favoriteMeals, recentMeals, remainingProtein, remainingCalories],
   );
+  const conversationLabel = useMemo(() => {
+    switch (assistantState.activeMode) {
+      case 'meal_building':
+        return 'Building meal';
+      case 'correction_mode':
+        return 'Updating meal';
+      case 'nutrition_coaching':
+        return 'Nutrition coach';
+      case 'macro_discussion':
+        return 'Macro chat';
+      case 'recommendation_mode':
+        return 'Ideas';
+      case 'review_save':
+        return 'Review';
+      default:
+        return 'Assistant';
+    }
+  }, [assistantState.activeMode]);
+  const compactComposerHint = clarifyingQuestion
+    ? 'Short answer is enough.'
+    : entryMode === 'barcode'
+      ? 'Barcode open.'
+      : entryMode === 'label'
+        ? 'Label entry open.'
+        : assistantState.activeMode === 'recommendation_mode'
+          ? 'Ask for ideas naturally.'
+          : 'Talk naturally.';
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1487,10 +1532,10 @@ export function MealLoggerClient({
         <Link href="/" aria-label="Back to dashboard" className="logger-topbar-button">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div className="min-w-0 text-center">
-          <p className="logger-topbar-title">Log meal</p>
+        <div className="logger-topbar-meta min-w-0">
+          <p className="logger-topbar-title">{conversationLabel}</p>
+          {assistantState.activeQuestion ? <p className="logger-topbar-subtitle truncate">{assistantState.activeQuestion}</p> : null}
         </div>
-        <div className="logger-topbar-button opacity-0" aria-hidden="true" />
       </div>
 
       <section className="logger-assistant-thread-shell app-screen">
@@ -1648,8 +1693,8 @@ export function MealLoggerClient({
             <ChatBubble role="assistant">
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{assistantEstimateMode === 'correction' ? 'Updated review' : 'Review'}</p>
-                  <p className="text-sm leading-6 text-slate-700">{memoryCue ? `${memoryCue} ` : ''}Adjust anything you want before you save it.</p>
+                  <p className="text-sm font-semibold text-slate-900">{assistantEstimateMode === 'correction' ? 'Updated meal' : 'What I have so far'}</p>
+                  <p className="text-sm leading-6 text-slate-700">{memoryCue ? `${memoryCue} ` : ''}You can tweak anything here before saving.</p>
                 </div>
 
                 <div className="logger-review-panel space-y-3">
@@ -1897,7 +1942,6 @@ export function MealLoggerClient({
 
             <div className="chat-composer-meta-row">
               <label className="chat-meal-type-field">
-                <span className="chat-meal-type-label">Meal type</span>
                 <select
                   aria-label="Meal type"
                   value={mealType}
@@ -1918,15 +1962,7 @@ export function MealLoggerClient({
                   ))}
                 </select>
               </label>
-              <p className="chat-composer-hint">
-                {clarifyingQuestion
-                  ? 'A short answer is enough here.'
-                  : entryMode === 'barcode'
-                    ? 'Barcode is open.'
-                    : entryMode === 'label'
-                      ? 'Label entry is open.'
-                      : 'Describe your meal naturally.'}
-              </p>
+              <p className="chat-composer-hint">{compactComposerHint}</p>
             </div>
 
             <div className="chat-composer-row">

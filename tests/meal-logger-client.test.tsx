@@ -133,8 +133,10 @@ describe('meal logger client', () => {
     expect(screen.getByText(/chipotle chicken bowl/i)).toBeInTheDocument();
     expect(screen.getByText(/protein left\?/i)).toBeInTheDocument();
     expect(screen.getByText(/tonight idea/i)).toBeInTheDocument();
-    expect(screen.getByText(/describe your meal naturally/i)).toBeInTheDocument();
+    expect(screen.getByText(/talk naturally/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Tell me what you ate')).toBeInTheDocument();
+    expect(screen.queryByText(/^log meal$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/assistant/i)).toBeInTheDocument();
   });
 
   it('can send a quick suggestion as a one-tap assistant prompt', async () => {

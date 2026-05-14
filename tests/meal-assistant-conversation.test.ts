@@ -541,6 +541,72 @@ describe('meal assistant conversational coverage', () => {
     expect(responses[2]?.meal.items).toHaveLength(0);
   });
 
+  it('handles a mixed log-plus-question turn without losing either intent', async () => {
+    const [response] = await runConversation(['2 eggs and also how much protein do I have left?'], {
+      context: buildContext({
+        remainingProtein: 58,
+      }),
+    });
+
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe('Eggs');
+    expect(response.assistant_reply).toMatch(/eggs/i);
+    expect(response.assistant_reply).toMatch(/58g of protein left/i);
+  });
+
+  it('understands macro follow-ups as part of the current thread', async () => {
+    const [response] = await runConversation(['what about carbs?'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Chipotle Chicken Bowl', unit: 'bowl', calories: 760, protein: 58, carbs: 62, fat: 24, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Chipotle official nutrition' })],
+        currentMealText: 'Chipotle Chicken Bowl',
+        activeTopic: 'nutrition',
+        activeMode: 'macro_discussion',
+      }),
+    });
+
+    expect(response.intent).toBe('macro_question');
+    expect(response.assistant_reply).toMatch(/62g carbs/i);
+    expect(response.next_state.activeMode).toBe('macro_discussion');
+  });
+
+  it('gives actual recommendation help for sweet-but-healthier prompts', async () => {
+    const [response] = await runConversation(['something sweet but healthier'], {
+      context: buildContext({
+        remainingCalories: 260,
+      }),
+    });
+
+    expect(response.intent).toBe('recommendation_request');
+    expect(response.assistant_reply).toMatch(/greek yogurt|yasso|protein pudding|dark chocolate/i);
+    expect(response.next_state.activeMode).toBe('recommendation_mode');
+  });
+
+  it('can suggest a healthier version of the active meal without breaking the meal thread', async () => {
+    const [response] = await runConversation(['healthier version?'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Fried Chicken Sandwich', unit: 'sandwich', calories: 490, protein: 26, carbs: 46, fat: 21, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Restaurant nutrition' })],
+        currentMealText: 'Fried Chicken Sandwich',
+      }),
+    });
+
+    expect(response.assistant_reply).toMatch(/grilled|skip heavy extras|lighter/i);
+    expect(response.meal.items[0]?.food_name).toBe('Fried Chicken Sandwich');
+    expect(response.next_state.activeTopic).toBe('recommendation');
+  });
+
+  it('can adaptively mutate the active meal with shorthand like double that', async () => {
+    const [response] = await runConversation(['double that'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 })],
+        currentMealText: '2 Eggs',
+      }),
+    });
+
+    expect(response.intent).toBe('quantity_change');
+    expect(response.meal.items[0]?.quantity).toBe(4);
+    expect(response.assistant_reply).toMatch(/doubled/i);
+  });
+
   it('handles casual and descriptive follow-ups without dropping the active meal', async () => {
     const currentMeal = createItem({ food_name: 'Burger', unit: 'burger', calories: 500, protein: 28, carbs: 38, fat: 24 });
 

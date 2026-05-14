@@ -17,10 +17,13 @@ import { saveConfirmedMeal, updateSavedMeal } from '@/lib/meals';
 import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
+const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
 const continuationRegex = /^(and|also|plus|with)\b/i;
 const removeRegex = /^(?:remove|without|no|hold the|skip the)\s+(.+)$/i;
 const startNewRegex = /^(?:start over|new meal|clear this|reset|fresh one|different meal)\b/i;
 const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)?|done)\b/i;
+const editRegex = /^(?:edit(?: it| that| this)?|change(?: it| that| this)?|tweak(?: it| that| this)?|adjust(?: it| that| this)?)\b/i;
+const reviewRegex = /\b(?:review (?:it|this|that)|show me (?:the )?(?:meal|review)|what do i have so far|show me what i have)\b/i;
 const quantityOnlyRegex = /^(?:actually|make that|update that to|it was|that was|no)\s+(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const directQuantityRegex = /^(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const casualRegex = /^(?:hi|hello|hey|yo|sup|what(?:'|’)??s up|thanks|thank you|cool|okay|ok|nice|lol|how are you|how(?:'|’)??s your day)\b/i;
@@ -28,11 +31,22 @@ const offTopicRegex = /\b(?:weather|movie|music|homework|code|browser|news|sport
 const repeatYesterdayRegex = /\b(?:repeat|log|use|same as|what(?: did)? i (?:have|eat|log))\s+yesterday(?:'?s)?\b|\byesterday(?:'?s)?\b/i;
 const usualRegex = /\b(?:same as usual|my usual|the usual|usual)\b/i;
 const repeatCueRegex = /\b(?:same|usual|again|repeat|yesterday|last time)\b/i;
+const followUpMacroRegex = /\bwhat about (?:carbs?|protein|fat|calories?)\b|\bhow about (?:carbs?|protein|fat|calories?)\b/i;
 const calorieLeftRegex = /\b(?:how many|how much|what(?:'s| is))\s+calories?\s+(?:do i have\s+)?(?:left|remaining)\b|\bcalories?\s+left\b/i;
 const proteinLeftRegex = /\b(?:how many|how much|what(?:'s| is))\s+protein\s+(?:do i have\s+)?(?:left|remaining)\b|\bprotein\s+left\b/i;
+const carbsQuestionRegex = /\b(?:carbs?|carbohydrates?)\b/i;
+const fatQuestionRegex = /\b(?:fat|fats)\b/i;
+const proteinQuestionRegex = /\bprotein\b/i;
+const caloriesQuestionRegex = /\bcalories?\b/i;
 const onTrackRegex = /\bam i on track\b|\bhow am i doing\b|\bdid i hit my goal\b|\bon track\b/i;
 const dinnerSuggestionRegex = /\b(?:what should i eat tonight|what should i have tonight|what should i eat for dinner|what should i have for dinner|dinner idea|dinner ideas)\b/i;
 const snackSuggestionRegex = /\b(?:high protein snack|protein snack|snack idea|snack ideas|what should i snack on|what's a good snack|what is a good snack)\b/i;
+const recommendationRegex = /\b(?:what should i eat|what should i have|what sounds good|give me (?:an?|some) ideas?|any ideas|recommend|suggest|something (?:sweet|lighter|healthy|healthier)|healthy snack|healthy dessert|dessert idea|quick meal|quick food|restaurant idea|healthier version|lighter version)\b/i;
+const sweetHealthyRegex = /\b(?:sweet|dessert)\b.*\b(?:healthy|healthier|lighter|light)\b|\b(?:healthy|healthier|lighter|light)\b.*\b(?:sweet|dessert)\b/i;
+const lighterVersionRegex = /\b(?:lighter|healthier)\s+(?:version|option)\b|\bsomething lighter\b|\bhealthier version\b/i;
+const grilledSwapRegex = /\b(?:make it grilled|grilled instead|swap .* for grilled|make that grilled)\b/i;
+const doubleThatRegex = /^(?:double that|double it|make it double|double this)\b/i;
+const comparisonRegex = /\b(?:better than|vs\.?|versus|compare)\b/i;
 const currentMealProteinRegex = /\b(?:how much|how many|what(?:'s| is)).*protein.*(?:this|that|meal|shake|bowl|burger)\b|\bhow much protein is (?:this|that)\b/i;
 const currentMealCaloriesRegex = /\b(?:how many|how much|what(?:'s| is)).*calories?.*(?:this|that|meal|shake|bowl|burger)\b|\bhow many calories is (?:this|that)\b/i;
 const mealTypeHintRegex = /\b(breakfast|lunch|dinner|snack)\b/i;
@@ -82,6 +96,11 @@ type MemoryMatch = {
   candidate: MemoryEntry;
   mode: 'yesterday' | 'usual' | 'recent';
   appendToCurrentMeal: boolean;
+};
+
+type MixedIntentSplit = {
+  foodMessage: string | null;
+  followUpMessage: string | null;
 };
 
 function sumTotals(items: ParsedFoodItem[]) {
@@ -258,6 +277,192 @@ function cleanMealReferenceText(text: string | null | undefined) {
 function buildMemoryReference(candidate: MemoryEntry) {
   const fallback = candidate.items.length === 1 ? candidate.items[0]?.food_name ?? candidate.title : candidate.title;
   return shorten(cleanMealReferenceText(candidate.rawText) || cleanMealReferenceText(candidate.title) || fallback || 'that meal');
+}
+
+function splitMixedIntentMessage(message: string): MixedIntentSplit {
+  const trimmed = message.trim();
+  const match = trimmed.match(/^(.*?)(?:,?\s+(?:and\s+)?(?:also\s+)?)((?:how much|how many|what about|how about|what should|what's|what is|am i|did i|is that|would that|can i)\b.*)$/i);
+
+  if (!match) {
+    return { foodMessage: null, followUpMessage: null };
+  }
+
+  const foodMessage = match[1]?.trim() ?? '';
+  const followUpMessage = match[2]?.trim() ?? '';
+
+  if (!foodMessage || !followUpMessage) {
+    return { foodMessage: null, followUpMessage: null };
+  }
+
+  return {
+    foodMessage,
+    followUpMessage,
+  };
+}
+
+function isGenericReply(reply: string) {
+  return /^(?:got it|okay|alright|makes sense|tell me what you ate|what did you have|send the meal whenever you’re ready|saved\.?)/i.test(reply.trim());
+}
+
+function buildCurrentMealMacroReply(message: string, state: MealAssistantState) {
+  if (!state.currentMealItems.length) {
+    return null;
+  }
+
+  const totals = sumTotals(state.currentMealItems);
+  const normalized = message.trim().toLowerCase();
+
+  if (carbsQuestionRegex.test(normalized) && (followUpMacroRegex.test(normalized) || /\bhow much|what(?:'s| is)|carbs?\?/i.test(normalized))) {
+    return `That meal is sitting around ${Math.round(totals.carbs)}g carbs.`;
+  }
+
+  if (fatQuestionRegex.test(normalized) && (followUpMacroRegex.test(normalized) || /\bhow much|what(?:'s| is)|fat\?/i.test(normalized))) {
+    return `That meal is around ${Math.round(totals.fat)}g fat.`;
+  }
+
+  if (proteinQuestionRegex.test(normalized) && followUpMacroRegex.test(normalized)) {
+    return `That meal is around ${Math.round(totals.protein)}g protein.`;
+  }
+
+  if (caloriesQuestionRegex.test(normalized) && followUpMacroRegex.test(normalized)) {
+    return `That meal is about ${Math.round(totals.calories)} calories.`;
+  }
+
+  return null;
+}
+
+function buildRecommendationReply(input: MealAssistantRunInput, context: MealAssistantContext) {
+  const normalized = input.message.trim().toLowerCase();
+  const remainingProtein = getRemainingProtein(context);
+  const remainingCalories = getRemainingCalories(context);
+  const suggestion = findSuggestionCandidate(context, {
+    mealType: input.state.mealType,
+    maxCalories: remainingCalories !== null && remainingCalories > 0 ? Math.min(remainingCalories, 550) : 550,
+    minProtein: remainingProtein !== null && remainingProtein > 20 ? 18 : 10,
+  });
+
+  if (!recommendationRegex.test(normalized) && !lighterVersionRegex.test(normalized) && !sweetHealthyRegex.test(normalized)) {
+    return null;
+  }
+
+  if (sweetHealthyRegex.test(normalized)) {
+    return remainingCalories !== null && remainingCalories < 220
+      ? 'Try something sweet but still light, like Greek yogurt with berries, a Yasso bar, or protein pudding.'
+      : 'A good sweet-but-better option would be Greek yogurt with fruit, protein pudding, a Yasso bar, or dark chocolate with berries.';
+  }
+
+  if (lighterVersionRegex.test(normalized) && input.state.currentMealItems.length) {
+    const mealLabel = input.state.currentMealItems.at(-1)?.food_name ?? 'that meal';
+    return `For a lighter version of ${mealLabel}, I’d lean grilled instead of fried, skip heavy extras like cheese or mayo, and keep the side simpler.`;
+  }
+
+  if (/restaurant/.test(normalized) && suggestion) {
+    return `Restaurant-wise, ${suggestion.entry.source === 'favorite' ? 'your usual ' : ''}${buildMemoryReference(suggestion.entry)} would fit pretty well.`;
+  }
+
+  if (/protein/.test(normalized)) {
+    return remainingProtein !== null && remainingProtein > 25
+      ? 'Go easy and protein-forward, like a Fairlife shake, Greek yogurt, cottage cheese, turkey jerky, or grilled chicken.'
+      : 'Protein-wise, a shake, Greek yogurt, cottage cheese, jerky, or grilled chicken would all work.';
+  }
+
+  if (suggestion) {
+    return `A solid option would be ${suggestion.entry.source === 'favorite' ? 'your usual ' : ''}${buildMemoryReference(suggestion.entry)}.`;
+  }
+
+  if (/lighter|light|low calorie/.test(normalized)) {
+    return 'Something lighter could be grilled chicken, a yogurt bowl, eggs and fruit, or a simple wrap with lean protein.';
+  }
+
+  return 'A few good options would be a shake, Greek yogurt with fruit, eggs and toast, or a grilled chicken bowl depending on what sounds good.';
+}
+
+function buildComparisonReply(input: MealAssistantRunInput) {
+  const normalized = input.message.trim().toLowerCase();
+
+  if (!comparisonRegex.test(normalized)) {
+    return null;
+  }
+
+  if (/grilled/.test(normalized) && /fried/.test(normalized)) {
+    return 'Usually grilled is the lighter move because it tends to cut calories and fat while keeping protein similar.';
+  }
+
+  if (/rice/.test(normalized) && /fries|fry/.test(normalized)) {
+    return 'Rice is usually the steadier option, while fries are heavier on calories and fat.';
+  }
+
+  return 'Usually the better call is the option with more protein and less fried or heavy add-ons.';
+}
+
+function updateConversationState(
+  nextState: MealAssistantState,
+  args: { intent: MealAssistantModelOutput['intent']; message: string; activeQuestion?: string | null },
+) {
+  let activeTopic: MealAssistantState['activeTopic'] = nextState.activeTopic ?? null;
+  let activeMode: MealAssistantState['activeMode'] = nextState.activeMode ?? null;
+
+  if (args.intent === 'new_food_item' || args.intent === 'add_to_current_meal' || args.intent === 'repeat_meal') {
+    activeTopic = 'meal';
+    activeMode = nextState.currentMealItems.length > 1 ? 'meal_building' : 'logging_mode';
+  } else if (args.intent === 'correction' || args.intent === 'quantity_change' || args.intent === 'remove_item' || args.intent === 'edit_command' || args.intent === 'delete_command') {
+    activeTopic = 'meal';
+    activeMode = 'correction_mode';
+  } else if (args.intent === 'nutrition_guidance' || args.intent === 'macro_question' || args.intent === 'goal_question' || args.intent === 'comparison_question') {
+    activeTopic = 'nutrition';
+    activeMode = args.intent === 'macro_question' ? 'macro_discussion' : 'nutrition_coaching';
+  } else if (args.intent === 'recommendation_request') {
+    activeTopic = 'recommendation';
+    activeMode = 'recommendation_mode';
+  } else if (args.intent === 'save_meal' || args.intent === 'meal_review') {
+    activeTopic = 'review';
+    activeMode = 'review_save';
+  } else if (args.intent === 'casual_message' || args.intent === 'greeting') {
+    activeTopic = offTopicRegex.test(args.message) ? 'off_topic' : 'casual';
+    activeMode = 'casual_conversation';
+  } else if (nextState.pendingClarification) {
+    activeTopic = 'clarification';
+    activeMode = 'logging_mode';
+  }
+
+  return {
+    ...nextState,
+    activeTopic,
+    activeMode,
+    activeQuestion: args.activeQuestion ?? nextState.activeQuestion ?? null,
+    previousIntent: args.intent,
+    previousUserMessage: args.message,
+  };
+}
+
+function validateAssistantReply(args: {
+  message: string;
+  assistantReply: string;
+  intent: MealAssistantModelOutput['intent'];
+  state: MealAssistantState;
+  context: MealAssistantContext;
+}) {
+  const macroReply = buildCurrentMealMacroReply(args.message, args.state);
+  const recommendationReply = buildRecommendationReply({ message: args.message, state: args.state, context: args.context }, args.context);
+  const comparisonReply = buildComparisonReply({ message: args.message, state: args.state, context: args.context });
+
+  if ((args.intent === 'macro_question' || followUpMacroRegex.test(args.message)) && macroReply) {
+    return macroReply;
+  }
+
+  if ((args.intent === 'recommendation_request' || recommendationRegex.test(args.message)) && recommendationReply) {
+    return recommendationReply;
+  }
+
+  if ((args.intent === 'comparison_question' || comparisonRegex.test(args.message)) && comparisonReply) {
+    return comparisonReply;
+  }
+
+  if ((args.intent === 'casual_message' || args.intent === 'greeting') && isGenericReply(args.assistantReply)) {
+    return buildFallbackReply(args.message, args.state);
+  }
+
+  return args.assistantReply;
 }
 
 function postProcessAssistantReply(reply: string, state: MealAssistantState) {
@@ -500,6 +705,10 @@ function buildCasualReply(message: string, state: MealAssistantState) {
     return hasActiveMeal ? 'Anytime. Want to add anything else to this meal?' : 'Anytime. Send the meal whenever you’re ready.';
   }
 
+  if (greetingRegex.test(normalized)) {
+    return hasActiveMeal ? 'Hey, I’m with you. Want to keep going on this meal?' : choosePhrase(normalized, ['Hey, what did you eat?', 'Hey, what are we logging?', 'I’m here. What’d you have?']);
+  }
+
   if (casualRegex.test(normalized)) {
     return hasActiveMeal
       ? choosePhrase(normalized, ['Got you. Keep going whenever you want.', 'All good. Send the next thing when you’re ready.'])
@@ -597,6 +806,7 @@ function buildMealDescriptorReply(input: MealAssistantRunInput, context: MealAss
       intent: 'correction',
       assistantReply: reply,
       nextState,
+      message: input.message,
     });
   }
 
@@ -621,6 +831,101 @@ function buildMealDescriptorReply(input: MealAssistantRunInput, context: MealAss
         currentMealText: input.state.currentMealText ?? buildMealTextFromItems(currentItems),
         confidenceScore: input.state.confidenceScore ?? getConfidenceScore(currentItems),
       },
+      message: input.message,
+    });
+  }
+
+  return null;
+}
+
+async function buildAdaptiveMealMutationReply(
+  input: MealAssistantRunInput,
+  resolveItemNutrition: NutritionResolver,
+): Promise<MealAssistantResponse | null> {
+  if (!input.state.currentMealItems.length) {
+    return null;
+  }
+
+  const normalized = input.message.trim().toLowerCase();
+  const currentItems = cloneParsedItems(input.state.currentMealItems);
+  const targetIndex = findContextualItemIndex(input.message, currentItems);
+  const targetItem = targetIndex >= 0 ? currentItems[targetIndex] : currentItems.at(-1) ?? null;
+
+  if (!targetItem) {
+    return null;
+  }
+
+  if (doubleThatRegex.test(normalized)) {
+    const nextItems = scaleMealAtIndex(currentItems, targetIndex >= 0 ? targetIndex : currentItems.length - 1, 2);
+    const nextState: MealAssistantState = {
+      ...input.state,
+      currentMealItems: nextItems,
+      currentMealText: buildMealTextFromItems(nextItems),
+      confidenceScore: getConfidenceScore(nextItems),
+      saved: false,
+      pendingClarification: null,
+      lastAssistantQuestion: null,
+    };
+
+    return buildDirectResponse({
+      intent: 'quantity_change',
+      assistantReply: choosePhrase(`${normalized}:${targetItem.food_name}`, [
+        `Done, I doubled ${targetItem.food_name}.`,
+        `Got you, I doubled ${targetItem.food_name}.`,
+        `${targetItem.food_name} is doubled now.`,
+      ]),
+      nextState,
+      message: input.message,
+    });
+  }
+
+  if (grilledSwapRegex.test(normalized)) {
+    const replacementName = /fried/i.test(targetItem.food_name)
+      ? targetItem.food_name.replace(/fried/gi, 'Grilled')
+      : `Grilled ${targetItem.food_name}`.replace(/Grilled Grilled/gi, 'Grilled');
+
+    const lookedUp = await resolveItemNutrition({
+      item: {
+        name: replacementName,
+        brand: null,
+        quantity: targetItem.quantity,
+        unit: targetItem.unit ?? null,
+        modifiers: [],
+        action: 'replace',
+      },
+      mealType: input.state.mealType,
+    });
+
+    const replacement = lookedUp?.items?.[0]
+      ? lookedUp.items[0]
+      : {
+          ...targetItem,
+          food_name: replacementName,
+          calories: Number((targetItem.calories * 0.82).toFixed(1)),
+          fat: Number((targetItem.fat * 0.62).toFixed(1)),
+          notes: 'Adjusted toward a grilled version.',
+        };
+
+    const nextItems = currentItems.map((item, index) => (index === (targetIndex >= 0 ? targetIndex : currentItems.length - 1) ? replacement : item));
+    const nextState: MealAssistantState = {
+      ...input.state,
+      currentMealItems: nextItems,
+      currentMealText: buildMealTextFromItems(nextItems),
+      confidenceScore: getConfidenceScore(nextItems),
+      saved: false,
+      pendingClarification: null,
+      lastAssistantQuestion: null,
+    };
+
+    return buildDirectResponse({
+      intent: 'correction',
+      assistantReply: choosePhrase(`${normalized}:${targetItem.food_name}`, [
+        `Yep, I switched that to grilled.`,
+        `Got it, I changed that to a grilled version.`,
+        `Okay, I’m treating that as grilled now.`,
+      ]),
+      nextState,
+      message: input.message,
     });
   }
 
@@ -631,10 +936,19 @@ function buildDirectResponse(args: {
   intent: MealAssistantModelOutput['intent'];
   assistantReply: string;
   nextState: MealAssistantState;
+  message?: string;
+  activeQuestion?: string | null;
 }) {
   const mealItems = args.nextState.currentMealItems;
   const totals = sumTotals(mealItems);
   const assistantReply = postProcessAssistantReply(args.assistantReply, args.nextState);
+  const nextState = args.message
+    ? updateConversationState(args.nextState, {
+        intent: args.intent,
+        message: args.message,
+        activeQuestion: args.activeQuestion,
+      })
+    : args.nextState;
 
   return {
     intent: args.intent,
@@ -649,10 +963,10 @@ function buildDirectResponse(args: {
     meal: {
       items: mealItems,
       totals,
-      confidence_score: args.nextState.confidenceScore,
+      confidence_score: nextState.confidenceScore,
     },
     next_state: {
-      ...args.nextState,
+      ...nextState,
       lastAssistantReply: assistantReply,
     },
   } satisfies MealAssistantResponse;
@@ -932,6 +1246,48 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
   const normalized = message.trim().toLowerCase();
   const hasActiveMeal = state.currentMealItems.length > 0;
 
+  if (greetingRegex.test(normalized) && !hasActiveMeal) {
+    return {
+      intent: 'greeting',
+      assistant_reply: choosePhrase(normalized, ['Hey, what are we logging?', 'Hey, what did you eat?', 'I’m here. What did you have?']),
+      items: [],
+      corrections: [],
+      should_lookup_nutrition: false,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'high',
+    };
+  }
+
+  if (reviewRegex.test(normalized) && hasActiveMeal) {
+    return {
+      intent: 'meal_review',
+      assistant_reply: 'Here’s what I have so far.',
+      items: [],
+      corrections: [],
+      should_lookup_nutrition: false,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'high',
+    };
+  }
+
+  if (editRegex.test(normalized) && hasActiveMeal) {
+    return {
+      intent: 'edit_command',
+      assistant_reply: 'Sure, tell me what you want to change.',
+      items: [],
+      corrections: [],
+      should_lookup_nutrition: false,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'high',
+    };
+  }
+
   if (saveRegex.test(normalized)) {
     return {
       intent: 'save_meal',
@@ -957,6 +1313,48 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
       should_ask_clarification: false,
       clarification_question: null,
       confidence: 'high',
+    };
+  }
+
+  if (comparisonRegex.test(normalized)) {
+    return {
+      intent: 'comparison_question',
+      assistant_reply: 'Let me compare that.',
+      items: [],
+      corrections: [],
+      should_lookup_nutrition: false,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'medium',
+    };
+  }
+
+  if (followUpMacroRegex.test(normalized) || (hasActiveMeal && /\b(?:carbs?|fat|protein|calories?)\b/i.test(normalized) && /\?/.test(normalized))) {
+    return {
+      intent: 'macro_question',
+      assistant_reply: 'Let me check that.',
+      items: [],
+      corrections: [],
+      should_lookup_nutrition: false,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'high',
+    };
+  }
+
+  if (recommendationRegex.test(normalized) || lighterVersionRegex.test(normalized)) {
+    return {
+      intent: 'recommendation_request',
+      assistant_reply: 'I’ve got a few ideas.',
+      items: [],
+      corrections: [],
+      should_lookup_nutrition: false,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'medium',
     };
   }
 
@@ -1157,7 +1555,19 @@ function buildReplyFromItems(args: {
     return choosePhrase(decisionReply, ['Okay, starting fresh. What did you eat?', 'Alright, new meal. What’d you have?', 'Fresh start. What did you eat?']);
   }
 
-  if (intent === 'casual_message' || intent === 'unknown' || intent === 'nutrition_guidance') {
+  if (
+    intent === 'casual_message' ||
+    intent === 'greeting' ||
+    intent === 'unknown' ||
+    intent === 'nutrition_guidance' ||
+    intent === 'macro_question' ||
+    intent === 'recommendation_request' ||
+    intent === 'comparison_question' ||
+    intent === 'goal_question' ||
+    intent === 'meal_review' ||
+    intent === 'edit_command' ||
+    intent === 'delete_command'
+  ) {
     return decisionReply;
   }
 
@@ -1228,18 +1638,78 @@ export async function runMealAssistant(
   const resolveItemNutrition = dependencies.resolveItemNutrition ?? defaultResolveItemNutrition;
   const saveMeal = dependencies.saveMeal ?? defaultSaveMeal;
   const context = input.context ?? emptyContext;
-  const state = { ...input.state };
+  const mixedIntent = splitMixedIntentMessage(input.message);
+  const workingInput: MealAssistantRunInput = mixedIntent.foodMessage
+    ? {
+        ...input,
+        message: mixedIntent.foodMessage,
+      }
+    : input;
+  const state = { ...workingInput.state };
 
   if (!dependencies.classify) {
-    const descriptorReply = buildMealDescriptorReply(input, context);
+    const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition);
+    if (adaptiveMealMutationReply) {
+      return adaptiveMealMutationReply;
+    }
+
+    const descriptorReply = buildMealDescriptorReply(workingInput, context);
     if (descriptorReply) {
       return descriptorReply;
     }
 
-    const casualReply = buildCasualReply(input.message, state);
+    const macroReply = buildCurrentMealMacroReply(workingInput.message, state);
+    if (macroReply) {
+      return buildDirectResponse({
+        intent: 'macro_question',
+        assistantReply: macroReply,
+        nextState: {
+          ...state,
+          currentMealItems: [...state.currentMealItems],
+          currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
+          confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+        },
+        message: workingInput.message,
+        activeQuestion: workingInput.message,
+      });
+    }
+
+    const recommendationReply = buildRecommendationReply(workingInput, context);
+    if (recommendationReply) {
+      return buildDirectResponse({
+        intent: 'recommendation_request',
+        assistantReply: recommendationReply,
+        nextState: {
+          ...state,
+          currentMealItems: [...state.currentMealItems],
+          currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
+          confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+        },
+        message: workingInput.message,
+        activeQuestion: workingInput.message,
+      });
+    }
+
+    const comparisonReply = buildComparisonReply(workingInput);
+    if (comparisonReply) {
+      return buildDirectResponse({
+        intent: 'comparison_question',
+        assistantReply: comparisonReply,
+        nextState: {
+          ...state,
+          currentMealItems: [...state.currentMealItems],
+          currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
+          confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+        },
+        message: workingInput.message,
+        activeQuestion: workingInput.message,
+      });
+    }
+
+    const casualReply = buildCasualReply(workingInput.message, state);
     if (casualReply) {
       return buildDirectResponse({
-        intent: 'casual_message',
+        intent: greetingRegex.test(workingInput.message) && !state.currentMealItems.length ? 'greeting' : 'casual_message',
         assistantReply: casualReply,
         nextState: {
           ...state,
@@ -1248,10 +1718,11 @@ export async function runMealAssistant(
           currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
           confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
         },
+        message: workingInput.message,
       });
     }
 
-    const memoryMatch = findMatchingMemoryMeal(input, context);
+    const memoryMatch = findMatchingMemoryMeal(workingInput, context);
     if (memoryMatch) {
       const loadedItems = cloneParsedItems(memoryMatch.candidate.items);
       const nextItems = memoryMatch.appendToCurrentMeal ? [...state.currentMealItems, ...loadedItems] : loadedItems;
@@ -1272,12 +1743,13 @@ export async function runMealAssistant(
 
       return buildDirectResponse({
         intent: memoryMatch.appendToCurrentMeal ? 'add_to_current_meal' : 'repeat_meal',
-        assistantReply: buildMemoryLoadReply(memoryMatch, input.message),
+        assistantReply: buildMemoryLoadReply(memoryMatch, workingInput.message),
         nextState,
+        message: workingInput.message,
       });
     }
 
-    const nutritionReply = buildNutritionGuidanceReply(input, context);
+    const nutritionReply = buildNutritionGuidanceReply(workingInput, context);
     if (nutritionReply) {
       return buildDirectResponse({
         intent: 'nutrition_guidance',
@@ -1291,12 +1763,14 @@ export async function runMealAssistant(
           currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
           confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
         },
+        message: workingInput.message,
+        activeQuestion: workingInput.message,
       });
     }
   }
 
   const decision = await classify({
-    ...input,
+    ...workingInput,
     context,
   });
 
@@ -1408,20 +1882,91 @@ export async function runMealAssistant(
 
   const mealItems = nextState.currentMealItems;
   const totals = sumTotals(mealItems);
-  const assistantReply = postProcessAssistantReply(
-    buildReplyFromItems({
+  const primaryReply = validateAssistantReply({
+    message: workingInput.message,
+    assistantReply: buildReplyFromItems({
       intent: decision.intent,
       decisionReply: suppressedClarification
         ? 'Got it, I’m checking that again.'
-        : decision.assistant_reply || buildFallbackReply(input.message, state),
+        : decision.assistant_reply || buildFallbackReply(workingInput.message, state),
       resolvedItems: resolvedItems.length ? resolvedItems : mealItems,
       removedTargets,
       saved,
       clarificationQuestion,
       mealAlreadySaved: state.saved,
     }),
+    intent: decision.intent,
+    state: {
+      ...nextState,
+      currentMealItems: mealItems,
+    },
+    context,
+  });
+
+  const followUpReply = mixedIntent.followUpMessage
+    ? validateAssistantReply({
+        message: mixedIntent.followUpMessage,
+        assistantReply:
+          buildCurrentMealMacroReply(mixedIntent.followUpMessage, {
+            ...nextState,
+            currentMealItems: mealItems,
+          }) ||
+          buildNutritionGuidanceReply(
+            {
+              ...workingInput,
+              message: mixedIntent.followUpMessage,
+              state: {
+                ...nextState,
+                currentMealItems: mealItems,
+              },
+            },
+            context,
+          ) ||
+          buildRecommendationReply(
+            {
+              ...workingInput,
+              message: mixedIntent.followUpMessage,
+              state: {
+                ...nextState,
+                currentMealItems: mealItems,
+              },
+            },
+            context,
+          ) ||
+          buildComparisonReply({
+            ...workingInput,
+            message: mixedIntent.followUpMessage,
+            state: {
+              ...nextState,
+              currentMealItems: mealItems,
+            },
+          }) ||
+          '',
+        intent: /recommend|idea|suggest|something/.test(mixedIntent.followUpMessage.toLowerCase())
+          ? 'recommendation_request'
+          : followUpMacroRegex.test(mixedIntent.followUpMessage.toLowerCase()) || /\b(?:carbs?|fat|protein|calories?)\b/i.test(mixedIntent.followUpMessage)
+            ? 'macro_question'
+            : comparisonRegex.test(mixedIntent.followUpMessage.toLowerCase())
+              ? 'comparison_question'
+              : 'nutrition_guidance',
+        state: {
+          ...nextState,
+          currentMealItems: mealItems,
+        },
+        context,
+      })
+    : null;
+
+  const assistantReply = postProcessAssistantReply(
+    [primaryReply, followUpReply].filter(Boolean).join(' '),
     state,
   );
+
+  nextState = updateConversationState(nextState, {
+    intent: decision.intent,
+    message: input.message,
+    activeQuestion: clarificationQuestion ?? mixedIntent.followUpMessage ?? null,
+  });
 
   return {
     ...decision,

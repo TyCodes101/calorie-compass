@@ -4,6 +4,7 @@ import { assistantMemorySchema } from '@/lib/assistant-memory';
 import { parsedFoodItemSchema } from '@/lib/ai/types';
 
 export const mealAssistantIntentSchema = z.enum([
+  'greeting',
   'new_food_item',
   'add_to_current_meal',
   'correction',
@@ -14,6 +15,13 @@ export const mealAssistantIntentSchema = z.enum([
   'start_new_meal',
   'repeat_meal',
   'nutrition_guidance',
+  'macro_question',
+  'recommendation_request',
+  'meal_review',
+  'edit_command',
+  'delete_command',
+  'comparison_question',
+  'goal_question',
   'casual_message',
   'unknown',
 ]);
@@ -61,6 +69,11 @@ export const mealAssistantStateSchema = z.object({
   sourceReusableMealId: z.string().nullable().optional(),
   editingMealId: z.string().nullable().optional(),
   lastAssistantReply: z.string().nullable().optional(),
+  activeTopic: z.enum(['meal', 'nutrition', 'recommendation', 'casual', 'clarification', 'review', 'off_topic']).nullable().optional(),
+  activeMode: z.enum(['casual_conversation', 'logging_mode', 'meal_building', 'nutrition_coaching', 'macro_discussion', 'recommendation_mode', 'correction_mode', 'review_save']).nullable().optional(),
+  activeQuestion: z.string().nullable().optional(),
+  previousIntent: mealAssistantIntentSchema.nullable().optional(),
+  previousUserMessage: z.string().nullable().optional(),
 });
 
 export const mealAssistantMemoryMealSchema = z.object({
