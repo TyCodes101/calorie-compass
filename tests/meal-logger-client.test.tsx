@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MealLoggerClient } from '@/components/meal-logger-client';
+import { assistantMemoryStorageKey } from '@/lib/assistant-memory';
 import type { MealAssistantResponse } from '@/lib/ai/mealAssistantSchema';
 import type { ParsedFoodItem } from '@/lib/ai/types';
 import type { RecentMealQuickLog } from '@/lib/history';
@@ -112,24 +113,84 @@ describe('meal logger client', () => {
   beforeEach(() => {
     refreshMock.mockReset();
     vi.restoreAllMocks();
+    window.localStorage.clear();
     Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
       value: vi.fn(),
     });
   });
 
-  it('keeps the first screen minimal without quick-start chips', () => {
+  it('shows quick suggestions on the first screen without cluttering the composer', () => {
     render(
       <MealLoggerClient
         favoriteMeals={[]}
         recentMeals={[buildRecentMeal()]}
+        remainingProtein={52}
+        remainingCalories={780}
       />,
     );
 
-    expect(screen.queryByText(/want a faster start/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/chipotle chicken bowl/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/chipotle chicken bowl/i)).toBeInTheDocument();
+    expect(screen.getByText(/protein left\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/tonight idea/i)).toBeInTheDocument();
     expect(screen.getByText(/describe your meal naturally/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Tell me what you ate')).toBeInTheDocument();
+  });
+
+  it('can send a quick suggestion as a one-tap assistant prompt', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () =>
+        buildAssistantResponse({
+          intent: 'nutrition_guidance',
+          assistant_reply: "You've got about 52g of protein left today.",
+          should_lookup_nutrition: false,
+          meal: {
+            items: [],
+            totals: {
+              calories: 0,
+              protein: 0,
+              carbs: 0,
+              fat: 0,
+              fiber: 0,
+              sugar: 0,
+              sodium: 0,
+            },
+            confidence_score: 0.82,
+          },
+          next_state: {
+            currentMealItems: [],
+            pendingClarification: null,
+            lastAssistantQuestion: null,
+            userCorrections: [],
+            saved: false,
+            mealType: 'snack',
+            userName: 'Tyler Cox',
+            currentMealText: null,
+            confidenceScore: 0.82,
+            sourceReusableMealId: null,
+            editingMealId: null,
+          },
+        }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} remainingProtein={52} remainingCalories={780} userName="Tyler Cox" />);
+
+    fireEvent.click(screen.getByText(/protein left\?/i));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    const request = fetchMock.mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body ?? '{}'));
+    expect(body.message).toBe('how much protein do I have left?');
+
+    await waitFor(() => {
+      expect(screen.getByText(/52g of protein left today/i)).toBeInTheDocument();
+    });
   });
 
   it('uses the meal-assistant route for conversational logging and still saves the reviewed meal', async () => {
@@ -146,7 +207,7 @@ describe('meal logger client', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} userName="Tyler Cox" />);
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} userName="Tyler Cox" />);
 
     fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'I had a Chipotle bowl with white rice, double chicken, corn salsa, cheese, and lettuce.' },
@@ -163,6 +224,19 @@ describe('meal logger client', () => {
       '/api/meal-assistant',
       expect.objectContaining({ method: 'POST' }),
     );
+
+    const firstRequest = fetchMock.mock.calls[0]?.[1];
+    const firstBody = JSON.parse(String(firstRequest?.body ?? '{}'));
+    expect(firstBody.context).toMatchObject({
+      favoriteMeals: [],
+      recentMeals: expect.any(Array),
+      proteinGoal: null,
+      dailyCalorieGoal: null,
+    });
+    expect(firstBody.context.recentMeals[0]).toMatchObject({
+      title: 'Chipotle chicken bowl',
+      mealType: 'dinner',
+    });
     expect(screen.getAllByText(/980/).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /^save it$/i })).toBeInTheDocument();
 
@@ -181,6 +255,11 @@ describe('meal logger client', () => {
     });
 
     expect(refreshMock).toHaveBeenCalled();
+
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem(assistantMemoryStorageKey) || '{}');
+      expect(stored.recurringMeals?.[0]?.title).toMatch(/chipotle bowl with white rice and chicken/i);
+    });
   });
 
   it('shows only the assistant reply from the conversational route for greetings', async () => {

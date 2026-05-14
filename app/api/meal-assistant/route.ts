@@ -7,7 +7,7 @@ import { getCurrentUserWithProfile } from '@/lib/current-user';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, state } = mealAssistantRequestSchema.parse(body);
+    const { message, state, context } = mealAssistantRequestSchema.parse(body);
     const user = await getCurrentUserWithProfile();
 
     const response = await runMealAssistant({
@@ -16,7 +16,20 @@ export async function POST(request: Request) {
         ...state,
         userName: state.userName ?? user?.name ?? null,
       },
-      userPreferences: user?.profile?.aiPreferenceNotes ?? null,
+      context: {
+        favoriteMeals: context?.favoriteMeals ?? [],
+        recentMeals: context?.recentMeals ?? [],
+        assistantMemory: context?.assistantMemory,
+        nutritionPreferences: context?.nutritionPreferences ?? user?.profile?.aiPreferenceNotes ?? null,
+        proteinGoal: context?.proteinGoal ?? user?.profile?.proteinGoal ?? null,
+        dailyCalorieGoal: context?.dailyCalorieGoal ?? user?.profile?.dailyCalorieGoal ?? null,
+        todayProtein: context?.todayProtein ?? null,
+        todayCalories: context?.todayCalories ?? null,
+        remainingProtein: context?.remainingProtein ?? null,
+        remainingCalories: context?.remainingCalories ?? null,
+        todayMealCount: context?.todayMealCount ?? null,
+      },
+      userPreferences: context?.nutritionPreferences ?? user?.profile?.aiPreferenceNotes ?? null,
     });
 
     return NextResponse.json(response);

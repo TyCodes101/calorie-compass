@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { MealAssistantModelOutput, MealAssistantState } from '@/lib/ai/mealAssistantSchema';
+import type { MealAssistantContext, MealAssistantModelOutput, MealAssistantState } from '@/lib/ai/mealAssistantSchema';
 import { runMealAssistant } from '@/lib/ai/runMealAssistant';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 
@@ -254,12 +254,30 @@ async function resolveConversationNutrition(args: {
   ], args.mealType);
 }
 
+function buildContext(overrides?: Partial<MealAssistantContext>): MealAssistantContext {
+  return {
+    favoriteMeals: [],
+    recentMeals: [],
+    nutritionPreferences: null,
+    proteinGoal: 180,
+    dailyCalorieGoal: 2400,
+    todayProtein: 120,
+    todayCalories: 1500,
+    remainingProtein: 60,
+    remainingCalories: 900,
+    todayMealCount: 2,
+    ...overrides,
+  };
+}
+
 async function runConversation(
   messages: string[],
   options?: {
     initialState?: MealAssistantState;
+    context?: MealAssistantContext;
     classify?: (args: { message: string; state: MealAssistantState }) => Promise<MealAssistantModelOutput>;
     saveMeal?: ReturnType<typeof vi.fn>;
+    resolveItemNutrition?: typeof resolveConversationNutrition;
   },
 ) {
   let state = options?.initialState ?? buildState();
@@ -267,10 +285,10 @@ async function runConversation(
 
   for (const message of messages) {
     const response = await runMealAssistant(
-      { message, state },
+      { message, state, context: options?.context },
       {
         classify: options?.classify,
-        resolveItemNutrition: resolveConversationNutrition,
+        resolveItemNutrition: options?.resolveItemNutrition ?? resolveConversationNutrition,
         saveMeal: options?.saveMeal,
       },
     );
@@ -341,8 +359,9 @@ describe('meal assistant conversational coverage', () => {
     const [response] = await runConversation([prompt]);
 
     expect(response.meal.items).toHaveLength(expectedItemCount);
-    expect(response.assistant_reply).toMatch(/got it/i);
-    expect(response.assistant_reply.length).toBeLessThan(140);
+    expect(response.assistant_reply.length).toBeLessThan(170);
+    expect(response.assistant_reply).not.toMatch(/what did you eat|one quick follow-up|adjust if needed/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
   });
 
   it('keeps adding to the same active meal across continuation turns', async () => {
@@ -354,7 +373,194 @@ describe('meal assistant conversational coverage', () => {
     expect(finalResponse?.next_state.currentMealText).toContain('Eggs');
     expect(finalResponse?.next_state.currentMealText).toContain('Toast');
     expect(finalResponse?.next_state.currentMealText).toContain('Bacon');
-    expect(finalResponse?.assistant_reply).toMatch(/added bacon/i);
+    expect(finalResponse?.assistant_reply).toMatch(/bacon/i);
+    expect(finalResponse?.assistant_reply).toMatch(/added|adding|in there too|got you/i);
+  });
+
+  it('loads a usual meal from favorites without reparsing it', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const favoriteShake = createItem({
+      food_name: 'Fairlife Elite 42g Shake',
+      unit: 'bottle',
+      calories: 230,
+      protein: 42,
+      carbs: 8,
+      fat: 3,
+      source_name: 'Fairlife nutrition reference',
+    });
+
+    const [response] = await runConversation(['same shake'], {
+      context: buildContext({
+        favoriteMeals: [
+          {
+            id: 'favorite-shake',
+            title: 'Fairlife Elite 42g shake',
+            rawText: 'Fairlife Elite 42g shake',
+            mealType: 'snack',
+            totalCalories: 230,
+            confidenceScore: 0.96,
+            sourceReusableMealId: 'favorite-shake',
+            items: [favoriteShake],
+          },
+        ],
+      }),
+      resolveItemNutrition,
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('repeat_meal');
+    expect(response.meal.items[0]?.food_name).toBe('Fairlife Elite 42g Shake');
+    expect(response.assistant_reply).toMatch(/usual fairlife elite 42g shake/i);
+    expect(response.next_state.sourceReusableMealId).toBe('favorite-shake');
+  });
+
+  it('can repeat yesterday from recent meals with the right meal loaded', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const yesterday = new Date(Date.now() - 86400000).toISOString();
+    const yesterdayMeal = createItem({
+      food_name: 'Chipotle Chicken Bowl',
+      unit: 'bowl',
+      calories: 980,
+      protein: 68,
+      carbs: 74,
+      fat: 34,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: 'Chipotle official nutrition',
+    });
+
+    const [response] = await runConversation(['repeat yesterday dinner'], {
+      context: buildContext({
+        recentMeals: [
+          {
+            id: 'recent-yesterday-dinner',
+            title: 'Chipotle chicken bowl',
+            rawText: 'Chipotle bowl with white rice and double chicken',
+            mealType: 'dinner',
+            totalCalories: 980,
+            confidenceScore: 0.96,
+            createdAt: yesterday,
+            items: [yesterdayMeal],
+          },
+        ],
+      }),
+      resolveItemNutrition,
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.meal.items[0]?.food_name).toBe('Chipotle Chicken Bowl');
+    expect(response.assistant_reply).toMatch(/yesterday's chipotle bowl with white rice and double chicken/i);
+    expect(response.next_state.mealType).toBe('dinner');
+  });
+
+  it('can pull a remembered usual meal from local assistant memory', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+
+    const [response] = await runConversation(['same fairlife elite shake'], {
+      context: buildContext({
+        assistantMemory: {
+          version: 1,
+          syncStatus: 'local',
+          updatedAt: '2026-05-14T12:00:00.000Z',
+          recurringMeals: [
+            {
+              id: 'snack:fairlife elite 42g shake',
+              title: 'Fairlife Elite 42g shake',
+              rawText: 'Fairlife Elite 42g shake',
+              mealType: 'snack',
+              totalCalories: 230,
+              confidenceScore: 0.96,
+              source: 'saved',
+              createdAt: '2026-05-13T18:00:00.000Z',
+              lastUsedAt: '2026-05-14T11:30:00.000Z',
+              count: 3,
+              items: [
+                createItem({
+                  food_name: 'Fairlife Elite 42g Shake',
+                  unit: 'bottle',
+                  calories: 230,
+                  protein: 42,
+                  carbs: 8,
+                  fat: 3,
+                  source_name: 'Fairlife nutrition reference',
+                }),
+              ],
+            },
+          ],
+          recurringFoods: [],
+          commonRestaurants: [],
+          commonBrands: [{ name: 'Fairlife', count: 3, lastUsedAt: '2026-05-14T11:30:00.000Z' }],
+          preferredServingSizes: [],
+          commonCorrections: [],
+          mealTiming: [],
+        },
+      }),
+      resolveItemNutrition,
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('repeat_meal');
+    expect(response.assistant_reply).toMatch(/usual fairlife elite 42g shake/i);
+    expect(response.meal.items[0]?.food_name).toBe('Fairlife Elite 42g Shake');
+  });
+
+  it('answers lightweight nutrition guidance from current daily context', async () => {
+    const responses = await runConversation(['how much protein do I have left?', 'am I on track?', 'what should I eat tonight?'], {
+      context: buildContext({
+        remainingProtein: 58,
+        remainingCalories: 760,
+        favoriteMeals: [
+          {
+            id: 'favorite-dinner',
+            title: 'Chipotle chicken bowl',
+            rawText: 'Chipotle bowl with white rice and double chicken',
+            mealType: 'dinner',
+            totalCalories: 980,
+            confidenceScore: 0.96,
+            sourceReusableMealId: 'favorite-dinner',
+            items: [
+              createItem({
+                food_name: 'Chipotle Chicken Bowl',
+                unit: 'bowl',
+                calories: 760,
+                protein: 58,
+                carbs: 62,
+                fat: 24,
+                source_type: 'OFFICIAL_RESTAURANT',
+                source_name: 'Chipotle official nutrition',
+              }),
+            ],
+          },
+        ],
+      }),
+    });
+
+    expect(responses[0]?.intent).toBe('nutrition_guidance');
+    expect(responses[0]?.assistant_reply).toMatch(/58g of protein left/i);
+    expect(responses[1]?.assistant_reply).toMatch(/760 calories and 58g protein left|58g short on protein/i);
+    expect(responses[2]?.assistant_reply).toMatch(/chipotle bowl with white rice and double chicken|protein-forward tonight/i);
+    expect(responses[2]?.meal.items).toHaveLength(0);
+  });
+
+  it('handles casual and descriptive follow-ups without dropping the active meal', async () => {
+    const currentMeal = createItem({ food_name: 'Burger', unit: 'burger', calories: 500, protein: 28, carbs: 38, fat: 24 });
+
+    const [sizeReply, healthyReply, laughReply] = await runConversation(['that burger was huge', 'that meal was actually pretty healthy', 'lol'], {
+      initialState: buildState({
+        currentMealItems: [currentMeal],
+        currentMealText: 'Burger',
+      }),
+      context: buildContext({
+        remainingProtein: 40,
+        remainingCalories: 700,
+      }),
+    });
+
+    expect(sizeReply.meal.items[0]?.calories).toBeGreaterThan(500);
+    expect(sizeReply.assistant_reply).toMatch(/lean bigger|bumped|larger serving/i);
+    expect(healthyReply.meal.items[0]?.food_name).toBe('Burger');
+    expect(healthyReply.assistant_reply).toMatch(/balanced|protein/i);
+    expect(laughReply.meal.items[0]?.food_name).toBe('Burger');
+    expect(laughReply.assistant_reply).toMatch(/😂|what else did you eat/i);
   });
 
   it('updates quantity in place for a correction instead of starting a new item', async () => {
@@ -525,7 +731,7 @@ describe('meal assistant conversational coverage', () => {
     });
 
     expect(saveMeal).toHaveBeenCalledTimes(1);
-    expect(response.assistant_reply).toBe('Saved. Anything else?');
+    expect(response.assistant_reply).toMatch(/saved/i);
     expect(response.assistant_reply).not.toMatch(/hey|what did you eat|what'd you eat/i);
     expect(response.next_state.saved).toBe(true);
   });

@@ -68,6 +68,8 @@ export type FavoriteMealSummary = {
   totalCalories: number;
   itemCount: number;
   trustedCount: number;
+  confidenceScore?: number | null;
+  items?: ParsedFoodItem[];
 };
 
 function titleFromMeal(rawText: string | null | undefined, mealType: MealTypeValue) {
@@ -422,5 +424,7 @@ export async function getFavoriteMeals(): Promise<FavoriteMealSummary[]> {
     totalCalories: Math.round(favorite.items.reduce((sum, item) => sum + item.calories, 0)),
     itemCount: favorite.items.length,
     trustedCount: favorite.items.filter((item) => item.isTrusted && item.sourceType !== 'AI_ESTIMATE').length,
+    confidenceScore: favorite.confidenceScore,
+    items: favorite.items.map(toParsedFoodItem),
   }));
 }

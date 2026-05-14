@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { assistantMemorySchema } from '@/lib/assistant-memory';
 import { parsedFoodItemSchema } from '@/lib/ai/types';
 
 export const mealAssistantIntentSchema = z.enum([
@@ -11,6 +12,8 @@ export const mealAssistantIntentSchema = z.enum([
   'clarification_answer',
   'save_meal',
   'start_new_meal',
+  'repeat_meal',
+  'nutrition_guidance',
   'casual_message',
   'unknown',
 ]);
@@ -57,11 +60,40 @@ export const mealAssistantStateSchema = z.object({
   confidenceScore: z.number().min(0).max(1).default(0.82),
   sourceReusableMealId: z.string().nullable().optional(),
   editingMealId: z.string().nullable().optional(),
+  lastAssistantReply: z.string().nullable().optional(),
+});
+
+export const mealAssistantMemoryMealSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  rawText: z.string().nullable().default(null),
+  mealType: mealAssistantMealTypeSchema,
+  totalCalories: z.number().nonnegative().default(0),
+  confidenceScore: z.number().min(0).max(1).default(0.82),
+  sourceReusableMealId: z.string().nullable().optional(),
+  createdAt: z.string().nullable().optional(),
+  lastUsedAt: z.string().nullable().optional(),
+  items: z.array(parsedFoodItemSchema).default([]),
+});
+
+export const mealAssistantContextSchema = z.object({
+  favoriteMeals: z.array(mealAssistantMemoryMealSchema).default([]),
+  recentMeals: z.array(mealAssistantMemoryMealSchema).default([]),
+  assistantMemory: assistantMemorySchema.optional(),
+  nutritionPreferences: z.string().nullable().default(null),
+  proteinGoal: z.number().nullable().optional(),
+  dailyCalorieGoal: z.number().nullable().optional(),
+  todayProtein: z.number().nullable().optional(),
+  todayCalories: z.number().nullable().optional(),
+  remainingProtein: z.number().nullable().optional(),
+  remainingCalories: z.number().nullable().optional(),
+  todayMealCount: z.number().nullable().optional(),
 });
 
 export const mealAssistantRequestSchema = z.object({
   message: z.string().min(1),
   state: mealAssistantStateSchema,
+  context: mealAssistantContextSchema.optional(),
 });
 
 const nutritionTotalsSchema = z.object({
@@ -89,5 +121,7 @@ export type MealAssistantItem = z.infer<typeof mealAssistantItemSchema>;
 export type MealAssistantCorrection = z.infer<typeof mealAssistantCorrectionSchema>;
 export type MealAssistantModelOutput = z.infer<typeof mealAssistantModelOutputSchema>;
 export type MealAssistantState = z.infer<typeof mealAssistantStateSchema>;
+export type MealAssistantMemoryMeal = z.infer<typeof mealAssistantMemoryMealSchema>;
+export type MealAssistantContext = z.infer<typeof mealAssistantContextSchema>;
 export type MealAssistantRequest = z.infer<typeof mealAssistantRequestSchema>;
 export type MealAssistantResponse = z.infer<typeof mealAssistantResponseSchema>;

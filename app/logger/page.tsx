@@ -32,7 +32,7 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
       editMealId,
     }),
     getFavoriteMeals(),
-    getRecentMealsForQuickLog(),
+    getRecentMealsForQuickLog(12),
     getCurrentUserWithProfile(),
     getDashboardData(),
   ]);
