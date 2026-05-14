@@ -3,6 +3,39 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MealLoggerClient } from '@/components/meal-logger-client';
+import type { RecentMealQuickLog } from '@/lib/history';
+
+function buildRecentMeal(overrides?: Partial<RecentMealQuickLog>): RecentMealQuickLog {
+  return {
+    id: 'recent-1',
+    title: 'Chipotle chicken bowl',
+    mealType: 'dinner',
+    totalCalories: 980,
+    createdAt: new Date().toISOString(),
+    rawText: 'Chipotle chicken bowl',
+    confidenceScore: 0.92,
+    items: [
+      {
+        food_name: 'Chipotle chicken bowl',
+        quantity: 1,
+        unit: 'bowl',
+        calories: 980,
+        protein: 68,
+        carbs: 74,
+        fat: 34,
+        fiber: 10,
+        sugar: 4,
+        sodium: 1760,
+        notes: 'Trusted match.',
+        is_trusted: true,
+        source_type: 'OFFICIAL_RESTAURANT' as const,
+        source_name: 'Chipotle official nutrition',
+        catalog_food_id: 'chipotle_bowl_double_chicken',
+      },
+    ],
+    ...overrides,
+  };
+}
 
 const refreshMock = vi.fn();
 
@@ -172,6 +205,35 @@ describe('meal logger client', () => {
     expect(screen.getByText(/195g of protein today/i)).toBeInTheDocument();
   });
 
+  it('answers goal questions using today totals without parsing food', async () => {
+    const fetchMock = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <MealLoggerClient
+        favoriteMeals={[]}
+        recentMeals={[]}
+        proteinGoal={195}
+        todayProtein={120}
+        remainingProtein={75}
+        dailyCalorieGoal={2550}
+        todayCalories={1800}
+        remainingCalories={750}
+        todayMealCount={3}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'how much protein do I have left?' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/75g left/i)).toBeInTheDocument();
+  });
+
   it('answers meal history questions from recent meals without triggering parsing', async () => {
     const fetchMock = vi.fn();
 
@@ -180,15 +242,7 @@ describe('meal logger client', () => {
     render(
       <MealLoggerClient
         favoriteMeals={[]}
-        recentMeals={[
-          {
-            id: 'meal-1',
-            title: 'Chipotle chicken bowl',
-            mealType: 'dinner',
-            totalCalories: 980,
-            createdAt: new Date().toISOString(),
-          },
-        ]}
+        recentMeals={[buildRecentMeal({ id: 'meal-1' })]}
       />,
     );
 
@@ -234,6 +288,30 @@ describe('meal logger client', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText(/fairlife core power elite 42g shake/i)).toBeInTheDocument();
+  });
+
+  it('keeps the running chat visible and can repeat the last meal from conversation', async () => {
+    const fetchMock = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'hi' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'repeat my last meal' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText('hi')).toBeInTheDocument();
+    expect(screen.getByText(/repeat my last meal/i)).toBeInTheDocument();
+    expect(screen.getByText(/i loaded chipotle chicken bowl again/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/chipotle chicken bowl/i).length).toBeGreaterThan(1);
   });
 
   it('updates the current meal when the user sends a simple correction', async () => {

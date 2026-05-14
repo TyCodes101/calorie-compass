@@ -1,3 +1,4 @@
+import type { ParsedFoodItem } from '@/lib/ai/types';
 import { getCurrentUserId } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { isoDay } from '@/lib/date';
@@ -27,6 +28,9 @@ export type RecentMealQuickLog = {
   mealType: string;
   totalCalories: number;
   createdAt: string;
+  rawText: string | null;
+  confidenceScore: number;
+  items: ParsedFoodItem[];
 };
 
 export async function getMealHistory(): Promise<MealHistoryGroup[]> {
@@ -89,10 +93,26 @@ export async function getRecentMealsForQuickLog(limit = 6): Promise<RecentMealQu
       id: true,
       mealType: true,
       rawText: true,
+      confidenceScore: true,
       totalCalories: true,
       createdAt: true,
       items: {
-        select: { id: true },
+        select: {
+          foodName: true,
+          quantity: true,
+          unit: true,
+          calories: true,
+          protein: true,
+          carbs: true,
+          fat: true,
+          fiber: true,
+          sugar: true,
+          sodium: true,
+          notes: true,
+          nutritionSourceType: true,
+          nutritionSourceName: true,
+          catalogFoodId: true,
+        },
       },
     },
   });
@@ -103,6 +123,24 @@ export async function getRecentMealsForQuickLog(limit = 6): Promise<RecentMealQu
     mealType: meal.mealType.toLowerCase(),
     totalCalories: Math.round(meal.totalCalories),
     createdAt: meal.createdAt.toISOString(),
+    rawText: meal.rawText,
+    confidenceScore: meal.confidenceScore ?? 0.82,
+    items: meal.items.map((item) => ({
+      food_name: item.foodName,
+      quantity: item.quantity,
+      unit: item.unit,
+      calories: item.calories,
+      protein: item.protein,
+      carbs: item.carbs,
+      fat: item.fat,
+      fiber: item.fiber,
+      sugar: item.sugar,
+      sodium: item.sodium,
+      notes: item.notes ?? null,
+      is_trusted: item.nutritionSourceType !== 'AI_ESTIMATE',
+      source_type: item.nutritionSourceType ?? null,
+      source_name: item.nutritionSourceName ?? null,
+      catalog_food_id: item.catalogFoodId ?? null,
+    })),
   }));
 }
-

@@ -15,8 +15,6 @@ import {
   RotateCcw,
   SendHorizontal,
   Star,
-  TriangleAlert,
-  UserRound,
   WifiOff,
   X,
 } from 'lucide-react';
@@ -24,7 +22,7 @@ import {
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { TrustBadge } from '@/components/trust-badge';
 import type { RecentMealQuickLog } from '@/lib/history';
-import { buildLoggerIntentReply, buildLoggerQuestionReply, detectLoggerCommand, detectLoggerIntent } from '@/lib/logger-intent';
+import { buildLoggerGoalReply, buildLoggerIntentReply, buildLoggerQuestionReply, detectLoggerCommand, detectLoggerIntent } from '@/lib/logger-intent';
 import { type FavoriteMealSummary, type LoggerDraft } from '@/lib/reusable-meals';
 import { getConfidenceCopy, getItemSourceLabel, getItemTrustPresentation, summarizeParsedItems } from '@/lib/trust';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -57,6 +55,19 @@ type QuickLogProps = {
   userName?: string | null;
   proteinGoal?: number | null;
   dailyCalorieGoal?: number | null;
+  todayProtein?: number | null;
+  todayCalories?: number | null;
+  remainingProtein?: number | null;
+  remainingCalories?: number | null;
+  todayMealCount?: number | null;
+};
+
+type ChatMessage = {
+  id: string;
+  role: 'assistant' | 'user';
+  text: string;
+  tone?: 'default' | 'success' | 'warning';
+  compact?: boolean;
 };
 
 type EntryMode = 'chat' | 'barcode' | 'label';
@@ -265,6 +276,21 @@ function buildHistoryReply(message: string, recentMeals: RecentMealQuickLog[]) {
     return "I don't have any recent meals to pull from yet. Once you log a few, I can use them here.";
   }
 
+  if (/today/.test(normalized)) {
+    const todayMeals = recentMeals.filter((meal) => !isYesterday(meal.createdAt) && new Date(meal.createdAt).toDateString() === new Date().toDateString());
+
+    if (!todayMeals.length) {
+      return "You haven't logged anything today yet.";
+    }
+
+    const mealList = todayMeals
+      .slice(0, 3)
+      .map((meal) => `${meal.title} (${meal.totalCalories} cal)`)
+      .join(', ');
+
+    return `Today you've logged ${mealList}.`;
+  }
+
   if (/yesterday/.test(normalized)) {
     const yesterdayMeals = recentMeals.filter((meal) => isYesterday(meal.createdAt));
 
@@ -302,9 +328,14 @@ function buildRecommendationReply(
 ) {
   const normalized = message.trim().toLowerCase();
   const repeatedMeals = [...options.favoriteMeals.map((meal) => meal.title), ...options.recentMeals.map((meal) => meal.title)];
+  const yesterdayDinner = options.recentMeals.find((meal) => isYesterday(meal.createdAt) && meal.mealType === 'dinner');
   const highProteinPick = repeatedMeals.find((title) => /fairlife|core power|chicken|chipotle|protein|greek yogurt|eggs/i.test(title));
   const easyPick = repeatedMeals.find((title) => /shake|bowl|sandwich|wrap|yogurt/i.test(title));
   const lunchDinnerPick = repeatedMeals.find((title) => /chipotle|bowl|sandwich|burger|salad|taco|dinner|lunch/i.test(title));
+
+  if (/(yesterday|again|repeat)/.test(normalized) && yesterdayDinner) {
+    return `If you want something easy, you could repeat yesterday’s dinner, ${yesterdayDinner.title}.`;
+  }
 
   if (/protein/.test(normalized) && highProteinPick) {
     return `If you want something easy and higher protein, ${highProteinPick} looks like a good fit.`;
@@ -323,6 +354,33 @@ function buildRecommendationReply(
   }
 
   return 'I’d keep it simple and go with something easy to repeat, then adjust from there.';
+}
+
+function createChatMessage(role: ChatMessage['role'], text: string, options?: Pick<ChatMessage, 'tone' | 'compact'>): ChatMessage {
+  return {
+    id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    role,
+    text,
+    tone: options?.tone ?? 'default',
+    compact: options?.compact ?? role === 'assistant',
+  };
+}
+
+function buildInitialAssistantMessage(options: {
+  firstName?: string | null;
+  editingMealId?: string | null;
+  sourceReusableMealId?: string | null;
+  hasYesterdayMeal?: boolean;
+}) {
+  if (options.editingMealId) {
+    return 'I pulled up that saved meal. Make any changes you want, then save it again.';
+  }
+
+  if (options.sourceReusableMealId) {
+    return 'I pulled up that favorite. You can log it as-is or tweak it first.';
+  }
+
+  return `Hey${options.firstName ? ` ${options.firstName}` : ''}, what'd you eat today${options.hasYesterdayMeal ? '? I can also repeat yesterday’s dinner if that helps.' : '?'}`;
 }
 
 function buildManualItem(): ParsedFoodItem {
@@ -565,8 +623,15 @@ export function MealLoggerClient({
   userName = null,
   proteinGoal = null,
   dailyCalorieGoal = null,
+  todayProtein = null,
+  todayCalories = null,
+  remainingProtein = null,
+  remainingCalories = null,
+  todayMealCount = null,
 }: QuickLogProps) {
   const router = useRouter();
+  const firstName = userName?.trim()?.split(/\s+/)[0] ?? null;
+  const initialQuickYesterdayMeals = recentMeals.filter((meal) => isYesterday(meal.createdAt));
   const [entryMode, setEntryMode] = useState<EntryMode>('chat');
   const [composerText, setComposerText] = useState(initialDraft?.items?.length ? '' : initialDraft?.rawText ?? '');
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -574,6 +639,14 @@ export function MealLoggerClient({
   const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(() => initialDraft?.mealType ?? getDefaultMealType());
   const [activePrompt, setActivePrompt] = useState(initialDraft?.rawText ?? '');
   const [displayUserMessage, setDisplayUserMessage] = useState(initialDraft?.rawText ?? '');
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() =>
+    initialDraft?.rawText
+      ? [
+          createChatMessage('assistant', buildInitialAssistantMessage({ firstName, editingMealId: initialDraft?.editingMealId ?? null, sourceReusableMealId: initialDraft?.sourceReusableMealId ?? null, hasYesterdayMeal: initialQuickYesterdayMeals.length > 0 })),
+          createChatMessage('user', initialDraft.rawText, { compact: false }),
+        ]
+      : [createChatMessage('assistant', buildInitialAssistantMessage({ firstName, editingMealId: initialDraft?.editingMealId ?? null, sourceReusableMealId: initialDraft?.sourceReusableMealId ?? null, hasYesterdayMeal: initialQuickYesterdayMeals.length > 0 }))],
+  );
   const [assistantChatReply, setAssistantChatReply] = useState<string | null>(null);
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [latestUserReply, setLatestUserReply] = useState('');
@@ -581,13 +654,7 @@ export function MealLoggerClient({
   const [confidenceScore, setConfidenceScore] = useState(initialDraft?.confidenceScore ?? 0.82);
   const [error, setError] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<ActionKind | null>(null);
-  const [notice, setNotice] = useState<Notice | null>(
-    initialDraft?.editingMealId
-      ? { tone: 'info', text: 'I loaded your saved meal. You can adjust it inline and save the updated version when it looks right.' }
-      : initialDraft?.sourceReusableMealId
-        ? { tone: 'info', text: 'I pulled in that favorite. Log it as-is or tweak anything first.' }
-        : null,
-  );
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [favoriteSaving, setFavoriteSaving] = useState(false);
@@ -618,20 +685,8 @@ export function MealLoggerClient({
   const canSaveFavorite = items.length > 0 && !favoriteSaving && !(sourceReusableMealId && favoriteState === 'saved') && isOnline;
   const canSend = composerText.trim().length > 0 && !loading && isOnline;
   const canLookupBarcode = barcodeInput.replace(/\D/g, '').length >= 8 && !loading && isOnline;
-  const firstName = userName?.trim()?.split(/\s+/)[0] ?? null;
-  const conversationPrompt = displayUserMessage || activePrompt || initialDraft?.rawText || '';
+  const conversationPrompt = displayUserMessage || activePrompt;
   const memoryCue = useMemo(() => buildMemoryCue(conversationPrompt, favoriteMeals, recentMeals), [conversationPrompt, favoriteMeals, recentMeals]);
-  const assistantEstimateCopy = items.length
-    ? buildAssistantEstimateCopy({
-        prompt: conversationPrompt,
-        items,
-        totalCalories: totals.calories,
-        totalProtein: totals.protein,
-        estimatedCount: trustSummary.estimatedCount,
-        mode: assistantEstimateMode,
-        memoryCue,
-      })
-    : null;
 
   useEffect(() => {
     if (!composerRef.current) {
@@ -644,7 +699,15 @@ export function MealLoggerClient({
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [activePrompt, displayUserMessage, assistantChatReply, clarifyingQuestion, latestUserReply, items, loading, error, notice, saveMessage, expandedIndex, entryMode]);
+  }, [chatHistory, activePrompt, displayUserMessage, assistantChatReply, clarifyingQuestion, latestUserReply, items, loading, error, notice, saveMessage, expandedIndex, entryMode]);
+
+  function appendChatMessage(role: ChatMessage['role'], text: string, options?: Pick<ChatMessage, 'tone' | 'compact'>) {
+    if (!text.trim()) {
+      return;
+    }
+
+    setChatHistory((current) => [...current, createChatMessage(role, text, options)]);
+  }
 
   function clearFeedback() {
     setError(null);
@@ -662,7 +725,7 @@ export function MealLoggerClient({
     }
   }
 
-  function resetDraft() {
+  function resetDraft(options?: { preserveThread?: boolean }) {
     clearFeedback();
     setEntryMode('chat');
     setComposerText('');
@@ -682,11 +745,14 @@ export function MealLoggerClient({
     setHasSavedCurrentDraft(false);
     setLastParseOptions(null);
     setAssistantEstimateMode('initial');
+    if (!options?.preserveThread) {
+      setChatHistory([createChatMessage('assistant', buildInitialAssistantMessage({ firstName, hasYesterdayMeal: quickYesterdayMeals.length > 0 }))]);
+    }
   }
 
-  function startAnotherMeal() {
-    resetDraft();
-    setNotice({ tone: 'info', text: 'Ready for the next one. What’d you eat?' });
+  function startAnotherMeal(message = 'Ready for the next one. What’d you eat?') {
+    resetDraft({ preserveThread: true });
+    appendChatMessage('assistant', message, { compact: true });
   }
 
   function addManualItem() {
@@ -694,7 +760,36 @@ export function MealLoggerClient({
     markDraftChanged();
     setItems((current) => [...current, buildManualItem()]);
     setExpandedIndex(nextIndex);
-    setNotice({ tone: 'info', text: 'I added a custom item. Fill in what looks right and I’ll keep the rest in place.' });
+    appendChatMessage('assistant', 'I added a custom item. Fill in what looks right and I’ll keep the rest in place.', { compact: true });
+  }
+
+  function loadRecentMealIntoDraft(meal: RecentMealQuickLog, triggerText?: string) {
+    clearFeedback();
+    setEntryMode('chat');
+    setComposerText('');
+    setBarcodeInput('');
+    setNutritionLabelDraft(defaultNutritionLabelDraft());
+    setMealType((meal.mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack') ?? getDefaultMealType());
+    setActivePrompt(meal.rawText?.trim() || meal.title);
+    setDisplayUserMessage(meal.rawText?.trim() || meal.title);
+    setItems(meal.items);
+    setConfidenceScore(meal.confidenceScore ?? 0.82);
+    setClarifyingQuestion(null);
+    setExpandedIndex(null);
+    setSourceReusableMealId(null);
+    setFavoriteState('idle');
+    setEditingMealId(null);
+    setUtilityMenuOpen(false);
+    setHasSavedCurrentDraft(false);
+    setLastParseOptions(null);
+    setAssistantEstimateMode('initial');
+    setSaveMessage(null);
+
+    if (triggerText) {
+      appendChatMessage('user', triggerText, { compact: true });
+    }
+
+    appendChatMessage('assistant', `Got it, I loaded ${meal.title} again. I’ll keep it here so you can save it or tweak it first.`);
   }
 
   async function parseMeal(options?: ParseRequestOptions) {
@@ -729,6 +824,10 @@ export function MealLoggerClient({
     setUtilityMenuOpen(false);
 
     const fullText = isClarification ? `${prompt}\nAdditional detail: ${nextInput}` : isCorrection ? nextInput : prompt;
+
+    if (!isDirectPackageInput && nextInput) {
+      appendChatMessage('user', nextInput, { compact: mode !== 'new' });
+    }
 
     if (!isClarification && !isCorrection) {
       setActivePrompt(prompt);
@@ -771,12 +870,14 @@ export function MealLoggerClient({
       setHasSavedCurrentDraft(false);
 
       if (parsed.needs_clarification) {
-        setClarifyingQuestion(parsed.clarifying_question);
+        const nextClarifyingQuestion = parsed.clarifying_question ?? 'I just need one quick detail to tighten that up.';
+        setClarifyingQuestion(nextClarifyingQuestion);
         setItems([]);
         setExpandedIndex(null);
         setComposerText('');
         setNotice(null);
         setAssistantEstimateMode('initial');
+        appendChatMessage('assistant', nextClarifyingQuestion, { compact: true });
         return;
       }
 
@@ -800,6 +901,19 @@ export function MealLoggerClient({
       setAssistantEstimateMode(isCorrection ? 'correction' : 'initial');
       setNotice(null);
 
+      appendChatMessage(
+        'assistant',
+        buildAssistantEstimateCopy({
+          prompt: isCorrection ? activePrompt || prompt : prompt,
+          items: parsed.items,
+          totalCalories: sumTotals(parsed.items).calories,
+          totalProtein: sumTotals(parsed.items).protein,
+          estimatedCount: summarizeParsedItems(parsed.items).estimatedCount,
+          mode: isCorrection ? 'correction' : 'initial',
+          memoryCue: buildMemoryCue(prompt, favoriteMeals, recentMeals),
+        }),
+      );
+
       if (isCorrection) {
         setActivePrompt(`${activePrompt}\nCorrection: ${nextInput}`.trim());
       }
@@ -820,7 +934,7 @@ export function MealLoggerClient({
 
   function openEntryMode(mode: EntryMode) {
     if (conversationPrompt || items.length || clarifyingQuestion || latestUserReply || saveMessage) {
-      resetDraft();
+      resetDraft({ preserveThread: true });
     }
 
     clearFeedback();
@@ -906,6 +1020,7 @@ export function MealLoggerClient({
       setHasSavedCurrentDraft(true);
       setSaveMessage(editingMealId ? 'Updated it.' : 'Saved it. Want to log anything else?');
       setNotice({ tone: 'success', text: editingMealId ? 'Updated it.' : 'Saved it.' });
+      appendChatMessage('assistant', editingMealId ? 'Updated it.' : 'Saved it. Want to log anything else?', { tone: 'success' });
       router.refresh();
     } catch {
       setSaving(false);
@@ -957,6 +1072,7 @@ export function MealLoggerClient({
         tone: 'success',
         text: sourceReusableMealId ? 'Updated your favorite.' : 'Saved that as a favorite.',
       });
+      appendChatMessage('assistant', sourceReusableMealId ? 'Updated your favorite.' : 'Saved that as a favorite.', { tone: 'success' });
       router.refresh();
     } catch {
       setFavoriteSaving(false);
@@ -999,6 +1115,7 @@ export function MealLoggerClient({
       setFavoriteState('idle');
       setFavoriteSaving(false);
       setNotice({ tone: 'success', text: 'Removed the favorite. The meal is still here if you want it.' });
+      appendChatMessage('assistant', 'Removed the favorite. The meal is still here if you want it.', { tone: 'success' });
       router.refresh();
     } catch {
       setFavoriteSaving(false);
@@ -1056,13 +1173,27 @@ export function MealLoggerClient({
       return false;
     }
 
+    const nextItems = scaleParsedItems(items, nextCount);
+
     markDraftChanged();
     setLatestUserReply(message);
     setAssistantChatReply(null);
     setClarifyingQuestion(null);
-    setItems(scaleParsedItems(items, nextCount));
+    appendChatMessage('user', message, { compact: true });
+    setItems(nextItems);
     setAssistantEstimateMode('correction');
     setComposerText('');
+    appendChatMessage(
+      'assistant',
+      buildAssistantEstimateCopy({
+        prompt: conversationPrompt,
+        items: nextItems,
+        totalCalories: sumTotals(nextItems).calories,
+        totalProtein: sumTotals(nextItems).protein,
+        estimatedCount: summarizeParsedItems(nextItems).estimatedCount,
+        mode: 'correction',
+      }),
+    );
     return true;
   }
 
@@ -1076,7 +1207,9 @@ export function MealLoggerClient({
     const nextMealType = match[1] as 'breakfast' | 'lunch' | 'dinner' | 'snack';
     setMealType(nextMealType);
     setLatestUserReply(message);
+    appendChatMessage('user', message, { compact: true });
     setAssistantChatReply(`Got it, I changed this to ${nextMealType}.`);
+    appendChatMessage('assistant', `Got it, I changed this to ${nextMealType}.`);
     setComposerText('');
     return true;
   }
@@ -1109,6 +1242,7 @@ export function MealLoggerClient({
     setLatestUserReply(message);
     setAssistantChatReply(null);
     setClarifyingQuestion(null);
+    appendChatMessage('user', message, { compact: true });
 
     setItems((current) => {
       if (!current.length) {
@@ -1139,6 +1273,7 @@ export function MealLoggerClient({
 
     setAssistantEstimateMode('correction');
     setComposerText('');
+    appendChatMessage('assistant', 'Got it, I updated that in the current meal.');
     return true;
   }
 
@@ -1153,14 +1288,25 @@ export function MealLoggerClient({
     const command = detectLoggerCommand(message, {
       hasActiveMeal,
       hasFavorite: Boolean(sourceReusableMealId),
+      hasRecentMeal: Boolean(recentMeals[0]),
     });
 
     if (command !== 'none') {
       clearFeedback();
       setAssistantChatReply(null);
       setLatestUserReply(message);
+      appendChatMessage('user', message, { compact: hasActiveMeal || command === 'repeat_last_meal' });
       setComposerText('');
       setUtilityMenuOpen(false);
+
+      if (command === 'repeat_last_meal') {
+        if (recentMeals[0]) {
+          loadRecentMealIntoDraft(recentMeals[0]);
+        } else {
+          appendChatMessage('assistant', "I don't have a recent meal to repeat yet. Once you've logged one, I can pull it back in fast.");
+        }
+        return;
+      }
 
       if (command === 'save') {
         saveMeal();
@@ -1168,6 +1314,7 @@ export function MealLoggerClient({
       }
 
       if (command === 'start_over') {
+        appendChatMessage('assistant', 'Okay, I cleared that. What do you want to log instead?');
         startAnotherMeal();
         return;
       }
@@ -1211,10 +1358,11 @@ export function MealLoggerClient({
       return;
     }
 
-    if (intent === 'question') {
+    if (intent === 'nutrition_question') {
       clearFeedback();
       setLastParseOptions(null);
       setEntryMode('chat');
+      appendChatMessage('user', message, { compact: hasActiveMeal });
       setComposerText('');
       setUtilityMenuOpen(false);
 
@@ -1224,14 +1372,46 @@ export function MealLoggerClient({
         setDisplayUserMessage(message);
       }
 
-      setAssistantChatReply(
-        buildLoggerQuestionReply(message, {
-          proteinGoal,
-          dailyCalorieGoal,
-          currentMealProtein: totals.protein,
-          currentMealCalories: totals.calories,
-        }),
-      );
+      const reply = buildLoggerQuestionReply(message, {
+        proteinGoal,
+        dailyCalorieGoal,
+        todayProtein,
+        todayCalories,
+        remainingProtein,
+        remainingCalories,
+        currentMealProtein: totals.protein,
+        currentMealCalories: totals.calories,
+      });
+      setAssistantChatReply(reply);
+      appendChatMessage('assistant', reply);
+      return;
+    }
+
+    if (intent === 'goal_question') {
+      clearFeedback();
+      setLastParseOptions(null);
+      setEntryMode('chat');
+      appendChatMessage('user', message, { compact: hasActiveMeal });
+      setComposerText('');
+      setUtilityMenuOpen(false);
+
+      if (hasActiveMeal) {
+        setLatestUserReply(message);
+      } else {
+        setDisplayUserMessage(message);
+      }
+
+      const reply = buildLoggerGoalReply(message, {
+        proteinGoal,
+        dailyCalorieGoal,
+        todayProtein,
+        todayCalories,
+        remainingProtein,
+        remainingCalories,
+        todayMealCount,
+      });
+      setAssistantChatReply(reply);
+      appendChatMessage('assistant', reply);
       return;
     }
 
@@ -1239,6 +1419,7 @@ export function MealLoggerClient({
       clearFeedback();
       setLastParseOptions(null);
       setEntryMode('chat');
+      appendChatMessage('user', message, { compact: hasActiveMeal });
       setComposerText('');
       setUtilityMenuOpen(false);
 
@@ -1248,7 +1429,9 @@ export function MealLoggerClient({
         setDisplayUserMessage(message);
       }
 
-      setAssistantChatReply(buildHistoryReply(message, recentMeals));
+      const reply = buildHistoryReply(message, recentMeals);
+      setAssistantChatReply(reply);
+      appendChatMessage('assistant', reply);
       return;
     }
 
@@ -1256,6 +1439,7 @@ export function MealLoggerClient({
       clearFeedback();
       setLastParseOptions(null);
       setEntryMode('chat');
+      appendChatMessage('user', message, { compact: hasActiveMeal });
       setComposerText('');
       setUtilityMenuOpen(false);
 
@@ -1265,13 +1449,13 @@ export function MealLoggerClient({
         setDisplayUserMessage(message);
       }
 
-      setAssistantChatReply(
-        buildRecommendationReply(message, {
-          favoriteMeals,
-          recentMeals,
-          proteinGoal,
-        }),
-      );
+      const reply = buildRecommendationReply(message, {
+        favoriteMeals,
+        recentMeals,
+        proteinGoal,
+      });
+      setAssistantChatReply(reply);
+      appendChatMessage('assistant', reply);
       return;
     }
 
@@ -1279,6 +1463,7 @@ export function MealLoggerClient({
       clearFeedback();
       setLastParseOptions(null);
       setEntryMode('chat');
+      appendChatMessage('user', message, { compact: hasActiveMeal });
       setComposerText('');
       setUtilityMenuOpen(false);
 
@@ -1288,12 +1473,12 @@ export function MealLoggerClient({
         setLatestUserReply(message);
       }
 
-      setAssistantChatReply(
-        buildLoggerIntentReply(intent, {
-          userName,
-          hasActiveMeal,
-        }),
-      );
+      const reply = buildLoggerIntentReply(intent, {
+        userName,
+        hasActiveMeal,
+      });
+      setAssistantChatReply(reply);
+      appendChatMessage('assistant', reply);
       return;
     }
 
@@ -1309,11 +1494,8 @@ export function MealLoggerClient({
         </Link>
         <div className="min-w-0 text-center">
           <p className="logger-topbar-title">Log meal</p>
-          <p className="logger-topbar-subtitle">AI nutrition assistant</p>
         </div>
-        <Link href="/profile" aria-label="Open profile" className="logger-topbar-button">
-          <UserRound className="h-5 w-5" />
-        </Link>
+        <div className="logger-topbar-button opacity-0" aria-hidden="true" />
       </div>
 
       <section className="logger-assistant-thread-shell app-screen">
@@ -1330,40 +1512,13 @@ export function MealLoggerClient({
             </ChatBubble>
           ) : null}
 
-          {notice ? (
-            <ChatBubble role="assistant" compact tone={notice.tone === 'success' ? 'success' : 'default'}>
-              <p className="text-sm leading-6 text-slate-700">{notice.text}</p>
+          {chatHistory.map((message) => (
+            <ChatBubble key={message.id} role={message.role} compact={message.compact} tone={message.tone === 'success' ? 'success' : message.tone === 'warning' ? 'warning' : 'default'}>
+              <p className={clsx('text-sm leading-6', message.role === 'user' ? 'font-medium text-slate-950' : 'text-slate-700')}>{message.text}</p>
             </ChatBubble>
-          ) : null}
+          ))}
 
-          {!conversationPrompt && !items.length ? (
-            <ChatBubble role="assistant" compact>
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-slate-950">
-                  {editingMealId
-                    ? 'I pulled up that saved meal.'
-                    : sourceReusableMealId
-                      ? 'I pulled up that favorite.'
-                      : `Hey${firstName ? ` ${firstName}` : ''}, what'd you eat?`}
-                </p>
-                <p className="text-sm leading-6 text-slate-700">
-                  {editingMealId
-                    ? 'Make any changes you want, then save it again.'
-                    : sourceReusableMealId
-                      ? 'You can log it as-is or tweak it first.'
-                      : 'Send it naturally. I’ll estimate it, and if anything is too vague I’ll ask one short question.'}
-                </p>
-                {!editingMealId && !sourceReusableMealId && quickYesterdayMeals.length ? (
-                  <p className="text-xs leading-5 text-slate-500">If you want something easy, you can repeat yesterday’s dinner or one of your usual meals below.</p>
-                ) : null}
-                {nutritionPreferences?.trim() ? (
-                  <p className="text-xs leading-5 text-slate-500">I’ll keep your preferences in mind: {nutritionPreferences.trim()}</p>
-                ) : null}
-              </div>
-            </ChatBubble>
-          ) : null}
-
-          {!conversationPrompt && !items.length ? (
+          {!items.length && entryMode === 'chat' && chatHistory.length <= 2 ? (
             <ConversationQuickStarts
               quickFavorites={quickFavorites}
               quickRecentMeals={quickRecentMeals}
@@ -1371,7 +1526,7 @@ export function MealLoggerClient({
             />
           ) : null}
 
-          {!conversationPrompt && !items.length && entryMode === 'barcode' ? (
+          {!items.length && entryMode === 'barcode' ? (
             <ChatBubble role="assistant" compact>
               <div className="chat-inline-tool-panel space-y-3">
                 <div>
@@ -1409,7 +1564,7 @@ export function MealLoggerClient({
             </ChatBubble>
           ) : null}
 
-          {!conversationPrompt && !items.length && entryMode === 'label' ? (
+          {!items.length && entryMode === 'label' ? (
             <ChatBubble role="assistant" compact>
               <div className="chat-inline-tool-panel space-y-3">
                 <div>
@@ -1482,36 +1637,6 @@ export function MealLoggerClient({
             </ChatBubble>
           ) : null}
 
-          {conversationPrompt ? (
-            <ChatBubble role="user">
-              <p className="text-sm font-medium leading-6">{conversationPrompt}</p>
-            </ChatBubble>
-          ) : null}
-
-          {latestUserReply ? (
-            <ChatBubble role="user" compact>
-              <p className="text-sm font-medium leading-6">{latestUserReply}</p>
-            </ChatBubble>
-          ) : null}
-
-          {assistantChatReply ? (
-            <ChatBubble role="assistant" compact>
-              <p className="text-sm leading-6 text-slate-700">{assistantChatReply}</p>
-            </ChatBubble>
-          ) : null}
-
-          {clarifyingQuestion ? (
-            <ChatBubble role="assistant" compact>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                  <TriangleAlert className="h-3.5 w-3.5 text-teal-600" />
-                  <span>I just need one detail.</span>
-                </div>
-                <p className="text-sm leading-6 text-slate-700">{clarifyingQuestion}</p>
-              </div>
-            </ChatBubble>
-          ) : null}
-
           {loading ? <TypingBubble /> : null}
 
           {error ? (
@@ -1535,7 +1660,10 @@ export function MealLoggerClient({
           {items.length ? (
             <ChatBubble role="assistant">
               <div className="space-y-4">
-                <p className="text-sm leading-6 text-slate-700">{assistantEstimateCopy}</p>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{assistantEstimateMode === 'correction' ? 'Updated review' : 'Review'}</p>
+                  <p className="text-sm leading-6 text-slate-700">{memoryCue ? `${memoryCue} ` : ''}Adjust anything you want before you save it.</p>
+                </div>
 
                 <div className="logger-review-panel space-y-3">
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1712,9 +1840,9 @@ export function MealLoggerClient({
           {saveMessage ? (
             <ChatBubble role="assistant" tone="success" compact>
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-slate-950">{saveMessage}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Next</p>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={startAnotherMeal} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
+                  <button type="button" onClick={() => startAnotherMeal()} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
                     <Plus className="h-4 w-4" />
                     Log another
                   </button>
@@ -1779,7 +1907,15 @@ export function MealLoggerClient({
                 </select>
               </label>
               <p className="chat-composer-hint">
-                {clarifyingQuestion ? 'A short answer is enough here.' : entryMode === 'barcode' ? 'Barcode is open.' : entryMode === 'label' ? 'Label entry is open.' : 'Talk normally, I’ll handle the match.'}
+                {clarifyingQuestion
+                  ? 'A short answer is enough here.'
+                  : entryMode === 'barcode'
+                    ? 'Barcode is open.'
+                    : entryMode === 'label'
+                      ? 'Label entry is open.'
+                      : nutritionPreferences?.trim()
+                        ? `Talk normally, I’ll keep ${nutritionPreferences.trim()} in mind.`
+                        : 'Talk normally, I’ll handle the match.'}
               </p>
             </div>
 

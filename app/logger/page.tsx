@@ -1,5 +1,6 @@
 import { MealLoggerClient } from '@/components/meal-logger-client';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
+import { getDashboardData } from '@/lib/dashboard';
 import { getRecentMealsForQuickLog } from '@/lib/history';
 import { getFavoriteMeals, getLoggerDraft } from '@/lib/reusable-meals';
 
@@ -24,7 +25,7 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
   const mealId = pickFirst(params?.mealId);
   const reusableMealId = pickFirst(params?.favorite);
   const editMealId = pickFirst(params?.editMealId);
-  const [initialDraft, favoriteMeals, recentMeals, user] = await Promise.all([
+  const [initialDraft, favoriteMeals, recentMeals, user, dashboard] = await Promise.all([
     getLoggerDraft({
       mealId,
       reusableMealId,
@@ -33,6 +34,7 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
     getFavoriteMeals(),
     getRecentMealsForQuickLog(),
     getCurrentUserWithProfile(),
+    getDashboardData(),
   ]);
 
   return (
@@ -45,6 +47,11 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
       userName={user?.name ?? null}
       proteinGoal={user?.profile?.proteinGoal ?? null}
       dailyCalorieGoal={user?.profile?.dailyCalorieGoal ?? null}
+      todayProtein={dashboard?.totals.protein ?? 0}
+      todayCalories={dashboard?.totals.calories ?? 0}
+      remainingProtein={dashboard ? Math.max(0, Math.round(dashboard.macroGoals.protein - dashboard.totals.protein)) : null}
+      remainingCalories={dashboard?.remainingCalories ?? null}
+      todayMealCount={dashboard?.mealCount ?? 0}
     />
   );
 }

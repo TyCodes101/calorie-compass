@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildLoggerIntentReply, detectLoggerIntent } from '@/lib/logger-intent';
+import { buildLoggerIntentReply, buildLoggerGoalReply, detectLoggerCommand, detectLoggerIntent } from '@/lib/logger-intent';
 
 describe('logger intent detection', () => {
   it('detects greetings before nutrition parsing', () => {
@@ -19,7 +19,8 @@ describe('logger intent detection', () => {
   });
 
   it('detects non-food questions separately', () => {
-    expect(detectLoggerIntent('can you help me log lunch?')).toBe('question');
+    expect(detectLoggerIntent('can you help me log lunch?')).toBe('nutrition_question');
+    expect(detectLoggerIntent('how much protein do I have left?')).toBe('goal_question');
   });
 
   it('detects meal history questions and recommendation requests', () => {
@@ -33,5 +34,16 @@ describe('logger intent detection', () => {
 
   it('builds a conversational greeting reply', () => {
     expect(buildLoggerIntentReply('greeting', { userName: 'Tyler Cox' })).toBe("Hey Tyler, what'd you eat?");
+  });
+
+  it('detects repeat-last-meal commands and builds goal replies', () => {
+    expect(detectLoggerCommand('repeat my last meal', { hasRecentMeal: true })).toBe('repeat_last_meal');
+    expect(
+      buildLoggerGoalReply('how much protein do I have left?', {
+        proteinGoal: 195,
+        todayProtein: 120,
+        remainingProtein: 75,
+      }),
+    ).toMatch(/75g left/i);
   });
 });

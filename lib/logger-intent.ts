@@ -1,18 +1,31 @@
 import { analyzeMealText } from '@/lib/ai/analyze';
 
-export type LoggerIntent = 'greeting' | 'food_log' | 'correction' | 'question' | 'meal_history_question' | 'recommendation_request' | 'casual' | 'unknown';
-export type LoggerCommand = 'save' | 'start_over' | 'favorite' | 'remove_favorite' | 'none';
+export type LoggerIntent =
+  | 'greeting'
+  | 'food_log'
+  | 'correction'
+  | 'nutrition_question'
+  | 'goal_question'
+  | 'meal_history_question'
+  | 'recommendation_request'
+  | 'casual'
+  | 'unknown';
+export type LoggerCommand = 'save' | 'start_over' | 'favorite' | 'remove_favorite' | 'repeat_last_meal' | 'none';
 
 const greetingRegex = /^(hi|hello|hey|yo|sup|what'?s up|good morning|good afternoon|good evening|how are you|how'?s it going)(?:\b|[!.?,]|$)/i;
 const casualRegex = /^(ok|okay|kk|cool|nice|got it|sounds good|thanks|thank you|thx|lol|lmao|bet|hmm|huh|yep|yup)(?:\b|[!.?,]|$)/i;
 const questionRegex = /\?|^(what|how|can|could|would|should|do|does|is|are|am|will|did)\b/i;
+const goalQuestionRegex = /(how much (protein|calories?|calories) (do i have )?(left|remaining)|what('?s| is) left|how many calories do i have left|how much protein do i have left|am i on track|how far (off|away) am i|did i hit my goal)/i;
+const nutritionQuestionRegex = /(protein|calories?|calories|carbs?|fat|fiber|sugar|sodium|macros?|nutrition)/i;
 const mealHistoryRegex = /(what (did|have) i (eat|log)|what was (my )?(last|recent) meal|what did i have yesterday|what did i eat yesterday|what did i log yesterday|what did i eat today|what did i have today|last meal|recent meals?|yesterday'?s (dinner|lunch|breakfast|meals?))/i;
 const recommendationRegex = /(what should i eat|what should i have|what do you recommend|any ideas? for|meal ideas?|recommend (something|a meal)|suggest (something|a meal)|give me (a|some) (meal )?ideas?|help me pick)/i;
+const assistantQuestionRegex = /(help me log|can you help me|can you log|how does this work|what can you do)/i;
 const correctionRegex = /^(actually|sorry|correction|i meant|make that|make it|change that|change it to|change to|not exactly|update that|edit that|add\b|remove|without|no\b|it was|that was|swap|hold the|skip the)\b/i;
 const saveCommandRegex = /^(save( it| that| this)?|log( it| that| this)?|looks good|that'?s right|done|good to save|save now)\b/i;
-const startOverCommandRegex = /^(start over|reset|new meal|clear this|try again)\b/i;
+const startOverCommandRegex = /^(start over|reset|new meal|clear this|try again|cancel|never mind|delete (it|this|that)|clear (it|this|that))\b/i;
 const favoriteCommandRegex = /^(save favorite|favorite this|save as favorite)\b/i;
 const removeFavoriteCommandRegex = /^(remove favorite|unfavorite this|delete favorite)\b/i;
+const repeatLastMealCommandRegex = /^(repeat (my )?(last meal|last thing|last one)|same as (last time|usual)|load my last meal)\b/i;
 const foodSignalRegex = /\b(chipotle|starbucks|mcdonald'?s?|chick-?fil-?a|burger|fries|pizza|taco|burrito|sandwich|salad|bowl|rice|chicken|beef|steak|salmon|shrimp|pasta|noodles|egg|eggs|toast|bagel|oatmeal|yogurt|banana|apple|shake|smoothie|protein|latte|coffee|coke|soda|fairlife|quest|premier|bar|cookie|ice cream|frappuccino|mcdouble|mcchicken)\b/i;
 
 export function detectLoggerIntent(input: string, options?: { hasActiveMeal?: boolean }): LoggerIntent {
@@ -47,12 +60,24 @@ export function detectLoggerIntent(input: string, options?: { hasActiveMeal?: bo
     return 'recommendation_request';
   }
 
+  if (assistantQuestionRegex.test(normalized) && questionRegex.test(normalized)) {
+    return 'nutrition_question';
+  }
+
   if (casualRegex.test(normalized) && !hasFoodSignals) {
     return 'casual';
   }
 
+  if (goalQuestionRegex.test(normalized)) {
+    return 'goal_question';
+  }
+
+  if (questionRegex.test(normalized) && nutritionQuestionRegex.test(normalized)) {
+    return 'nutrition_question';
+  }
+
   if (questionRegex.test(normalized) && !analysis.brand && analysis.category === 'unknown' && !analysis.hasPortion && !analysis.hasExplicitCountableQuantity) {
-    return 'question';
+    return 'nutrition_question';
   }
 
   if (correctionRegex.test(normalized) && !hasFoodSignals) {
@@ -64,7 +89,7 @@ export function detectLoggerIntent(input: string, options?: { hasActiveMeal?: bo
   }
 
   if (questionRegex.test(normalized)) {
-    return 'question';
+    return 'nutrition_question';
   }
 
   if (correctionRegex.test(normalized)) {
@@ -85,10 +110,14 @@ export function buildLoggerIntentReply(intent: LoggerIntent, options?: { userNam
       return options?.hasActiveMeal
         ? "Got you. Tell me what changed and I'll update it."
         : "No problem. Send the corrected meal and I'll update the estimate.";
-    case 'question':
+    case 'nutrition_question':
       return options?.hasActiveMeal
         ? "I can help with that. If it's about this meal, ask it naturally and I'll keep the current estimate in place."
         : "I can help with that. Ask the question naturally, or send the meal and I'll log it.";
+    case 'goal_question':
+      return options?.hasActiveMeal
+        ? 'I can help with that. I’ll keep this meal in place and answer based on today so far.'
+        : 'I can help with that. I’ll answer based on today so far and keep it practical.';
     case 'meal_history_question':
       return options?.hasActiveMeal
         ? "I can check that. I’ll keep this meal in place while we look at your recent logging."
@@ -107,10 +136,18 @@ export function buildLoggerIntentReply(intent: LoggerIntent, options?: { userNam
   }
 }
 
-export function detectLoggerCommand(input: string, options?: { hasActiveMeal?: boolean; hasFavorite?: boolean }): LoggerCommand {
+export function detectLoggerCommand(input: string, options?: { hasActiveMeal?: boolean; hasFavorite?: boolean; hasRecentMeal?: boolean }): LoggerCommand {
   const normalized = input.trim().toLowerCase();
 
-  if (!normalized || !options?.hasActiveMeal) {
+  if (!normalized) {
+    return 'none';
+  }
+
+  if (options?.hasRecentMeal && repeatLastMealCommandRegex.test(normalized)) {
+    return 'repeat_last_meal';
+  }
+
+  if (!options?.hasActiveMeal) {
     return 'none';
   }
 
@@ -138,6 +175,10 @@ export function buildLoggerQuestionReply(
   options?: {
     proteinGoal?: number | null;
     dailyCalorieGoal?: number | null;
+    todayProtein?: number | null;
+    todayCalories?: number | null;
+    remainingProtein?: number | null;
+    remainingCalories?: number | null;
     currentMealProtein?: number | null;
     currentMealCalories?: number | null;
   },
@@ -161,4 +202,34 @@ export function buildLoggerQuestionReply(
   }
 
   return "I can help with nutrition questions, but I'm best when we keep it tied to your meal or your daily goals.";
+}
+
+export function buildLoggerGoalReply(
+  input: string,
+  options?: {
+    proteinGoal?: number | null;
+    dailyCalorieGoal?: number | null;
+    todayProtein?: number | null;
+    todayCalories?: number | null;
+    remainingProtein?: number | null;
+    remainingCalories?: number | null;
+    todayMealCount?: number | null;
+  },
+) {
+  const normalized = input.trim().toLowerCase();
+
+  if (/protein/.test(normalized) && options?.proteinGoal != null && options?.remainingProtein != null && options?.todayProtein != null) {
+    return `You’ve logged about ${Math.round(options.todayProtein)}g so far, so you have roughly ${Math.max(0, Math.round(options.remainingProtein))}g left to hit your ${Math.round(options.proteinGoal)}g goal.`;
+  }
+
+  if (/calor/.test(normalized) && options?.dailyCalorieGoal != null && options?.todayCalories != null && options?.remainingCalories != null) {
+    const remainingText = options.remainingCalories >= 0 ? `${Math.round(options.remainingCalories)} calories left` : `${Math.abs(Math.round(options.remainingCalories))} calories over target`;
+    return `You’ve logged about ${Math.round(options.todayCalories)} calories so far, so you’re ${remainingText} against your ${Math.round(options.dailyCalorieGoal)} calorie goal.`;
+  }
+
+  if (/on track|goal/.test(normalized) && options?.todayMealCount != null) {
+    return `So far you’ve logged ${options.todayMealCount} meal${options.todayMealCount === 1 ? '' : 's'} today. If you want, I can use that plus your goals to suggest the next meal.`;
+  }
+
+  return 'I can help with what you have left today. Ask about calories, protein, or whether you’re on track.';
 }
