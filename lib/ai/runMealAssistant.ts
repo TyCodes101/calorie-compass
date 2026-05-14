@@ -21,8 +21,8 @@ const startNewRegex = /^(?:start over|new meal|clear this|reset|fresh one|differ
 const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)?|done)\b/i;
 const quantityOnlyRegex = /^(?:actually|make that|update that to|it was|that was|no)\s+(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const directQuantityRegex = /^(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
-const casualRegex = /^(?:hi|hello|hey|yo|sup|what'?s up|thanks|thank you|cool|okay|ok|nice|lol|how are you)\b/i;
-const offTopicRegex = /\b(?:weather|movie|music|homework|code|browser|news|sports)\b/i;
+const casualRegex = /^(?:hi|hello|hey|yo|sup|what(?:'|’)??s up|thanks|thank you|cool|okay|ok|nice|lol|how are you|how(?:'|’)??s your day)\b/i;
+const offTopicRegex = /\b(?:weather|movie|music|homework|code|browser|news|sports|joke)\b/i;
 
 type MealAssistantRunInput = {
   message: string;
@@ -219,7 +219,8 @@ function buildReplyFromItems(args: {
   }
 
   if (intent === 'add_to_current_meal') {
-    return `Added ${mainItem.food_name}${resolvedItems.length > 1 ? ' to this meal' : ''}. ${sourceLabel}.`;
+    const addedItem = resolvedItems.at(-1) ?? mainItem;
+    return `Added ${addedItem.food_name}${resolvedItems.length > 1 ? ' to this meal' : ''}. ${getSourceLabel(addedItem)}.`;
   }
 
   if (intent === 'new_food_item' && mealAlreadySaved) {
