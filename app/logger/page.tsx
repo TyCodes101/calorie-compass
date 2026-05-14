@@ -48,8 +48,12 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
       proteinGoal={user?.profile?.proteinGoal ?? null}
       dailyCalorieGoal={user?.profile?.dailyCalorieGoal ?? null}
       todayProtein={dashboard?.totals.protein ?? 0}
+      todayCarbs={dashboard?.totals.carbs ?? 0}
+      todayFat={dashboard?.totals.fat ?? 0}
       todayCalories={dashboard?.totals.calories ?? 0}
       remainingProtein={dashboard ? Math.max(0, Math.round(dashboard.macroGoals.protein - dashboard.totals.protein)) : null}
+      remainingCarbs={dashboard ? Math.max(0, Math.round(dashboard.macroGoals.carbs - dashboard.totals.carbs)) : null}
+      remainingFat={dashboard ? Math.max(0, Math.round(dashboard.macroGoals.fat - dashboard.totals.fat)) : null}
       remainingCalories={dashboard?.remainingCalories ?? null}
       todayMealCount={dashboard?.mealCount ?? 0}
     />

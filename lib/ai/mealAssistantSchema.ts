@@ -97,8 +97,12 @@ export const mealAssistantContextSchema = z.object({
   proteinGoal: z.number().nullable().optional(),
   dailyCalorieGoal: z.number().nullable().optional(),
   todayProtein: z.number().nullable().optional(),
+  todayCarbs: z.number().nullable().optional(),
+  todayFat: z.number().nullable().optional(),
   todayCalories: z.number().nullable().optional(),
   remainingProtein: z.number().nullable().optional(),
+  remainingCarbs: z.number().nullable().optional(),
+  remainingFat: z.number().nullable().optional(),
   remainingCalories: z.number().nullable().optional(),
   todayMealCount: z.number().nullable().optional(),
 });

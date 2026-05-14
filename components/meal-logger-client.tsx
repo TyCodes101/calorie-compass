@@ -60,8 +60,12 @@ type QuickLogProps = {
   proteinGoal?: number | null;
   dailyCalorieGoal?: number | null;
   todayProtein?: number | null;
+  todayCarbs?: number | null;
+  todayFat?: number | null;
   todayCalories?: number | null;
   remainingProtein?: number | null;
+  remainingCarbs?: number | null;
+  remainingFat?: number | null;
   remainingCalories?: number | null;
   todayMealCount?: number | null;
 };
@@ -564,8 +568,12 @@ export function MealLoggerClient({
   proteinGoal = null,
   dailyCalorieGoal = null,
   todayProtein = null,
+  todayCarbs = null,
+  todayFat = null,
   todayCalories = null,
   remainingProtein = null,
+  remainingCarbs = null,
+  remainingFat = null,
   remainingCalories = null,
   todayMealCount = null,
 }: QuickLogProps) {
@@ -774,8 +782,12 @@ export function MealLoggerClient({
       proteinGoal,
       dailyCalorieGoal,
       todayProtein,
+      todayCarbs,
+      todayFat,
       todayCalories,
       remainingProtein,
+      remainingCarbs,
+      remainingFat,
       remainingCalories,
       todayMealCount,
     };

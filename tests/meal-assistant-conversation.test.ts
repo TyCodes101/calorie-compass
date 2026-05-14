@@ -262,8 +262,12 @@ function buildContext(overrides?: Partial<MealAssistantContext>): MealAssistantC
     proteinGoal: 180,
     dailyCalorieGoal: 2400,
     todayProtein: 120,
+    todayCarbs: 180,
+    todayFat: 55,
     todayCalories: 1500,
     remainingProtein: 60,
+    remainingCarbs: 60,
+    remainingFat: 25,
     remainingCalories: 900,
     todayMealCount: 2,
     ...overrides,
@@ -569,6 +573,19 @@ describe('meal assistant conversational coverage', () => {
     expect(response.next_state.activeMode).toBe('macro_discussion');
   });
 
+  it('answers carbs remaining after a protein-left question thread', async () => {
+    const responses = await runConversation(['how much protein do I have left?', 'what about carbs?'], {
+      context: buildContext({
+        remainingProtein: 58,
+        remainingCarbs: 96,
+      }),
+    });
+
+    expect(responses[0]?.assistant_reply).toMatch(/58g of protein left/i);
+    expect(responses[1]?.assistant_reply).toMatch(/96g of carbs left/i);
+    expect(responses[1]?.assistant_reply).not.toMatch(/^let me check that\.?$/i);
+  });
+
   it('gives actual recommendation help for sweet-but-healthier prompts', async () => {
     const [response] = await runConversation(['something sweet but healthier'], {
       context: buildContext({
@@ -605,6 +622,34 @@ describe('meal assistant conversational coverage', () => {
     expect(response.intent).toBe('quantity_change');
     expect(response.meal.items[0]?.quantity).toBe(4);
     expect(response.assistant_reply).toMatch(/doubled/i);
+  });
+
+  it('updates the active item for absolute quantity edits like make it 4', async () => {
+    const [response] = await runConversation(['actually make it 4'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 3, unit: 'egg', calories: 210, protein: 18, fat: 15 })],
+        currentMealText: '3 Eggs',
+      }),
+    });
+
+    expect(response.intent).toBe('quantity_change');
+    expect(response.meal.items[0]?.quantity).toBe(4);
+    expect(response.assistant_reply).toMatch(/4 eggs?/i);
+  });
+
+  it('does not let healthy-treat recommendation prompts get hijacked by meal-descriptor logic', async () => {
+    const [response] = await runConversation(['what should I snack on as a healthy treat?'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 3, unit: 'egg', calories: 210, protein: 18, fat: 15 })],
+        currentMealText: '3 Eggs',
+      }),
+      context: buildContext({
+        remainingProtein: 42,
+      }),
+    });
+
+    expect(response.assistant_reply).toMatch(/shake|greek yogurt|cottage cheese|fruit|protein/i);
+    expect(response.assistant_reply).not.toMatch(/balanced overall/i);
   });
 
   it('handles casual and descriptive follow-ups without dropping the active meal', async () => {

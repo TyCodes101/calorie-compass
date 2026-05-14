@@ -22,6 +22,7 @@ const continuationRegex = /^(and|also|plus|with)\b/i;
 const removeRegex = /^(?:remove|without|no|hold the|skip the)\s+(.+)$/i;
 const startNewRegex = /^(?:start over|new meal|clear this|reset|fresh one|different meal)\b/i;
 const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)?|done)\b/i;
+const explicitQuantityUpdateRegex = /^(?:actually\s+)?(?:make|change|update)\s+(?:it|that|this)(?:\s+to)?\s+(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const editRegex = /^(?:edit(?: it| that| this)?|change(?: it| that| this)?|tweak(?: it| that| this)?|adjust(?: it| that| this)?)\b/i;
 const reviewRegex = /\b(?:review (?:it|this|that)|show me (?:the )?(?:meal|review)|what do i have so far|show me what i have)\b/i;
 const quantityOnlyRegex = /^(?:actually|make that|update that to|it was|that was|no)\s+(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
@@ -56,6 +57,7 @@ const appreciationRegex = /^(?:thanks|thank you|thx|appreciate it)[!. ]*$/i;
 const sizeUpRegex = /\b(?:huge|massive|giant|really big|extra big|super big)\b/i;
 const sizeDownRegex = /\b(?:small|tiny|light|not that much|pretty small)\b/i;
 const healthyCueRegex = /\b(?:healthy|balanced|pretty healthy|pretty balanced|not too bad|clean)\b/i;
+const mealDescriptorReferenceRegex = /\b(?:that|this|it|meal|burger|bowl|shake|sandwich|breakfast|lunch|dinner|snack)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -443,11 +445,16 @@ function validateAssistantReply(args: {
   context: MealAssistantContext;
 }) {
   const macroReply = buildCurrentMealMacroReply(args.message, args.state);
+  const nutritionReply = buildNutritionGuidanceReply({ message: args.message, state: args.state, context: args.context }, args.context);
   const recommendationReply = buildRecommendationReply({ message: args.message, state: args.state, context: args.context }, args.context);
   const comparisonReply = buildComparisonReply({ message: args.message, state: args.state, context: args.context });
 
   if ((args.intent === 'macro_question' || followUpMacroRegex.test(args.message)) && macroReply) {
     return macroReply;
+  }
+
+  if ((args.intent === 'macro_question' || args.intent === 'nutrition_guidance' || followUpMacroRegex.test(args.message)) && nutritionReply) {
+    return nutritionReply;
   }
 
   if ((args.intent === 'recommendation_request' || recommendationRegex.test(args.message)) && recommendationReply) {
@@ -777,7 +784,7 @@ function buildMealDescriptorReply(input: MealAssistantRunInput, context: MealAss
     return null;
   }
 
-  if (sizeUpRegex.test(normalized) || sizeDownRegex.test(normalized)) {
+  if ((sizeUpRegex.test(normalized) || sizeDownRegex.test(normalized)) && mealDescriptorReferenceRegex.test(normalized)) {
     const factor = sizeUpRegex.test(normalized) ? 1.2 : 0.85;
     const nextItems = scaleMealAtIndex(currentItems, targetIndex, factor);
     const nextState: MealAssistantState = {
@@ -810,7 +817,7 @@ function buildMealDescriptorReply(input: MealAssistantRunInput, context: MealAss
     });
   }
 
-  if (healthyCueRegex.test(normalized)) {
+  if (healthyCueRegex.test(normalized) && mealDescriptorReferenceRegex.test(normalized)) {
     const totals = sumTotals(currentItems);
     const proteinLeft = getRemainingProtein(context);
     const reply = totals.protein >= 25
@@ -853,6 +860,34 @@ async function buildAdaptiveMealMutationReply(
 
   if (!targetItem) {
     return null;
+  }
+
+  const explicitQuantityMatch = normalized.match(explicitQuantityUpdateRegex);
+  if (explicitQuantityMatch) {
+    const nextQuantity = parseCount(explicitQuantityMatch[1] ?? '');
+    if (nextQuantity > 0) {
+      const nextItems = scaleMealAtIndex(currentItems, targetIndex >= 0 ? targetIndex : currentItems.length - 1, nextQuantity / Math.max(targetItem.quantity, 1));
+      const nextState: MealAssistantState = {
+        ...input.state,
+        currentMealItems: nextItems,
+        currentMealText: buildMealTextFromItems(nextItems),
+        confidenceScore: getConfidenceScore(nextItems),
+        saved: false,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      };
+
+      return buildDirectResponse({
+        intent: 'quantity_change',
+        assistantReply: choosePhrase(`${normalized}:${targetItem.food_name}:${nextQuantity}`, [
+          `Done, I changed that to ${nextQuantity} ${targetItem.food_name}.`,
+          `Okay, I updated that to ${nextQuantity} ${targetItem.food_name}.`,
+          `Got you, that’s ${nextQuantity} ${targetItem.food_name} now.`,
+        ]),
+        nextState,
+        message: input.message,
+      });
+    }
   }
 
   if (doubleThatRegex.test(normalized)) {
@@ -996,6 +1031,32 @@ function getRemainingCalories(context: MealAssistantContext) {
   return null;
 }
 
+function getRemainingCarbs(context: MealAssistantContext) {
+  if (context.remainingCarbs !== null && context.remainingCarbs !== undefined) {
+    return Math.max(0, Math.round(context.remainingCarbs));
+  }
+
+  if (context.dailyCalorieGoal !== null && context.dailyCalorieGoal !== undefined && context.todayCarbs !== null && context.todayCarbs !== undefined) {
+    const carbGoal = Math.round((context.dailyCalorieGoal * 0.4) / 4);
+    return Math.max(0, Math.round(carbGoal - context.todayCarbs));
+  }
+
+  return null;
+}
+
+function getRemainingFat(context: MealAssistantContext) {
+  if (context.remainingFat !== null && context.remainingFat !== undefined) {
+    return Math.max(0, Math.round(context.remainingFat));
+  }
+
+  if (context.dailyCalorieGoal !== null && context.dailyCalorieGoal !== undefined && context.todayFat !== null && context.todayFat !== undefined) {
+    const fatGoal = Math.round((context.dailyCalorieGoal * 0.3) / 9);
+    return Math.max(0, Math.round(fatGoal - context.todayFat));
+  }
+
+  return null;
+}
+
 function findSuggestionCandidate(context: MealAssistantContext, options?: { mealType?: MealAssistantState['mealType'] | null; maxCalories?: number | null; minProtein?: number }) {
   const minProtein = options?.minProtein ?? 20;
   const entries = getMemoryEntries(context).filter((entry) => entry.items.length > 0);
@@ -1025,6 +1086,8 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
   const normalized = input.message.trim().toLowerCase();
   const currentTotals = sumTotals(input.state.currentMealItems);
   const remainingProtein = getRemainingProtein(context);
+  const remainingCarbs = getRemainingCarbs(context);
+  const remainingFat = getRemainingFat(context);
   const remainingCalories = getRemainingCalories(context);
 
   if (currentMealProteinRegex.test(normalized) && input.state.currentMealItems.length) {
@@ -1037,6 +1100,28 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
 
   if (proteinLeftRegex.test(normalized)) {
     return remainingProtein !== null ? `You've got about ${remainingProtein}g of protein left today.` : 'I can estimate that once your daily goal is set.';
+  }
+
+  if (followUpMacroRegex.test(normalized) || /\bcarbs? left\b/i.test(normalized)) {
+    if (carbsQuestionRegex.test(normalized) && remainingCarbs !== null) {
+      return `You've got about ${remainingCarbs}g of carbs left today.`;
+    }
+
+    if (fatQuestionRegex.test(normalized) && remainingFat !== null) {
+      return `You've got about ${remainingFat}g of fat left today.`;
+    }
+
+    if (proteinQuestionRegex.test(normalized) && remainingProtein !== null) {
+      return `You've got about ${remainingProtein}g of protein left today.`;
+    }
+
+    if (caloriesQuestionRegex.test(normalized) && remainingCalories !== null) {
+      return remainingCalories >= 0
+        ? `You've got about ${remainingCalories} calories left today.`
+        : `You're about ${Math.abs(remainingCalories)} calories over right now.`;
+    }
+
+    return 'I can answer that once your daily goals are set.';
   }
 
   if (calorieLeftRegex.test(normalized)) {
