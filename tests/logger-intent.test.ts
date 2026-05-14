@@ -18,6 +18,6 @@ describe('logger intent detection', () => {
   });
 
   it('builds a conversational greeting reply', () => {
-    expect(buildLoggerIntentReply('greeting', { userName: 'Tyler Cox' })).toBe("Hey Tyler, I'm ready when you are. Tell me what you ate and I'll estimate it.");
+    expect(buildLoggerIntentReply('greeting', { userName: 'Tyler Cox' })).toBe("Hey Tyler, what'd you eat?");
   });
 });

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import {
+  ArrowLeft,
   BookmarkPlus,
   CheckCircle2,
   ChevronDown,
@@ -13,10 +14,9 @@ import {
   Plus,
   RotateCcw,
   SendHorizontal,
-  ShieldCheck,
-  Sparkles,
   Star,
   TriangleAlert,
+  UserRound,
   WifiOff,
   X,
 } from 'lucide-react';
@@ -108,14 +108,6 @@ function sumTotals(items: ParsedFoodItem[]) {
   );
 }
 
-function shouldTrackFieldFocus(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
-}
-
 function cleanPromptForReply(text: string) {
   return text
     .trim()
@@ -158,11 +150,12 @@ function isYesterday(dateString: string) {
   return date.getUTCFullYear() === yesterday.getUTCFullYear() && date.getUTCMonth() === yesterday.getUTCMonth() && date.getUTCDate() === yesterday.getUTCDate();
 }
 
-function buildAssistantEstimateCopy(prompt: string, totalCalories: number, fullyTrusted: boolean) {
+function buildAssistantEstimateCopy(prompt: string, totalCalories: number, totalProtein: number, fullyTrusted: boolean) {
   const normalizedPrompt = shorten(cleanPromptForReply(prompt) || 'that meal');
-  const lead = fullyTrusted ? 'Matched' : 'Estimated';
+  const lead = fullyTrusted ? 'That looks like' : 'That sounds like';
+  const proteinNote = totalProtein >= 20 ? ` with roughly ${Math.round(totalProtein)}g of protein` : '';
 
-  return `${lead} as ${normalizedPrompt}. About ${Math.round(totalCalories)} calories. Adjust anything before saving.`;
+  return `${lead} ${normalizedPrompt}. I'd estimate about ${Math.round(totalCalories)} calories${proteinNote}. You can tweak anything before I save it.`;
 }
 
 function parseNonNegativeNumber(value: string) {
@@ -231,14 +224,6 @@ function getDefaultMealType() {
   return 'snack' as const;
 }
 
-function NoticeBanner({ notice }: { notice: Notice }) {
-  return (
-    <div className={`rounded-[24px] border px-4 py-3 text-sm ${notice.tone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-sky-200 bg-sky-50 text-sky-800'}`}>
-      {notice.text}
-    </div>
-  );
-}
-
 function ChatBubble({
   role,
   children,
@@ -274,8 +259,8 @@ function TypingBubble() {
       <div className="flex items-center gap-3 text-sm text-slate-600">
         <LoaderCircle className="h-4 w-4 animate-spin text-teal-600" />
         <div>
-          <p className="font-medium text-slate-900">Checking trusted matches first</p>
-          <p className="mt-0.5 text-xs text-slate-500">Pulling the best estimate before you save anything.</p>
+          <p className="font-medium text-slate-900">Give me a second</p>
+          <p className="mt-0.5 text-xs text-slate-500">I’m checking the closest match.</p>
         </div>
       </div>
     </ChatBubble>
@@ -296,24 +281,17 @@ function ConversationQuickStarts({
   }
 
   return (
-    <ChatBubble role="assistant">
-      <div className="space-y-4">
-        <div>
-          <p className="text-sm font-semibold text-slate-950">Want a faster start?</p>
-          <p className="mt-1 text-sm leading-6 text-slate-600">Use something familiar and let the assistant tighten it up instead of starting from scratch.</p>
-        </div>
+    <ChatBubble role="assistant" compact>
+      <div className="space-y-3">
+        <p className="text-sm text-slate-700">Want a faster start? Pick something familiar.</p>
 
         {quickYesterdayMeals.length ? (
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Repeat yesterday</p>
-            <div className="grid gap-2">
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Yesterday</p>
+            <div className="flex flex-wrap gap-2">
               {quickYesterdayMeals.slice(0, 2).map((meal) => (
-                <Link key={`yesterday-${meal.id}`} href={`/logger?mealId=${meal.id}`} className="chat-choice-card">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-950">{meal.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">{meal.totalCalories} cal, {meal.mealType}</p>
-                  </div>
-                  <span className="chat-choice-pill">Re-log</span>
+                <Link key={`yesterday-${meal.id}`} href={`/logger?mealId=${meal.id}`} className="chat-quick-chip">
+                  {meal.title}
                 </Link>
               ))}
             </div>
@@ -321,16 +299,12 @@ function ConversationQuickStarts({
         ) : null}
 
         {quickFavorites.length ? (
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Favorites</p>
-            <div className="grid gap-2 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Favorites</p>
+            <div className="flex flex-wrap gap-2">
               {quickFavorites.map((favorite) => (
-                <Link key={favorite.id} href={`/logger?favorite=${favorite.id}`} className="chat-choice-card">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-950">{favorite.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">{favorite.totalCalories} cal, {favorite.itemCount} items</p>
-                  </div>
-                  <span className="chat-choice-pill chat-choice-pill-accent">Favorite</span>
+                <Link key={favorite.id} href={`/logger?favorite=${favorite.id}`} className="chat-quick-chip chat-quick-chip-accent">
+                  {favorite.title}
                 </Link>
               ))}
             </div>
@@ -338,16 +312,12 @@ function ConversationQuickStarts({
         ) : null}
 
         {quickRecentMeals.length ? (
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Recent meals</p>
-            <div className="grid gap-2 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Recent</p>
+            <div className="flex flex-wrap gap-2">
               {quickRecentMeals.map((meal) => (
-                <Link key={meal.id} href={`/logger?mealId=${meal.id}`} className="chat-choice-card">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-950">{meal.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">{meal.totalCalories} cal, {meal.mealType}</p>
-                  </div>
-                  <span className="chat-choice-pill">Use again</span>
+                <Link key={meal.id} href={`/logger?mealId=${meal.id}`} className="chat-quick-chip">
+                  {meal.title}
                 </Link>
               ))}
             </div>
@@ -388,7 +358,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [sourceReusableMealId, setSourceReusableMealId] = useState<string | null>(initialDraft?.sourceReusableMealId ?? null);
   const [editingMealId, setEditingMealId] = useState<string | null>(initialDraft?.editingMealId ?? null);
-  const [isFieldFocused, setIsFieldFocused] = useState(false);
+  const [utilityMenuOpen, setUtilityMenuOpen] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [hasSavedCurrentDraft, setHasSavedCurrentDraft] = useState(false);
   const [lastParseOptions, setLastParseOptions] = useState<ParseRequestOptions | null>(null);
@@ -410,9 +380,10 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
   const canSaveFavorite = items.length > 0 && !favoriteSaving && !(sourceReusableMealId && favoriteState === 'saved') && isOnline;
   const canSend = composerText.trim().length > 0 && !loading && isOnline;
   const canLookupBarcode = barcodeInput.replace(/\D/g, '').length >= 8 && !loading && isOnline;
+  const firstName = userName?.trim()?.split(/\s+/)[0] ?? null;
   const conversationPrompt = displayUserMessage || activePrompt || initialDraft?.rawText || '';
   const assistantEstimateCopy = items.length
-    ? buildAssistantEstimateCopy(conversationPrompt, totals.calories, trustSummary.estimatedCount === 0)
+    ? buildAssistantEstimateCopy(conversationPrompt, totals.calories, totals.protein, trustSummary.estimatedCount === 0)
     : null;
 
   useEffect(() => {
@@ -460,13 +431,14 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     setSourceReusableMealId(null);
     setFavoriteState('idle');
     setEditingMealId(null);
+    setUtilityMenuOpen(false);
     setHasSavedCurrentDraft(false);
     setLastParseOptions(null);
   }
 
   function startAnotherMeal() {
     resetDraft();
-    setNotice({ tone: 'info', text: 'Ready for the next one. Send a natural message and I’ll estimate it first.' });
+    setNotice({ tone: 'info', text: 'Ready for the next one. What did you have?' });
   }
 
   function addManualItem() {
@@ -474,7 +446,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     markDraftChanged();
     setItems((current) => [...current, buildManualItem()]);
     setExpandedIndex(nextIndex);
-    setNotice({ tone: 'info', text: 'Custom item added. Fill in the nutrition that looks right, then save.' });
+    setNotice({ tone: 'info', text: 'Added a custom item. Fill in what looks right and I’ll keep the rest in place.' });
   }
 
   async function parseMeal(options?: ParseRequestOptions) {
@@ -504,6 +476,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     setSaveMessage(null);
     setLastParseOptions(options ?? null);
     setAssistantChatReply(null);
+    setUtilityMenuOpen(false);
 
     const fullText = isClarification ? `${prompt}\nAdditional detail: ${nextInput}` : prompt;
 
@@ -565,7 +538,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
       setNutritionLabelDraft(defaultNutritionLabelDraft());
       setComposerText('');
       setLastClarificationReply('');
-      setNotice({ tone: 'info', text: 'Your estimate is ready. Edit anything inline before saving if it looks off.' });
+      setNotice({ tone: 'info', text: 'I put together an estimate. Tweak anything that looks off.' });
     } catch {
       setError('We could not estimate that meal right now. Please try again.');
       setErrorAction('parse');
@@ -588,10 +561,12 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
 
     clearFeedback();
     setEntryMode(mode);
+    setUtilityMenuOpen(false);
   }
 
   function closeEntryMode() {
     setEntryMode('chat');
+    setUtilityMenuOpen(false);
   }
 
   async function lookupBarcode() {
@@ -665,8 +640,8 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
 
       setSaving(false);
       setHasSavedCurrentDraft(true);
-      setSaveMessage(editingMealId ? 'Saved your changes. The updated meal is now reflected across the app.' : 'Saved to today. You can log another meal whenever you are ready.');
-      setNotice({ tone: 'success', text: editingMealId ? 'Meal updated.' : 'Meal saved.' });
+      setSaveMessage(editingMealId ? 'Updated that meal.' : 'Saved to today. Ready for another one whenever you are.');
+      setNotice({ tone: 'success', text: editingMealId ? 'Looks good, I updated it.' : 'Saved.' });
       router.refresh();
     } catch {
       setSaving(false);
@@ -716,7 +691,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
       setFavoriteSaving(false);
       setNotice({
         tone: 'success',
-        text: sourceReusableMealId ? 'Favorite updated for future quick logs.' : 'Saved to favorites for faster repeat logging.',
+        text: sourceReusableMealId ? 'Favorite updated.' : 'Saved as a favorite.',
       });
       router.refresh();
     } catch {
@@ -759,7 +734,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
       setSourceReusableMealId(null);
       setFavoriteState('idle');
       setFavoriteSaving(false);
-      setNotice({ tone: 'success', text: 'Favorite removed. The meal itself is still ready to save normally.' });
+      setNotice({ tone: 'success', text: 'Favorite removed. The meal is still here if you want to save it.' });
       router.refresh();
     } catch {
       setFavoriteSaving(false);
@@ -847,70 +822,63 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
   }
 
   return (
-    <div
-      className="app-page-chat app-screen-wide flex min-w-0 flex-col gap-6 py-6"
-      onFocusCapture={(event) => {
-        if (shouldTrackFieldFocus(event.target)) {
-          setIsFieldFocused(true);
-        }
-      }}
-      onBlurCapture={() => {
-        requestAnimationFrame(() => {
-          if (!shouldTrackFieldFocus(document.activeElement)) {
-            setIsFieldFocused(false);
-          }
-        });
-      }}
-    >
-      {!isOnline ? (
-        <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <div className="flex items-start gap-3">
-            <WifiOff className="mt-0.5 h-4 w-4" />
-            <div>
-              <p className="font-medium text-slate-900">You are offline right now.</p>
-              <p className="mt-1 text-sm leading-6 text-slate-700">You can still review recent meals and edit values, but estimating and saving need a connection.</p>
-            </div>
-          </div>
+    <div className="logger-assistant-screen app-page-chat flex min-w-0 flex-col py-3">
+      <div className="logger-assistant-topbar app-screen">
+        <Link href="/" aria-label="Back to dashboard" className="logger-topbar-button">
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <div className="min-w-0 text-center">
+          <p className="logger-topbar-title">Log meal</p>
+          <p className="logger-topbar-subtitle">AI nutrition assistant</p>
         </div>
-      ) : null}
-      {notice ? <NoticeBanner notice={notice} /> : null}
+        <Link href="/profile" aria-label="Open profile" className="logger-topbar-button">
+          <UserRound className="h-5 w-5" />
+        </Link>
+      </div>
 
-      <section className="app-card min-w-0 overflow-hidden rounded-[32px] p-4 md:p-6">
-        <div className="flex min-w-0 flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0">
-            <p className="app-section-label">AI meal assistant</p>
-            <h1 className="mt-2 text-[1.85rem] font-semibold leading-tight text-slate-950 sm:text-3xl">Talk through your meals naturally</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Calorie Compass now behaves more like a nutrition assistant than a form. Send a natural message, get an estimate first, and edit only if something looks off.
-            </p>
-          </div>
-          <div className="rounded-[22px] border border-slate-200 bg-slate-50/75 px-4 py-3 text-sm text-slate-600 shadow-sm md:max-w-sm">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-4 w-4 text-teal-600" />
-              <div>
-                <p className="font-medium text-slate-900">Trust stays visible</p>
-                <p className="mt-1 leading-6">Trusted sources come first. Estimates stay labeled, and you can correct anything before it saves.</p>
+      <section className="logger-assistant-thread-shell app-screen">
+        <div className="chat-thread">
+          {!isOnline ? (
+            <ChatBubble role="assistant" tone="warning" compact>
+              <div className="flex items-start gap-3">
+                <WifiOff className="mt-0.5 h-4 w-4" />
+                <div>
+                  <p className="text-sm font-medium text-slate-900">You’re offline right now.</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">You can still review meals, but estimating and saving need a connection.</p>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
+            </ChatBubble>
+          ) : null}
 
-        <div className="chat-thread mt-5 space-y-4">
-          <ChatBubble role="assistant">
-            <div className="space-y-2 text-sm leading-6 text-slate-700">
-              <p className="font-semibold text-slate-950">{editingMealId ? 'I loaded your saved meal.' : sourceReusableMealId ? 'I loaded that favorite.' : 'Tell me what you ate.'}</p>
-              <p>
-                {editingMealId
-                  ? 'I’ll keep the structure clean, and you can update the saved version once the nutrition looks right.'
-                  : sourceReusableMealId
-                    ? 'I can log it as-is or you can tweak the nutrition inline before you save.'
-                    : 'I’ll estimate first, keep the source confidence clear, and only ask one follow-up if the meal is truly too vague.'}
-              </p>
-              {nutritionPreferences?.trim() ? (
-                <p className="text-xs leading-5 text-slate-500">I’ll keep your saved preferences in mind: {nutritionPreferences.trim()}</p>
-              ) : null}
-            </div>
-          </ChatBubble>
+          {notice ? (
+            <ChatBubble role="assistant" compact tone={notice.tone === 'success' ? 'success' : 'default'}>
+              <p className="text-sm leading-6 text-slate-700">{notice.text}</p>
+            </ChatBubble>
+          ) : null}
+
+          {!conversationPrompt && !items.length ? (
+            <ChatBubble role="assistant" compact>
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-slate-950">
+                  {editingMealId
+                    ? 'I pulled up that saved meal.'
+                    : sourceReusableMealId
+                      ? 'I pulled up that favorite.'
+                      : `Hey${firstName ? ` ${firstName}` : ''}, what'd you eat?`}
+                </p>
+                <p className="text-sm leading-6 text-slate-700">
+                  {editingMealId
+                    ? 'Make any changes you want, then save it again.'
+                    : sourceReusableMealId
+                      ? 'You can log it as-is or tweak it first.'
+                      : 'Send it naturally. I’ll estimate first and only ask one quick follow-up if I really need it.'}
+                </p>
+                {nutritionPreferences?.trim() ? (
+                  <p className="text-xs leading-5 text-slate-500">I’ll keep your preferences in mind: {nutritionPreferences.trim()}</p>
+                ) : null}
+              </div>
+            </ChatBubble>
+          ) : null}
 
           {!conversationPrompt && !items.length ? (
             <ConversationQuickStarts
@@ -920,60 +888,12 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
             />
           ) : null}
 
-          {!conversationPrompt && !items.length ? (
-            <ChatBubble role="assistant" compact>
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-slate-900">Try one of these to get moving fast:</p>
-                <div className="flex flex-wrap gap-2">
-                  {promptExamples.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      onClick={() => setComposerText(example)}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-teal-200 hover:text-teal-700 active:scale-[0.99]"
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </ChatBubble>
-          ) : null}
-
-          {!conversationPrompt && !items.length ? (
-            <ChatBubble role="assistant">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-950">Logging something packaged?</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Use a barcode or the nutrition label when you want a product-first estimate instead of a generic food guess.</p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openEntryMode('barcode')}
-                    className={clsx('chat-tool-button', entryMode === 'barcode' && 'chat-tool-button-active')}
-                  >
-                    Enter barcode
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openEntryMode('label')}
-                    className={clsx('chat-tool-button', entryMode === 'label' && 'chat-tool-button-active')}
-                  >
-                    Type nutrition label
-                  </button>
-                </div>
-              </div>
-            </ChatBubble>
-          ) : null}
-
           {!conversationPrompt && !items.length && entryMode === 'barcode' ? (
-            <ChatBubble role="assistant">
-              <div className="chat-inline-tool-panel space-y-4">
+            <ChatBubble role="assistant" compact>
+              <div className="chat-inline-tool-panel space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-950">Barcode lookup</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Type the digits under the barcode. I’ll try the packaged-food match before falling back to a broader estimate.</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">Type the digits under the barcode and I’ll check the packaged-food match first.</p>
                 </div>
 
                 <label className="space-y-2 text-xs text-slate-500">
@@ -996,7 +916,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
 
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={lookupBarcode} disabled={!canLookupBarcode} className="app-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70">
-                    {loading ? 'Looking up…' : 'Look up barcode'}
+                    {loading ? 'Looking up…' : 'Use barcode'}
                   </button>
                   <button type="button" onClick={closeEntryMode} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
                     Cancel
@@ -1007,16 +927,16 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
           ) : null}
 
           {!conversationPrompt && !items.length && entryMode === 'label' ? (
-            <ChatBubble role="assistant">
-              <div className="chat-inline-tool-panel space-y-4">
+            <ChatBubble role="assistant" compact>
+              <div className="chat-inline-tool-panel space-y-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-950">Nutrition label entry</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Great for protein bars, shakes, frozen meals, and anything with a clear label. Calories are required, the rest are optional.</p>
+                  <p className="text-sm font-semibold text-slate-950">Nutrition label</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">Good for shakes, bars, and packaged meals. Calories are required, the rest are optional.</p>
                 </div>
 
                 <div className="chat-inline-tool-grid">
                   <label className="space-y-2 text-xs text-slate-500 md:col-span-2">
-                    <span>Product name, optional</span>
+                    <span>Product name</span>
                     <input
                       aria-label="Product name"
                       value={nutritionLabelDraft.name}
@@ -1069,7 +989,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
 
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={useNutritionLabel} disabled={loading || !isOnline} className="app-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70">
-                    {loading ? 'Building item…' : 'Use nutrition label'}
+                    {loading ? 'Building item…' : 'Use label'}
                   </button>
                   <button type="button" onClick={closeEntryMode} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
                     Cancel
@@ -1094,7 +1014,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
           {clarifyingQuestion ? (
             <ChatBubble role="assistant" compact>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                   <TriangleAlert className="h-3.5 w-3.5 text-teal-600" />
                   One quick follow-up
                 </div>
@@ -1112,7 +1032,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
           {loading ? <TypingBubble /> : null}
 
           {error ? (
-            <ChatBubble role="assistant" tone="warning">
+            <ChatBubble role="assistant" tone="warning" compact>
               <div className="space-y-3">
                 <p className="text-sm leading-6 text-slate-700">{error}</p>
                 {errorAction ? (
@@ -1131,42 +1051,122 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
 
           {items.length ? (
             <ChatBubble role="assistant">
-              <div className="space-y-5">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-medium text-teal-700">
-                    <Sparkles className="h-4 w-4" />
-                    Assistant estimate ready
+              <div className="space-y-4">
+                <p className="text-sm leading-6 text-slate-700">{assistantEstimateCopy}</p>
+
+                <div className="logger-review-panel space-y-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="logger-review-stat">
+                      <p className="logger-review-stat-label">Calories</p>
+                      <p className="logger-review-stat-value">{Math.round(totals.calories)}</p>
+                    </div>
+                    <div className="logger-review-stat">
+                      <p className="logger-review-stat-label">Protein</p>
+                      <p className="logger-review-stat-value">{Math.round(totals.protein)}g</p>
+                    </div>
+                    <div className="logger-review-stat">
+                      <p className="logger-review-stat-label">Carbs</p>
+                      <p className="logger-review-stat-value">{Math.round(totals.carbs)}g</p>
+                    </div>
+                    <div className="logger-review-stat">
+                      <p className="logger-review-stat-label">Fat</p>
+                      <p className="logger-review-stat-value">{Math.round(totals.fat)}g</p>
+                    </div>
                   </div>
+
+                  <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{trustSummary.coverageSummary}</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{trustSummary.estimatedSummary}</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{Math.round(confidenceScore * 100)}% confidence</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{confidence.description}</span>
+                  </div>
+
                   <div className="space-y-2">
-                    <p className="text-base font-semibold leading-7 text-slate-950">{assistantEstimateCopy}</p>
-                    <p className="text-sm leading-6 text-slate-600">{confidence.description}</p>
-                    <p className="text-sm leading-6 text-slate-500">Nutrition facts can vary by product and serving size.</p>
-                  </div>
-                </div>
+                    {items.map((item, index) => {
+                      const expanded = expandedIndex === index;
+                      const trustPresentation = getItemTrustPresentation(item);
+                      const trusted = trustPresentation.trusted;
+                      const sourceLabel = getItemSourceLabel(item);
 
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-3">
-                    <p className="text-xs text-slate-500">Calories</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950">{Math.round(totals.calories)}</p>
-                  </div>
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-3">
-                    <p className="text-xs text-slate-500">Protein</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950">{Math.round(totals.protein)}g</p>
-                  </div>
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-3">
-                    <p className="text-xs text-slate-500">Carbs</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950">{Math.round(totals.carbs)}g</p>
-                  </div>
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-3">
-                    <p className="text-xs text-slate-500">Fat</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950">{Math.round(totals.fat)}g</p>
-                  </div>
-                </div>
+                      return (
+                        <article key={`${item.food_name}-${index}`} className="logger-food-item">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedIndex((current) => (current === index ? null : index))}
+                            className="flex w-full items-start justify-between gap-3 text-left"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="truncate text-sm font-semibold text-slate-950">{item.food_name}</p>
+                                <TrustBadge trusted={trusted} compact label={trustPresentation.badgeLabel} tone={trustPresentation.badgeTone} />
+                              </div>
+                              <p className="mt-1 text-xs text-slate-500">{sourceLabel}</p>
+                              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">{Math.round(item.calories)} cal</span>
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">P {Math.round(item.protein)}g</span>
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">{item.quantity} {item.unit}</span>
+                              </div>
+                            </div>
+                            <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-slate-400 transition ${expanded ? 'rotate-180' : ''}`} />
+                          </button>
 
-                <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{trustSummary.coverageSummary}</span>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{trustSummary.estimatedSummary}</span>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{Math.round(confidenceScore * 100)}% confidence</span>
+                          {expanded ? (
+                            <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3">
+                              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                                <label className="space-y-2 text-xs text-slate-500 lg:col-span-2">
+                                  <span>Food</span>
+                                  <input value={item.food_name} onChange={(event) => updateItem(index, 'food_name', event.target.value)} className="app-input px-3 py-2 text-sm" />
+                                </label>
+                                <label className="space-y-2 text-xs text-slate-500">
+                                  <span>Quantity</span>
+                                  <input type="number" step="0.1" value={item.quantity} onChange={(event) => updateItem(index, 'quantity', event.target.value)} className="app-input px-3 py-2 text-sm" />
+                                </label>
+                                <label className="space-y-2 text-xs text-slate-500">
+                                  <span>Unit</span>
+                                  <input value={item.unit} onChange={(event) => updateItem(index, 'unit', event.target.value)} className="app-input px-3 py-2 text-sm" />
+                                </label>
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+                                  <p className="font-medium text-slate-700">Source</p>
+                                  <p className="mt-1">{sourceLabel}</p>
+                                </div>
+                              </div>
+
+                              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                {[
+                                  ['calories', 'Calories'],
+                                  ['protein', 'Protein'],
+                                  ['carbs', 'Carbs'],
+                                  ['fat', 'Fat'],
+                                ].map(([key, label]) => (
+                                  <label key={key} className="space-y-2 text-xs text-slate-500">
+                                    <span>{label}</span>
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={item[key as keyof ParsedFoodItem] as number}
+                                      onChange={(event) => updateItem(index, key as keyof ParsedFoodItem, event.target.value)}
+                                      className="app-input px-3 py-2 text-sm"
+                                    />
+                                  </label>
+                                ))}
+                              </div>
+
+                              {item.notes ? (
+                                <p className="text-xs leading-5 text-slate-500">{item.notes}</p>
+                              ) : null}
+
+                              <div className="flex justify-end">
+                                <button type="button" onClick={() => removeItem(index)} className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 active:scale-[0.99]">
+                                  <X className="h-4 w-4" />
+                                  Remove item
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -1177,23 +1177,23 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                     className="app-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <CheckCircle2 className="h-4 w-4" />
-                    {hasSavedCurrentDraft ? 'Saved' : saving ? 'Saving meal...' : 'Looks right, save meal'}
+                    {hasSavedCurrentDraft ? 'Saved' : saving ? 'Saving…' : 'Save it'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setExpandedIndex(0)}
-                    className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700 active:scale-[0.99]"
+                    className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium"
                   >
                     <PencilLine className="h-4 w-4" />
-                    Edit items
+                    Adjust items
                   </button>
                   <button
                     type="button"
                     onClick={addManualItem}
-                    className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition hover:border-teal-200 hover:text-teal-700 active:scale-[0.99]"
+                    className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium"
                   >
                     <Plus className="h-4 w-4" />
-                    Add custom item
+                    Add item
                   </button>
                   <button
                     type="button"
@@ -1203,12 +1203,12 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                   >
                     <BookmarkPlus className="h-4 w-4" />
                     {favoriteSaving
-                      ? 'Saving favorite...'
+                      ? 'Saving…'
                       : sourceReusableMealId
                         ? favoriteState === 'dirty'
                           ? 'Update favorite'
-                          : 'Favorite saved'
-                        : 'Save as favorite'}
+                          : 'Favorited'
+                        : 'Save favorite'}
                   </button>
                   {sourceReusableMealId ? (
                     <button
@@ -1218,130 +1218,25 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                       className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <Star className="h-4 w-4" />
-                      {favoriteSaving ? 'Removing...' : 'Remove favorite'}
+                      {favoriteSaving ? 'Removing…' : 'Remove favorite'}
                     </button>
                   ) : null}
-                  <button type="button" onClick={resetDraft} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
-                    <RotateCcw className="h-4 w-4" />
-                    Start over
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {items.map((item, index) => {
-                    const expanded = expandedIndex === index;
-                    const trustPresentation = getItemTrustPresentation(item);
-                    const trusted = trustPresentation.trusted;
-                    const sourceLabel = getItemSourceLabel(item);
-
-                    return (
-                      <article key={`${item.food_name}-${index}`} className="rounded-[24px] border border-slate-200 bg-white/95 px-4 py-4 shadow-[0_14px_28px_rgba(148,163,184,0.08)]">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedIndex((current) => (current === index ? null : index))}
-                          className="flex w-full items-start justify-between gap-4 text-left active:scale-[0.995]"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="truncate text-base font-semibold text-slate-950">{item.food_name}</p>
-                              <TrustBadge trusted={trusted} compact label={trustPresentation.badgeLabel} tone={trustPresentation.badgeTone} />
-                            </div>
-                            <p className="mt-1 text-sm font-medium text-slate-700">{trustPresentation.confidenceLabel}</p>
-                            <p className="mt-1 text-sm text-slate-500">{sourceLabel}</p>
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{Math.round(item.calories)} cal</span>
-                              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">P {Math.round(item.protein)}g</span>
-                              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">C {Math.round(item.carbs)}g</span>
-                              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">F {Math.round(item.fat)}g</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3 text-slate-400">
-                            <span className="text-sm font-semibold text-slate-700">{item.quantity} {item.unit}</span>
-                            <ChevronDown className={`h-5 w-5 transition ${expanded ? 'rotate-180' : ''}`} />
-                          </div>
-                        </button>
-
-                        {expanded ? (
-                          <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4">
-                            <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                              <p>{trustPresentation.helperText}</p>
-                              <p className="mt-1">You can fine-tune this item before saving. Estimated entries are safe to adjust if the portion or brand looks off.</p>
-                            </div>
-
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                              <label className="space-y-2 text-xs text-slate-500 lg:col-span-2">
-                                <span>Food</span>
-                                <input value={item.food_name} onChange={(event) => updateItem(index, 'food_name', event.target.value)} className="app-input px-3 py-2 text-sm" />
-                              </label>
-                              <label className="space-y-2 text-xs text-slate-500">
-                                <span>Quantity</span>
-                                <input type="number" step="0.1" value={item.quantity} onChange={(event) => updateItem(index, 'quantity', event.target.value)} className="app-input px-3 py-2 text-sm" />
-                              </label>
-                              <label className="space-y-2 text-xs text-slate-500">
-                                <span>Unit</span>
-                                <input value={item.unit} onChange={(event) => updateItem(index, 'unit', event.target.value)} className="app-input px-3 py-2 text-sm" />
-                              </label>
-                              <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
-                                <p className="font-medium text-slate-700">Source</p>
-                                <p className="mt-1">{sourceLabel}</p>
-                                <p className="mt-2 text-[11px] text-slate-500">{trustPresentation.confidenceLabel}</p>
-                              </div>
-                            </div>
-
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                              {[
-                                ['calories', 'Calories'],
-                                ['protein', 'Protein'],
-                                ['carbs', 'Carbs'],
-                                ['fat', 'Fat'],
-                              ].map(([key, label]) => (
-                                <label key={key} className="space-y-2 text-xs text-slate-500">
-                                  <span>{label}</span>
-                                  <input
-                                    type="number"
-                                    step="0.1"
-                                    value={item[key as keyof ParsedFoodItem] as number}
-                                    onChange={(event) => updateItem(index, key as keyof ParsedFoodItem, event.target.value)}
-                                    className="app-input px-3 py-2 text-sm"
-                                  />
-                                </label>
-                              ))}
-                            </div>
-
-                            {item.notes ? (
-                              <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                                <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Notes</p>
-                                <p className="mt-2 leading-6">{item.notes}</p>
-                              </div>
-                            ) : null}
-
-                            <div className="flex justify-end">
-                              <button type="button" onClick={() => removeItem(index)} className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 active:scale-[0.99]">
-                                <X className="h-4 w-4" />
-                                Remove item
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
-                      </article>
-                    );
-                  })}
                 </div>
               </div>
             </ChatBubble>
           ) : null}
 
           {saveMessage ? (
-            <ChatBubble role="assistant" tone="success">
+            <ChatBubble role="assistant" tone="success" compact>
               <div className="space-y-3">
                 <p className="text-sm font-semibold text-slate-950">{saveMessage}</p>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={startAnotherMeal} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
                     <Plus className="h-4 w-4" />
-                    Log another meal
+                    Log another
                   </button>
-                  <Link href="/" className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
-                    View dashboard
+                  <Link href="/history" className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
+                    View history
                   </Link>
                 </div>
               </div>
@@ -1353,9 +1248,38 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
       </section>
 
       <div className="app-chat-composer-shell">
-        <div className="app-chat-composer-inner">
+        <div className="app-chat-composer-inner app-screen">
+          {utilityMenuOpen ? (
+            <div className="chat-utility-menu">
+              <button
+                type="button"
+                onClick={() => openEntryMode('barcode')}
+                className={clsx('chat-utility-action', entryMode === 'barcode' && 'chat-utility-action-active')}
+              >
+                Barcode
+              </button>
+              <button
+                type="button"
+                onClick={() => openEntryMode('label')}
+                className={clsx('chat-utility-action', entryMode === 'label' && 'chat-utility-action-active')}
+              >
+                Nutrition label
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setComposerText(promptExamples[0]);
+                  setUtilityMenuOpen(false);
+                }}
+                className="chat-utility-action"
+              >
+                Use an example
+              </button>
+            </div>
+          ) : null}
+
           <div className="app-chat-composer-card">
-            <div className="flex items-center justify-between gap-3 pb-2.5">
+            <div className="chat-composer-meta-row">
               <label className="chat-meal-type-field">
                 <span className="chat-meal-type-label">Meal type</span>
                 <select
@@ -1371,32 +1295,21 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                   ))}
                 </select>
               </label>
-              <div className="chat-helper-actions">
-                <button
-                  type="button"
-                  onClick={() => openEntryMode('barcode')}
-                  className={clsx('chat-helper-action', entryMode === 'barcode' && 'chat-helper-action-active')}
-                >
-                  Barcode
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openEntryMode('label')}
-                  className={clsx('chat-helper-action', entryMode === 'label' && 'chat-helper-action-active')}
-                >
-                  Label
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setComposerText(promptExamples[0])}
-                  className="chat-helper-action"
-                >
-                  Example
-                </button>
-              </div>
+              <p className="chat-composer-hint">
+                {clarifyingQuestion ? 'One short answer is enough here.' : entryMode === 'barcode' ? 'Barcode is open.' : entryMode === 'label' ? 'Label entry is open.' : 'Estimate first, adjust later.'}
+              </p>
             </div>
 
             <div className="chat-composer-row">
+              <button
+                type="button"
+                onClick={() => setUtilityMenuOpen((current) => !current)}
+                className={clsx('chat-utility-toggle', utilityMenuOpen && 'chat-utility-toggle-active')}
+                aria-label="Open helper actions"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+
               <div className="chat-composer-input-shell">
                 <textarea
                   ref={composerRef}
@@ -1422,21 +1335,6 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                   {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
                 </button>
               </div>
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-              <p className="min-w-0 flex-1">
-                {clarifyingQuestion
-                  ? 'One focused answer is enough here.'
-                  : entryMode === 'barcode'
-                    ? 'Barcode entry is open above if you want a packaged-food lookup.'
-                    : entryMode === 'label'
-                      ? 'Nutrition label entry is open above for a product-first match.'
-                  : isFieldFocused
-                    ? 'Press enter to send. Use shift + enter for a new line.'
-                    : 'Estimate first, edit only if needed.'}
-              </p>
-              <span className="text-[11px] font-medium text-slate-400">Chat-style logging, review before save</span>
             </div>
           </div>
         </div>

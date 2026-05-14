@@ -52,15 +52,15 @@ export function buildLoggerIntentReply(intent: LoggerIntent, options?: { userNam
 
   switch (intent) {
     case 'greeting':
-      return `Hey${namePrefix}, I'm ready when you are. Tell me what you ate and I'll estimate it.`;
+      return `Hey${namePrefix}, what'd you eat?`;
     case 'correction':
       return options?.hasActiveMeal
-        ? "Got it. Update the estimate below, or send the corrected meal in one message and I'll re-estimate it."
-        : "No problem. Send the corrected meal in one message and I'll re-estimate it.";
+        ? "Got it. Send the corrected version and I'll update the estimate."
+        : "No problem. Send the corrected meal and I'll re-estimate it.";
     case 'question':
-      return "I can help here, but this screen works best when you tell me what you ate. Send the meal naturally and I'll estimate it for you.";
+      return "I can help with that. If you send the meal naturally, I'll estimate it for you.";
     case 'unknown':
     default:
-      return "I'm ready to log it whenever you are. Tell me what you ate, or use barcode or nutrition label for packaged foods.";
+      return "I'm ready when you are. Tell me what you ate, or use barcode or a nutrition label for packaged foods.";
   }
 }

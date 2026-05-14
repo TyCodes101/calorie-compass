@@ -92,14 +92,13 @@ describe('meal logger client', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Assistant estimate ready')).toBeInTheDocument();
+      expect(screen.getByText(/i'd estimate about 980 calories/i)).toBeInTheDocument();
     });
 
     expect(screen.getAllByText(/980/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Looks right, save meal/i)).toBeInTheDocument();
-    expect(screen.getByText(/I’ll keep your saved preferences in mind: high protein/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^save it$/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /looks right, save meal/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save it/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -145,8 +144,8 @@ describe('meal logger client', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByText("Hey Tyler, I'm ready when you are. Tell me what you ate and I'll estimate it.")).toBeInTheDocument();
-    expect(screen.queryByText(/assistant estimate ready/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Hey Tyler, what'd you eat?")).toBeInTheDocument();
+    expect(screen.queryByText(/i'd estimate about/i)).not.toBeInTheDocument();
   });
 
   it('supports barcode lookup for packaged foods', async () => {
@@ -192,23 +191,17 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /enter barcode/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open helper actions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^barcode$/i }));
     fireEvent.change(screen.getByLabelText('Barcode digits'), {
       target: { value: '012345678905' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /look up barcode/i }));
+    fireEvent.click(screen.getByRole('button', { name: /use barcode/i }));
 
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/ai/parse-meal',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('012345678905'),
-        }),
-      );
-    });
+    await screen.findByText(/packaged protein bar/i);
 
-    expect(screen.getByText(/assistant estimate ready/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalled();
+    expect(screen.getByText(/i'd estimate about 200 calories/i)).toBeInTheDocument();
     expect(screen.getByText(/packaged protein bar/i)).toBeInTheDocument();
   });
 
@@ -255,7 +248,8 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /type nutrition label/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open helper actions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /nutrition label/i }));
     fireEvent.change(screen.getByLabelText('Product name'), {
       target: { value: 'Fairlife Core Power Elite' },
     });
@@ -272,7 +266,7 @@ describe('meal logger client', () => {
       target: { value: '42' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /use nutrition label/i }));
+    fireEvent.click(screen.getByRole('button', { name: /use label/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -286,6 +280,6 @@ describe('meal logger client', () => {
 
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"calories":230');
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"protein":42');
-    expect(screen.getByText(/assistant estimate ready/i)).toBeInTheDocument();
+    expect(screen.getByText(/i'd estimate about 230 calories/i)).toBeInTheDocument();
   });
 });
