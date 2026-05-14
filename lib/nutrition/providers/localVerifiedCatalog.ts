@@ -70,7 +70,7 @@ export const localVerifiedCatalogProvider: NutritionLookupProvider = {
 
     if (match) {
       const source = getNutritionSourceById(match.food.sourceId);
-      if (source?.sourceType === 'OFFICIAL_RESTAURANT' && (match.exactAlias || match.exactProduct)) {
+      if (source && (match.exactAlias || match.exactProduct) && (source.sourceType === 'OFFICIAL_RESTAURANT' || Boolean(source.brand))) {
         const item = scaleCatalogFood(match.food, normalizedQuery.quantity, match.food.servingUnit);
 
         return makeCatalogMealResponse(
@@ -79,14 +79,14 @@ export const localVerifiedCatalogProvider: NutritionLookupProvider = {
             {
               ...item,
               notes: buildLocalMatchNotes(match.food.canonicalName, source.name ?? null, normalizedQuery.matchedQuery),
-              confidence_label: 'Verified',
+              confidence_label: getConfidenceLabel(source.sourceType),
               matched_query: normalizedQuery.matchedQuery,
               original_user_text: text,
               provider_used: 'local-verified-catalog',
               used_ai_fallback: false,
             },
           ],
-          0.98,
+          source.sourceType === 'OFFICIAL_RESTAURANT' ? 0.98 : 0.95,
         );
       }
     }

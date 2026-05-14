@@ -6,8 +6,11 @@ export type ClarificationDecision = {
   reason: 'portion' | 'cooking_style' | 'meal_type' | 'none';
 };
 
+const packagedSnackRegex = /\b(quaker(?: oats)?|white cheddar|rice cakes?|chips?|protein bars?|popcorn|crackers?|packaged snacks?)\b/i;
+const compoundFoodRegex = /\b(white cheddar rice cakes?|rice cakes?|protein bars?|chicken sandwich|peanut butter|ice cream|grilled chicken(?: breast)?|hash browns?|french fries|mac and cheese)\b/i;
+
 export function buildClarificationDecision(analysis: MealAnalysis): ClarificationDecision {
-  if (!analysis.likelyNeedsClarification) {
+  if (!analysis.likelyNeedsClarification || packagedSnackRegex.test(analysis.normalizedText) || compoundFoodRegex.test(analysis.normalizedText)) {
     return { needsClarification: false, question: null, reason: 'none' };
   }
 
@@ -35,7 +38,7 @@ export function buildClarificationDecision(analysis: MealAnalysis): Clarificatio
     };
   }
 
-  if (/\brice\b/i.test(analysis.normalizedText) && !analysis.hasMultipleItems) {
+  if (/\brice\b/i.test(analysis.normalizedText) && !/\brice cakes?\b/i.test(analysis.normalizedText) && !analysis.hasMultipleItems) {
     return {
       needsClarification: true,
       question: 'About how much rice did you have, and was it plain or cooked with butter or oil?',

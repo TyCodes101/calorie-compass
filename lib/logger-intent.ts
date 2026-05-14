@@ -20,14 +20,14 @@ const nutritionQuestionRegex = /(protein|calories?|calories|carbs?|fat|fiber|sug
 const mealHistoryRegex = /(what (did|have) i (eat|log)|what was (my )?(last|recent) meal|what did i have yesterday|what did i eat yesterday|what did i log yesterday|what did i eat today|what did i have today|last meal|recent meals?|yesterday'?s (dinner|lunch|breakfast|meals?))/i;
 const recommendationRegex = /(what should i eat|what should i have|what do you recommend|any ideas? for|meal ideas?|recommend (something|a meal)|suggest (something|a meal)|give me (a|some) (meal )?ideas?|help me pick)/i;
 const assistantQuestionRegex = /(help me log|can you help me|can you log|how does this work|what can you do)/i;
-const correctionRegex = /^(actually|sorry|correction|i meant|make that|make it|change that|change it to|change to|not exactly|update that|edit that|add\b|remove|without|no\b|it was|that was|swap|hold the|skip the)\b/i;
+const correctionRegex = /^(actually|sorry|correction|i meant|make that|make it|change that|change it to|change to|not exactly|update that|edit that|add\b|remove|without|no\b|it was|that was|they were|those were|no they were|no it was|swap|hold the|skip the)\b/i;
 const saveCommandRegex = /^(save( it| that| this)?|log( it| that| this)?|looks good|that'?s right|done|good to save|save now)\b/i;
 const startOverCommandRegex = /^(start over|reset|new meal|clear this|try again|cancel|never mind|delete (it|this|that)|clear (it|this|that))\b/i;
 const favoriteCommandRegex = /^(save favorite|favorite this|save as favorite)\b/i;
 const removeFavoriteCommandRegex = /^(remove favorite|unfavorite this|delete favorite)\b/i;
 const repeatLastMealCommandRegex = /^(repeat (my )?(last meal|last thing|last one)|same as (last time|usual)|load my last meal)\b/i;
 const editCommandRegex = /^(edit( it| this| that)?|adjust( it| this| that)?|review (it|this|that)|show me the meal)\b/i;
-const foodSignalRegex = /\b(chipotle|starbucks|mcdonald'?s?|chick-?fil-?a|burger|fries|pizza|taco|burrito|sandwich|salad|bowl|rice|chicken|beef|steak|salmon|shrimp|pasta|noodles|egg|eggs|toast|bagel|oatmeal|yogurt|banana|apple|shake|smoothie|protein|latte|coffee|coke|soda|fairlife|quest|premier|bar|cookie|ice cream|frappuccino|mcdouble|mcchicken)\b/i;
+const foodSignalRegex = /\b(chipotle|starbucks|mcdonald'?s?|chick-?fil-?a|burger|fries|french fries|pizza|taco|burrito|sandwich|chicken sandwich|salad|bowl|rice cakes?|white cheddar|quaker|chicken|grilled chicken|beef|steak|salmon|shrimp|pasta|mac and cheese|noodles|egg|eggs|toast|bagel|oatmeal|yogurt|banana|apple|shake|smoothie|protein|protein bar|chips?|popcorn|crackers?|latte|coffee|coke|soda|fairlife|quest|premier|bar|cookie|ice cream|frappuccino|mcdouble|mcchicken|hash browns?)\b/i;
 
 export function detectLoggerIntent(input: string, options?: { hasActiveMeal?: boolean }): LoggerIntent {
   const normalized = input.trim().toLowerCase();

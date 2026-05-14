@@ -36,6 +36,38 @@ const usdaFoodsByQuery: Record<string, unknown[]> = {
       ],
     },
   ],
+  'quaker oats white cheddar rice cake': [
+    {
+      description: 'Quaker Rice Crisps White Cheddar',
+      brandOwner: 'Quaker Oats',
+      dataType: 'Branded',
+      servingSize: 1,
+      servingSizeUnit: 'cake',
+      householdServingFullText: '1 cake',
+      foodNutrients: [
+        { nutrientName: 'Energy', value: 55 },
+        { nutrientName: 'Protein', value: 1 },
+        { nutrientName: 'Carbohydrate, by difference', value: 11 },
+        { nutrientName: 'Total lipid (fat)', value: 1.5 },
+      ],
+    },
+  ],
+  'quaker oats rice cake': [
+    {
+      description: 'Quaker Rice Cakes',
+      brandOwner: 'Quaker Oats',
+      dataType: 'Branded',
+      servingSize: 1,
+      servingSizeUnit: 'cake',
+      householdServingFullText: '1 cake',
+      foodNutrients: [
+        { nutrientName: 'Energy', value: 50 },
+        { nutrientName: 'Protein', value: 1 },
+        { nutrientName: 'Carbohydrate, by difference', value: 11 },
+        { nutrientName: 'Total lipid (fat)', value: 0.5 },
+      ],
+    },
+  ],
   'grilled chicken breast': [
     {
       description: 'Chicken breast, grilled',
@@ -152,7 +184,17 @@ describe('normalizeFoodQuery', () => {
 
     expect(normalizeFoodQuery('rice cakes')).toMatchObject({
       searchText: 'rice cake',
-      matchedQuery: 'Rice cake',
+      matchedQuery: 'Rice cakes',
+    });
+
+    expect(normalizeFoodQuery('3 quaker oats rice cakes white cheddar')).toMatchObject({
+      searchText: 'quaker oats white cheddar rice cake',
+      matchedQuery: 'Quaker Oats White Cheddar Rice cakes',
+      quantity: 3,
+    });
+
+    expect(normalizeFoodQuery('they were rice cakes')).toMatchObject({
+      searchText: 'rice cake',
     });
   });
 });
@@ -218,6 +260,27 @@ describe('lookupNutrition', () => {
     expect(riceCakes?.items[0]?.food_name).toMatch(/rice cake/i);
     expect(chicken?.items[0]?.food_name).toMatch(/chicken breast/i);
     expect(proteinBar?.items[0]?.food_name).toMatch(/quest protein bar/i);
+  });
+
+  it('matches branded rice cakes without collapsing them into generic rice', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = installUsdaFetchMock();
+
+    const whiteCheddar = await lookupNutrition({ text: '3 quaker oats rice cakes white cheddar', mealType: 'snack' });
+    const quaker = await lookupNutrition({ text: 'quaker rice cakes', mealType: 'snack' });
+    const plain = await lookupNutrition({ text: 'rice cakes', mealType: 'snack' });
+
+    expect(fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).query)).toEqual(['rice cake']);
+    expect(whiteCheddar?.items[0]).toMatchObject({
+      food_name: 'Quaker White Cheddar Rice Cakes',
+      quantity: 3,
+      provider_used: 'local-verified-catalog',
+    });
+    expect(quaker?.items[0]).toMatchObject({
+      food_name: 'Quaker Rice Cakes',
+      provider_used: 'local-verified-catalog',
+    });
+    expect(plain?.items[0]?.food_name).toMatch(/rice cake/i);
   });
 
   it('uses USDA FoodData Central for generic foods that are not in the local catalog', async () => {

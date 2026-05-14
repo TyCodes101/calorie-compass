@@ -19,10 +19,11 @@ import {
   X,
 } from 'lucide-react';
 
+import type { MealAssistantResponse, MealAssistantState } from '@/lib/ai/mealAssistantSchema';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { TrustBadge } from '@/components/trust-badge';
 import type { RecentMealQuickLog } from '@/lib/history';
-import { buildLoggerGoalReply, buildLoggerIntentReply, buildLoggerQuestionReply, detectLoggerCommand, detectLoggerIntent } from '@/lib/logger-intent';
+import { detectLoggerCommand } from '@/lib/logger-intent';
 import { type FavoriteMealSummary, type LoggerDraft } from '@/lib/reusable-meals';
 import { getConfidenceCopy, getItemSourceLabel, getItemTrustPresentation, summarizeParsedItems } from '@/lib/trust';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -131,64 +132,6 @@ function shorten(text: string, max = 90) {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 }
 
-const numberWordMap: Record<string, number> = {
-  a: 1,
-  an: 1,
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-};
-
-function parseCountToken(value: string) {
-  const normalized = value.trim().toLowerCase();
-
-  if (numberWordMap[normalized] !== undefined) {
-    return numberWordMap[normalized];
-  }
-
-  const numeric = Number(normalized);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-}
-
-function detectSimpleQuantityCorrection(message: string) {
-  const normalized = message.trim().toLowerCase();
-  const match = normalized.match(/(?:make that|actually it was|it was|that was|actually|update that to)\s+(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
-
-  if (!match) {
-    return null;
-  }
-
-  return parseCountToken(match[1] ?? '');
-}
-
-function scaleParsedItems(items: ParsedFoodItem[], nextCount: number) {
-  if (!items.length || nextCount <= 0) {
-    return items;
-  }
-
-  const baseline = items.length === 1 && items[0]?.quantity > 0 ? items[0].quantity : 1;
-  const factor = nextCount / baseline;
-
-  return items.map((item) => ({
-    ...item,
-    quantity: Number((item.quantity * factor).toFixed(2)),
-    calories: Number((item.calories * factor).toFixed(1)),
-    protein: Number((item.protein * factor).toFixed(1)),
-    carbs: Number((item.carbs * factor).toFixed(1)),
-    fat: Number((item.fat * factor).toFixed(1)),
-    fiber: Number((item.fiber * factor).toFixed(1)),
-    sugar: Number((item.sugar * factor).toFixed(1)),
-    sodium: Number((item.sodium * factor).toFixed(1)),
-  }));
-}
-
 function buildMealReference(prompt: string, items: ParsedFoodItem[]) {
   if (items.length === 1) {
     return items[0]?.food_name ?? shorten(cleanPromptForReply(prompt) || 'that meal');
@@ -264,102 +207,6 @@ function buildMemoryCue(prompt: string, favoriteMeals: FavoriteMealSummary[], re
   return match.kind === 'favorite' ? `Looks like one of your saved go-tos.` : `Looks similar to something you've logged recently.`;
 }
 
-function normalizeIngredientText(text: string) {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\b(the|a|an|my|some|extra)\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function buildHistoryReply(message: string, recentMeals: RecentMealQuickLog[]) {
-  const normalized = message.trim().toLowerCase();
-
-  if (!recentMeals.length) {
-    return "I don't have any recent meals to pull from yet. Once you log a few, I can use them here.";
-  }
-
-  if (/today/.test(normalized)) {
-    const todayMeals = recentMeals.filter((meal) => !isYesterday(meal.createdAt) && new Date(meal.createdAt).toDateString() === new Date().toDateString());
-
-    if (!todayMeals.length) {
-      return "You haven't logged anything today yet.";
-    }
-
-    const mealList = todayMeals
-      .slice(0, 3)
-      .map((meal) => `${meal.title} (${meal.totalCalories} cal)`)
-      .join(', ');
-
-    return `Today you've logged ${mealList}.`;
-  }
-
-  if (/yesterday/.test(normalized)) {
-    const yesterdayMeals = recentMeals.filter((meal) => isYesterday(meal.createdAt));
-
-    if (!yesterdayMeals.length) {
-      return "You didn't log anything yesterday yet, at least not in the recent history I have here.";
-    }
-
-    const mealList = yesterdayMeals
-      .slice(0, 2)
-      .map((meal) => `${meal.title} (${meal.totalCalories} cal)`)
-      .join(' and ');
-
-    return `Yesterday you logged ${mealList}.`;
-  }
-
-  const lastMeal = recentMeals[0];
-  if (/last meal|last thing|recent meal/.test(normalized)) {
-    return `Your last meal was ${lastMeal.title}, about ${lastMeal.totalCalories} calories.`;
-  }
-
-  const mealList = recentMeals
-    .slice(0, 3)
-    .map((meal) => meal.title)
-    .join(', ');
-  return `Recently you've logged ${mealList}.`;
-}
-
-function buildRecommendationReply(
-  message: string,
-  options: {
-    favoriteMeals: FavoriteMealSummary[];
-    recentMeals: RecentMealQuickLog[];
-    proteinGoal?: number | null;
-  },
-) {
-  const normalized = message.trim().toLowerCase();
-  const repeatedMeals = [...options.favoriteMeals.map((meal) => meal.title), ...options.recentMeals.map((meal) => meal.title)];
-  const yesterdayDinner = options.recentMeals.find((meal) => isYesterday(meal.createdAt) && meal.mealType === 'dinner');
-  const highProteinPick = repeatedMeals.find((title) => /fairlife|core power|chicken|chipotle|protein|greek yogurt|eggs/i.test(title));
-  const easyPick = repeatedMeals.find((title) => /shake|bowl|sandwich|wrap|yogurt/i.test(title));
-  const lunchDinnerPick = repeatedMeals.find((title) => /chipotle|bowl|sandwich|burger|salad|taco|dinner|lunch/i.test(title));
-
-  if (/(yesterday|again|repeat)/.test(normalized) && yesterdayDinner) {
-    return `If you want something easy, you could repeat yesterday’s dinner, ${yesterdayDinner.title}.`;
-  }
-
-  if (/protein/.test(normalized) && highProteinPick) {
-    return `If you want something easy and higher protein, ${highProteinPick} looks like a good fit.`;
-  }
-
-  if (/(lunch|dinner)/.test(normalized) && lunchDinnerPick) {
-    return `You could keep it simple and repeat ${lunchDinnerPick}. That's already in your rhythm.`;
-  }
-
-  if (easyPick) {
-    return `You could go with ${easyPick} if you want something familiar and quick.`;
-  }
-
-  if (options.proteinGoal) {
-    return `I'd lean toward something simple with solid protein so you can move toward your ${Math.round(options.proteinGoal)}g goal without overthinking it.`;
-  }
-
-  return 'I’d keep it simple and go with something easy to repeat, then adjust from there.';
-}
-
 function createChatMessage(role: ChatMessage['role'], text: string, options?: Pick<ChatMessage, 'tone' | 'compact'>): ChatMessage {
   return {
     id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -386,6 +233,26 @@ function buildInitialAssistantMessage(options: {
   return `Hey${options.firstName ? ` ${options.firstName}` : ''}, what'd you eat today?`;
 }
 
+function buildInitialAssistantState(args: {
+  initialDraft?: LoggerDraft | null;
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  userName?: string | null;
+}): MealAssistantState {
+  return {
+    currentMealItems: args.initialDraft?.items ?? [],
+    pendingClarification: null,
+    lastAssistantQuestion: null,
+    userCorrections: [],
+    saved: false,
+    mealType: args.initialDraft?.mealType ?? args.mealType,
+    userName: args.userName ?? null,
+    currentMealText: args.initialDraft?.rawText ?? null,
+    confidenceScore: args.initialDraft?.confidenceScore ?? 0.82,
+    sourceReusableMealId: args.initialDraft?.sourceReusableMealId ?? null,
+    editingMealId: args.initialDraft?.editingMealId ?? null,
+  };
+}
+
 function buildManualItem(): ParsedFoodItem {
   return {
     food_name: 'Custom item',
@@ -404,15 +271,6 @@ function buildManualItem(): ParsedFoodItem {
     source_name: 'Manual adjustment',
     catalog_food_id: null,
   };
-}
-
-function isYesterday(dateString: string) {
-  const date = new Date(dateString);
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-
-  return date.getUTCFullYear() === yesterday.getUTCFullYear() && date.getUTCMonth() === yesterday.getUTCMonth() && date.getUTCDate() === yesterday.getUTCDate();
 }
 
 function buildAssistantEstimateCopy({
@@ -562,21 +420,15 @@ export function MealLoggerClient({
   favoriteMeals = [],
   recentMeals = [],
   userName = null,
-  proteinGoal = null,
-  dailyCalorieGoal = null,
-  todayProtein = null,
-  todayCalories = null,
-  remainingProtein = null,
-  remainingCalories = null,
-  todayMealCount = null,
 }: QuickLogProps) {
   const router = useRouter();
   const firstName = userName?.trim()?.split(/\s+/)[0] ?? null;
+  const initialMealType = initialDraft?.mealType ?? getDefaultMealType();
   const [entryMode, setEntryMode] = useState<EntryMode>('chat');
   const [composerText, setComposerText] = useState(initialDraft?.items?.length ? '' : initialDraft?.rawText ?? '');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [nutritionLabelDraft, setNutritionLabelDraft] = useState<NutritionLabelDraft>(() => defaultNutritionLabelDraft());
-  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(() => initialDraft?.mealType ?? getDefaultMealType());
+  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(() => initialMealType);
   const [activePrompt, setActivePrompt] = useState(initialDraft?.rawText ?? '');
   const [displayUserMessage, setDisplayUserMessage] = useState(initialDraft?.rawText ?? '');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() =>
@@ -603,7 +455,15 @@ export function MealLoggerClient({
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [hasSavedCurrentDraft, setHasSavedCurrentDraft] = useState(false);
   const [lastParseOptions, setLastParseOptions] = useState<ParseRequestOptions | null>(null);
+  const [lastAssistantMessage, setLastAssistantMessage] = useState<string | null>(null);
   const [assistantEstimateMode, setAssistantEstimateMode] = useState<'initial' | 'correction'>('initial');
+  const [assistantState, setAssistantState] = useState<MealAssistantState>(() =>
+    buildInitialAssistantState({
+      initialDraft,
+      mealType: initialMealType,
+      userName,
+    }),
+  );
   const isOnline = useOnlineStatus();
 
   const totals = useMemo(() => sumTotals(items), [items]);
@@ -658,8 +518,61 @@ export function MealLoggerClient({
   function markDraftChanged() {
     clearFeedback();
     setHasSavedCurrentDraft(false);
+    setAssistantState((current) => ({
+      ...current,
+      saved: false,
+    }));
 
     if (sourceReusableMealId) {
+      setFavoriteState((current) => (current === 'saved' ? 'dirty' : current));
+    }
+  }
+
+  function buildAssistantRequestState(): MealAssistantState {
+    return {
+      ...assistantState,
+      currentMealItems: items,
+      mealType,
+      userName: assistantState.userName ?? userName ?? null,
+      confidenceScore,
+      sourceReusableMealId,
+      editingMealId,
+    };
+  }
+
+  function applyAssistantResponse(response: MealAssistantResponse, message: string) {
+    setAssistantState(response.next_state);
+    setMealType(response.next_state.mealType);
+    setItems(response.meal.items);
+    setConfidenceScore(response.meal.confidence_score);
+    setClarifyingQuestion(response.clarification_question);
+    setExpandedIndex(null);
+    setEntryMode('chat');
+    setBarcodeInput('');
+    setNutritionLabelDraft(defaultNutritionLabelDraft());
+    setUtilityMenuOpen(false);
+    setComposerText('');
+    setActivePrompt(response.next_state.currentMealText ?? '');
+    setDisplayUserMessage(response.next_state.currentMealText ?? (response.meal.items.length ? message : ''));
+    setAssistantEstimateMode(
+      response.intent === 'correction' || response.intent === 'quantity_change' || response.intent === 'remove_item'
+        ? 'correction'
+        : 'initial',
+    );
+
+    if (response.next_state.saved) {
+      setHasSavedCurrentDraft(true);
+      setSaveMessage('saved');
+      router.refresh();
+    } else {
+      setHasSavedCurrentDraft(false);
+      setSaveMessage(null);
+    }
+
+    if (
+      sourceReusableMealId &&
+      ['new_food_item', 'add_to_current_meal', 'correction', 'quantity_change', 'remove_item', 'clarification_answer'].includes(response.intent)
+    ) {
       setFavoriteState((current) => (current === 'saved' ? 'dirty' : current));
     }
   }
@@ -681,7 +594,21 @@ export function MealLoggerClient({
     setUtilityMenuOpen(false);
     setHasSavedCurrentDraft(false);
     setLastParseOptions(null);
+    setLastAssistantMessage(null);
     setAssistantEstimateMode('initial');
+    setAssistantState({
+      currentMealItems: [],
+      pendingClarification: null,
+      lastAssistantQuestion: null,
+      userCorrections: [],
+      saved: false,
+      mealType,
+      userName: userName ?? null,
+      currentMealText: null,
+      confidenceScore: 0.82,
+      sourceReusableMealId: null,
+      editingMealId: null,
+    });
     if (!options?.preserveThread) {
       setChatHistory([createChatMessage('assistant', buildInitialAssistantMessage({ firstName }))]);
     }
@@ -694,8 +621,17 @@ export function MealLoggerClient({
 
   function addManualItem() {
     const nextIndex = items.length;
+    const nextItems = [...items, buildManualItem()];
     markDraftChanged();
-    setItems((current) => [...current, buildManualItem()]);
+    setItems(nextItems);
+    setAssistantState((current) => ({
+      ...current,
+      currentMealItems: nextItems,
+      mealType,
+      confidenceScore,
+      sourceReusableMealId,
+      editingMealId,
+    }));
     setExpandedIndex(nextIndex);
     appendChatMessage('assistant', 'I added a custom item. Fill in what looks right and I’ll keep the rest in place.', { compact: true });
   }
@@ -719,14 +655,86 @@ export function MealLoggerClient({
     setUtilityMenuOpen(false);
     setHasSavedCurrentDraft(false);
     setLastParseOptions(null);
+    setLastAssistantMessage(null);
     setAssistantEstimateMode('initial');
     setSaveMessage(null);
+    setAssistantState({
+      currentMealItems: meal.items,
+      pendingClarification: null,
+      lastAssistantQuestion: null,
+      userCorrections: [],
+      saved: false,
+      mealType: (meal.mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack') ?? getDefaultMealType(),
+      userName: userName ?? null,
+      currentMealText: meal.rawText?.trim() || meal.title,
+      confidenceScore: meal.confidenceScore ?? 0.82,
+      sourceReusableMealId: null,
+      editingMealId: null,
+    });
 
     if (triggerText) {
       appendChatMessage('user', triggerText, { compact: true });
     }
 
     appendChatMessage('assistant', `Got it, I loaded ${meal.title} again. I’ll keep it here so you can save it or tweak it first.`);
+  }
+
+  async function sendAssistantMessage(message: string, options?: { retry?: boolean }) {
+    const trimmedMessage = message.trim();
+
+    if (!trimmedMessage || loading) {
+      return;
+    }
+
+    if (!isOnline) {
+      setError('You appear to be offline. Reconnect to update this meal.');
+      setErrorAction('parse');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setErrorAction(null);
+    setSaveMessage(null);
+    setLastParseOptions(null);
+    setLastAssistantMessage(trimmedMessage);
+    setUtilityMenuOpen(false);
+
+    if (!options?.retry) {
+      appendChatMessage('user', trimmedMessage, { compact: items.length > 0 || Boolean(clarifyingQuestion) });
+      setComposerText('');
+    }
+
+    try {
+      const response = await fetch('/api/meal-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: trimmedMessage,
+          state: buildAssistantRequestState(),
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setError(data?.error ?? 'We could not update that meal right now. Please try again.');
+        setErrorAction('parse');
+        return;
+      }
+
+      const assistantResponse = data as MealAssistantResponse;
+      applyAssistantResponse(assistantResponse, trimmedMessage);
+      appendChatMessage('assistant', assistantResponse.assistant_reply, {
+        compact: assistantResponse.meal.items.length === 0 && !assistantResponse.next_state.saved,
+        tone: assistantResponse.next_state.saved ? 'success' : 'default',
+      });
+    } catch {
+      setError('We could not update that meal right now. Please try again.');
+      setErrorAction('parse');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function parseMeal(options?: ParseRequestOptions) {
@@ -756,6 +764,7 @@ export function MealLoggerClient({
     setErrorAction(null);
     setSaveMessage(null);
     setLastParseOptions(options ?? null);
+    setLastAssistantMessage(null);
     setUtilityMenuOpen(false);
 
     const fullText = isClarification ? `${prompt}\nAdditional detail: ${nextInput}` : isCorrection ? nextInput : prompt;
@@ -809,6 +818,19 @@ export function MealLoggerClient({
         setExpandedIndex(null);
         setComposerText('');
         setAssistantEstimateMode('initial');
+        setAssistantState((current) => ({
+          ...current,
+          currentMealItems: [],
+          pendingClarification: nextClarifyingQuestion,
+          lastAssistantQuestion: nextClarifyingQuestion,
+          saved: false,
+          mealType,
+          userName: current.userName ?? userName ?? null,
+          currentMealText: prompt,
+          confidenceScore: parsed.confidence_score,
+          sourceReusableMealId,
+          editingMealId,
+        }));
         appendChatMessage('assistant', nextClarifyingQuestion, { compact: true });
         return;
       }
@@ -823,6 +845,10 @@ export function MealLoggerClient({
         setFavoriteState('dirty');
       }
 
+      if (isClarification) {
+        setActivePrompt(fullText.trim());
+      }
+
       setClarifyingQuestion(null);
       setItems(parsed.items);
       setExpandedIndex(null);
@@ -831,6 +857,19 @@ export function MealLoggerClient({
       setNutritionLabelDraft(defaultNutritionLabelDraft());
       setComposerText('');
       setAssistantEstimateMode(isCorrection ? 'correction' : 'initial');
+      setAssistantState((current) => ({
+        ...current,
+        currentMealItems: parsed.items,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+        saved: false,
+        mealType,
+        userName: current.userName ?? userName ?? null,
+        currentMealText: isCorrection ? `${activePrompt}\nCorrection: ${nextInput}`.trim() : fullText.trim(),
+        confidenceScore: parsed.confidence_score,
+        sourceReusableMealId,
+        editingMealId,
+      }));
 
       appendChatMessage(
         'assistant',
@@ -949,6 +988,19 @@ export function MealLoggerClient({
       setSaving(false);
       setHasSavedCurrentDraft(true);
       setSaveMessage(editingMealId ? 'Updated it.' : 'Saved it. Want to log anything else?');
+      setAssistantState((current) => ({
+        ...current,
+        currentMealItems: items,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+        saved: true,
+        mealType,
+        userName: current.userName ?? userName ?? null,
+        currentMealText: activePrompt || current.currentMealText,
+        confidenceScore,
+        sourceReusableMealId,
+        editingMealId,
+      }));
       appendChatMessage('assistant', editingMealId ? 'Updated it.' : 'Saved it. Want to log anything else?', { tone: 'success' });
       router.refresh();
     } catch {
@@ -993,7 +1045,12 @@ export function MealLoggerClient({
         return;
       }
 
-      setSourceReusableMealId(data?.favoriteMeal?.id ?? sourceReusableMealId);
+      const nextReusableMealId = data?.favoriteMeal?.id ?? sourceReusableMealId;
+      setSourceReusableMealId(nextReusableMealId);
+      setAssistantState((current) => ({
+        ...current,
+        sourceReusableMealId: nextReusableMealId,
+      }));
       setFavoriteState('saved');
       setFavoriteSaving(false);
       appendChatMessage('assistant', sourceReusableMealId ? 'Updated your favorite.' : 'Saved that as a favorite.', { tone: 'success' });
@@ -1035,6 +1092,10 @@ export function MealLoggerClient({
       }
 
       setSourceReusableMealId(null);
+      setAssistantState((current) => ({
+        ...current,
+        sourceReusableMealId: null,
+      }));
       setFavoriteState('idle');
       setFavoriteSaving(false);
       appendChatMessage('assistant', 'Removed the favorite. The meal is still here if you want it.', { tone: 'success' });
@@ -1048,6 +1109,11 @@ export function MealLoggerClient({
 
   function retryLastAction() {
     if (errorAction === 'parse') {
+      if (lastAssistantMessage) {
+        sendAssistantMessage(lastAssistantMessage, { retry: true });
+        return;
+      }
+
       parseMeal(lastParseOptions ?? undefined);
       return;
     }
@@ -1069,173 +1135,39 @@ export function MealLoggerClient({
 
   function updateItem(index: number, key: keyof ParsedFoodItem, value: string | number | null) {
     markDraftChanged();
-    setItems((current) =>
-      current.map((item, itemIndex) => {
-        if (itemIndex !== index) return item;
+    const nextItems = items.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
 
-        const isText = ['food_name', 'unit', 'notes', 'source_name', 'source_type', 'catalog_food_id'].includes(key);
-        return {
-          ...item,
-          [key]: isText ? value : Number(value),
-        };
-      }),
-    );
+      const isText = ['food_name', 'unit', 'notes', 'source_name', 'source_type', 'catalog_food_id'].includes(key);
+      return {
+        ...item,
+        [key]: isText ? value : Number(value),
+      };
+    });
+    setItems(nextItems);
+    setAssistantState((current) => ({
+      ...current,
+      currentMealItems: nextItems,
+      mealType,
+      confidenceScore,
+      sourceReusableMealId,
+      editingMealId,
+    }));
   }
 
   function removeItem(index: number) {
     markDraftChanged();
-    setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    const nextItems = items.filter((_, itemIndex) => itemIndex !== index);
+    setItems(nextItems);
+    setAssistantState((current) => ({
+      ...current,
+      currentMealItems: nextItems,
+      mealType,
+      confidenceScore,
+      sourceReusableMealId,
+      editingMealId,
+    }));
     setExpandedIndex((current) => (current === index ? null : current));
-  }
-
-  function applySimpleQuantityCorrection(message: string) {
-    const nextCount = detectSimpleQuantityCorrection(message);
-
-    if (!nextCount || !items.length) {
-      return false;
-    }
-
-    const nextItems = scaleParsedItems(items, nextCount);
-
-    markDraftChanged();
-    setClarifyingQuestion(null);
-    appendChatMessage('user', message, { compact: true });
-    setItems(nextItems);
-    setAssistantEstimateMode('correction');
-    setComposerText('');
-    appendChatMessage(
-      'assistant',
-      buildAssistantEstimateCopy({
-        prompt: conversationPrompt,
-        items: nextItems,
-        totalCalories: sumTotals(nextItems).calories,
-        totalProtein: sumTotals(nextItems).protein,
-        estimatedCount: summarizeParsedItems(nextItems).estimatedCount,
-        mode: 'correction',
-      }),
-    );
-    return true;
-  }
-
-  function applyMealTypeCorrection(message: string) {
-    const match = message.trim().toLowerCase().match(/\b(breakfast|lunch|dinner|snack)\b/);
-
-    if (!match || !items.length) {
-      return false;
-    }
-
-    const nextMealType = match[1] as 'breakfast' | 'lunch' | 'dinner' | 'snack';
-    setMealType(nextMealType);
-    appendChatMessage('user', message, { compact: true });
-    appendChatMessage('assistant', `Got it, I changed this to ${nextMealType}.`);
-    setComposerText('');
-    return true;
-  }
-
-  function applyMacroCorrection(message: string) {
-    if (!items.length) {
-      return false;
-    }
-
-    const normalized = message.trim().toLowerCase();
-    const fieldPatterns: Array<{ regex: RegExp; field: keyof ParsedFoodItem; label: string; unit: string }> = [
-      { regex: /(calories?|cal)\D*(\d+(?:\.\d+)?)/i, field: 'calories', label: 'calories', unit: '' },
-      { regex: /(protein)\D*(\d+(?:\.\d+)?)/i, field: 'protein', label: 'protein', unit: 'g' },
-      { regex: /(carbs?)\D*(\d+(?:\.\d+)?)/i, field: 'carbs', label: 'carbs', unit: 'g' },
-      { regex: /(fat)\D*(\d+(?:\.\d+)?)/i, field: 'fat', label: 'fat', unit: 'g' },
-    ];
-
-    const matchConfig = fieldPatterns.find((entry) => entry.regex.test(normalized));
-    if (!matchConfig) {
-      return false;
-    }
-
-    const match = normalized.match(matchConfig.regex);
-    const nextValue = Number(match?.[2] ?? '');
-    if (!Number.isFinite(nextValue) || nextValue < 0) {
-      return false;
-    }
-
-    markDraftChanged();
-    setClarifyingQuestion(null);
-    appendChatMessage('user', message, { compact: true });
-
-    setItems((current) => {
-      if (!current.length) {
-        return current;
-      }
-
-      if (current.length === 1) {
-        return [
-          {
-            ...current[0],
-            [matchConfig.field]: nextValue,
-          },
-        ];
-      }
-
-      const restTotal = current.slice(1).reduce((sum, item) => sum + Number(item[matchConfig.field] as number), 0);
-      const firstValue = Math.max(0, nextValue - restTotal);
-
-      return current.map((item, index) =>
-        index === 0
-          ? {
-              ...item,
-              [matchConfig.field]: firstValue,
-            }
-          : item,
-      );
-    });
-
-    setAssistantEstimateMode('correction');
-    setComposerText('');
-    appendChatMessage('assistant', 'Got it, I updated that in the current meal.');
-    return true;
-  }
-
-  function applyIngredientRemovalCorrection(message: string) {
-    if (!items.length) {
-      return false;
-    }
-
-    const match = message.trim().toLowerCase().match(/^(?:remove|without|no|hold the|skip the)\s+(.+)$/i);
-    const ingredientText = normalizeIngredientText(match?.[1] ?? '');
-
-    if (!ingredientText) {
-      return false;
-    }
-
-    const exactFilteredItems = items.filter((item) => !normalizeIngredientText(item.food_name).includes(ingredientText));
-    const nextItems = exactFilteredItems.length !== items.length
-      ? exactFilteredItems
-      : items.filter((item) => {
-          const normalizedName = normalizeIngredientText(item.food_name);
-          return !ingredientText.split(' ').some((token) => token.length > 2 && normalizedName.includes(token));
-        });
-
-    if (nextItems.length === items.length || !nextItems.length) {
-      return false;
-    }
-
-    markDraftChanged();
-    setClarifyingQuestion(null);
-    appendChatMessage('user', message, { compact: true });
-    setItems(nextItems);
-    setAssistantEstimateMode('correction');
-    setComposerText('');
-    appendChatMessage(
-      'assistant',
-      buildAssistantEstimateCopy({
-        prompt: conversationPrompt,
-        items: nextItems,
-        totalCalories: sumTotals(nextItems).calories,
-        totalProtein: sumTotals(nextItems).protein,
-        estimatedCount: summarizeParsedItems(nextItems).estimatedCount,
-        mode: 'correction',
-        memoryCue,
-      }),
-    );
-    return true;
   }
 
   function submitComposer() {
@@ -1252,7 +1184,7 @@ export function MealLoggerClient({
       hasRecentMeal: Boolean(recentMeals[0]),
     });
 
-    if (command !== 'none') {
+    if (command === 'repeat_last_meal' || command === 'favorite' || command === 'remove_favorite' || command === 'edit') {
       clearFeedback();
       appendChatMessage('user', message, { compact: hasActiveMeal || command === 'repeat_last_meal' });
       setComposerText('');
@@ -1264,22 +1196,6 @@ export function MealLoggerClient({
         } else {
           appendChatMessage('assistant', "I don't have a recent meal to repeat yet. Once you've logged one, I can pull it back in fast.");
         }
-        return;
-      }
-
-      if (command === 'save') {
-        saveMeal();
-        return;
-      }
-
-      if (command === 'start_over') {
-        if (!hasActiveMeal) {
-          appendChatMessage('assistant', "Nothing's open right now. Just send the meal when you're ready.");
-          return;
-        }
-
-        appendChatMessage('assistant', 'Okay, I cleared that. What do you want to log instead?');
-        startAnotherMeal();
         return;
       }
 
@@ -1300,130 +1216,7 @@ export function MealLoggerClient({
       }
     }
 
-    if (clarifyingQuestion) {
-      parseMeal({ mode: 'clarification' });
-      return;
-    }
-
-    const intent = detectLoggerIntent(message, { hasActiveMeal });
-
-    if (intent === 'correction' && hasActiveMeal) {
-      if (applySimpleQuantityCorrection(message)) {
-        return;
-      }
-
-      if (applyIngredientRemovalCorrection(message)) {
-        return;
-      }
-
-      if (applyMealTypeCorrection(message)) {
-        return;
-      }
-
-      if (applyMacroCorrection(message)) {
-        return;
-      }
-
-      parseMeal({
-        text: message,
-        mode: 'correction',
-        correctionText: message,
-      });
-      return;
-    }
-
-    if (intent === 'nutrition_question') {
-      clearFeedback();
-      setLastParseOptions(null);
-      setEntryMode('chat');
-      appendChatMessage('user', message, { compact: hasActiveMeal });
-      setComposerText('');
-      setUtilityMenuOpen(false);
-
-      const reply = buildLoggerQuestionReply(message, {
-        proteinGoal,
-        dailyCalorieGoal,
-        todayProtein,
-        todayCalories,
-        remainingProtein,
-        remainingCalories,
-        currentMealProtein: totals.protein,
-        currentMealCalories: totals.calories,
-      });
-      appendChatMessage('assistant', reply);
-      return;
-    }
-
-    if (intent === 'goal_question') {
-      clearFeedback();
-      setLastParseOptions(null);
-      setEntryMode('chat');
-      appendChatMessage('user', message, { compact: hasActiveMeal });
-      setComposerText('');
-      setUtilityMenuOpen(false);
-
-      const reply = buildLoggerGoalReply(message, {
-        proteinGoal,
-        dailyCalorieGoal,
-        todayProtein,
-        todayCalories,
-        remainingProtein,
-        remainingCalories,
-        todayMealCount,
-        currentMealProtein: totals.protein,
-        currentMealCalories: totals.calories,
-      });
-      appendChatMessage('assistant', reply);
-      return;
-    }
-
-    if (intent === 'meal_history_question') {
-      clearFeedback();
-      setLastParseOptions(null);
-      setEntryMode('chat');
-      appendChatMessage('user', message, { compact: hasActiveMeal });
-      setComposerText('');
-      setUtilityMenuOpen(false);
-
-      const reply = buildHistoryReply(message, recentMeals);
-      appendChatMessage('assistant', reply);
-      return;
-    }
-
-    if (intent === 'recommendation_request') {
-      clearFeedback();
-      setLastParseOptions(null);
-      setEntryMode('chat');
-      appendChatMessage('user', message, { compact: hasActiveMeal });
-      setComposerText('');
-      setUtilityMenuOpen(false);
-
-      const reply = buildRecommendationReply(message, {
-        favoriteMeals,
-        recentMeals,
-        proteinGoal,
-      });
-      appendChatMessage('assistant', reply);
-      return;
-    }
-
-    if (intent !== 'food_log') {
-      clearFeedback();
-      setLastParseOptions(null);
-      setEntryMode('chat');
-      appendChatMessage('user', message, { compact: hasActiveMeal });
-      setComposerText('');
-      setUtilityMenuOpen(false);
-
-      const reply = buildLoggerIntentReply(intent, {
-        userName,
-        hasActiveMeal,
-      });
-      appendChatMessage('assistant', reply);
-      return;
-    }
-
-    parseMeal({ mode: 'new' });
+    sendAssistantMessage(message);
   }
 
   return (
@@ -1828,7 +1621,14 @@ export function MealLoggerClient({
                 <select
                   aria-label="Meal type"
                   value={mealType}
-                  onChange={(event) => setMealType(event.target.value as 'breakfast' | 'lunch' | 'dinner' | 'snack')}
+                  onChange={(event) => {
+                    const nextMealType = event.target.value as 'breakfast' | 'lunch' | 'dinner' | 'snack';
+                    setMealType(nextMealType);
+                    setAssistantState((current) => ({
+                      ...current,
+                      mealType: nextMealType,
+                    }));
+                  }}
                   className="chat-meal-type-select"
                 >
                   {mealTypeOptions.map((option) => (

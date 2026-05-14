@@ -33,6 +33,7 @@ type KnownPackagedBrand =
   | 'Oikos'
   | 'Premier Protein'
   | 'Quest'
+  | 'Quaker'
   | null;
 
 function detectRestaurantBrand(text: string): KnownRestaurantBrand {
@@ -54,12 +55,15 @@ function detectPackagedBrand(text: string): KnownPackagedBrand {
   if (text.includes('fairlife')) return 'Fairlife';
   if (text.includes('premier protein')) return 'Premier Protein';
   if (text.includes('quest')) return 'Quest';
+  if (text.includes('quaker')) return 'Quaker';
   if (text.includes('gatorade')) return 'Gatorade';
   if (text.includes('celsius')) return 'Celsius';
   if (text.includes('coke zero') || text.includes('coca cola') || text.includes('coke')) return 'Coca-Cola';
   if (text.includes('oikos')) return 'Oikos';
   return null;
 }
+
+const packagedSnackRegex = /\b(rice cakes?|white cheddar rice cakes?|chips?|protein bars?|popcorn|crackers?|packaged snacks?)\b/i;
 
 function cleanSegment(segment: string) {
   return segment
@@ -246,7 +250,15 @@ function extractPackagedQuantity(segment: string, unit: string) {
     return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:cup|cups)/, 1);
   }
 
-  return 1;
+  if (unit === 'cake') {
+    return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s+(?:[a-z]+\s+){0,4}(?:rice cake|rice cakes|cake|cakes)/, 1);
+  }
+
+  if (unit === 'serving') {
+    return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:serving|servings|bag|bags|pack|packs)/, 1);
+  }
+
+  return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)/, 1);
 }
 
 function buildPackagedMatchNotes(segment: string, foodName: string) {
@@ -254,7 +266,7 @@ function buildPackagedMatchNotes(segment: string, foodName: string) {
     return `Estimated as ${foodName}. Adjust if needed.`;
   }
 
-  if (segment.includes('fairlife') || segment.includes('core power') || segment.includes('premier protein')) {
+  if (segment.includes('white cheddar') || segment.includes('quaker') || segment.includes('fairlife') || segment.includes('core power') || segment.includes('premier protein')) {
     return `Matched to ${foodName}. Adjust if your exact product or flavor differs.`;
   }
 
@@ -276,16 +288,34 @@ function getPackagedBrandCandidates(brand: Exclude<KnownPackagedBrand, null>, se
   return [brand] as const;
 }
 
+function looksLikePackagedSnack(segment: string) {
+  return packagedSnackRegex.test(segment) || Boolean(detectPackagedBrand(segment));
+}
+
+function normalizePackagedSearch(segment: string) {
+  return segment
+    .replace(/\bwhich\s+are\b/g, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*(?:cals?|calories?)\s*(?:each)?\b/g, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:cals?|calories?)\s*(?:each)?\b/g, ' ')
+    .replace(/^\s*(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s+/i, '')
+    .replace(/\beach\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function matchPackagedSegment(segment: string): ParsedFoodItem[] {
-  const brand = detectPackagedBrand(segment);
-  if (!brand) {
+  if (!looksLikePackagedSnack(segment)) {
     return [];
   }
 
-  const match = getPackagedBrandCandidates(brand, segment)
-    .map((candidateBrand) => findCatalogFoodMatch(segment, candidateBrand))
-    .filter((candidate): candidate is NonNullable<ReturnType<typeof findCatalogFoodMatch>> => Boolean(candidate))
-    .sort((left, right) => right.score - left.score)[0] ?? null;
+  const brand = detectPackagedBrand(segment);
+  const packagedSearch = normalizePackagedSearch(segment);
+  const candidateMatches = [
+    findCatalogFoodMatch(packagedSearch),
+    ...(brand ? getPackagedBrandCandidates(brand, packagedSearch).map((candidateBrand) => findCatalogFoodMatch(packagedSearch, candidateBrand)) : []),
+  ].filter((candidate): candidate is NonNullable<ReturnType<typeof findCatalogFoodMatch>> => Boolean(candidate));
+
+  const match = candidateMatches.sort((left, right) => right.score - left.score)[0] ?? null;
 
   if (!match) {
     return [];
@@ -299,7 +329,7 @@ function matchPackagedSegment(segment: string): ParsedFoodItem[] {
     {
       ...scaled,
       notes: buildPackagedMatchNotes(segment, food.canonicalName),
-      source_name: match.exactProduct
+      source_name: match.exactProduct || match.exactAlias
         ? `${scaled.source_name ?? 'Branded nutrition reference'} · high-confidence product match`
         : scaled.source_name,
     },
@@ -356,7 +386,7 @@ function matchGenericSegment(segment: string): ParsedFoodItem[] {
     }
   }
 
-  if (segment.includes('rice')) {
+  if (segment.includes('rice') && !segment.includes('rice cake')) {
     const rice = findCatalogFoodById('generic_cooked_white_rice');
     if (rice) {
       if (/scoop|scoops/.test(segment)) {
@@ -385,7 +415,7 @@ function matchGenericSegment(segment: string): ParsedFoodItem[] {
     }
   }
 
-  if (segment.includes('oats') || segment.includes('oatmeal')) {
+  if ((segment.includes('oats') || segment.includes('oatmeal')) && !segment.includes('quaker oats') && !segment.includes('rice cake')) {
     const oats = findCatalogFoodById('generic_oats');
     if (oats) items.push(scaleCatalogFood(oats, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:cup|cups)\s+(?:of\s+)?(?:oats|oatmeal)/, 0.5), 'cup'));
   }

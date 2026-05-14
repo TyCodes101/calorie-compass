@@ -3,7 +3,6 @@ import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import type { MealTypeValue } from '@/lib/ai/orchestrate';
 import { getCurrentUserId } from '@/lib/current-user';
 import { lookupNutrition } from '@/lib/nutrition/nutritionLookup';
-import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
 import type { NutritionLabelInput } from '@/lib/nutrition/types';
 import { prisma } from '@/lib/prisma';
 
@@ -250,10 +249,5 @@ export async function resolveNutritionEstimate({ text, mealType, nutritionLabel 
     return savedCorrection;
   }
 
-  return lookupNutrition(
-    { text, mealType, nutritionLabel, barcode },
-    {
-      providers: [localVerifiedCatalogProvider],
-    },
-  );
+  return lookupNutrition({ text, mealType, nutritionLabel, barcode });
 }

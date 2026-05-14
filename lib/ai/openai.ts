@@ -51,7 +51,6 @@ export async function parseMealText(
   const clarification = options?.conversation?.mode === 'correction' ? { needsClarification: false, question: null } : buildClarificationDecision(analysis);
   const inferredMealType = inferMealType(mealType, effectiveText);
   const hasDirectNutritionInput = Boolean(options?.barcode || options?.nutritionLabel);
-  const isCorrection = options?.conversation?.mode === 'correction';
 
   if (hasDirectNutritionInput) {
     const resolvedEstimate = await resolveNutritionEstimate({
@@ -66,7 +65,7 @@ export async function parseMealText(
     }
   }
 
-  if (!clarification.needsClarification && !isCorrection) {
+  if (!clarification.needsClarification) {
     const resolvedEstimate = await resolveNutritionEstimate({
       text: effectiveText,
       mealType: inferredMealType,

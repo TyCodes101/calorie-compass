@@ -70,6 +70,32 @@ describe('trusted nutrition catalog matching', () => {
     expect(response?.items[0]?.food_name).toMatch(/fairlife/i);
   });
 
+  it('matches branded and compound rice-cake phrases before generic decomposition', () => {
+    const branded = getTrustedCatalogEstimate('3 quaker oats rice cakes white cheddar', 'snack');
+    const flavored = getTrustedCatalogEstimate('white cheddar rice cakes', 'snack');
+    const quaker = getTrustedCatalogEstimate('quaker rice cakes', 'snack');
+    const plain = getTrustedCatalogEstimate('rice cakes', 'snack');
+
+    expect(branded).not.toBeNull();
+    expect(branded?.items).toHaveLength(1);
+    expect(branded?.items[0]?.food_name).toMatch(/quaker white cheddar rice cakes/i);
+    expect(branded?.items[0]?.quantity).toBe(3);
+
+    expect(flavored?.items[0]?.food_name).toMatch(/white cheddar rice cakes/i);
+    expect(quaker?.items[0]?.food_name).toMatch(/quaker rice cakes/i);
+    expect(plain?.items[0]?.food_name).toMatch(/rice cake/i);
+  });
+
+  it('does not decompose quaker oats rice cakes into oats plus rice', () => {
+    const response = getTrustedCatalogEstimate('3 quaker oats rice cakes which are 50-60 cals each white cheddar', 'snack');
+
+    expect(response).not.toBeNull();
+    expect(response?.items).toHaveLength(1);
+    expect(response?.items[0]?.food_name).toMatch(/white cheddar rice cakes/i);
+    expect(response?.items[0]?.food_name).not.toMatch(/^dry oats$/i);
+    expect(response?.totals.calories).toBeGreaterThan(100);
+  });
+
   it('prefers the 42g Fairlife Core Power Elite product when the protein signal is explicit', () => {
     const cases = [
       '42g Fairlife shake',

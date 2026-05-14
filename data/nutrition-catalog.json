@@ -151,6 +151,14 @@
       "brand": "Oikos",
       "citation": "Oikos branded nutrition reference",
       "notes": "Used for branded packaged food matching"
+    },
+    {
+      "id": "quaker_reference",
+      "name": "Quaker nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Quaker",
+      "citation": "Quaker packaged snack nutrition reference",
+      "notes": "Used for branded packaged food matching"
     }
   ],
   "foods": [
@@ -1146,6 +1154,54 @@
         "oikos triple zero",
         "oikos yogurt",
         "oikos greek yogurt"
+      ]
+    },
+    {
+      "id": "quaker_rice_cakes",
+      "canonicalName": "Quaker Rice Cakes",
+      "brand": "Quaker",
+      "servingQuantity": 1,
+      "servingUnit": "cake",
+      "calories": 35,
+      "protein": 1,
+      "carbs": 7,
+      "fat": 0.3,
+      "fiber": 0.3,
+      "sugar": 0,
+      "sodium": 15,
+      "sourceId": "quaker_reference",
+      "active": true,
+      "aliases": [
+        "quaker rice cakes",
+        "quaker oats rice cakes",
+        "quaker rice cake",
+        "quaker oats rice cake"
+      ]
+    },
+    {
+      "id": "quaker_white_cheddar_rice_cakes",
+      "canonicalName": "Quaker White Cheddar Rice Cakes",
+      "brand": "Quaker",
+      "servingQuantity": 1,
+      "servingUnit": "cake",
+      "calories": 55,
+      "protein": 1,
+      "carbs": 11,
+      "fat": 1.5,
+      "fiber": 0.3,
+      "sugar": 1,
+      "sodium": 180,
+      "sourceId": "quaker_reference",
+      "active": true,
+      "aliases": [
+        "white cheddar rice cakes",
+        "white cheddar rice cake",
+        "quaker white cheddar rice cakes",
+        "quaker oats white cheddar rice cakes",
+        "quaker oats rice cakes white cheddar",
+        "quaker rice cakes white cheddar",
+        "quaker white cheddar rice cake",
+        "quaker oats white cheddar rice cake"
       ]
     },
     {

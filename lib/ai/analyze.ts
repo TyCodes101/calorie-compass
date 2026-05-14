@@ -1,4 +1,4 @@
-export type KnownBrand = 'chipotle' | 'starbucks' | 'chick-fil-a' | 'mcdonalds' | null;
+export type KnownBrand = 'chipotle' | 'starbucks' | 'chick-fil-a' | 'mcdonalds' | 'quaker' | null;
 export type MealCategory = 'restaurant' | 'home_cooked' | 'simple' | 'unknown';
 export type SpecificityLevel = 'high' | 'medium' | 'low';
 
@@ -17,9 +17,25 @@ export type MealAnalysis = {
   likelyNeedsClarification: boolean;
 };
 
-const portionRegex = /(\b\d+(?:\.\d+)?\b\s?(?:cup|cups|oz|ounce|ounces|serving|servings|piece|pieces|slice|slices|bowl|bowls|plate|plates|scoop|scoops|tbsp|tsp|grams|g|egg|eggs|banana|bananas|apple|apples|bagel|bagels|bar|bars|cake|cakes|container|containers|count)\b)/i;
-const countableSimpleQuantityRegex = /(?:\b\d+(?:\.\d+)?\b\s*(?:rice cakes?|bananas?|apples?|eggs?|protein bars?|bagels?|(?:greek\s+)?yogurts?)\b|\b\d+(?:\.\d+)?\b\s*(?:slice|slices)\s+(?:of\s+)?toast\b)/i;
-const simpleCountableFoodRegex = /\b(rice cakes?|bananas?|apples?|eggs?|protein bars?|greek yogurt|yogurts?|bagels?|toast)\b/i;
+const protectedCompoundPatterns = [
+  /white cheddar rice cakes?/gi,
+  /rice cakes?/gi,
+  /protein bars?/gi,
+  /chicken sandwich/gi,
+  /peanut butter/gi,
+  /ice cream/gi,
+  /grilled chicken(?: breast)?/gi,
+  /hash browns?/gi,
+  /french fries/gi,
+  /mac and cheese/gi,
+  /popcorn/gi,
+  /crackers?/gi,
+];
+
+const portionRegex = /(\b\d+(?:\.\d+)?\b\s?(?:cup|cups|oz|ounce|ounces|serving|servings|piece|pieces|slice|slices|bowl|bowls|plate|plates|scoop|scoops|tbsp|tsp|grams|g|egg|eggs|banana|bananas|apple|apples|bagel|bagels|bar|bars|cake|cakes|container|containers|count|breast|sandwich)\b)/i;
+const simpleCountableFoodRegex = /\b(rice cakes?|protein bars?|bananas?|apples?|eggs?|protein bar|greek yogurt|yogurts?|bagels?|toast|crackers?|chips?|popcorn)\b/i;
+const compoundFoodRegex = /\b(white cheddar rice cakes?|rice cakes?|protein bars?|chicken sandwich|peanut butter|ice cream|grilled chicken(?: breast)?|hash browns?|french fries|mac and cheese|popcorn|crackers?)\b/i;
+const packagedSnackRegex = /\b(quaker(?: oats)?|white cheddar|rice cakes?|chips?|protein bars?|popcorn|crackers?|packaged snacks?)\b/i;
 const proteinShakeRegex = /\b(protein shake|shake|smoothie)\b/i;
 const packagedProteinRegex = /\b(fairlife|core power|premier protein|quest)\b/i;
 const cookingStyleRegex = /\b(grilled|fried|baked|roasted|blackened|crispy|sauced|sauteed|broiled)\b/i;
@@ -28,34 +44,60 @@ const separatorRegex = /(,| and | with )/i;
 const simpleAddonRegex = /\b(almond milk|milk|water|berries?|banana|ice|cinnamon|honey|peanut butter)\b/i;
 const ambiguousMealRegex = /\b(chicken and rice|chicken|rice|pasta|sandwich|salad|bowl|tacos?|protein shake|snacks?)\b/i;
 
+function protectCompoundFoods(text: string) {
+  return protectedCompoundPatterns.reduce(
+    (current, pattern) => current.replace(pattern, (match) => match.replace(/\s+/g, '_')),
+    text,
+  );
+}
+
+function restoreProtectedText(text: string) {
+  return text.replace(/_/g, ' ');
+}
+
 function cleanSegment(segment: string) {
-  return segment
-    .replace(/^\s*(i had|i ate|had|ate|with|and|a|an)\s+/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return restoreProtectedText(
+    segment
+      .replace(/^\s*(i had|i ate|had|ate|with|and|a|an)\s+/i, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
 }
 
 function splitSegments(text: string) {
-  return text
+  const protectedText = protectCompoundFoods(text);
+
+  return protectedText
     .split(/,|\band\b|\bwith\b/i)
     .map(cleanSegment)
     .filter(Boolean);
 }
 
+function hasCountableQuantity(text: string) {
+  return /\b\d+(?:\.\d+)?\b(?:\s+[a-z0-9]+){0,4}\s+(?:rice cakes?|protein bars?|bananas?|apples?|eggs?|bagels?|(?:greek\s+)?yogurts?|crackers?|chips?|popcorn)\b/i.test(
+    text,
+  );
+}
+
 function isCountableSimpleSegment(segment: string) {
-  return countableSimpleQuantityRegex.test(segment);
+  return hasCountableQuantity(segment) || simpleCountableFoodRegex.test(segment);
 }
 
 function detectBrand(text: string): KnownBrand {
   if (text.includes('chipotle')) return 'chipotle';
   if (text.includes('starbucks')) return 'starbucks';
   if (text.includes('chick-fil-a') || text.includes('chick fil a')) return 'chick-fil-a';
-  if (text.includes("mcdonald") || text.includes('mcdonalds')) return 'mcdonalds';
+  if (text.includes('mcdonald') || text.includes('mcdonalds')) return 'mcdonalds';
+  if (text.includes('quaker')) return 'quaker';
   return null;
 }
 
 function detectCategory(text: string, brand: KnownBrand, hasExplicitCountableQuantity: boolean, looksLikeSimpleCountableMeal: boolean): MealCategory {
-  if (brand) return 'restaurant';
+  if (brand && brand !== 'quaker') return 'restaurant';
+
+  if (packagedSnackRegex.test(text) || compoundFoodRegex.test(text)) {
+    return 'simple';
+  }
 
   if (looksLikeSimpleCountableMeal || (hasExplicitCountableQuantity && simpleCountableFoodRegex.test(text))) {
     return 'simple';
@@ -65,7 +107,7 @@ function detectCategory(text: string, brand: KnownBrand, hasExplicitCountableQua
     return simpleAddonRegex.test(text) || hasExplicitCountableQuantity || packagedProteinRegex.test(text) ? 'simple' : 'unknown';
   }
 
-  if (/\b(protein bar|banana|apple|yogurt|greek yogurt|rice cake|bagel|eggs?|toast)\b/i.test(text) && (!separatorRegex.test(text) || simpleAddonRegex.test(text))) {
+  if (simpleCountableFoodRegex.test(text) && (!separatorRegex.test(text) || simpleAddonRegex.test(text))) {
     return 'simple';
   }
 
@@ -82,7 +124,8 @@ function detectSpecificity(text: string, hasPortion: boolean, hasCookingStyle: b
   if (hasPortion) score += 1;
   if (hasCookingStyle) score += 1;
   if (hasMultipleItems) score += 1;
-  if (/\b(double|extra|grande|venti|tall|small|medium|large)\b/i.test(text)) score += 1;
+  if (compoundFoodRegex.test(text) || packagedSnackRegex.test(text)) score += 1;
+  if (/\b(double|extra|grande|venti|tall|small|medium|large|white cheddar)\b/i.test(text)) score += 1;
 
   if (score >= 4) return 'high' as const;
   if (score >= 2) return 'medium' as const;
@@ -93,17 +136,19 @@ export function analyzeMealText(input: string): MealAnalysis {
   const normalizedText = input.trim().toLowerCase();
   const brand = detectBrand(normalizedText);
   const segments = splitSegments(normalizedText);
-  const hasExplicitCountableQuantity = countableSimpleQuantityRegex.test(normalizedText);
+  const hasExplicitCountableQuantity = hasCountableQuantity(normalizedText);
   const looksLikeSimpleCountableMeal = segments.length > 0 && segments.every(isCountableSimpleSegment);
   const hasPortion = portionRegex.test(normalizedText) || hasExplicitCountableQuantity;
   const hasCookingStyle = cookingStyleRegex.test(normalizedText);
   const hasSauceSignal = sauceRegex.test(normalizedText);
-  const hasMultipleItems = separatorRegex.test(normalizedText);
+  const hasMultipleItems = separatorRegex.test(protectCompoundFoods(normalizedText));
   const category = detectCategory(normalizedText, brand, hasExplicitCountableQuantity, looksLikeSimpleCountableMeal);
   const specificity = detectSpecificity(normalizedText, hasPortion, hasCookingStyle, hasMultipleItems, brand);
 
   const likelyNeedsClarification = Boolean(
     !brand &&
+      !packagedSnackRegex.test(normalizedText) &&
+      !compoundFoodRegex.test(normalizedText) &&
       !hasExplicitCountableQuantity &&
       !looksLikeSimpleCountableMeal &&
       category !== 'simple' &&

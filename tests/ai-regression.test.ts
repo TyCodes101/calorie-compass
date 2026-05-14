@@ -25,6 +25,13 @@ const cases = [
     minItems: 1,
   },
   {
+    label: 'quaker white cheddar rice cakes',
+    text: '3 quaker oats rice cakes white cheddar',
+    mealType: 'snack' as const,
+    expectClarification: false,
+    minItems: 1,
+  },
+  {
     label: 'bare protein shake gets a default estimate',
     text: 'protein shake',
     mealType: 'snack' as const,

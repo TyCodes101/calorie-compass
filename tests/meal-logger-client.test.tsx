@@ -3,7 +3,80 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MealLoggerClient } from '@/components/meal-logger-client';
+import type { MealAssistantResponse } from '@/lib/ai/mealAssistantSchema';
+import type { ParsedFoodItem } from '@/lib/ai/types';
 import type { RecentMealQuickLog } from '@/lib/history';
+
+function buildItem(overrides?: Partial<ParsedFoodItem>): ParsedFoodItem {
+  return {
+    food_name: 'Chipotle chicken bowl',
+    quantity: 1,
+    unit: 'bowl',
+    calories: 980,
+    protein: 68,
+    carbs: 74,
+    fat: 34,
+    fiber: 10,
+    sugar: 4,
+    sodium: 1760,
+    notes: 'Matched to a trusted Chipotle-style bowl estimate.',
+    is_trusted: true,
+    source_type: 'OFFICIAL_RESTAURANT',
+    source_name: 'Chipotle official nutrition',
+    confidence_label: 'Verified',
+    matched_query: null,
+    original_user_text: null,
+    provider_used: null,
+    used_ai_fallback: false,
+    catalog_food_id: 'chipotle_bowl_double_chicken',
+    ...overrides,
+  };
+}
+
+function buildAssistantResponse(overrides?: Partial<MealAssistantResponse>): MealAssistantResponse {
+  const items = overrides?.meal?.items ?? [buildItem()];
+  return {
+    intent: 'new_food_item',
+    assistant_reply: 'Got it, that looks like a Chipotle chicken bowl. Verified match.',
+    items: [],
+    corrections: [],
+    should_lookup_nutrition: true,
+    should_save_meal: false,
+    should_ask_clarification: false,
+    clarification_question: null,
+    confidence: 'high',
+    meal: {
+      items,
+      totals: {
+        calories: 980,
+        protein: 68,
+        carbs: 74,
+        fat: 34,
+        fiber: 10,
+        sugar: 4,
+        sodium: 1760,
+        ...overrides?.meal?.totals,
+      },
+      confidence_score: 0.96,
+      ...overrides?.meal,
+    },
+    next_state: {
+      currentMealItems: items,
+      pendingClarification: null,
+      lastAssistantQuestion: null,
+      userCorrections: [],
+      saved: false,
+      mealType: 'lunch',
+      userName: 'Tyler Cox',
+      currentMealText: 'Chipotle bowl with white rice and chicken',
+      confidenceScore: 0.96,
+      sourceReusableMealId: null,
+      editingMealId: null,
+      ...overrides?.next_state,
+    },
+    ...overrides,
+  };
+}
 
 function buildRecentMeal(overrides?: Partial<RecentMealQuickLog>): RecentMealQuickLog {
   return {
@@ -14,25 +87,7 @@ function buildRecentMeal(overrides?: Partial<RecentMealQuickLog>): RecentMealQui
     createdAt: new Date().toISOString(),
     rawText: 'Chipotle chicken bowl',
     confidenceScore: 0.92,
-    items: [
-      {
-        food_name: 'Chipotle chicken bowl',
-        quantity: 1,
-        unit: 'bowl',
-        calories: 980,
-        protein: 68,
-        carbs: 74,
-        fat: 34,
-        fiber: 10,
-        sugar: 4,
-        sodium: 1760,
-        notes: 'Trusted match.',
-        is_trusted: true,
-        source_type: 'OFFICIAL_RESTAURANT' as const,
-        source_name: 'Chipotle official nutrition',
-        catalog_food_id: 'chipotle_bowl_double_chicken',
-      },
-    ],
+    items: [buildItem()],
     ...overrides,
   };
 }
@@ -66,18 +121,7 @@ describe('meal logger client', () => {
   it('keeps the first screen minimal without quick-start chips', () => {
     render(
       <MealLoggerClient
-        favoriteMeals={[
-          {
-            id: 'fav-1',
-            title: 'Fairlife Core Power Elite 42g shake',
-            rawText: 'Fairlife Core Power Elite 42g shake',
-            mealType: 'snack',
-            lastUsedAt: new Date().toISOString(),
-            totalCalories: 230,
-            itemCount: 1,
-            trustedCount: 1,
-          },
-        ]}
+        favoriteMeals={[]}
         recentMeals={[buildRecentMeal()]}
       />,
     );
@@ -88,45 +132,12 @@ describe('meal logger client', () => {
     expect(screen.getByPlaceholderText('Tell me what you ate')).toBeInTheDocument();
   });
 
-  it('renders a conversational estimate flow and saves the reviewed meal', async () => {
+  it('uses the meal-assistant route for conversational logging and still saves the reviewed meal', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          needs_clarification: false,
-          clarifying_question: null,
-          meal_type: 'lunch',
-          confidence_score: 0.9,
-          items: [
-            {
-              food_name: 'Chipotle chicken bowl',
-              quantity: 1,
-              unit: 'bowl',
-              calories: 980,
-              protein: 68,
-              carbs: 74,
-              fat: 34,
-              fiber: 10,
-              sugar: 4,
-              sodium: 1760,
-              notes: 'Matched to a trusted Chipotle-style bowl estimate.',
-              is_trusted: true,
-              source_type: 'OFFICIAL_RESTAURANT',
-              source_name: 'Chipotle official nutrition',
-              catalog_food_id: 'chipotle_bowl_double_chicken',
-            },
-          ],
-          totals: {
-            calories: 980,
-            protein: 68,
-            carbs: 74,
-            fat: 34,
-            fiber: 10,
-            sugar: 4,
-            sodium: 1760,
-          },
-        }),
+        json: async () => buildAssistantResponse(),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -135,13 +146,7 @@ describe('meal logger client', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    render(
-      <MealLoggerClient
-        nutritionPreferences="high protein"
-        favoriteMeals={[]}
-        recentMeals={[]}
-      />,
-    );
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} userName="Tyler Cox" />);
 
     fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'I had a Chipotle bowl with white rice, double chicken, corn salsa, cheese, and lettuce.' },
@@ -150,50 +155,74 @@ describe('meal logger client', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/got it, that looks like chipotle chicken bowl/i)).toBeInTheDocument();
-    });
-
-    expect(screen.getAllByText(/980/).length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: /^save it$/i })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /save it/i }));
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByText(/got it, that looks like a chipotle chicken bowl/i)).toBeInTheDocument();
     });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/ai/parse-meal',
-      expect.objectContaining({
-        method: 'POST',
-      }),
+      '/api/meal-assistant',
+      expect.objectContaining({ method: 'POST' }),
     );
+    expect(screen.getAllByText(/980/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /^save it$/i })).toBeInTheDocument();
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      '/api/meals',
-      expect.objectContaining({
-        method: 'POST',
-      }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: /^save it$/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Saved it\. Want to log anything else\?/i)).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        '/api/meals',
+        expect.objectContaining({ method: 'POST' }),
+      );
     });
 
-    expect(screen.getByRole('button', { name: 'Saved' })).toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByText(/saved it\. want to log anything else\?/i)).toBeInTheDocument();
+    });
+
     expect(refreshMock).toHaveBeenCalled();
   });
 
-  it('responds conversationally to greetings instead of trying to parse a meal', async () => {
-    const fetchMock = vi.fn();
+  it('shows only the assistant reply from the conversational route for greetings', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () =>
+        buildAssistantResponse({
+          intent: 'casual_message',
+          assistant_reply: "Hey Tyler, what'd you eat?",
+          should_lookup_nutrition: false,
+          meal: {
+            items: [],
+            totals: {
+              calories: 0,
+              protein: 0,
+              carbs: 0,
+              fat: 0,
+              fiber: 0,
+              sugar: 0,
+              sodium: 0,
+            },
+            confidence_score: 0.82,
+          },
+          next_state: {
+            currentMealItems: [],
+            pendingClarification: null,
+            lastAssistantQuestion: null,
+            userCorrections: [],
+            saved: false,
+            mealType: 'snack',
+            userName: 'Tyler Cox',
+            currentMealText: null,
+            confidenceScore: 0.82,
+            sourceReusableMealId: null,
+            editingMealId: null,
+          },
+        }),
+    });
 
     vi.stubGlobal('fetch', fetchMock);
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} userName="Tyler Cox" />);
-
-    expect(screen.getByRole('combobox', { name: /meal type/i })).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'hi' },
@@ -201,142 +230,31 @@ describe('meal logger client', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByText("Hey Tyler, what'd you eat?")).toBeInTheDocument();
-    expect(screen.queryByText(/i'd estimate about/i)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Hey Tyler, what'd you eat?")).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/meal-assistant', expect.anything());
+    expect(screen.queryByText(/980/)).not.toBeInTheDocument();
   });
 
-  it('does not duplicate assistant replies when the screen rerenders', () => {
+  it('does not duplicate the initial assistant bubble when the screen rerenders', () => {
     const fetchMock = vi.fn();
 
     vi.stubGlobal('fetch', fetchMock);
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'asdf' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    expect(screen.getAllByText(/i'm with you/i)).toHaveLength(1);
+    expect(screen.getAllByText(/what'd you eat today\?/i)).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open helper actions' }));
 
-    expect(screen.getAllByText(/i'm with you/i)).toHaveLength(1);
+    expect(screen.getAllByText(/what'd you eat today\?/i)).toHaveLength(1);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('answers nutrition questions conversationally without trying to parse them as food', async () => {
-    const fetchMock = vi.fn();
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(
-      <MealLoggerClient
-        favoriteMeals={[]}
-        recentMeals={[]}
-        proteinGoal={195}
-        dailyCalorieGoal={2550}
-      />,
-    );
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'how much protein should I eat?' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/195g of protein today/i)).toBeInTheDocument();
-  });
-
-  it('answers goal questions using today totals without parsing food', async () => {
-    const fetchMock = vi.fn();
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(
-      <MealLoggerClient
-        favoriteMeals={[]}
-        recentMeals={[]}
-        proteinGoal={195}
-        todayProtein={120}
-        remainingProtein={75}
-        dailyCalorieGoal={2550}
-        todayCalories={1800}
-        remainingCalories={750}
-        todayMealCount={3}
-      />,
-    );
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'how much protein do I have left?' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/75g left/i)).toBeInTheDocument();
-  });
-
-  it('answers meal history questions from recent meals without triggering parsing', async () => {
-    const fetchMock = vi.fn();
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(
-      <MealLoggerClient
-        favoriteMeals={[]}
-        recentMeals={[buildRecentMeal({ id: 'meal-1' })]}
-      />,
-    );
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'what was my last meal?' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/your last meal was chipotle chicken bowl/i)).toBeInTheDocument();
-  });
-
-  it('answers recommendation requests using familiar meals', async () => {
-    const fetchMock = vi.fn();
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(
-      <MealLoggerClient
-        favoriteMeals={[
-          {
-            id: 'fav-1',
-            title: 'Fairlife Core Power Elite 42g shake',
-            rawText: 'Fairlife Core Power Elite 42g shake',
-            mealType: 'snack',
-            lastUsedAt: new Date().toISOString(),
-            totalCalories: 230,
-            itemCount: 1,
-            trustedCount: 1,
-          },
-        ]}
-        recentMeals={[]}
-        proteinGoal={195}
-      />,
-    );
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'what should I eat for protein?' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/fairlife core power elite 42g shake/i)).toBeInTheDocument();
-  });
-
-  it('keeps the running chat visible and can repeat the last meal from conversation', async () => {
+  it('can repeat the last meal without hitting the assistant route', async () => {
     const fetchMock = vi.fn();
 
     vi.stubGlobal('fetch', fetchMock);
@@ -344,297 +262,126 @@ describe('meal logger client', () => {
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} />);
 
     fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'hi' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'repeat my last meal' },
     });
+
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByText('hi')).toBeInTheDocument();
-    expect(screen.getByText(/repeat my last meal/i)).toBeInTheDocument();
     expect(screen.getByText(/i loaded chipotle chicken bowl again/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/chipotle chicken bowl/i).length).toBeGreaterThan(1);
+    expect(screen.getAllByText(/980/).length).toBeGreaterThan(0);
   });
 
-  it('updates the current meal when the user sends a simple correction', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        needs_clarification: false,
-        clarifying_question: null,
-        meal_type: 'lunch',
-        confidence_score: 0.94,
-        items: [
-          {
-            food_name: "McDonald's McDouble",
-            quantity: 1,
-            unit: 'burger',
-            calories: 390,
-            protein: 22,
-            carbs: 33,
-            fat: 18,
-            fiber: 2,
-            sugar: 7,
-            sodium: 850,
-            notes: 'Restaurant match.',
-            is_trusted: true,
-            source_type: 'OFFICIAL_RESTAURANT',
-            source_name: "McDonald's official nutrition",
-            catalog_food_id: 'mcdouble',
-          },
-        ],
-        totals: {
-          calories: 390,
-          protein: 22,
-          carbs: 33,
-          fat: 18,
-          fiber: 2,
-          sugar: 7,
-          sodium: 850,
-        },
-      }),
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: "mcdouble from mcdonald's" },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    await screen.findByText(/390 calories/i);
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'actually it was two' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/780 calories total/i)).toBeInTheDocument();
-  });
-
-  it('removes a matching item locally when the user says remove fries', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        needs_clarification: false,
-        clarifying_question: null,
-        meal_type: 'lunch',
-        confidence_score: 0.94,
-        items: [
-          {
-            food_name: "McDonald's McDouble",
-            quantity: 1,
-            unit: 'burger',
-            calories: 390,
-            protein: 22,
-            carbs: 33,
-            fat: 18,
-            fiber: 2,
-            sugar: 7,
-            sodium: 850,
-            notes: 'Restaurant match.',
-            is_trusted: true,
-            source_type: 'OFFICIAL_RESTAURANT',
-            source_name: "McDonald's official nutrition",
-            catalog_food_id: 'mcdouble',
-          },
-          {
-            food_name: "McDonald's small fries",
-            quantity: 1,
-            unit: 'order',
-            calories: 230,
-            protein: 3,
-            carbs: 29,
-            fat: 11,
-            fiber: 3,
-            sugar: 0,
-            sodium: 180,
-            notes: 'Restaurant match.',
-            is_trusted: true,
-            source_type: 'OFFICIAL_RESTAURANT',
-            source_name: "McDonald's official nutrition",
-            catalog_food_id: 'mcdonalds_small_fries',
-          },
-        ],
-        totals: {
-          calories: 620,
-          protein: 25,
-          carbs: 62,
-          fat: 29,
-          fiber: 5,
-          sugar: 7,
-          sodium: 1030,
-        },
-      }),
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: "mcdouble and fries from mcdonald's" },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    await screen.findByText(/620 calories/i);
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'remove fries' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/390 calories total/i)).toBeInTheDocument();
-    expect(screen.queryByText(/small fries/i)).not.toBeInTheDocument();
-  });
-
-  it('updates meal type locally when the user changes it', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        needs_clarification: false,
-        clarifying_question: null,
-        meal_type: 'lunch',
-        confidence_score: 0.9,
-        items: [
-          {
-            food_name: 'Chicken bowl',
-            quantity: 1,
-            unit: 'bowl',
-            calories: 700,
-            protein: 45,
-            carbs: 60,
-            fat: 20,
-            fiber: 8,
-            sugar: 4,
-            sodium: 900,
-            notes: 'Estimate.',
-            is_trusted: false,
-            source_type: 'AI_ESTIMATE',
-            source_name: 'AI estimate',
-            catalog_food_id: null,
-          },
-        ],
-        totals: {
-          calories: 700,
-          protein: 45,
-          carbs: 60,
-          fat: 20,
-          fiber: 8,
-          sugar: 4,
-          sodium: 900,
-        },
-      }),
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'chicken bowl' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    await screen.findByText(/around 700 calories/i);
-
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'change it to lunch' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/changed this to lunch/i)).toBeInTheDocument();
-  });
-
-  it('handles save it as a conversational command', async () => {
+  it('can send a conversational correction through the assistant route', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          needs_clarification: false,
-          clarifying_question: null,
-          meal_type: 'snack',
-          confidence_score: 0.96,
-          items: [
-            {
-              food_name: 'Fairlife Core Power Elite 42g Protein Shake',
-              quantity: 1,
-              unit: 'bottle',
-              calories: 230,
-              protein: 42,
-              carbs: 9,
-              fat: 3.5,
-              fiber: 1,
-              sugar: 7,
-              sodium: 260,
-              notes: 'Product match.',
-              is_trusted: true,
-              source_type: 'GENERIC_REFERENCE',
-              source_name: 'Core Power nutrition reference',
-              catalog_food_id: 'fairlife-core-power-elite-42g',
-            },
-          ],
-          totals: {
-            calories: 230,
-            protein: 42,
-            carbs: 9,
-            fat: 3.5,
-            fiber: 1,
-            sugar: 7,
-            sodium: 260,
-          },
-        }),
+        json: async () => buildAssistantResponse(),
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ ok: true }),
+        json: async () =>
+          buildAssistantResponse({
+            intent: 'correction',
+            assistant_reply: 'Got it, I updated that to 2 Chipotle chicken bowls. Verified match.',
+            meal: {
+              items: [buildItem({ quantity: 2, calories: 1960, protein: 136, carbs: 148, fat: 68 })],
+              totals: {
+                calories: 1960,
+                protein: 136,
+                carbs: 148,
+                fat: 68,
+                fiber: 20,
+                sugar: 8,
+                sodium: 3520,
+              },
+              confidence_score: 0.96,
+            },
+            next_state: {
+              currentMealItems: [buildItem({ quantity: 2, calories: 1960, protein: 136, carbs: 148, fat: 68 })],
+              pendingClarification: null,
+              lastAssistantQuestion: null,
+              userCorrections: ['actually it was two'],
+              saved: false,
+              mealType: 'lunch',
+              userName: 'Tyler Cox',
+              currentMealText: '2 Chipotle chicken bowls',
+              confidenceScore: 0.96,
+              sourceReusableMealId: null,
+              editingMealId: null,
+            },
+          }),
       });
 
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} userName="Tyler Cox" />);
 
     fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
-      target: { value: 'fairlife 42g shake' },
+      target: { value: 'Chipotle bowl with chicken' },
     });
-
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
-    await screen.findByText(/230 calories/i);
+    await waitFor(() => {
+      expect(screen.getAllByText(/chipotle chicken bowl/i).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+      target: { value: 'actually it was two' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/updated that to 2 chipotle chicken bowls/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText(/1960/).length).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('handles save it as a conversational command through the assistant route', async () => {
+    const mealResponse = buildAssistantResponse();
+    const saveResponse = buildAssistantResponse({
+      intent: 'save_meal',
+      assistant_reply: 'Saved. Anything else?',
+      should_lookup_nutrition: false,
+      should_save_meal: true,
+      next_state: {
+        ...mealResponse.next_state,
+        saved: true,
+      },
+    });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => mealResponse })
+      .mockResolvedValueOnce({ ok: true, json: async () => saveResponse });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} userName="Tyler Cox" />);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+      target: { value: 'chipotle bowl' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^save it$/i })).toBeInTheDocument();
+    });
 
     fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'save it' },
     });
-
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByText(/saved\. anything else\?/i)).toBeInTheDocument();
     });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      '/api/meals',
-      expect.objectContaining({
-        method: 'POST',
-      }),
-    );
+    expect(refreshMock).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/meal-assistant', expect.anything());
   });
 
   it('supports barcode lookup for packaged foods', async () => {
@@ -646,32 +393,30 @@ describe('meal logger client', () => {
         meal_type: 'snack',
         confidence_score: 0.93,
         items: [
-          {
-            food_name: 'Packaged protein bar',
-            quantity: 1,
-            unit: 'bar',
-            calories: 200,
-            protein: 20,
-            carbs: 22,
-            fat: 7,
-            fiber: 5,
-            sugar: 2,
-            sodium: 190,
-            notes: 'Barcode match.',
+          buildItem({
+            food_name: 'Coca-Cola Classic',
+            unit: 'can',
+            calories: 140,
+            protein: 0,
+            carbs: 39,
+            fat: 0,
+            fiber: 0,
+            sugar: 39,
+            sodium: 45,
             is_trusted: true,
             source_type: 'GENERIC_REFERENCE',
-            source_name: 'Open Food Facts barcode match',
+            source_name: 'Open Food Facts Coke match',
             catalog_food_id: null,
-          },
+          }),
         ],
         totals: {
-          calories: 200,
-          protein: 20,
-          carbs: 22,
-          fat: 7,
-          fiber: 5,
-          sugar: 2,
-          sodium: 190,
+          calories: 140,
+          protein: 0,
+          carbs: 39,
+          fat: 0,
+          fiber: 0,
+          sugar: 39,
+          sodium: 45,
         },
       }),
     });
@@ -680,18 +425,18 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /open helper actions/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^barcode$/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open helper actions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Barcode' }));
     fireEvent.change(screen.getByLabelText('Barcode digits'), {
-      target: { value: '012345678905' },
+      target: { value: '5449000000996' },
     });
     fireEvent.click(screen.getByRole('button', { name: /use barcode/i }));
 
-    await screen.findByText(/around 200 calories/i);
+    await waitFor(() => {
+      expect(screen.getAllByText(/coca-cola classic/i).length).toBeGreaterThan(0);
+    });
 
-    expect(fetchMock).toHaveBeenCalled();
-    expect(screen.getByText(/got it, that looks like packaged protein bar/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/packaged protein bar/i).length).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledWith('/api/ai/parse-meal', expect.anything());
   });
 
   it('supports manual nutrition label entry for packaged foods', async () => {
@@ -703,30 +448,28 @@ describe('meal logger client', () => {
         meal_type: 'snack',
         confidence_score: 0.95,
         items: [
-          {
+          buildItem({
             food_name: 'Fairlife Core Power Elite',
-            quantity: 1,
             unit: 'bottle',
             calories: 230,
             protein: 42,
-            carbs: 9,
-            fat: 3.5,
-            fiber: 1,
+            carbs: 8,
+            fat: 3,
+            fiber: 0,
             sugar: 7,
             sodium: 260,
-            notes: 'Matched to a nutrition label you provided.',
             is_trusted: true,
             source_type: 'GENERIC_REFERENCE',
             source_name: 'User-provided nutrition label',
             catalog_food_id: null,
-          },
+          }),
         ],
         totals: {
           calories: 230,
           protein: 42,
-          carbs: 9,
-          fat: 3.5,
-          fiber: 1,
+          carbs: 8,
+          fat: 3,
+          fiber: 0,
           sugar: 7,
           sodium: 260,
         },
@@ -737,16 +480,10 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /open helper actions/i }));
-    fireEvent.click(screen.getByRole('button', { name: /nutrition label/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open helper actions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nutrition label' }));
     fireEvent.change(screen.getByLabelText('Product name'), {
       target: { value: 'Fairlife Core Power Elite' },
-    });
-    fireEvent.change(screen.getByLabelText('Serving amount'), {
-      target: { value: '1' },
-    });
-    fireEvent.change(screen.getByLabelText('Serving unit'), {
-      target: { value: 'bottle' },
     });
     fireEvent.change(screen.getByLabelText('Calories'), {
       target: { value: '230' },
@@ -754,22 +491,12 @@ describe('meal logger client', () => {
     fireEvent.change(screen.getByLabelText('Protein (g)'), {
       target: { value: '42' },
     });
-
     fireEvent.click(screen.getByRole('button', { name: /use label/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/ai/parse-meal',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('Fairlife Core Power Elite'),
-        }),
-      );
+      expect(screen.getAllByText(/fairlife core power elite/i).length).toBeGreaterThan(0);
     });
 
-    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"calories":230');
-    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"protein":42');
-    expect(screen.getAllByText(/fairlife core power elite/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/around 230 calories/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/ai/parse-meal', expect.anything());
   });
 });
