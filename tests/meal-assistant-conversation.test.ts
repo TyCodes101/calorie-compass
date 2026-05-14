@@ -648,8 +648,8 @@ describe('meal assistant conversational coverage', () => {
       }),
     });
 
-    expect(response.assistant_reply).toMatch(/shake|greek yogurt|cottage cheese|fruit|protein/i);
-    expect(response.assistant_reply).not.toMatch(/balanced overall/i);
+    expect(response.assistant_reply).toMatch(/shake|greek yogurt|cottage cheese|fruit|yasso|pudding/i);
+    expect(response.assistant_reply).not.toMatch(/balanced/i);
   });
 
   it('handles casual and descriptive follow-ups without dropping the active meal', async () => {

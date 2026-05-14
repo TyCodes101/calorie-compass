@@ -467,14 +467,14 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 .logger-assistant-thread-shell {
   flex: 1;
   min-width: 0;
-  padding-bottom: 0.2rem;
+  padding-bottom: 0.9rem;
 }
 
 .chat-thread {
   display: flex;
   flex-direction: column;
   gap: 0.72rem;
-  padding-bottom: 0.25rem;
+  padding-bottom: 1.35rem;
 }
 
 .chat-bubble {

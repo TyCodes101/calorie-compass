@@ -44,6 +44,7 @@ const dinnerSuggestionRegex = /\b(?:what should i eat tonight|what should i have
 const snackSuggestionRegex = /\b(?:high protein snack|protein snack|snack idea|snack ideas|what should i snack on|what's a good snack|what is a good snack)\b/i;
 const recommendationRegex = /\b(?:what should i eat|what should i have|what sounds good|give me (?:an?|some) ideas?|any ideas|recommend|suggest|something (?:sweet|lighter|healthy|healthier)|healthy snack|healthy dessert|dessert idea|quick meal|quick food|restaurant idea|healthier version|lighter version)\b/i;
 const sweetHealthyRegex = /\b(?:sweet|dessert)\b.*\b(?:healthy|healthier|lighter|light)\b|\b(?:healthy|healthier|lighter|light)\b.*\b(?:sweet|dessert)\b/i;
+const healthyTreatRegex = /\b(?:healthy treat|healthy snack|healthier treat|dessert|sweet snack)\b/i;
 const lighterVersionRegex = /\b(?:lighter|healthier)\s+(?:version|option)\b|\bsomething lighter\b|\bhealthier version\b/i;
 const grilledSwapRegex = /\b(?:make it grilled|grilled instead|swap .* for grilled|make that grilled)\b/i;
 const doubleThatRegex = /^(?:double that|double it|make it double|double this)\b/i;
@@ -343,7 +344,7 @@ function buildRecommendationReply(input: MealAssistantRunInput, context: MealAss
     minProtein: remainingProtein !== null && remainingProtein > 20 ? 18 : 10,
   });
 
-  if (!recommendationRegex.test(normalized) && !lighterVersionRegex.test(normalized) && !sweetHealthyRegex.test(normalized)) {
+  if (!recommendationRegex.test(normalized) && !lighterVersionRegex.test(normalized) && !sweetHealthyRegex.test(normalized) && !healthyTreatRegex.test(normalized)) {
     return null;
   }
 
@@ -351,6 +352,12 @@ function buildRecommendationReply(input: MealAssistantRunInput, context: MealAss
     return remainingCalories !== null && remainingCalories < 220
       ? 'Try something sweet but still light, like Greek yogurt with berries, a Yasso bar, or protein pudding.'
       : 'A good sweet-but-better option would be Greek yogurt with fruit, protein pudding, a Yasso bar, or dark chocolate with berries.';
+  }
+
+  if (healthyTreatRegex.test(normalized)) {
+    return remainingCalories !== null && remainingCalories < 220
+      ? 'A good healthy treat would be Greek yogurt with berries, a Yasso bar, protein pudding, or a Fairlife shake if you want something easy.'
+      : 'A few solid healthy treats would be Greek yogurt with fruit, protein pudding, a Yasso bar, cottage cheese with fruit, or a Fairlife shake.';
   }
 
   if (lighterVersionRegex.test(normalized) && input.state.currentMealItems.length) {
@@ -1429,7 +1436,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if (recommendationRegex.test(normalized) || lighterVersionRegex.test(normalized)) {
+  if (recommendationRegex.test(normalized) || lighterVersionRegex.test(normalized) || sweetHealthyRegex.test(normalized) || healthyTreatRegex.test(normalized)) {
     return {
       intent: 'recommendation_request',
       assistant_reply: 'I’ve got a few ideas.',
@@ -1738,16 +1745,11 @@ export async function runMealAssistant(
       return adaptiveMealMutationReply;
     }
 
-    const descriptorReply = buildMealDescriptorReply(workingInput, context);
-    if (descriptorReply) {
-      return descriptorReply;
-    }
-
-    const macroReply = buildCurrentMealMacroReply(workingInput.message, state);
-    if (macroReply) {
+    const recommendationReply = buildRecommendationReply(workingInput, context);
+    if (recommendationReply) {
       return buildDirectResponse({
-        intent: 'macro_question',
-        assistantReply: macroReply,
+        intent: 'recommendation_request',
+        assistantReply: recommendationReply,
         nextState: {
           ...state,
           currentMealItems: [...state.currentMealItems],
@@ -1759,11 +1761,16 @@ export async function runMealAssistant(
       });
     }
 
-    const recommendationReply = buildRecommendationReply(workingInput, context);
-    if (recommendationReply) {
+    const descriptorReply = buildMealDescriptorReply(workingInput, context);
+    if (descriptorReply) {
+      return descriptorReply;
+    }
+
+    const macroReply = buildCurrentMealMacroReply(workingInput.message, state);
+    if (macroReply) {
       return buildDirectResponse({
-        intent: 'recommendation_request',
-        assistantReply: recommendationReply,
+        intent: 'macro_question',
+        assistantReply: macroReply,
         nextState: {
           ...state,
           currentMealItems: [...state.currentMealItems],
