@@ -172,6 +172,70 @@ describe('meal logger client', () => {
     expect(screen.getByText(/195g of protein today/i)).toBeInTheDocument();
   });
 
+  it('answers meal history questions from recent meals without triggering parsing', async () => {
+    const fetchMock = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <MealLoggerClient
+        favoriteMeals={[]}
+        recentMeals={[
+          {
+            id: 'meal-1',
+            title: 'Chipotle chicken bowl',
+            mealType: 'dinner',
+            totalCalories: 980,
+            createdAt: new Date().toISOString(),
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'what was my last meal?' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/your last meal was chipotle chicken bowl/i)).toBeInTheDocument();
+  });
+
+  it('answers recommendation requests using familiar meals', async () => {
+    const fetchMock = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <MealLoggerClient
+        favoriteMeals={[
+          {
+            id: 'fav-1',
+            title: 'Fairlife Core Power Elite 42g shake',
+            rawText: 'Fairlife Core Power Elite 42g shake',
+            mealType: 'snack',
+            lastUsedAt: new Date().toISOString(),
+            totalCalories: 230,
+            itemCount: 1,
+            trustedCount: 1,
+          },
+        ]}
+        recentMeals={[]}
+        proteinGoal={195}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'what should I eat for protein?' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/fairlife core power elite 42g shake/i)).toBeInTheDocument();
+  });
+
   it('updates the current meal when the user sends a simple correction', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -231,6 +295,67 @@ describe('meal logger client', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/780 calories total/i)).toBeInTheDocument();
+  });
+
+  it('updates meal type locally when the user changes it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        needs_clarification: false,
+        clarifying_question: null,
+        meal_type: 'lunch',
+        confidence_score: 0.9,
+        items: [
+          {
+            food_name: 'Chicken bowl',
+            quantity: 1,
+            unit: 'bowl',
+            calories: 700,
+            protein: 45,
+            carbs: 60,
+            fat: 20,
+            fiber: 8,
+            sugar: 4,
+            sodium: 900,
+            notes: 'Estimate.',
+            is_trusted: false,
+            source_type: 'AI_ESTIMATE',
+            source_name: 'AI estimate',
+            catalog_food_id: null,
+          },
+        ],
+        totals: {
+          calories: 700,
+          protein: 45,
+          carbs: 60,
+          fat: 20,
+          fiber: 8,
+          sugar: 4,
+          sodium: 900,
+        },
+      }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'chicken bowl' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    await screen.findByText(/around 700 calories/i);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'change it to lunch' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/changed this to lunch/i)).toBeInTheDocument();
   });
 
   it('handles save it as a conversational command', async () => {

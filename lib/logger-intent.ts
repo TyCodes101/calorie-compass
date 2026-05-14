@@ -1,11 +1,14 @@
 import { analyzeMealText } from '@/lib/ai/analyze';
 
-export type LoggerIntent = 'greeting' | 'food_log' | 'correction' | 'question' | 'unknown';
+export type LoggerIntent = 'greeting' | 'food_log' | 'correction' | 'question' | 'meal_history_question' | 'recommendation_request' | 'casual' | 'unknown';
 export type LoggerCommand = 'save' | 'start_over' | 'favorite' | 'remove_favorite' | 'none';
 
 const greetingRegex = /^(hi|hello|hey|yo|sup|what'?s up|good morning|good afternoon|good evening|how are you|how'?s it going)(?:\b|[!.?,]|$)/i;
+const casualRegex = /^(ok|okay|kk|cool|nice|got it|sounds good|thanks|thank you|thx|lol|lmao|bet|hmm|huh|yep|yup)(?:\b|[!.?,]|$)/i;
 const questionRegex = /\?|^(what|how|can|could|would|should|do|does|is|are|am|will|did)\b/i;
-const correctionRegex = /^(actually|sorry|correction|i meant|make that|change that|not exactly|update that|edit that|remove|without|no\b|it was|that was|swap|hold the|skip the)\b/i;
+const mealHistoryRegex = /(what (did|have) i (eat|log)|what was (my )?(last|recent) meal|what did i have yesterday|what did i eat yesterday|what did i log yesterday|what did i eat today|what did i have today|last meal|recent meals?|yesterday'?s (dinner|lunch|breakfast|meals?))/i;
+const recommendationRegex = /(what should i eat|what should i have|what do you recommend|any ideas? for|meal ideas?|recommend (something|a meal)|suggest (something|a meal)|give me (a|some) (meal )?ideas?|help me pick)/i;
+const correctionRegex = /^(actually|sorry|correction|i meant|make that|make it|change that|change it to|change to|not exactly|update that|edit that|add\b|remove|without|no\b|it was|that was|swap|hold the|skip the)\b/i;
 const saveCommandRegex = /^(save( it| that| this)?|log( it| that| this)?|looks good|that'?s right|done|good to save|save now)\b/i;
 const startOverCommandRegex = /^(start over|reset|new meal|clear this|try again)\b/i;
 const favoriteCommandRegex = /^(save favorite|favorite this|save as favorite)\b/i;
@@ -34,6 +37,18 @@ export function detectLoggerIntent(input: string, options?: { hasActiveMeal?: bo
 
   if (greetingRegex.test(normalized) && normalized.split(/\s+/).length <= 7 && !hasFoodSignals) {
     return 'greeting';
+  }
+
+  if (mealHistoryRegex.test(normalized)) {
+    return 'meal_history_question';
+  }
+
+  if (recommendationRegex.test(normalized)) {
+    return 'recommendation_request';
+  }
+
+  if (casualRegex.test(normalized) && !hasFoodSignals) {
+    return 'casual';
   }
 
   if (questionRegex.test(normalized) && !analysis.brand && analysis.category === 'unknown' && !analysis.hasPortion && !analysis.hasExplicitCountableQuantity) {
@@ -74,6 +89,16 @@ export function buildLoggerIntentReply(intent: LoggerIntent, options?: { userNam
       return options?.hasActiveMeal
         ? "I can help with that. If it's about this meal, ask it naturally and I'll keep the current estimate in place."
         : "I can help with that. Ask the question naturally, or send the meal and I'll log it.";
+    case 'meal_history_question':
+      return options?.hasActiveMeal
+        ? "I can check that. I’ll keep this meal in place while we look at your recent logging."
+        : 'I can check that. I’ll look at your recent meals and keep it simple.';
+    case 'recommendation_request':
+      return options?.hasActiveMeal
+        ? 'I can help with that. If you want, I can suggest something based on your current meal and your usual picks.'
+        : 'I can help with that. I can suggest something based on your goals and the meals you repeat most.';
+    case 'casual':
+      return options?.hasActiveMeal ? 'Got it. I can keep adjusting this one whenever you want.' : 'All good. Send the meal whenever you’re ready.';
     case 'unknown':
     default:
       return options?.hasActiveMeal

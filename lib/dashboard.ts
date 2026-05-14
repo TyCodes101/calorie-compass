@@ -142,6 +142,7 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       sugar: Math.round(dailyTotals.sugar),
       sodium: Math.round(dailyTotals.sodium),
     },
+    mealCount: todayMeals.length,
     remainingCalories,
     dailySummary,
     macroGoals: {

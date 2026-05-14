@@ -22,6 +22,15 @@ describe('logger intent detection', () => {
     expect(detectLoggerIntent('can you help me log lunch?')).toBe('question');
   });
 
+  it('detects meal history questions and recommendation requests', () => {
+    expect(detectLoggerIntent('what did I eat yesterday?')).toBe('meal_history_question');
+    expect(detectLoggerIntent('what should I eat for lunch?')).toBe('recommendation_request');
+  });
+
+  it('detects casual non-food replies', () => {
+    expect(detectLoggerIntent('okay cool')).toBe('casual');
+  });
+
   it('builds a conversational greeting reply', () => {
     expect(buildLoggerIntentReply('greeting', { userName: 'Tyler Cox' })).toBe("Hey Tyler, what'd you eat?");
   });

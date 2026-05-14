@@ -206,6 +206,10 @@ function buildTrustSentence(items: ParsedFoodItem[], estimatedCount: number) {
     return 'You can tweak it before saving.';
   }
 
+  if (items.some((item) => /using your last saved values/i.test(item.notes ?? ''))) {
+    return 'I used your last saved version for it.';
+  }
+
   if (items.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')) {
     return 'I found a restaurant match for it.';
   }
@@ -215,6 +219,110 @@ function buildTrustSentence(items: ParsedFoodItem[], estimatedCount: number) {
   }
 
   return 'This one looks estimated, so you can tweak it before saving.';
+}
+
+function normalizeMemoryKey(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(i|had|have|ate|drank|from|with|and|the|a|an|for|my|usual)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildMemoryCue(prompt: string, favoriteMeals: FavoriteMealSummary[], recentMeals: RecentMealQuickLog[]) {
+  const normalizedPrompt = normalizeMemoryKey(prompt);
+
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  const entries = [
+    ...favoriteMeals.map((meal) => ({ title: meal.title, kind: 'favorite' as const })),
+    ...recentMeals.map((meal) => ({ title: meal.title, kind: 'recent' as const })),
+  ];
+
+  const match = entries.find((entry) => {
+    const normalizedTitle = normalizeMemoryKey(entry.title);
+    if (!normalizedTitle) {
+      return false;
+    }
+
+    return normalizedPrompt.includes(normalizedTitle) || normalizedTitle.includes(normalizedPrompt);
+  });
+
+  if (!match) {
+    return null;
+  }
+
+  return match.kind === 'favorite' ? `Looks like one of your saved go-tos.` : `Looks similar to something you've logged recently.`;
+}
+
+function buildHistoryReply(message: string, recentMeals: RecentMealQuickLog[]) {
+  const normalized = message.trim().toLowerCase();
+
+  if (!recentMeals.length) {
+    return "I don't have any recent meals to pull from yet. Once you log a few, I can use them here.";
+  }
+
+  if (/yesterday/.test(normalized)) {
+    const yesterdayMeals = recentMeals.filter((meal) => isYesterday(meal.createdAt));
+
+    if (!yesterdayMeals.length) {
+      return "You didn't log anything yesterday yet, at least not in the recent history I have here.";
+    }
+
+    const mealList = yesterdayMeals
+      .slice(0, 2)
+      .map((meal) => `${meal.title} (${meal.totalCalories} cal)`)
+      .join(' and ');
+
+    return `Yesterday you logged ${mealList}.`;
+  }
+
+  const lastMeal = recentMeals[0];
+  if (/last meal|last thing|recent meal/.test(normalized)) {
+    return `Your last meal was ${lastMeal.title}, about ${lastMeal.totalCalories} calories.`;
+  }
+
+  const mealList = recentMeals
+    .slice(0, 3)
+    .map((meal) => meal.title)
+    .join(', ');
+  return `Recently you've logged ${mealList}.`;
+}
+
+function buildRecommendationReply(
+  message: string,
+  options: {
+    favoriteMeals: FavoriteMealSummary[];
+    recentMeals: RecentMealQuickLog[];
+    proteinGoal?: number | null;
+  },
+) {
+  const normalized = message.trim().toLowerCase();
+  const repeatedMeals = [...options.favoriteMeals.map((meal) => meal.title), ...options.recentMeals.map((meal) => meal.title)];
+  const highProteinPick = repeatedMeals.find((title) => /fairlife|core power|chicken|chipotle|protein|greek yogurt|eggs/i.test(title));
+  const easyPick = repeatedMeals.find((title) => /shake|bowl|sandwich|wrap|yogurt/i.test(title));
+  const lunchDinnerPick = repeatedMeals.find((title) => /chipotle|bowl|sandwich|burger|salad|taco|dinner|lunch/i.test(title));
+
+  if (/protein/.test(normalized) && highProteinPick) {
+    return `If you want something easy and higher protein, ${highProteinPick} looks like a good fit.`;
+  }
+
+  if (/(lunch|dinner)/.test(normalized) && lunchDinnerPick) {
+    return `You could keep it simple and repeat ${lunchDinnerPick}. That's already in your rhythm.`;
+  }
+
+  if (easyPick) {
+    return `You could go with ${easyPick} if you want something familiar and quick.`;
+  }
+
+  if (options.proteinGoal) {
+    return `I'd lean toward something simple with solid protein so you can move toward your ${Math.round(options.proteinGoal)}g goal without overthinking it.`;
+  }
+
+  return 'I’d keep it simple and go with something easy to repeat, then adjust from there.';
 }
 
 function buildManualItem(): ParsedFoodItem {
@@ -253,6 +361,7 @@ function buildAssistantEstimateCopy({
   totalProtein,
   estimatedCount,
   mode,
+  memoryCue,
 }: {
   prompt: string;
   items: ParsedFoodItem[];
@@ -260,20 +369,22 @@ function buildAssistantEstimateCopy({
   totalProtein: number;
   estimatedCount: number;
   mode?: 'initial' | 'correction';
+  memoryCue?: string | null;
 }) {
   const mealReference = buildMealReference(prompt, items);
   const trustSentence = buildTrustSentence(items, estimatedCount);
   const proteinNote = totalProtein >= 20 ? ` with about ${Math.round(totalProtein)}g protein` : '';
+  const cuePrefix = memoryCue ? `${memoryCue} ` : '';
 
   if (mode === 'correction') {
     return `Got you, I updated that to ${buildCorrectionReference(prompt, items)}. That's about ${Math.round(totalCalories)} calories total${proteinNote}. ${trustSentence}`;
   }
 
   if (/fairlife|core power|shake|protein shake/i.test(mealReference)) {
-    return `That should be ${mealReference}. I've got it around ${Math.round(totalCalories)} calories${proteinNote}. ${trustSentence}`;
+    return `${cuePrefix}That should be ${mealReference}. I've got it around ${Math.round(totalCalories)} calories${proteinNote}. ${trustSentence}`;
   }
 
-  return `Got it, that looks like ${mealReference}. I've got it around ${Math.round(totalCalories)} calories${proteinNote}. ${trustSentence}`;
+  return `${cuePrefix}Got it, that looks like ${mealReference}. I've got it around ${Math.round(totalCalories)} calories${proteinNote}. ${trustSentence}`;
 }
 
 function parseNonNegativeNumber(value: string) {
@@ -509,6 +620,7 @@ export function MealLoggerClient({
   const canLookupBarcode = barcodeInput.replace(/\D/g, '').length >= 8 && !loading && isOnline;
   const firstName = userName?.trim()?.split(/\s+/)[0] ?? null;
   const conversationPrompt = displayUserMessage || activePrompt || initialDraft?.rawText || '';
+  const memoryCue = useMemo(() => buildMemoryCue(conversationPrompt, favoriteMeals, recentMeals), [conversationPrompt, favoriteMeals, recentMeals]);
   const assistantEstimateCopy = items.length
     ? buildAssistantEstimateCopy({
         prompt: conversationPrompt,
@@ -517,6 +629,7 @@ export function MealLoggerClient({
         totalProtein: totals.protein,
         estimatedCount: trustSummary.estimatedCount,
         mode: assistantEstimateMode,
+        memoryCue,
       })
     : null;
 
@@ -953,6 +1066,82 @@ export function MealLoggerClient({
     return true;
   }
 
+  function applyMealTypeCorrection(message: string) {
+    const match = message.trim().toLowerCase().match(/\b(breakfast|lunch|dinner|snack)\b/);
+
+    if (!match || !items.length) {
+      return false;
+    }
+
+    const nextMealType = match[1] as 'breakfast' | 'lunch' | 'dinner' | 'snack';
+    setMealType(nextMealType);
+    setLatestUserReply(message);
+    setAssistantChatReply(`Got it, I changed this to ${nextMealType}.`);
+    setComposerText('');
+    return true;
+  }
+
+  function applyMacroCorrection(message: string) {
+    if (!items.length) {
+      return false;
+    }
+
+    const normalized = message.trim().toLowerCase();
+    const fieldPatterns: Array<{ regex: RegExp; field: keyof ParsedFoodItem; label: string; unit: string }> = [
+      { regex: /(calories?|cal)\D*(\d+(?:\.\d+)?)/i, field: 'calories', label: 'calories', unit: '' },
+      { regex: /(protein)\D*(\d+(?:\.\d+)?)/i, field: 'protein', label: 'protein', unit: 'g' },
+      { regex: /(carbs?)\D*(\d+(?:\.\d+)?)/i, field: 'carbs', label: 'carbs', unit: 'g' },
+      { regex: /(fat)\D*(\d+(?:\.\d+)?)/i, field: 'fat', label: 'fat', unit: 'g' },
+    ];
+
+    const matchConfig = fieldPatterns.find((entry) => entry.regex.test(normalized));
+    if (!matchConfig) {
+      return false;
+    }
+
+    const match = normalized.match(matchConfig.regex);
+    const nextValue = Number(match?.[2] ?? '');
+    if (!Number.isFinite(nextValue) || nextValue < 0) {
+      return false;
+    }
+
+    markDraftChanged();
+    setLatestUserReply(message);
+    setAssistantChatReply(null);
+    setClarifyingQuestion(null);
+
+    setItems((current) => {
+      if (!current.length) {
+        return current;
+      }
+
+      if (current.length === 1) {
+        return [
+          {
+            ...current[0],
+            [matchConfig.field]: nextValue,
+          },
+        ];
+      }
+
+      const restTotal = current.slice(1).reduce((sum, item) => sum + Number(item[matchConfig.field] as number), 0);
+      const firstValue = Math.max(0, nextValue - restTotal);
+
+      return current.map((item, index) =>
+        index === 0
+          ? {
+              ...item,
+              [matchConfig.field]: firstValue,
+            }
+          : item,
+      );
+    });
+
+    setAssistantEstimateMode('correction');
+    setComposerText('');
+    return true;
+  }
+
   function submitComposer() {
     const message = composerText.trim();
     const hasActiveMeal = items.length > 0;
@@ -1006,6 +1195,14 @@ export function MealLoggerClient({
         return;
       }
 
+      if (applyMealTypeCorrection(message)) {
+        return;
+      }
+
+      if (applyMacroCorrection(message)) {
+        return;
+      }
+
       parseMeal({
         text: message,
         mode: 'correction',
@@ -1033,6 +1230,46 @@ export function MealLoggerClient({
           dailyCalorieGoal,
           currentMealProtein: totals.protein,
           currentMealCalories: totals.calories,
+        }),
+      );
+      return;
+    }
+
+    if (intent === 'meal_history_question') {
+      clearFeedback();
+      setLastParseOptions(null);
+      setEntryMode('chat');
+      setComposerText('');
+      setUtilityMenuOpen(false);
+
+      if (hasActiveMeal) {
+        setLatestUserReply(message);
+      } else {
+        setDisplayUserMessage(message);
+      }
+
+      setAssistantChatReply(buildHistoryReply(message, recentMeals));
+      return;
+    }
+
+    if (intent === 'recommendation_request') {
+      clearFeedback();
+      setLastParseOptions(null);
+      setEntryMode('chat');
+      setComposerText('');
+      setUtilityMenuOpen(false);
+
+      if (hasActiveMeal) {
+        setLatestUserReply(message);
+      } else {
+        setDisplayUserMessage(message);
+      }
+
+      setAssistantChatReply(
+        buildRecommendationReply(message, {
+          favoriteMeals,
+          recentMeals,
+          proteinGoal,
         }),
       );
       return;
@@ -1116,6 +1353,9 @@ export function MealLoggerClient({
                       ? 'You can log it as-is or tweak it first.'
                       : 'Send it naturally. I’ll estimate it, and if anything is too vague I’ll ask one short question.'}
                 </p>
+                {!editingMealId && !sourceReusableMealId && quickYesterdayMeals.length ? (
+                  <p className="text-xs leading-5 text-slate-500">If you want something easy, you can repeat yesterday’s dinner or one of your usual meals below.</p>
+                ) : null}
                 {nutritionPreferences?.trim() ? (
                   <p className="text-xs leading-5 text-slate-500">I’ll keep your preferences in mind: {nutritionPreferences.trim()}</p>
                 ) : null}
