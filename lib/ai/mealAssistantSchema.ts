@@ -84,6 +84,7 @@ export const mealAssistantMemoryMealSchema = z.object({
   totalCalories: z.number().nonnegative().default(0),
   confidenceScore: z.number().min(0).max(1).default(0.82),
   sourceReusableMealId: z.string().nullable().optional(),
+  date: z.string().nullable().optional(),
   createdAt: z.string().nullable().optional(),
   lastUsedAt: z.string().nullable().optional(),
   items: z.array(parsedFoodItemSchema).default([]),

@@ -391,7 +391,7 @@ export function seedAssistantMemoryFromSavedMeals(input: AssistantMemorySeedInpu
       items: meal.items,
       confidenceScore: meal.confidenceScore ?? 0.82,
       source: 'recent',
-      occurredAt: meal.createdAt,
+      occurredAt: meal.date ?? meal.createdAt,
     });
   }
 

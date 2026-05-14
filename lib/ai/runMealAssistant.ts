@@ -295,6 +295,10 @@ function buildMemoryReference(candidate: Pick<MemoryEntry, 'items' | 'title' | '
   return shorten(cleanMealReferenceText(candidate.rawText) || cleanMealReferenceText(candidate.title) || fallback || 'that meal');
 }
 
+function getRecentMealOccurredAt(meal: MealAssistantContext['recentMeals'][number]) {
+  return meal.date ?? meal.createdAt ?? null;
+}
+
 function splitMixedIntentMessage(message: string): MixedIntentSplit {
   const trimmed = message.trim();
   const match = trimmed.match(/^(.*?)(?:,?\s+(?:and\s+)?(?:also\s+)?)((?:how much|how many|what about|how about|what should|what's|what is|am i|did i|is that|would that|can i)\b.*)$/i);
@@ -587,8 +591,8 @@ function findSimilarMealPattern(items: ParsedFoodItem[], entries: MealAssistantM
 
 function buildWeeklySummaryReply(context: MealAssistantContext) {
   const recentWeek = (context.recentMeals ?? []).filter((meal) => {
-    const createdAt = parseIsoTime(meal.createdAt);
-    return createdAt !== null && Date.now() - createdAt <= 7 * 86400000;
+    const occurredAt = parseIsoTime(getRecentMealOccurredAt(meal));
+    return occurredAt !== null && Date.now() - occurredAt <= 7 * 86400000;
   });
 
   if (!recentWeek.length) {
@@ -685,7 +689,7 @@ function buildCompanionInsight(args: { response: MealAssistantResponse; input: M
 
   const yesterdayMatch = findSimilarMealPattern(
     response.meal.items,
-    (context.recentMeals ?? []).filter((meal) => isYesterday(meal.createdAt)),
+    (context.recentMeals ?? []).filter((meal) => isYesterday(getRecentMealOccurredAt(meal))),
   );
 
   if (yesterdayMatch && response.intent !== 'repeat_meal' && !repeatCueRegex.test(normalized)) {
@@ -911,9 +915,9 @@ function buildMemoryLoadReply(match: MemoryMatch, message: string) {
 
 function findYesterdayMemoryEntry(context: MealAssistantContext, mealTypeHint?: string | null) {
   const recentEntries = (context.recentMeals ?? [])
-    .filter((entry) => entry.items.length > 0 && isYesterday(entry.createdAt))
+    .filter((entry) => entry.items.length > 0 && isYesterday(getRecentMealOccurredAt(entry)))
     .filter((entry) => !mealTypeHint || entry.mealType === mealTypeHint)
-    .sort((left, right) => (parseIsoTime(right.createdAt) ?? 0) - (parseIsoTime(left.createdAt) ?? 0));
+    .sort((left, right) => (parseIsoTime(getRecentMealOccurredAt(right)) ?? 0) - (parseIsoTime(getRecentMealOccurredAt(left)) ?? 0));
 
   return recentEntries[0] ?? null;
 }

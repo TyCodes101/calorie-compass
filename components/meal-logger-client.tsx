@@ -181,11 +181,15 @@ function getUtcDayStamp(timestamp: string) {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
+function getRecentMealDay(meal: RecentMealQuickLog) {
+  return meal.date ?? meal.createdAt;
+}
+
 function getRecentLoggingStreak(recentMeals: RecentMealQuickLog[]) {
   const uniqueDays = Array.from(
     new Set(
       recentMeals
-        .map((meal) => getUtcDayStamp(meal.createdAt))
+        .map((meal) => getUtcDayStamp(getRecentMealDay(meal)))
         .filter((value): value is number => value !== null),
     ),
   ).sort((left, right) => right - left);
@@ -406,7 +410,7 @@ function buildQuickSuggestions(args: {
   const recent = args.recentMeals[0];
   const remembered = args.assistantMemory?.recurringMeals?.[0];
   const yesterdayMeal = args.recentMeals.find((meal) => {
-    const createdAt = Date.parse(meal.createdAt);
+    const createdAt = Date.parse(getRecentMealDay(meal));
     if (!Number.isFinite(createdAt)) {
       return false;
     }
@@ -960,6 +964,7 @@ export function MealLoggerClient({
         mealType: meal.mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
         totalCalories: meal.totalCalories,
         confidenceScore: meal.confidenceScore ?? 0.82,
+        date: meal.date,
         createdAt: meal.createdAt,
         items: meal.items,
       })),

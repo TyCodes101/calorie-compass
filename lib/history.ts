@@ -27,6 +27,7 @@ export type RecentMealQuickLog = {
   title: string;
   mealType: string;
   totalCalories: number;
+  date?: string;
   createdAt: string;
   rawText: string | null;
   confidenceScore: number;
@@ -92,6 +93,7 @@ export async function getRecentMealsForQuickLog(limit = 6): Promise<RecentMealQu
     select: {
       id: true,
       mealType: true,
+      date: true,
       rawText: true,
       confidenceScore: true,
       totalCalories: true,
@@ -122,6 +124,7 @@ export async function getRecentMealsForQuickLog(limit = 6): Promise<RecentMealQu
     title: meal.rawText || `${meal.items.length} item meal`,
     mealType: meal.mealType.toLowerCase(),
     totalCalories: Math.round(meal.totalCalories),
+    date: meal.date.toISOString(),
     createdAt: meal.createdAt.toISOString(),
     rawText: meal.rawText,
     confidenceScore: meal.confidenceScore ?? 0.82,
