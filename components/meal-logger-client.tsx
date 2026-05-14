@@ -1898,7 +1898,7 @@ export function MealLoggerClient({
             </ChatBubble>
           ) : null}
 
-          <div ref={feedEndRef} />
+          <div ref={feedEndRef} className="chat-feed-end" aria-hidden="true" />
         </div>
       </section>
 

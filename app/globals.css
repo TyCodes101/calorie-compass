@@ -477,6 +477,12 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   padding-bottom: 1.35rem;
 }
 
+.chat-feed-end {
+  height: calc(7.75rem + env(safe-area-inset-bottom));
+  flex-shrink: 0;
+  scroll-margin-bottom: calc(8.5rem + env(safe-area-inset-bottom));
+}
+
 .chat-bubble {
   width: fit-content;
   max-width: min(100%, 37rem);
