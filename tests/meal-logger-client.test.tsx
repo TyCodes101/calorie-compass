@@ -63,6 +63,31 @@ describe('meal logger client', () => {
     });
   });
 
+  it('keeps the first screen minimal without quick-start chips', () => {
+    render(
+      <MealLoggerClient
+        favoriteMeals={[
+          {
+            id: 'fav-1',
+            title: 'Fairlife Core Power Elite 42g shake',
+            rawText: 'Fairlife Core Power Elite 42g shake',
+            mealType: 'snack',
+            lastUsedAt: new Date().toISOString(),
+            totalCalories: 230,
+            itemCount: 1,
+            trustedCount: 1,
+          },
+        ]}
+        recentMeals={[buildRecentMeal()]}
+      />,
+    );
+
+    expect(screen.queryByText(/want a faster start/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/chipotle chicken bowl/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/describe your meal naturally/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Tell me what you ate')).toBeInTheDocument();
+  });
+
   it('renders a conversational estimate flow and saves the reviewed meal', async () => {
     const fetchMock = vi
       .fn()
@@ -118,7 +143,7 @@ describe('meal logger client', () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'I had a Chipotle bowl with white rice, double chicken, corn salsa, cheese, and lettuce.' },
     });
 
@@ -170,7 +195,7 @@ describe('meal logger client', () => {
 
     expect(screen.getByRole('combobox', { name: /meal type/i })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'hi' },
     });
 
@@ -179,6 +204,27 @@ describe('meal logger client', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText("Hey Tyler, what'd you eat?")).toBeInTheDocument();
     expect(screen.queryByText(/i'd estimate about/i)).not.toBeInTheDocument();
+  });
+
+  it('does not duplicate assistant replies when the screen rerenders', () => {
+    const fetchMock = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+      target: { value: 'asdf' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(screen.getAllByText(/i'm with you/i)).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open helper actions' }));
+
+    expect(screen.getAllByText(/i'm with you/i)).toHaveLength(1);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('answers nutrition questions conversationally without trying to parse them as food', async () => {
@@ -195,7 +241,7 @@ describe('meal logger client', () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'how much protein should I eat?' },
     });
 
@@ -224,7 +270,7 @@ describe('meal logger client', () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'how much protein do I have left?' },
     });
 
@@ -246,7 +292,7 @@ describe('meal logger client', () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'what was my last meal?' },
     });
 
@@ -280,7 +326,7 @@ describe('meal logger client', () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'what should I eat for protein?' },
     });
 
@@ -297,12 +343,12 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'hi' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'repeat my last meal' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
@@ -357,7 +403,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: "mcdouble from mcdonald's" },
     });
 
@@ -365,7 +411,7 @@ describe('meal logger client', () => {
 
     await screen.findByText(/390 calories/i);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'actually it was two' },
     });
 
@@ -435,7 +481,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: "mcdouble and fries from mcdonald's" },
     });
 
@@ -443,7 +489,7 @@ describe('meal logger client', () => {
 
     await screen.findByText(/620 calories/i);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'remove fries' },
     });
 
@@ -497,7 +543,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'chicken bowl' },
     });
 
@@ -505,7 +551,7 @@ describe('meal logger client', () => {
 
     await screen.findByText(/around 700 calories/i);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'change it to lunch' },
     });
 
@@ -564,7 +610,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'fairlife 42g shake' },
     });
 
@@ -572,7 +618,7 @@ describe('meal logger client', () => {
 
     await screen.findByText(/230 calories/i);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
       target: { value: 'save it' },
     });
 
