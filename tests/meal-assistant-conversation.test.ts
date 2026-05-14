@@ -456,6 +456,41 @@ describe('meal assistant conversational coverage', () => {
     expect(response.next_state.mealType).toBe('dinner');
   });
 
+  it('handles the exact phrase same as yesterday gracefully', async () => {
+    const yesterday = new Date(Date.now() - 86400000).toISOString();
+    const yesterdayMeal = createItem({
+      food_name: 'Chipotle Chicken Bowl',
+      unit: 'bowl',
+      calories: 760,
+      protein: 58,
+      carbs: 62,
+      fat: 24,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: 'Chipotle official nutrition',
+    });
+
+    const [response] = await runConversation(['same as yesterday'], {
+      context: buildContext({
+        recentMeals: [
+          {
+            id: 'recent-yesterday-dinner',
+            title: 'Chipotle chicken bowl',
+            rawText: 'Chipotle bowl with white rice and double chicken',
+            mealType: 'dinner',
+            totalCalories: 760,
+            confidenceScore: 0.96,
+            createdAt: yesterday,
+            items: [yesterdayMeal],
+          },
+        ],
+      }),
+    });
+
+    expect(response.intent).toBe('repeat_meal');
+    expect(response.meal.items[0]?.food_name).toBe('Chipotle Chicken Bowl');
+    expect(response.assistant_reply).toMatch(/yesterday/i);
+  });
+
   it('can pull a remembered usual meal from local assistant memory', async () => {
     const resolveItemNutrition = vi.fn(resolveConversationNutrition);
 
@@ -611,6 +646,59 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).not.toMatch(/dashboard|analytics/i);
   });
 
+  it('handles the exact phrase how am I doing this week with a calm summary', async () => {
+    const [response] = await runConversation(['how am I doing this week?'], {
+      context: buildContext({
+        recentMeals: [
+          {
+            id: 'week-1',
+            title: 'Eggs and toast',
+            rawText: 'Eggs and toast',
+            mealType: 'breakfast',
+            totalCalories: 320,
+            confidenceScore: 0.9,
+            createdAt: new Date(Date.now() - 86400000).toISOString(),
+            items: [createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 }), createItem({ food_name: 'Toast', unit: 'slice', calories: 100, carbs: 19, protein: 4, fat: 1 })],
+          },
+          {
+            id: 'week-2',
+            title: 'Fairlife shake',
+            rawText: 'Fairlife shake',
+            mealType: 'snack',
+            totalCalories: 150,
+            confidenceScore: 0.96,
+            createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+            items: [createItem({ food_name: 'Fairlife Chocolate Protein Shake', unit: 'bottle', calories: 150, protein: 30, carbs: 4, fat: 2 })],
+          },
+          {
+            id: 'week-3',
+            title: 'Chipotle chicken bowl',
+            rawText: 'Chipotle chicken bowl',
+            mealType: 'dinner',
+            totalCalories: 760,
+            confidenceScore: 0.96,
+            createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+            items: [createItem({ food_name: 'Chipotle Chicken Bowl', unit: 'bowl', calories: 760, protein: 58, carbs: 62, fat: 24, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Chipotle official nutrition' })],
+          },
+          {
+            id: 'week-4',
+            title: 'Greek yogurt',
+            rawText: 'Greek yogurt',
+            mealType: 'breakfast',
+            totalCalories: 140,
+            confidenceScore: 0.92,
+            createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+            items: [createItem({ food_name: 'Greek Yogurt', unit: 'cup', calories: 140, protein: 17, carbs: 8, fat: 4 })],
+          },
+        ],
+      }),
+    });
+
+    expect(response.assistant_reply).toMatch(/week|steady|consistent|go-to/i);
+    expect(response.assistant_reply).not.toMatch(/^got it\.?$/i);
+    expect(response.meal.items).toHaveLength(0);
+  });
+
   it('handles a mixed log-plus-question turn without losing either intent', async () => {
     const [response] = await runConversation(['2 eggs and also how much protein do I have left?'], {
       context: buildContext({
@@ -659,6 +747,26 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).toMatch(/meal|today/i);
   });
 
+  it('recovers naturally even when the prior thread was day-level and no meal is active', async () => {
+    const [response] = await runConversation(['wait were we talking about my meal or my day?'], {
+      initialState: buildState({
+        currentMealItems: [],
+        currentMealText: null,
+        activeTopic: 'nutrition',
+        activeMode: 'nutrition_coaching',
+        previousIntent: 'nutrition_guidance',
+      }),
+      context: buildContext({
+        remainingCalories: 420,
+        remainingProtein: 36,
+      }),
+    });
+
+    expect(response.intent).toBe('casual_message');
+    expect(response.assistant_reply).toMatch(/day overall|meal instead|what you have left/i);
+    expect(response.assistant_reply).not.toMatch(/^got it\.?$/i);
+  });
+
   it('answers carbs remaining after a protein-left question thread', async () => {
     const responses = await runConversation(['how much protein do I have left?', 'what about carbs?'], {
       context: buildContext({
@@ -670,6 +778,19 @@ describe('meal assistant conversational coverage', () => {
     expect(responses[0]?.assistant_reply).toMatch(/58g of protein left/i);
     expect(responses[1]?.assistant_reply).toMatch(/96g of carbs left/i);
     expect(responses[1]?.assistant_reply).not.toMatch(/^let me check that\.?$/i);
+  });
+
+  it('answers do I have room for a snack from remaining daily context', async () => {
+    const [response] = await runConversation(['do I have room for a snack?'], {
+      context: buildContext({
+        remainingCalories: 420,
+        remainingProtein: 36,
+      }),
+    });
+
+    expect(response.intent).toBe('nutrition_guidance');
+    expect(response.assistant_reply).toMatch(/room|420 calories|36g protein|snack/i);
+    expect(response.assistant_reply).not.toMatch(/^got it\.?$/i);
   });
 
   it('gives actual recommendation help for sweet-but-healthier prompts', async () => {

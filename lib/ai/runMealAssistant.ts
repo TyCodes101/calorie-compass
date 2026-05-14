@@ -42,6 +42,7 @@ const caloriesQuestionRegex = /\bcalories?\b/i;
 const onTrackRegex = /\bam i on track\b|\bhow am i doing\b|\bdid i hit my goal\b|\bon track\b/i;
 const dinnerSuggestionRegex = /\b(?:what should i eat tonight|what should i have tonight|what should i eat for dinner|what should i have for dinner|dinner idea|dinner ideas)\b/i;
 const snackSuggestionRegex = /\b(?:high protein snack|protein snack|snack idea|snack ideas|what should i snack on|what's a good snack|what is a good snack)\b/i;
+const snackRoomRegex = /\b(?:do i have room for a snack|room for a snack|can i have a snack|can i fit a snack)\b/i;
 const recommendationRegex = /\b(?:what should i eat|what should i have|what sounds good|give me (?:an?|some) ideas?|any ideas|recommend|suggest|something (?:sweet|lighter|healthy|healthier)|healthy snack|healthy dessert|dessert idea|quick meal|quick food|restaurant idea|healthier version|lighter version)\b/i;
 const sweetHealthyRegex = /\b(?:sweet|dessert)\b.*\b(?:healthy|healthier|lighter|light)\b|\b(?:healthy|healthier|lighter|light)\b.*\b(?:sweet|dessert)\b/i;
 const healthyTreatRegex = /\b(?:healthy treat|healthy snack|healthier treat|dessert|sweet snack)\b/i;
@@ -289,7 +290,7 @@ function stripEmotionalPreface(text: string) {
   return text.trim().replace(/^(?:ugh|oops|sorry|my bad|whoops|damn|dang)[\s,!.-]+/i, '').trim();
 }
 
-function buildMemoryReference(candidate: MemoryEntry) {
+function buildMemoryReference(candidate: Pick<MemoryEntry, 'items' | 'title' | 'rawText'>) {
   const fallback = candidate.items.length === 1 ? candidate.items[0]?.food_name ?? candidate.title : candidate.title;
   return shorten(cleanMealReferenceText(candidate.rawText) || cleanMealReferenceText(candidate.title) || fallback || 'that meal');
 }
@@ -304,6 +305,11 @@ function splitMixedIntentMessage(message: string): MixedIntentSplit {
 
   const foodMessage = match[1]?.trim() ?? '';
   const followUpMessage = match[2]?.trim() ?? '';
+
+  const leadTokens = tokenizeText(foodMessage);
+  if (!leadTokens.length || leadTokens.every((token) => ['how', 'what', 'why', 'when', 'where', 'who', 'am', 'is', 'are', 'can', 'should', 'would', 'did', 'do', 'wait'].includes(token))) {
+    return { foodMessage: null, followUpMessage: null };
+  }
 
   if (!foodMessage || !followUpMessage) {
     return { foodMessage: null, followUpMessage: null };
@@ -636,11 +642,19 @@ function buildConversationRecoveryReply(input: MealAssistantRunInput, context: M
     return `I just need one detail to keep going: ${input.state.pendingClarification}`;
   }
 
-  if (!hasActiveMeal) {
-    return null;
-  }
-
   if (ambiguousFollowUpRegex.test(normalized) || (/\?$/.test(normalized) && /\b(?:it|that|this|those|them)\b/.test(normalized))) {
+    if (!hasActiveMeal && (input.state.previousIntent || input.state.activeTopic)) {
+      if (input.state.activeTopic === 'nutrition' || input.state.previousIntent === 'nutrition_guidance' || input.state.previousIntent === 'macro_question') {
+        return 'We were talking about your day overall. If you mean the meal instead, send the meal or ask about this meal once it’s in front of me.';
+      }
+
+      return 'We were between the meal thread and the day-level view. If you mean the meal, send it again or ask about this meal. If you mean today, ask what you have left.';
+    }
+
+    if (!hasActiveMeal) {
+      return null;
+    }
+
     if (hasDailyContext) {
       return 'I think I lost track of whether we were editing the meal or talking about today overall. If you mean the meal, ask about this meal. If you mean today, ask what you have left.';
     }
@@ -893,6 +907,15 @@ function buildMemoryLoadReply(match: MemoryMatch, message: string) {
   }
 
   return choosePhrase(seed, [`I loaded ${reference} again`, `Pulled back ${reference}`]);
+}
+
+function findYesterdayMemoryEntry(context: MealAssistantContext, mealTypeHint?: string | null) {
+  const recentEntries = (context.recentMeals ?? [])
+    .filter((entry) => entry.items.length > 0 && isYesterday(entry.createdAt))
+    .filter((entry) => !mealTypeHint || entry.mealType === mealTypeHint)
+    .sort((left, right) => (parseIsoTime(right.createdAt) ?? 0) - (parseIsoTime(left.createdAt) ?? 0));
+
+  return recentEntries[0] ?? null;
 }
 
 function buildCasualReply(message: string, state: MealAssistantState) {
@@ -1325,6 +1348,10 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
   const remainingFat = getRemainingFat(context);
   const remainingCalories = getRemainingCalories(context);
 
+  if (weeklySummaryRegex.test(normalized)) {
+    return buildWeeklySummaryReply(context);
+  }
+
   if (currentMealProteinRegex.test(normalized) && input.state.currentMealItems.length) {
     return `This looks like about ${Math.round(currentTotals.protein)}g of protein.`;
   }
@@ -1411,6 +1438,28 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
     return remainingProtein !== null && remainingProtein > 20
       ? 'A shake, Greek yogurt, cottage cheese, or turkey jerky would be an easy high-protein snack.'
       : 'Greek yogurt, cottage cheese, fruit with yogurt, or a shake would all work well.';
+  }
+
+  if (snackRoomRegex.test(normalized)) {
+    if (remainingCalories === null && remainingProtein === null) {
+      return 'Probably, but I can answer that more cleanly once your daily goals are set.';
+    }
+
+    if (remainingCalories !== null && remainingCalories <= 120) {
+      return remainingProtein !== null && remainingProtein > 0
+        ? `You still could, but keep it light. You’ve got about ${remainingCalories} calories and ${remainingProtein}g protein left.`
+        : `You still could, but keep it pretty light. You’ve got about ${remainingCalories} calories left.`;
+    }
+
+    if (remainingCalories !== null && remainingCalories > 120) {
+      return remainingProtein !== null && remainingProtein > 20
+        ? `Yeah, you’ve got room. About ${remainingCalories} calories left, and you could still use roughly ${remainingProtein}g protein.`
+        : `Yeah, you’ve got room for one. About ${remainingCalories} calories left today.`;
+    }
+
+    return remainingProtein !== null && remainingProtein > 20
+      ? `Yeah, you’ve still got room, especially if you make it protein-forward. You’re about ${remainingProtein}g short on protein.`
+      : 'Yeah, you should still have room for a snack.';
   }
 
   if (dinnerSuggestionRegex.test(normalized)) {
@@ -2082,6 +2131,36 @@ export async function runMealAssistant(
         },
         message: workingInput.message,
       }), workingInput, context);
+    }
+
+    if (repeatYesterdayRegex.test(workingInput.message.trim().toLowerCase())) {
+      const yesterdayMeal = findYesterdayMemoryEntry(context, extractMealTypeHint(workingInput.message) ?? null);
+      if (yesterdayMeal) {
+        const loadedItems = cloneParsedItems(yesterdayMeal.items);
+        const nextState: MealAssistantState = {
+          ...state,
+          currentMealItems: loadedItems,
+          pendingClarification: null,
+          lastAssistantQuestion: null,
+          saved: false,
+          mealType: yesterdayMeal.mealType,
+          currentMealText: cleanMealReferenceText(yesterdayMeal.rawText) || cleanMealReferenceText(yesterdayMeal.title) || buildMealTextFromItems(loadedItems),
+          confidenceScore: yesterdayMeal.confidenceScore ?? getConfidenceScore(loadedItems),
+          sourceReusableMealId: null,
+          editingMealId: null,
+        };
+
+        return finalizeResponse(buildDirectResponse({
+          intent: 'repeat_meal',
+          assistantReply: choosePhrase(workingInput.message, [
+            `Using yesterday's ${buildMemoryReference(yesterdayMeal)}.`,
+            `I pulled in yesterday's ${buildMemoryReference(yesterdayMeal)}.`,
+            `Got you, I've got yesterday's ${buildMemoryReference(yesterdayMeal)} loaded.`,
+          ]),
+          nextState,
+          message: workingInput.message,
+        }), workingInput, context);
+      }
     }
 
     const memoryMatch = findMatchingMemoryMeal(workingInput, context);
