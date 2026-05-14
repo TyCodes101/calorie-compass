@@ -24,7 +24,7 @@ import {
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { TrustBadge } from '@/components/trust-badge';
 import type { RecentMealQuickLog } from '@/lib/history';
-import { buildLoggerIntentReply, detectLoggerIntent } from '@/lib/logger-intent';
+import { buildLoggerIntentReply, buildLoggerQuestionReply, detectLoggerCommand, detectLoggerIntent } from '@/lib/logger-intent';
 import { type FavoriteMealSummary, type LoggerDraft } from '@/lib/reusable-meals';
 import { getConfidenceCopy, getItemSourceLabel, getItemTrustPresentation, summarizeParsedItems } from '@/lib/trust';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -55,6 +55,8 @@ type QuickLogProps = {
   recentMeals?: RecentMealQuickLog[];
   nutritionPreferences?: string | null;
   userName?: string | null;
+  proteinGoal?: number | null;
+  dailyCalorieGoal?: number | null;
 };
 
 type EntryMode = 'chat' | 'barcode' | 'label';
@@ -76,6 +78,8 @@ type ParseRequestOptions = {
   text?: string;
   barcode?: string | null;
   nutritionLabel?: ReturnType<typeof buildNutritionLabelPayload> | null;
+  mode?: 'new' | 'clarification' | 'correction';
+  correctionText?: string | null;
 };
 
 function defaultNutritionLabelDraft(): NutritionLabelDraft {
@@ -121,6 +125,98 @@ function shorten(text: string, max = 90) {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 }
 
+const numberWordMap: Record<string, number> = {
+  a: 1,
+  an: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+};
+
+function parseCountToken(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  if (numberWordMap[normalized] !== undefined) {
+    return numberWordMap[normalized];
+  }
+
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function detectSimpleQuantityCorrection(message: string) {
+  const normalized = message.trim().toLowerCase();
+  const match = normalized.match(/(?:make that|actually it was|it was|that was|actually|update that to)\s+(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+
+  if (!match) {
+    return null;
+  }
+
+  return parseCountToken(match[1] ?? '');
+}
+
+function scaleParsedItems(items: ParsedFoodItem[], nextCount: number) {
+  if (!items.length || nextCount <= 0) {
+    return items;
+  }
+
+  const baseline = items.length === 1 && items[0]?.quantity > 0 ? items[0].quantity : 1;
+  const factor = nextCount / baseline;
+
+  return items.map((item) => ({
+    ...item,
+    quantity: Number((item.quantity * factor).toFixed(2)),
+    calories: Number((item.calories * factor).toFixed(1)),
+    protein: Number((item.protein * factor).toFixed(1)),
+    carbs: Number((item.carbs * factor).toFixed(1)),
+    fat: Number((item.fat * factor).toFixed(1)),
+    fiber: Number((item.fiber * factor).toFixed(1)),
+    sugar: Number((item.sugar * factor).toFixed(1)),
+    sodium: Number((item.sodium * factor).toFixed(1)),
+  }));
+}
+
+function buildMealReference(prompt: string, items: ParsedFoodItem[]) {
+  if (items.length === 1) {
+    return items[0]?.food_name ?? shorten(cleanPromptForReply(prompt) || 'that meal');
+  }
+
+  return shorten(cleanPromptForReply(prompt) || 'that meal');
+}
+
+function buildCorrectionReference(prompt: string, items: ParsedFoodItem[]) {
+  if (items.length === 1) {
+    const item = items[0];
+    const quantityLabel = Number.isInteger(item.quantity) ? String(item.quantity) : item.quantity.toFixed(1);
+    return `${quantityLabel} ${item.food_name}`;
+  }
+
+  return buildMealReference(prompt, items);
+}
+
+function buildTrustSentence(items: ParsedFoodItem[], estimatedCount: number) {
+  if (!items.length) {
+    return 'You can tweak it before saving.';
+  }
+
+  if (items.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')) {
+    return 'I found a restaurant match for it.';
+  }
+
+  if (estimatedCount === 0) {
+    return 'I found a likely match for it.';
+  }
+
+  return 'This one looks estimated, so you can tweak it before saving.';
+}
+
 function buildManualItem(): ParsedFoodItem {
   return {
     food_name: 'Custom item',
@@ -150,12 +246,34 @@ function isYesterday(dateString: string) {
   return date.getUTCFullYear() === yesterday.getUTCFullYear() && date.getUTCMonth() === yesterday.getUTCMonth() && date.getUTCDate() === yesterday.getUTCDate();
 }
 
-function buildAssistantEstimateCopy(prompt: string, totalCalories: number, totalProtein: number, fullyTrusted: boolean) {
-  const normalizedPrompt = shorten(cleanPromptForReply(prompt) || 'that meal');
-  const lead = fullyTrusted ? 'That looks like' : 'That sounds like';
-  const proteinNote = totalProtein >= 20 ? ` with roughly ${Math.round(totalProtein)}g of protein` : '';
+function buildAssistantEstimateCopy({
+  prompt,
+  items,
+  totalCalories,
+  totalProtein,
+  estimatedCount,
+  mode,
+}: {
+  prompt: string;
+  items: ParsedFoodItem[];
+  totalCalories: number;
+  totalProtein: number;
+  estimatedCount: number;
+  mode?: 'initial' | 'correction';
+}) {
+  const mealReference = buildMealReference(prompt, items);
+  const trustSentence = buildTrustSentence(items, estimatedCount);
+  const proteinNote = totalProtein >= 20 ? ` with about ${Math.round(totalProtein)}g protein` : '';
 
-  return `${lead} ${normalizedPrompt}. I'd estimate about ${Math.round(totalCalories)} calories${proteinNote}. You can tweak anything before I save it.`;
+  if (mode === 'correction') {
+    return `Got you, I updated that to ${buildCorrectionReference(prompt, items)}. That's about ${Math.round(totalCalories)} calories total${proteinNote}. ${trustSentence}`;
+  }
+
+  if (/fairlife|core power|shake|protein shake/i.test(mealReference)) {
+    return `That should be ${mealReference}. I've got it around ${Math.round(totalCalories)} calories${proteinNote}. ${trustSentence}`;
+  }
+
+  return `Got it, that looks like ${mealReference}. I've got it around ${Math.round(totalCalories)} calories${proteinNote}. ${trustSentence}`;
 }
 
 function parseNonNegativeNumber(value: string) {
@@ -328,7 +446,15 @@ function ConversationQuickStarts({
   );
 }
 
-export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], recentMeals = [], nutritionPreferences = null, userName = null }: QuickLogProps) {
+export function MealLoggerClient({
+  initialDraft = null,
+  favoriteMeals = [],
+  recentMeals = [],
+  nutritionPreferences = null,
+  userName = null,
+  proteinGoal = null,
+  dailyCalorieGoal = null,
+}: QuickLogProps) {
   const router = useRouter();
   const [entryMode, setEntryMode] = useState<EntryMode>('chat');
   const [composerText, setComposerText] = useState(initialDraft?.items?.length ? '' : initialDraft?.rawText ?? '');
@@ -339,7 +465,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
   const [displayUserMessage, setDisplayUserMessage] = useState(initialDraft?.rawText ?? '');
   const [assistantChatReply, setAssistantChatReply] = useState<string | null>(null);
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
-  const [lastClarificationReply, setLastClarificationReply] = useState('');
+  const [latestUserReply, setLatestUserReply] = useState('');
   const [items, setItems] = useState<ParsedFoodItem[]>(initialDraft?.items ?? []);
   const [confidenceScore, setConfidenceScore] = useState(initialDraft?.confidenceScore ?? 0.82);
   const [error, setError] = useState<string | null>(null);
@@ -362,6 +488,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [hasSavedCurrentDraft, setHasSavedCurrentDraft] = useState(false);
   const [lastParseOptions, setLastParseOptions] = useState<ParseRequestOptions | null>(null);
+  const [assistantEstimateMode, setAssistantEstimateMode] = useState<'initial' | 'correction'>('initial');
   const isOnline = useOnlineStatus();
 
   const totals = useMemo(() => sumTotals(items), [items]);
@@ -383,7 +510,14 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
   const firstName = userName?.trim()?.split(/\s+/)[0] ?? null;
   const conversationPrompt = displayUserMessage || activePrompt || initialDraft?.rawText || '';
   const assistantEstimateCopy = items.length
-    ? buildAssistantEstimateCopy(conversationPrompt, totals.calories, totals.protein, trustSummary.estimatedCount === 0)
+    ? buildAssistantEstimateCopy({
+        prompt: conversationPrompt,
+        items,
+        totalCalories: totals.calories,
+        totalProtein: totals.protein,
+        estimatedCount: trustSummary.estimatedCount,
+        mode: assistantEstimateMode,
+      })
     : null;
 
   useEffect(() => {
@@ -397,7 +531,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [activePrompt, displayUserMessage, assistantChatReply, clarifyingQuestion, lastClarificationReply, items, loading, error, notice, saveMessage, expandedIndex, entryMode]);
+  }, [activePrompt, displayUserMessage, assistantChatReply, clarifyingQuestion, latestUserReply, items, loading, error, notice, saveMessage, expandedIndex, entryMode]);
 
   function clearFeedback() {
     setError(null);
@@ -426,7 +560,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     setAssistantChatReply(null);
     setItems([]);
     setClarifyingQuestion(null);
-    setLastClarificationReply('');
+    setLatestUserReply('');
     setExpandedIndex(null);
     setSourceReusableMealId(null);
     setFavoriteState('idle');
@@ -434,11 +568,12 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     setUtilityMenuOpen(false);
     setHasSavedCurrentDraft(false);
     setLastParseOptions(null);
+    setAssistantEstimateMode('initial');
   }
 
   function startAnotherMeal() {
     resetDraft();
-    setNotice({ tone: 'info', text: 'Ready for the next one. What did you have?' });
+    setNotice({ tone: 'info', text: 'Ready for the next one. What’d you eat?' });
   }
 
   function addManualItem() {
@@ -446,12 +581,14 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     markDraftChanged();
     setItems((current) => [...current, buildManualItem()]);
     setExpandedIndex(nextIndex);
-    setNotice({ tone: 'info', text: 'Added a custom item. Fill in what looks right and I’ll keep the rest in place.' });
+    setNotice({ tone: 'info', text: 'I added a custom item. Fill in what looks right and I’ll keep the rest in place.' });
   }
 
   async function parseMeal(options?: ParseRequestOptions) {
     const isDirectPackageInput = Boolean(options?.barcode || options?.nutritionLabel);
-    const isClarification = Boolean(clarifyingQuestion) && !isDirectPackageInput;
+    const mode = options?.mode ?? (clarifyingQuestion && !isDirectPackageInput ? 'clarification' : 'new');
+    const isClarification = mode === 'clarification';
+    const isCorrection = mode === 'correction';
     const nextInput = (options?.text ?? composerText).trim();
     const prompt = isClarification ? activePrompt.trim() : nextInput;
 
@@ -478,13 +615,13 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     setAssistantChatReply(null);
     setUtilityMenuOpen(false);
 
-    const fullText = isClarification ? `${prompt}\nAdditional detail: ${nextInput}` : prompt;
+    const fullText = isClarification ? `${prompt}\nAdditional detail: ${nextInput}` : isCorrection ? nextInput : prompt;
 
-    if (!isClarification) {
+    if (!isClarification && !isCorrection) {
       setActivePrompt(prompt);
       setDisplayUserMessage(prompt);
     } else {
-      setLastClarificationReply(nextInput);
+      setLatestUserReply(nextInput);
     }
 
     try {
@@ -496,6 +633,15 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
           mealType,
           barcode: options?.barcode ?? undefined,
           nutritionLabel: options?.nutritionLabel ?? undefined,
+          conversation:
+            isCorrection || isClarification
+              ? {
+                  mode,
+                  previousMealText: activePrompt || null,
+                  correctionText: isCorrection ? options?.correctionText ?? nextInput : null,
+                  currentItems: items,
+                }
+              : undefined,
         }),
       });
 
@@ -517,6 +663,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
         setExpandedIndex(null);
         setComposerText('');
         setNotice(null);
+        setAssistantEstimateMode('initial');
         return;
       }
 
@@ -537,8 +684,12 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
       setBarcodeInput('');
       setNutritionLabelDraft(defaultNutritionLabelDraft());
       setComposerText('');
-      setLastClarificationReply('');
-      setNotice({ tone: 'info', text: 'I put together an estimate. Tweak anything that looks off.' });
+      setAssistantEstimateMode(isCorrection ? 'correction' : 'initial');
+      setNotice(null);
+
+      if (isCorrection) {
+        setActivePrompt(`${activePrompt}\nCorrection: ${nextInput}`.trim());
+      }
     } catch {
       setError('We could not estimate that meal right now. Please try again.');
       setErrorAction('parse');
@@ -555,7 +706,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
   }
 
   function openEntryMode(mode: EntryMode) {
-    if (conversationPrompt || items.length || clarifyingQuestion || lastClarificationReply || saveMessage) {
+    if (conversationPrompt || items.length || clarifyingQuestion || latestUserReply || saveMessage) {
       resetDraft();
     }
 
@@ -640,8 +791,8 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
 
       setSaving(false);
       setHasSavedCurrentDraft(true);
-      setSaveMessage(editingMealId ? 'Updated that meal.' : 'Saved to today. Ready for another one whenever you are.');
-      setNotice({ tone: 'success', text: editingMealId ? 'Looks good, I updated it.' : 'Saved.' });
+      setSaveMessage(editingMealId ? 'Updated it.' : 'Saved it. Want to log anything else?');
+      setNotice({ tone: 'success', text: editingMealId ? 'Updated it.' : 'Saved it.' });
       router.refresh();
     } catch {
       setSaving(false);
@@ -691,7 +842,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
       setFavoriteSaving(false);
       setNotice({
         tone: 'success',
-        text: sourceReusableMealId ? 'Favorite updated.' : 'Saved as a favorite.',
+        text: sourceReusableMealId ? 'Updated your favorite.' : 'Saved that as a favorite.',
       });
       router.refresh();
     } catch {
@@ -734,7 +885,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
       setSourceReusableMealId(null);
       setFavoriteState('idle');
       setFavoriteSaving(false);
-      setNotice({ tone: 'success', text: 'Favorite removed. The meal is still here if you want to save it.' });
+      setNotice({ tone: 'success', text: 'Removed the favorite. The meal is still here if you want it.' });
       router.refresh();
     } catch {
       setFavoriteSaving(false);
@@ -785,40 +936,132 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
     setExpandedIndex((current) => (current === index ? null : current));
   }
 
+  function applySimpleQuantityCorrection(message: string) {
+    const nextCount = detectSimpleQuantityCorrection(message);
+
+    if (!nextCount || !items.length) {
+      return false;
+    }
+
+    markDraftChanged();
+    setLatestUserReply(message);
+    setAssistantChatReply(null);
+    setClarifyingQuestion(null);
+    setItems(scaleParsedItems(items, nextCount));
+    setAssistantEstimateMode('correction');
+    setComposerText('');
+    return true;
+  }
+
   function submitComposer() {
     const message = composerText.trim();
+    const hasActiveMeal = items.length > 0;
 
     if (!message || loading) {
       return;
     }
 
+    const command = detectLoggerCommand(message, {
+      hasActiveMeal,
+      hasFavorite: Boolean(sourceReusableMealId),
+    });
+
+    if (command !== 'none') {
+      clearFeedback();
+      setAssistantChatReply(null);
+      setLatestUserReply(message);
+      setComposerText('');
+      setUtilityMenuOpen(false);
+
+      if (command === 'save') {
+        saveMeal();
+        return;
+      }
+
+      if (command === 'start_over') {
+        startAnotherMeal();
+        return;
+      }
+
+      if (command === 'favorite') {
+        saveFavorite();
+        return;
+      }
+
+      if (command === 'remove_favorite') {
+        removeFavorite();
+        return;
+      }
+    }
+
     if (clarifyingQuestion) {
-      parseMeal();
+      parseMeal({ mode: 'clarification' });
       return;
     }
 
-    const intent = detectLoggerIntent(message);
+    const intent = detectLoggerIntent(message, { hasActiveMeal });
+
+    if (intent === 'correction' && hasActiveMeal) {
+      if (applySimpleQuantityCorrection(message)) {
+        return;
+      }
+
+      parseMeal({
+        text: message,
+        mode: 'correction',
+        correctionText: message,
+      });
+      return;
+    }
+
+    if (intent === 'question') {
+      clearFeedback();
+      setLastParseOptions(null);
+      setEntryMode('chat');
+      setComposerText('');
+      setUtilityMenuOpen(false);
+
+      if (hasActiveMeal) {
+        setLatestUserReply(message);
+      } else {
+        setDisplayUserMessage(message);
+      }
+
+      setAssistantChatReply(
+        buildLoggerQuestionReply(message, {
+          proteinGoal,
+          dailyCalorieGoal,
+          currentMealProtein: totals.protein,
+          currentMealCalories: totals.calories,
+        }),
+      );
+      return;
+    }
 
     if (intent !== 'food_log') {
       clearFeedback();
       setLastParseOptions(null);
       setEntryMode('chat');
       setComposerText('');
+      setUtilityMenuOpen(false);
 
-      if (!items.length) {
+      if (!hasActiveMeal) {
         setDisplayUserMessage(message);
+      } else {
+        setLatestUserReply(message);
       }
 
       setAssistantChatReply(
         buildLoggerIntentReply(intent, {
           userName,
-          hasActiveMeal: items.length > 0,
+          hasActiveMeal,
         }),
       );
       return;
     }
 
-    parseMeal();
+    setLatestUserReply('');
+    parseMeal({ mode: 'new' });
   }
 
   return (
@@ -871,7 +1114,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                     ? 'Make any changes you want, then save it again.'
                     : sourceReusableMealId
                       ? 'You can log it as-is or tweak it first.'
-                      : 'Send it naturally. I’ll estimate first and only ask one quick follow-up if I really need it.'}
+                      : 'Send it naturally. I’ll estimate it, and if anything is too vague I’ll ask one short question.'}
                 </p>
                 {nutritionPreferences?.trim() ? (
                   <p className="text-xs leading-5 text-slate-500">I’ll keep your preferences in mind: {nutritionPreferences.trim()}</p>
@@ -1005,6 +1248,12 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
             </ChatBubble>
           ) : null}
 
+          {latestUserReply ? (
+            <ChatBubble role="user" compact>
+              <p className="text-sm font-medium leading-6">{latestUserReply}</p>
+            </ChatBubble>
+          ) : null}
+
           {assistantChatReply ? (
             <ChatBubble role="assistant" compact>
               <p className="text-sm leading-6 text-slate-700">{assistantChatReply}</p>
@@ -1014,18 +1263,12 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
           {clarifyingQuestion ? (
             <ChatBubble role="assistant" compact>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                <div className="flex items-center gap-2 text-[11px] text-slate-400">
                   <TriangleAlert className="h-3.5 w-3.5 text-teal-600" />
-                  One quick follow-up
+                  <span>I just need one detail.</span>
                 </div>
                 <p className="text-sm leading-6 text-slate-700">{clarifyingQuestion}</p>
               </div>
-            </ChatBubble>
-          ) : null}
-
-          {lastClarificationReply ? (
-            <ChatBubble role="user" compact>
-              <p className="text-sm font-medium leading-6">{lastClarificationReply}</p>
             </ChatBubble>
           ) : null}
 
@@ -1296,7 +1539,7 @@ export function MealLoggerClient({ initialDraft = null, favoriteMeals = [], rece
                 </select>
               </label>
               <p className="chat-composer-hint">
-                {clarifyingQuestion ? 'One short answer is enough here.' : entryMode === 'barcode' ? 'Barcode is open.' : entryMode === 'label' ? 'Label entry is open.' : 'Estimate first, adjust later.'}
+                {clarifyingQuestion ? 'A short answer is enough here.' : entryMode === 'barcode' ? 'Barcode is open.' : entryMode === 'label' ? 'Label entry is open.' : 'Talk normally, I’ll handle the match.'}
               </p>
             </div>
 

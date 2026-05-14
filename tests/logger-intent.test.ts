@@ -13,6 +13,11 @@ describe('logger intent detection', () => {
     expect(detectLoggerIntent('3 scrambled eggs and toast')).toBe('food_log');
   });
 
+  it('treats follow-up fixes as corrections when a meal is already active', () => {
+    expect(detectLoggerIntent('actually it was two', { hasActiveMeal: true })).toBe('correction');
+    expect(detectLoggerIntent('remove cheese', { hasActiveMeal: true })).toBe('correction');
+  });
+
   it('detects non-food questions separately', () => {
     expect(detectLoggerIntent('can you help me log lunch?')).toBe('question');
   });

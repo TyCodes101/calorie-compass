@@ -1,17 +1,26 @@
 import { analyzeMealText } from '@/lib/ai/analyze';
 
 export type LoggerIntent = 'greeting' | 'food_log' | 'correction' | 'question' | 'unknown';
+export type LoggerCommand = 'save' | 'start_over' | 'favorite' | 'remove_favorite' | 'none';
 
 const greetingRegex = /^(hi|hello|hey|yo|sup|what'?s up|good morning|good afternoon|good evening|how are you|how'?s it going)(?:\b|[!.?,]|$)/i;
 const questionRegex = /\?|^(what|how|can|could|would|should|do|does|is|are|am|will|did)\b/i;
-const correctionRegex = /^(actually|sorry|correction|i meant|make that|change that|not exactly|update that|edit that)\b/i;
+const correctionRegex = /^(actually|sorry|correction|i meant|make that|change that|not exactly|update that|edit that|remove|without|no\b|it was|that was|swap|hold the|skip the)\b/i;
+const saveCommandRegex = /^(save( it| that| this)?|log( it| that| this)?|looks good|that'?s right|done|good to save|save now)\b/i;
+const startOverCommandRegex = /^(start over|reset|new meal|clear this|try again)\b/i;
+const favoriteCommandRegex = /^(save favorite|favorite this|save as favorite)\b/i;
+const removeFavoriteCommandRegex = /^(remove favorite|unfavorite this|delete favorite)\b/i;
 const foodSignalRegex = /\b(chipotle|starbucks|mcdonald'?s?|chick-?fil-?a|burger|fries|pizza|taco|burrito|sandwich|salad|bowl|rice|chicken|beef|steak|salmon|shrimp|pasta|noodles|egg|eggs|toast|bagel|oatmeal|yogurt|banana|apple|shake|smoothie|protein|latte|coffee|coke|soda|fairlife|quest|premier|bar|cookie|ice cream|frappuccino|mcdouble|mcchicken)\b/i;
 
-export function detectLoggerIntent(input: string): LoggerIntent {
+export function detectLoggerIntent(input: string, options?: { hasActiveMeal?: boolean }): LoggerIntent {
   const normalized = input.trim().toLowerCase();
 
   if (!normalized) {
     return 'unknown';
+  }
+
+  if (options?.hasActiveMeal && correctionRegex.test(normalized)) {
+    return 'correction';
   }
 
   const analysis = analyzeMealText(input);
@@ -25,6 +34,10 @@ export function detectLoggerIntent(input: string): LoggerIntent {
 
   if (greetingRegex.test(normalized) && normalized.split(/\s+/).length <= 7 && !hasFoodSignals) {
     return 'greeting';
+  }
+
+  if (questionRegex.test(normalized) && !analysis.brand && analysis.category === 'unknown' && !analysis.hasPortion && !analysis.hasExplicitCountableQuantity) {
+    return 'question';
   }
 
   if (correctionRegex.test(normalized) && !hasFoodSignals) {
@@ -52,15 +65,75 @@ export function buildLoggerIntentReply(intent: LoggerIntent, options?: { userNam
 
   switch (intent) {
     case 'greeting':
-      return `Hey${namePrefix}, what'd you eat?`;
+      return options?.hasActiveMeal ? `Hey${namePrefix}, want to keep working on this meal or start a new one?` : `Hey${namePrefix}, what'd you eat?`;
     case 'correction':
       return options?.hasActiveMeal
-        ? "Got it. Send the corrected version and I'll update the estimate."
-        : "No problem. Send the corrected meal and I'll re-estimate it.";
+        ? "Got you. Tell me what changed and I'll update it."
+        : "No problem. Send the corrected meal and I'll update the estimate.";
     case 'question':
-      return "I can help with that. If you send the meal naturally, I'll estimate it for you.";
+      return options?.hasActiveMeal
+        ? "I can help with that. If it's about this meal, ask it naturally and I'll keep the current estimate in place."
+        : "I can help with that. Ask the question naturally, or send the meal and I'll log it.";
     case 'unknown':
     default:
-      return "I'm ready when you are. Tell me what you ate, or use barcode or a nutrition label for packaged foods.";
+      return options?.hasActiveMeal
+        ? "I'm with you. You can update this meal, save it, or start a new one."
+        : "I'm with you. Tell me what you ate, or use barcode or a nutrition label for packaged foods.";
   }
+}
+
+export function detectLoggerCommand(input: string, options?: { hasActiveMeal?: boolean; hasFavorite?: boolean }): LoggerCommand {
+  const normalized = input.trim().toLowerCase();
+
+  if (!normalized || !options?.hasActiveMeal) {
+    return 'none';
+  }
+
+  if (saveCommandRegex.test(normalized)) {
+    return 'save';
+  }
+
+  if (startOverCommandRegex.test(normalized)) {
+    return 'start_over';
+  }
+
+  if (favoriteCommandRegex.test(normalized)) {
+    return 'favorite';
+  }
+
+  if (options.hasFavorite && removeFavoriteCommandRegex.test(normalized)) {
+    return 'remove_favorite';
+  }
+
+  return 'none';
+}
+
+export function buildLoggerQuestionReply(
+  input: string,
+  options?: {
+    proteinGoal?: number | null;
+    dailyCalorieGoal?: number | null;
+    currentMealProtein?: number | null;
+    currentMealCalories?: number | null;
+  },
+) {
+  const normalized = input.trim().toLowerCase();
+
+  if (/protein/.test(normalized) && /(should i eat|should i have|goal|target|aim)/.test(normalized) && options?.proteinGoal) {
+    return `You're aiming for about ${Math.round(options.proteinGoal)}g of protein today. I can help you log meals toward that without making it a whole thing.`;
+  }
+
+  if (/calor/.test(normalized) && /(should i eat|goal|target|aim)/.test(normalized) && options?.dailyCalorieGoal) {
+    return `You're aiming for about ${Math.round(options.dailyCalorieGoal)} calories today. I can keep the logging side simple while you track against it.`;
+  }
+
+  if (/protein/.test(normalized) && /(this|that|meal|shake|bowl|burger)/.test(normalized) && options?.currentMealProtein) {
+    return `Right now I have this at about ${Math.round(options.currentMealProtein)}g of protein.`;
+  }
+
+  if (/calor/.test(normalized) && /(this|that|meal|shake|bowl|burger)/.test(normalized) && options?.currentMealCalories) {
+    return `Right now I have this at about ${Math.round(options.currentMealCalories)} calories.`;
+  }
+
+  return "I can help with nutrition questions, but I'm best when we keep it tied to your meal or your daily goals.";
 }

@@ -92,7 +92,7 @@ describe('meal logger client', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/i'd estimate about 980 calories/i)).toBeInTheDocument();
+      expect(screen.getByText(/got it, that looks like chipotle chicken bowl/i)).toBeInTheDocument();
     });
 
     expect(screen.getAllByText(/980/).length).toBeGreaterThan(0);
@@ -121,7 +121,7 @@ describe('meal logger client', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Saved to today/i)).toBeInTheDocument();
+      expect(screen.getByText(/Saved it\. Want to log anything else\?/i)).toBeInTheDocument();
     });
 
     expect(screen.getByRole('button', { name: 'Saved' })).toBeDisabled();
@@ -146,6 +146,167 @@ describe('meal logger client', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText("Hey Tyler, what'd you eat?")).toBeInTheDocument();
     expect(screen.queryByText(/i'd estimate about/i)).not.toBeInTheDocument();
+  });
+
+  it('answers nutrition questions conversationally without trying to parse them as food', async () => {
+    const fetchMock = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <MealLoggerClient
+        favoriteMeals={[]}
+        recentMeals={[]}
+        proteinGoal={195}
+        dailyCalorieGoal={2550}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'how much protein should I eat?' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/195g of protein today/i)).toBeInTheDocument();
+  });
+
+  it('updates the current meal when the user sends a simple correction', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        needs_clarification: false,
+        clarifying_question: null,
+        meal_type: 'lunch',
+        confidence_score: 0.94,
+        items: [
+          {
+            food_name: "McDonald's McDouble",
+            quantity: 1,
+            unit: 'burger',
+            calories: 390,
+            protein: 22,
+            carbs: 33,
+            fat: 18,
+            fiber: 2,
+            sugar: 7,
+            sodium: 850,
+            notes: 'Restaurant match.',
+            is_trusted: true,
+            source_type: 'OFFICIAL_RESTAURANT',
+            source_name: "McDonald's official nutrition",
+            catalog_food_id: 'mcdouble',
+          },
+        ],
+        totals: {
+          calories: 390,
+          protein: 22,
+          carbs: 33,
+          fat: 18,
+          fiber: 2,
+          sugar: 7,
+          sodium: 850,
+        },
+      }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: "mcdouble from mcdonald's" },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    await screen.findByText(/390 calories/i);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'actually it was two' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/780 calories total/i)).toBeInTheDocument();
+  });
+
+  it('handles save it as a conversational command', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          needs_clarification: false,
+          clarifying_question: null,
+          meal_type: 'snack',
+          confidence_score: 0.96,
+          items: [
+            {
+              food_name: 'Fairlife Core Power Elite 42g Protein Shake',
+              quantity: 1,
+              unit: 'bottle',
+              calories: 230,
+              protein: 42,
+              carbs: 9,
+              fat: 3.5,
+              fiber: 1,
+              sugar: 7,
+              sodium: 260,
+              notes: 'Product match.',
+              is_trusted: true,
+              source_type: 'GENERIC_REFERENCE',
+              source_name: 'Core Power nutrition reference',
+              catalog_food_id: 'fairlife-core-power-elite-42g',
+            },
+          ],
+          totals: {
+            calories: 230,
+            protein: 42,
+            carbs: 9,
+            fat: 3.5,
+            fiber: 1,
+            sugar: 7,
+            sodium: 260,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'fairlife 42g shake' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    await screen.findByText(/230 calories/i);
+
+    fireEvent.change(screen.getByPlaceholderText('Tell the assistant what you ate'), {
+      target: { value: 'save it' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/meals',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
   });
 
   it('supports barcode lookup for packaged foods', async () => {
@@ -198,11 +359,11 @@ describe('meal logger client', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /use barcode/i }));
 
-    await screen.findByText(/packaged protein bar/i);
+    await screen.findByText(/around 200 calories/i);
 
     expect(fetchMock).toHaveBeenCalled();
-    expect(screen.getByText(/i'd estimate about 200 calories/i)).toBeInTheDocument();
-    expect(screen.getByText(/packaged protein bar/i)).toBeInTheDocument();
+    expect(screen.getByText(/got it, that looks like packaged protein bar/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/packaged protein bar/i).length).toBeGreaterThan(0);
   });
 
   it('supports manual nutrition label entry for packaged foods', async () => {
@@ -280,6 +441,7 @@ describe('meal logger client', () => {
 
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"calories":230');
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"protein":42');
-    expect(screen.getByText(/i'd estimate about 230 calories/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/fairlife core power elite/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/around 230 calories/i)).toBeInTheDocument();
   });
 });

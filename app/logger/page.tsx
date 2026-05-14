@@ -43,6 +43,8 @@ export default async function LoggerPage({ searchParams }: LoggerPageProps) {
       recentMeals={recentMeals}
       nutritionPreferences={user?.profile?.aiPreferenceNotes ?? null}
       userName={user?.name ?? null}
+      proteinGoal={user?.profile?.proteinGoal ?? null}
+      dailyCalorieGoal={user?.profile?.dailyCalorieGoal ?? null}
     />
   );
 }

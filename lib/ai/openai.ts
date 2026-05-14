@@ -8,23 +8,49 @@ import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import { finalizeParsedResponse, inferMealType, shouldUseDeterministicRestaurantEstimate } from '@/lib/ai/orchestrate';
 import { getRestaurantEstimate } from '@/lib/ai/restaurant';
 import { resolveNutritionEstimate, type NutritionLabelInput } from '@/lib/nutrition/resolver';
-import type { ParsedMealResponse } from '@/lib/ai/types';
+import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
+
+type ConversationContext = {
+  mode?: 'new' | 'clarification' | 'correction';
+  previousMealText?: string | null;
+  correctionText?: string | null;
+  currentItems?: ParsedFoodItem[];
+};
+
+function buildEffectiveMealText(text: string, conversation?: ConversationContext) {
+  if (conversation?.mode === 'correction' && conversation.previousMealText && conversation.correctionText) {
+    return `${conversation.previousMealText}\nCorrection: ${conversation.correctionText}`;
+  }
+
+  if (conversation?.mode === 'clarification' && conversation.previousMealText) {
+    return `${conversation.previousMealText}\nAdditional detail: ${text}`;
+  }
+
+  return text;
+}
 
 export async function parseMealText(
   text: string,
   mealType?: string,
-  options?: { barcode?: string | null; nutritionLabel?: NutritionLabelInput | null; userPreferences?: string | null }
+  options?: {
+    barcode?: string | null;
+    nutritionLabel?: NutritionLabelInput | null;
+    userPreferences?: string | null;
+    conversation?: ConversationContext;
+  }
 ): Promise<ParsedMealResponse> {
-  const analysis = analyzeMealText(text);
-  const clarification = buildClarificationDecision(analysis);
-  const inferredMealType = inferMealType(mealType, text);
+  const effectiveText = buildEffectiveMealText(text, options?.conversation);
+  const analysis = analyzeMealText(effectiveText);
+  const clarification = options?.conversation?.mode === 'correction' ? { needsClarification: false, question: null } : buildClarificationDecision(analysis);
+  const inferredMealType = inferMealType(mealType, effectiveText);
   const hasDirectNutritionInput = Boolean(options?.barcode || options?.nutritionLabel);
+  const isCorrection = options?.conversation?.mode === 'correction';
 
   if (hasDirectNutritionInput) {
     const resolvedEstimate = await resolveNutritionEstimate({
-      text,
+      text: effectiveText,
       mealType: inferredMealType,
       barcode: options?.barcode,
       nutritionLabel: options?.nutritionLabel,
@@ -35,9 +61,9 @@ export async function parseMealText(
     }
   }
 
-  if (!clarification.needsClarification) {
+  if (!clarification.needsClarification && !isCorrection) {
     const resolvedEstimate = await resolveNutritionEstimate({
-      text,
+      text: effectiveText,
       mealType: inferredMealType,
       barcode: options?.barcode,
       nutritionLabel: options?.nutritionLabel,
@@ -49,7 +75,7 @@ export async function parseMealText(
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return getMockParsedMeal(text, mealType);
+    return getMockParsedMeal(effectiveText, mealType);
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -62,14 +88,29 @@ export async function parseMealText(
       {
         role: 'system',
         content:
-          'You are a nutrition estimation engine. Return only valid JSON. Be conservative and honest. If the meal is too vague, you may signal that clarification is needed, but do not ask more than one short follow-up question. If the meal is specific enough, estimate immediately. Prefer estimation first when a reasonable default exists, then let the user adjust. Generic meals like protein shakes, sandwiches, salads, pasta, tacos, and bowls should usually be estimated instead of blocked by a follow-up unless there is no reasonable baseline at all. Prefer itemized outputs, preserve restaurant or brand information in notes when helpful, and never invent precision you do not have. Recognize common restaurant meals from brands like Chipotle, Starbucks, Chick-fil-A, and McDonald\'s when the user gives clear menu-like details. If the meal is a simple countable food with an explicit quantity, like bananas, eggs, apples, bagels, yogurt, rice cakes, toast, or protein bars, do not ask a follow-up question. Use a reasonable trusted default serving and go straight to review. Only ask about sauces, oils, or toppings when the food actually makes that relevant. If user preferences are provided, use them only as soft context for assumptions and phrasing. Never let them override the explicit meal description. Output keys: needs_clarification, clarifying_question, meal_type, confidence_score, items, totals. Items must include food_name, quantity, unit, calories, protein, carbs, fat, fiber, sugar, sodium, notes. Totals must include calories, protein, carbs, fat, fiber, sugar, sodium. Nutrition estimates are approximate and not medical advice.',
+          'You are Calorie Compass, a calm, concise, trustworthy nutrition assistant. Return only valid JSON. Think like a real assistant even though your output is structured. Be conservative and honest. If the meal is specific enough, estimate it immediately. Prefer estimation first when a reasonable default exists, then let the user adjust. If conversation context says this is a correction, revise the current meal instead of starting over. If conversation context says this is a clarification, use the added detail to tighten the estimate without changing unrelated parts. Do not ask more than one short, human-sounding follow-up question. Generic meals like protein shakes, sandwiches, salads, pasta, tacos, burgers, and bowls should usually be estimated instead of blocked by a follow-up unless there is no reasonable baseline at all. Prefer itemized outputs, preserve restaurant or brand information in notes when helpful, and never invent precision you do not have. Recognize common restaurant meals from brands like Chipotle, Starbucks, Chick-fil-A, McDonald\'s, and Fairlife when the user gives clear menu-like details. If the meal is a simple countable food with an explicit quantity, do not ask a follow-up question. Use a reasonable trusted default serving and go straight to review. Only ask about sauces, oils, toppings, or preparation when the food actually makes that relevant. If user preferences are provided, use them only as soft context. Never let them override the explicit meal description. Output keys: needs_clarification, clarifying_question, meal_type, confidence_score, items, totals. Items must include food_name, quantity, unit, calories, protein, carbs, fat, fiber, sugar, sodium, notes. Totals must include calories, protein, carbs, fat, fiber, sugar, sodium. Nutrition estimates are approximate and not medical advice.',
       },
       {
         role: 'user',
         content: JSON.stringify({
-          meal_text: text,
+          meal_text: effectiveText,
           suggested_meal_type: mealType ?? null,
           user_preferences: options?.userPreferences ?? null,
+          conversation_context: options?.conversation
+            ? {
+                mode: options.conversation.mode ?? 'new',
+                previous_meal_text: options.conversation.previousMealText ?? null,
+                correction_text: options.conversation.correctionText ?? null,
+                current_items:
+                  options.conversation.currentItems?.map((item) => ({
+                    food_name: item.food_name,
+                    quantity: item.quantity,
+                    unit: item.unit,
+                    calories: item.calories,
+                    protein: item.protein,
+                  })) ?? [],
+              }
+            : null,
           analysis_hints: {
             detected_brand: analysis.brand,
             category: analysis.category,
@@ -87,7 +128,7 @@ export async function parseMealText(
 
   const content = completion.choices[0]?.message?.content;
   if (!content) {
-    return getMockParsedMeal(text, mealType);
+    return getMockParsedMeal(effectiveText, mealType);
   }
 
   try {
@@ -104,7 +145,7 @@ export async function parseMealText(
       };
     }
 
-    const restaurantEstimate = getRestaurantEstimate(text, inferredMealType);
+    const restaurantEstimate = getRestaurantEstimate(effectiveText, inferredMealType);
 
     if (restaurantEstimate && shouldUseDeterministicRestaurantEstimate(analysis)) {
       return finalizeParsedResponse(analysis, restaurantEstimate);
@@ -112,6 +153,6 @@ export async function parseMealText(
 
     return finalizeParsedResponse(analysis, normalized);
   } catch {
-    return getMockParsedMeal(text, mealType);
+    return getMockParsedMeal(effectiveText, mealType);
   }
 }

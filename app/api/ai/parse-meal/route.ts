@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { parseMealText } from '@/lib/ai/openai';
+import { parsedFoodItemSchema } from '@/lib/ai/types';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 
 const requestSchema = z.object({
@@ -22,17 +23,26 @@ const requestSchema = z.object({
       sodium: z.number().nonnegative().nullable().optional(),
     })
     .optional(),
+  conversation: z
+    .object({
+      mode: z.enum(['new', 'clarification', 'correction']).optional(),
+      previousMealText: z.string().nullable().optional(),
+      correctionText: z.string().nullable().optional(),
+      currentItems: z.array(parsedFoodItemSchema).optional(),
+    })
+    .optional(),
 });
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { text, mealType, barcode, nutritionLabel } = requestSchema.parse(body);
+    const { text, mealType, barcode, nutritionLabel, conversation } = requestSchema.parse(body);
     const user = await getCurrentUserWithProfile();
     const parsed = await parseMealText(text, mealType, {
       barcode,
       nutritionLabel,
       userPreferences: user?.profile?.aiPreferenceNotes ?? null,
+      conversation,
     });
     return NextResponse.json(parsed);
   } catch (error) {
