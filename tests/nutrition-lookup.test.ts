@@ -118,15 +118,16 @@ const usdaFoodsByQuery: Record<string, unknown[]> = {
   'cottage cheese': [
     {
       description: 'Cottage cheese, 2% milkfat',
+      fdcId: 170851,
       dataType: 'Foundation',
-      servingSize: 0.5,
-      servingSizeUnit: 'cup',
-      householdServingFullText: '1/2 cup',
+      servingSize: 100,
+      servingSizeUnit: 'g',
+      householdServingFullText: '100 g',
       foodNutrients: [
-        { nutrientName: 'Energy', value: 90 },
-        { nutrientName: 'Protein', value: 12 },
-        { nutrientName: 'Carbohydrate, by difference', value: 5 },
-        { nutrientName: 'Total lipid (fat)', value: 2.5 },
+        { nutrientName: 'Energy', nutrientNumber: '1008', unitName: 'KCAL', value: 84 },
+        { nutrientName: 'Protein', nutrientNumber: '1003', value: 11 },
+        { nutrientName: 'Carbohydrate, by difference', nutrientNumber: '1005', value: 4.3 },
+        { nutrientName: 'Total lipid (fat)', nutrientNumber: '1004', value: 2.3 },
       ],
     },
   ],
@@ -202,12 +203,14 @@ describe('normalizeFoodQuery', () => {
       searchText: 'cottage cheese',
       matchedQuery: 'Cottage Cheese',
       quantity: 24,
+      quantityUnit: 'g',
     });
 
     expect(normalizeFoodQuery('24 grams cotaage cheese')).toMatchObject({
       searchText: 'cottage cheese',
       matchedQuery: 'Cottage Cheese',
       quantity: 24,
+      quantityUnit: 'g',
     });
 
     expect(normalizeFoodQuery('little ceasers pizza')).toMatchObject({
@@ -219,6 +222,7 @@ describe('normalizeFoodQuery', () => {
       searchText: 'toast',
       matchedQuery: 'Toast',
       quantity: 2,
+      quantityUnit: 'piece',
     });
   });
 });
@@ -320,7 +324,42 @@ describe('lookupNutrition', () => {
       confidence_label: 'High confidence',
       matched_query: 'Cottage Cheese',
     });
-    expect(response?.totals.calories).toBe(90);
+    expect(response?.totals.calories).toBe(84);
+  });
+
+  it('uses the USDA DEMO_KEY fallback outside test mode when no private key is configured', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('USDA_FDC_API_KEY', '');
+    vi.stubEnv('FDC_API_KEY', '');
+    const fetchMock = installUsdaFetchMock();
+
+    const response = await lookupNutrition({ text: 'cottage cheese', mealType: 'snack' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('api_key=DEMO_KEY');
+    expect(response?.items[0]?.provider_used).toBe('usda-fdc');
+  });
+
+  it('scales USDA FoodData Central matches by explicit gram amounts', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = installUsdaFetchMock();
+
+    const response = await lookupNutrition({ text: '24 grams cotaage cheese', mealType: 'snack' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      query: 'cottage cheese',
+      dataType: ['Foundation', 'SR Legacy', 'Survey (FNDDS)', 'Branded'],
+    });
+    expect(response?.items[0]).toMatchObject({
+      food_name: 'Cottage cheese, 2% milkfat',
+      quantity: 24,
+      unit: 'g',
+      source_name: 'USDA FoodData Central',
+      provider_used: 'usda-fdc',
+    });
+    expect(response?.totals.calories).toBeCloseTo(20.16, 2);
+    expect(response?.items[0]?.notes).toMatch(/FDC 170851/i);
   });
 
   it('does not mistake gram amounts for branded protein claims', async () => {
