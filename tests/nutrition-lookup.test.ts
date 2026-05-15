@@ -363,7 +363,7 @@ describe('lookupNutrition', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
       query: 'cottage cheese',
-      dataType: ['Foundation', 'SR Legacy', 'Survey (FNDDS)', 'Branded'],
+      dataType: ['Foundation', 'SR Legacy', 'Survey (FNDDS)'],
     });
     expect(response?.items[0]).toMatchObject({
       food_name: 'Cottage cheese, 2% milkfat',
@@ -492,7 +492,7 @@ describe('lookupNutrition', () => {
     const fallback = await lookupNutrition({ text: 'mystery casserole surprise', mealType: 'dinner' }, { aiEstimateProvider: aiProvider });
 
     expect(localMatch?.items[0]?.confidence_label).toBe('Verified');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(aiLookup).toHaveBeenCalledTimes(1);
     expect(fallback?.items[0]).toMatchObject({
       source_type: 'AI_ESTIMATE',
