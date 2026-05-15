@@ -63,10 +63,18 @@ function findUsdaNutrient(food: UsdaFood, names: string[], nutrientNumbers: stri
 }
 
 function pickServingText(food: UsdaFood) {
+  if (!food.servingSize && !food.servingSizeUnit && /foundation|survey|sr legacy/i.test(food.dataType ?? '')) {
+    return '100 g';
+  }
+
   return food.householdServingFullText?.trim() || food.servingSizeUnit?.trim() || 'serving';
 }
 
 function pickServingQuantity(food: UsdaFood) {
+  if (!food.servingSize && !food.servingSizeUnit && /foundation|survey|sr legacy/i.test(food.dataType ?? '')) {
+    return 100;
+  }
+
   return food.servingSize && Number.isFinite(food.servingSize) ? food.servingSize : 1;
 }
 
@@ -133,6 +141,14 @@ function scoreUsdaFood(food: UsdaFood, searchText: string, brandHint: string | n
 
   if (unitHint && servingText.includes(normalizeText(unitHint))) {
     score += 16;
+  }
+
+  if (/\b(?:fruit|vegetables?|veggies)\b/.test(normalizedDescription) && !/\b(?:fruit|vegetables?|veggies)\b/.test(normalizedQuery)) {
+    score -= 32;
+  }
+
+  if (/\bnfs\b/.test(normalizedDescription)) {
+    score += 12;
   }
 
   if (calories > 0 && calories <= 1200) score += 10;
