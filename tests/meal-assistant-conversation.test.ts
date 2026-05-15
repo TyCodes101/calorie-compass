@@ -309,6 +309,7 @@ function expectNoBadAssistantPatterns(reply: string) {
   expect(reply).not.toMatch(/butter|oil/i);
   expect(reply).not.toMatch(/barcode/i);
   expect(reply).not.toMatch(/i'?m with you/i);
+  expect(reply).not.toMatch(/\u00e2|\u2018|\u2019|\u2026/);
 }
 
 describe('meal assistant conversational coverage', () => {
@@ -358,6 +359,7 @@ describe('meal assistant conversational coverage', () => {
   it.each([
     'cottage cheese',
     '20 grams of cottage cheese low fat',
+    '24 grams of cotaage cheese',
   ])('logs cottage cheese without a clarification loop: %s', async (prompt) => {
     const [response] = await runConversation([prompt]);
 
@@ -379,6 +381,54 @@ describe('meal assistant conversational coverage', () => {
     expect(response?.meal.totals.calories).toBeGreaterThan(500);
     expect(response?.assistant_reply).toMatch(/little caesars pizza/i);
     expect(response?.assistant_reply).not.toMatch(/need a little more detail/i);
+  });
+
+  it('bot QA: logs a whole misspelled Little Caesars pizza without a portion loop', async () => {
+    const [response] = await runConversation(['i had a whole little ceasers pizza']);
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.clarification_question).toBeNull();
+    expect(response.meal.items[0]?.food_name).toMatch(/little caesars pizza/i);
+    expect(response.meal.items[0]?.unit).toBe('pizza');
+    expect(response.meal.totals.calories).toBeGreaterThan(2000);
+    expect(response.assistant_reply).toMatch(/little caesars pizza/i);
+    expect(response.assistant_reply).not.toMatch(/how much pizza|one slice|few slices/i);
+  });
+
+  it('bot QA: overrides a model clarification when the pizza amount is already clear', async () => {
+    const classify = vi.fn().mockResolvedValue({
+      intent: 'new_food_item',
+      assistant_reply: 'How much pizza should I log?',
+      items: [],
+      corrections: [],
+      should_lookup_nutrition: false,
+      should_save_meal: false,
+      should_ask_clarification: true,
+      clarification_question: 'How much pizza should I log?',
+      confidence: 'medium',
+    } satisfies MealAssistantModelOutput);
+
+    const [response] = await runConversation(['i had a whole little ceasers pizza'], { classify });
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.clarification_question).toBeNull();
+    expect(response.meal.items[0]?.food_name).toMatch(/little caesars pizza/i);
+    expect(response.meal.items[0]?.unit).toBe('pizza');
+    expect(response.assistant_reply).not.toMatch(/how much pizza|need a little more detail/i);
+  });
+
+  it('uses a whole-pizza reply to answer a pending Little Caesars pizza portion question', async () => {
+    const responses = await runConversation(['Little Caesars pizza', 'a whole pizza']);
+    const response = responses.at(-1);
+
+    expect(response?.should_ask_clarification).toBe(false);
+    expect(response?.clarification_question).toBeNull();
+    expect(response?.meal.items).toHaveLength(1);
+    expect(response?.meal.items[0]?.food_name).toMatch(/little caesars pizza/i);
+    expect(response?.meal.items[0]?.unit).toBe('pizza');
+    expect(response?.meal.totals.calories).toBeGreaterThan(2000);
+    expect(response?.assistant_reply).toMatch(/little caesars pizza/i);
+    expect(response?.assistant_reply).not.toMatch(/how much pizza|bread|toast/i);
   });
 
   it('starts a clean second meal after save and logs obvious countable foods', async () => {
@@ -1243,7 +1293,7 @@ describe('meal assistant conversational coverage', () => {
     const second = responses[1];
 
     expect(first?.assistant_reply).toBe(repeatedQuestion);
-    expect(second?.assistant_reply).toBe('Got it, Iâ€™m checking that again.');
+    expect(second?.assistant_reply).toBe("Got it, I'm checking that again.");
     expect(second?.assistant_reply).not.toBe(repeatedQuestion);
     expect(second?.assistant_reply).not.toMatch(/i'?m with you/i);
     expect(second?.assistant_reply).not.toMatch(/barcode/i);
