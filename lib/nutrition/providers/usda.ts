@@ -64,7 +64,7 @@ function findUsdaNutrient(food: UsdaFood, names: string[], nutrientNumbers: stri
 
 function pickServingText(food: UsdaFood) {
   if (!food.servingSize && !food.servingSizeUnit && /foundation|survey|sr legacy/i.test(food.dataType ?? '')) {
-    return '100 g';
+    return 'g';
   }
 
   return food.householdServingFullText?.trim() || food.servingSizeUnit?.trim() || 'serving';
@@ -84,7 +84,10 @@ function getScaleFactor(food: UsdaFood, quantity: number, quantityUnit: string |
   }
 
   const requestedUnit = normalizeUnit(quantityUnit);
-  const servingUnit = normalizeUnit(food.servingSizeUnit) ?? normalizeUnit(food.householdServingFullText);
+  const servingUnit =
+    normalizeUnit(food.servingSizeUnit) ??
+    normalizeUnit(food.householdServingFullText) ??
+    (!food.servingSize && !food.servingSizeUnit && /foundation|survey|sr legacy/i.test(food.dataType ?? '') ? 'g' : null);
   const servingQuantity = pickServingQuantity(food);
 
   if (requestedUnit && servingUnit && requestedUnit === servingUnit && servingQuantity > 0) {
