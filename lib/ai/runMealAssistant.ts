@@ -217,7 +217,7 @@ function buildItemLookupText(item: MealAssistantItem) {
 }
 
 function buildMealTextFromItems(items: ParsedFoodItem[]) {
-  return items.map((item) => `${Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(1)} ${item.food_name}`).join(', ');
+  return items.map((item) => formatParsedItemLabel(item)).join(', ');
 }
 
 function buildHumanFoodNameFromAssistantItem(item: MealAssistantItem) {
@@ -341,6 +341,60 @@ type GenericEstimateSpec = {
 
 function formatDisplayQuantity(quantity: number) {
   return Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(1);
+}
+
+function formatUnitForQuantity(unit: string, quantity: number) {
+  const normalized = unit.trim().toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+
+  if (normalized === 'g' || normalized === 'gram' || normalized === 'grams') {
+    return 'g';
+  }
+
+  if (normalized === 'slice' || normalized === 'slices') {
+    return quantity === 1 ? 'slice' : 'slices';
+  }
+
+  if (normalized === 'piece' || normalized === 'pieces') {
+    return quantity === 1 ? 'piece' : 'pieces';
+  }
+
+  if (normalized.endsWith('s') && quantity === 1) {
+    return normalized.slice(0, -1);
+  }
+
+  if (!normalized.endsWith('s') && quantity !== 1 && !['oz', 'tbsp'].includes(normalized)) {
+    return `${normalized}s`;
+  }
+
+  return normalized;
+}
+
+function formatParsedItemLabel(item: ParsedFoodItem) {
+  const quantity = formatDisplayQuantity(item.quantity);
+  const unit = item.unit?.trim() ?? '';
+  const normalizedUnit = formatUnitForQuantity(unit, item.quantity);
+  const normalizedFoodName = normalizeText(item.food_name);
+
+  if (!normalizedUnit || ['serving', 'servings', 'meal', 'meals', 'count', 'counts'].includes(normalizedUnit)) {
+    return `${quantity} ${item.food_name}`;
+  }
+
+  if (normalizedUnit === 'g') {
+    return `${quantity}g ${item.food_name}`;
+  }
+
+  if (normalizedFoodName.includes(normalizeText(normalizedUnit)) || normalizedFoodName.includes(normalizeText(unit))) {
+    return `${quantity} ${item.food_name}`;
+  }
+
+  if (['slice', 'slices', 'piece', 'pieces'].includes(normalizedUnit)) {
+    return `${quantity} ${normalizedUnit} of ${item.food_name}`;
+  }
+
+  return `${quantity} ${normalizedUnit} ${item.food_name}`;
 }
 
 function makeGenericEstimate(spec: GenericEstimateSpec, originalText: string): ParsedFoodItem {
@@ -1014,7 +1068,7 @@ function buildFoodAwareFallbackReply(message: string, items: ParsedFoodItem[]) {
   }
 
   const totalCalories = Math.round(sumTotals(items).calories);
-  const foodLabel = items.length === 1 ? `${formatDisplayQuantity(items[0].quantity)} ${items[0].food_name}` : items.map((item) => item.food_name).join(' and ');
+  const foodLabel = items.length === 1 ? formatParsedItemLabel(items[0]) : items.map((item) => item.food_name).join(' and ');
   const sourceLabel = items.every((item) => item.source_type === 'OFFICIAL_RESTAURANT') ? 'Verified match' : 'Estimated';
   return `${foodLabel}, about ${totalCalories} calories total. ${sourceLabel}.`;
 }
@@ -2976,6 +3030,7 @@ function buildReplyFromItems(args: {
   }
 
   const mainItem = resolvedItems[0];
+  const mainItemLabel = formatParsedItemLabel(mainItem);
   const totalCalories = Math.round(sumTotals(resolvedItems).calories);
   const sourceLabel = getSourceLabel(mainItem);
   const seed = `${intent}:${mainItem.food_name}:${totalCalories}:${sourceLabel}`;
@@ -2991,9 +3046,9 @@ function buildReplyFromItems(args: {
       : choosePhrase(seed, ['Updated that', 'Okay, I changed it', 'Got you, I updated it']);
 
     return choosePhrase(seed, [
-      `${quantityLead} to ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}.`,
-      `${quantityLead} Iâ€™ve got it as ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name} now.`,
-      `${quantityLead} Thatâ€™s now ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}.`,
+      `${quantityLead} to ${mainItemLabel}.`,
+      `${quantityLead} I've got it as ${mainItemLabel} now.`,
+      `${quantityLead} That's now ${mainItemLabel}.`,
     ]);
   }
 
@@ -3003,9 +3058,9 @@ function buildReplyFromItems(args: {
       : choosePhrase(normalizedMessage || seed, ['Got you.', 'Okay, updating it.', 'That makes sense.']);
 
     return choosePhrase(seed, [
-      `${correctionLead} Iâ€™ve got it as ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, about ${totalCalories} calories total. ${sourceLabel}.`,
-      `${correctionLead} Thatâ€™s now ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, roughly ${totalCalories} calories. ${sourceLabel}.`,
-      `${correctionLead} I switched it to ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}. About ${totalCalories} calories total. ${sourceLabel}.`,
+      `${correctionLead} I've got it as ${mainItemLabel}, about ${totalCalories} calories total. ${sourceLabel}.`,
+      `${correctionLead} That's now ${mainItemLabel}, roughly ${totalCalories} calories. ${sourceLabel}.`,
+      `${correctionLead} I switched it to ${mainItemLabel}. About ${totalCalories} calories total. ${sourceLabel}.`,
     ]);
   }
 
@@ -3034,10 +3089,10 @@ function buildReplyFromItems(args: {
   }
 
   return choosePhrase(seed, [
-    `${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, about ${totalCalories} calories total. ${sourceLabel}.`,
-    `Iâ€™ve got ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, roughly ${totalCalories} calories. ${sourceLabel}.`,
-    `That looks like ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, around ${totalCalories} calories total. ${sourceLabel}.`,
-    `Alright, Iâ€™ve got ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}. That comes out to about ${totalCalories} calories. ${sourceLabel}.`,
+    `${mainItemLabel}, about ${totalCalories} calories total. ${sourceLabel}.`,
+    `I've got ${mainItemLabel}, roughly ${totalCalories} calories. ${sourceLabel}.`,
+    `That looks like ${mainItemLabel}, around ${totalCalories} calories total. ${sourceLabel}.`,
+    `Alright, I've got ${mainItemLabel}. That comes out to about ${totalCalories} calories. ${sourceLabel}.`,
   ]);
 }
 
