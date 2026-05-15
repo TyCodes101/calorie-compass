@@ -487,6 +487,36 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).toMatch(/68g of protein left/i);
   });
 
+  it('manual QA: preserves multi-food and restaurant meal identity across priority prompts', async () => {
+    const [blueberriesYogurt] = await runConversation(['Some blueberries with greek yogurt']);
+    expect(blueberriesYogurt.should_ask_clarification).toBe(false);
+    expect(blueberriesYogurt.meal.items.map((item) => item.food_name)).toEqual(expect.arrayContaining(['Blueberries', 'Greek yogurt']));
+    expect(blueberriesYogurt.assistant_reply).not.toMatch(/estimated mixed meal|need a little more detail/i);
+
+    const [chipotle] = await runConversation(['Chipotle bowl with white rice, double chicken, cheese, corn salsa, lettuce, and green salsa']);
+    expect(chipotle.should_ask_clarification).toBe(false);
+    expect(chipotle.meal.items).toHaveLength(1);
+    expect(chipotle.meal.items[0]?.food_name).toMatch(/chipotle bowl/i);
+    expect(chipotle.meal.items[0]?.food_name).toMatch(/white rice/i);
+    expect(chipotle.meal.items[0]?.food_name).toMatch(/double chicken/i);
+    expect(chipotle.meal.items[0]?.food_name).toMatch(/cheese/i);
+    expect(chipotle.meal.items[0]?.food_name).toMatch(/corn salsa/i);
+    expect(chipotle.meal.items[0]?.food_name).toMatch(/lettuce/i);
+    expect(chipotle.meal.items[0]?.food_name).toMatch(/green salsa/i);
+    expect(chipotle.assistant_reply).not.toMatch(/chipotle white rice|estimated mixed meal/i);
+
+    const [pizzaSlices] = await runConversation(['5 slices of pizza']);
+    expect(pizzaSlices.should_ask_clarification).toBe(false);
+    expect(pizzaSlices.meal.items[0]?.food_name).toMatch(/pizza/i);
+    expect(pizzaSlices.meal.items[0]?.quantity).toBe(5);
+    expect(pizzaSlices.meal.totals.calories).toBeGreaterThan(1200);
+    expect(pizzaSlices.assistant_reply).not.toMatch(/estimated mixed meal|how much pizza/i);
+
+    const [littleCaesars] = await runConversation(['Little Caesars pizza']);
+    expect(littleCaesars.should_ask_clarification).toBe(true);
+    expect(littleCaesars.clarification_question).toMatch(/little caesars|slice|whole pizza/i);
+  });
+
   it.each(['2 apples', 'protein bar', 'banana and peanut butter'])('logs obvious everyday foods without a detail loop: %s', async (prompt) => {
     const [response] = await runConversation([prompt]);
 
@@ -502,7 +532,7 @@ describe('meal assistant conversational coverage', () => {
     expect(response.should_ask_clarification).toBe(false);
     expect(response.meal.items[0]?.food_name).toBe('Toast');
     expect(response.meal.items[0]?.quantity).toBe(2);
-    expect(response.assistant_reply).toMatch(/2 Toast|2 toast/i);
+    expect(response.assistant_reply).toMatch(/2 slices of toast/i);
     expect(response.assistant_reply).not.toMatch(/1 Toast|need a little more detail/i);
   });
 
