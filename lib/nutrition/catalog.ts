@@ -52,7 +52,12 @@ function countOverlap(left: string[], right: string[]) {
 }
 
 function extractProteinSignal(text: string) {
-  const match = normalizeSearchText(text).match(/\b(\d{2})\s*(?:g|gram|grams)\b/);
+  const normalized = normalizeSearchText(text);
+  if (!/\b(?:protein|shake|bar|fairlife|core power|premier|quest|muscle milk)\b/.test(normalized)) {
+    return null;
+  }
+
+  const match = normalized.match(/\b(\d{2})\s*(?:g|gram|grams)\b/);
   if (!match) {
     return null;
   }
