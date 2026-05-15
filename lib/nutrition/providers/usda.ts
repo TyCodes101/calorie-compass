@@ -3,13 +3,14 @@ import { scaleParsedFoodItem } from '@/lib/nutrition/catalog';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
 type UsdaFood = {
+  fdcId?: number;
   description?: string;
   brandOwner?: string;
   servingSize?: number;
   servingSizeUnit?: string;
   householdServingFullText?: string;
   dataType?: string;
-  foodNutrients?: Array<{ nutrientName?: string; value?: number }>;
+  foodNutrients?: Array<{ nutrientName?: string; nutrientNumber?: string; unitName?: string; value?: number }>;
 };
 
 type UsdaSearchResponse = {
@@ -33,8 +34,28 @@ function countOverlap(left: string[], right: string[]) {
   return left.reduce((count, token) => count + (rightSet.has(token) ? 1 : 0), 0);
 }
 
-function findUsdaNutrient(food: UsdaFood, names: string[]) {
-  const nutrient = food.foodNutrients?.find((entry) => names.includes(entry.nutrientName ?? ''));
+function normalizeUnit(unit: string | null | undefined) {
+  const normalized = normalizeText(unit ?? '');
+  if (!normalized) return null;
+  if (['g', 'gram', 'grams'].includes(normalized)) return 'g';
+  if (['oz', 'ounce', 'ounces'].includes(normalized)) return 'oz';
+  if (['slice', 'slices'].includes(normalized)) return 'slice';
+  if (['piece', 'pieces'].includes(normalized)) return 'piece';
+  if (['cup', 'cups'].includes(normalized)) return 'cup';
+  if (['tbsp', 'tablespoon', 'tablespoons'].includes(normalized)) return 'tbsp';
+  if (['tsp', 'teaspoon', 'teaspoons'].includes(normalized)) return 'tsp';
+  return normalized;
+}
+
+function findUsdaNutrient(food: UsdaFood, names: string[], nutrientNumbers: string[] = []) {
+  const nutrient = food.foodNutrients?.find((entry) => {
+    const nameMatches = names.includes(entry.nutrientName ?? '');
+    const numberMatches = nutrientNumbers.length > 0 && nutrientNumbers.includes(entry.nutrientNumber ?? '');
+    const isKcalEnergy = entry.nutrientName === 'Energy'
+      ? !entry.unitName || normalizeText(entry.unitName) === 'kcal' || entry.nutrientNumber === '1008'
+      : true;
+    return (nameMatches || numberMatches) && isKcalEnergy;
+  });
   return nutrient?.value ?? 0;
 }
 
@@ -44,6 +65,43 @@ function pickServingText(food: UsdaFood) {
 
 function pickServingQuantity(food: UsdaFood) {
   return food.servingSize && Number.isFinite(food.servingSize) ? food.servingSize : 1;
+}
+
+function getScaleFactor(food: UsdaFood, quantity: number, quantityUnit: string | null) {
+  if (quantity <= 1 && !quantityUnit) {
+    return 1;
+  }
+
+  const requestedUnit = normalizeUnit(quantityUnit);
+  const servingUnit = normalizeUnit(food.servingSizeUnit) ?? normalizeUnit(food.householdServingFullText);
+  const servingQuantity = pickServingQuantity(food);
+
+  if (requestedUnit && servingUnit && requestedUnit === servingUnit && servingQuantity > 0) {
+    return quantity / servingQuantity;
+  }
+
+  if (requestedUnit === 'oz' && servingUnit === 'g' && servingQuantity > 0) {
+    return (quantity * 28.3495) / servingQuantity;
+  }
+
+  if (requestedUnit === 'g' && servingUnit === 'oz' && servingQuantity > 0) {
+    return quantity / (servingQuantity * 28.3495);
+  }
+
+  if (requestedUnit && requestedUnit !== servingUnit) {
+    return null;
+  }
+
+  return quantity > 1 ? quantity : 1;
+}
+
+function getQuantityUnitOverride(food: UsdaFood, quantityUnit: string | null) {
+  const requestedUnit = normalizeUnit(quantityUnit);
+  if (requestedUnit) {
+    return requestedUnit;
+  }
+
+  return pickServingText(food);
 }
 
 function scoreUsdaFood(food: UsdaFood, searchText: string, brandHint: string | null, unitHint: string | null) {
@@ -114,7 +172,7 @@ async function fetchJson<T>(url: string, init?: RequestInit) {
 export const usdaProvider: NutritionLookupProvider = {
   id: 'usda-fdc',
   async lookup({ mealType, normalizedQuery }) {
-    const apiKey = process.env.USDA_FDC_API_KEY || process.env.FDC_API_KEY;
+    const apiKey = process.env.USDA_FDC_API_KEY || process.env.FDC_API_KEY || (process.env.NODE_ENV === 'test' ? null : 'DEMO_KEY');
     if (!apiKey) {
       return null;
     }
@@ -122,7 +180,11 @@ export const usdaProvider: NutritionLookupProvider = {
     const payload = await fetchJson<UsdaSearchResponse>(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: normalizedQuery.searchText, pageSize: 10 }),
+      body: JSON.stringify({
+        query: normalizedQuery.searchText,
+        pageSize: 12,
+        dataType: ['Foundation', 'SR Legacy', 'Survey (FNDDS)', 'Branded'],
+      }),
     });
 
     const bestMatch = (payload?.foods ?? [])
@@ -143,14 +205,14 @@ export const usdaProvider: NutritionLookupProvider = {
         : bestMatch.description?.trim() || normalizedQuery.matchedQuery,
       quantity: pickServingQuantity(bestMatch),
       unit: pickServingText(bestMatch),
-      calories: findUsdaNutrient(bestMatch, ['Energy']),
-      protein: findUsdaNutrient(bestMatch, ['Protein']),
-      carbs: findUsdaNutrient(bestMatch, ['Carbohydrate, by difference']),
-      fat: findUsdaNutrient(bestMatch, ['Total lipid (fat)']),
-      fiber: findUsdaNutrient(bestMatch, ['Fiber, total dietary']),
-      sugar: findUsdaNutrient(bestMatch, ['Sugars, total including NLEA']),
-      sodium: findUsdaNutrient(bestMatch, ['Sodium, Na']),
-      notes: `Matched using USDA FoodData Central. Query: ${normalizedQuery.matchedQuery}.`,
+      calories: findUsdaNutrient(bestMatch, ['Energy'], ['1008']),
+      protein: findUsdaNutrient(bestMatch, ['Protein'], ['1003']),
+      carbs: findUsdaNutrient(bestMatch, ['Carbohydrate, by difference'], ['1005']),
+      fat: findUsdaNutrient(bestMatch, ['Total lipid (fat)'], ['1004']),
+      fiber: findUsdaNutrient(bestMatch, ['Fiber, total dietary'], ['1079']),
+      sugar: findUsdaNutrient(bestMatch, ['Sugars, total including NLEA', 'Sugars, total'], ['2000', '1063']),
+      sodium: findUsdaNutrient(bestMatch, ['Sodium, Na'], ['1093']),
+      notes: `Matched using USDA FoodData Central${bestMatch.fdcId ? ` FDC ${bestMatch.fdcId}` : ''}. Query: ${normalizedQuery.matchedQuery}.`,
       is_trusted: true,
       source_type: 'GENERIC_REFERENCE' as const,
       source_name: 'USDA FoodData Central',
@@ -162,7 +224,18 @@ export const usdaProvider: NutritionLookupProvider = {
       catalog_food_id: null,
     };
 
-    const item = normalizedQuery.quantity > 1 ? scaleParsedFoodItem(baseItem, normalizedQuery.quantity) : baseItem;
+    const scaleFactor = getScaleFactor(bestMatch, normalizedQuery.quantity, normalizedQuery.quantityUnit);
+    if (scaleFactor === null) {
+      return null;
+    }
+
+    const item = scaleFactor !== 1
+      ? scaleParsedFoodItem(baseItem, scaleFactor, getQuantityUnitOverride(bestMatch, normalizedQuery.quantityUnit))
+      : {
+          ...baseItem,
+          quantity: normalizedQuery.quantityUnit ? normalizedQuery.quantity : baseItem.quantity,
+          unit: getQuantityUnitOverride(bestMatch, normalizedQuery.quantityUnit),
+        };
 
     return normalizeParsedMealResponse({
       needs_clarification: false,
