@@ -424,6 +424,28 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).toMatch(/tonight|light|protein-forward|grilled chicken|cottage cheese/i);
   });
 
+  it('keeps multiple food lines and multiple macro follow-ups in one chatbox send', async () => {
+    const [response] = await runConversation(['2 eggs\nbanana\ncals left?\nprotein left?'], {
+      context: buildContext({ remainingProtein: 68, remainingCalories: 420 }),
+    });
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items.map((item) => item.food_name)).toEqual(['Eggs', 'Banana']);
+    expect(response.meal.totals.calories).toBeGreaterThan(200);
+    expect(response.assistant_reply).toMatch(/eggs/i);
+    expect(response.assistant_reply).toMatch(/420 calories left/i);
+    expect(response.assistant_reply).toMatch(/68g of protein left/i);
+  });
+
+  it.each(['2 apples', 'protein bar', 'banana and peanut butter'])('logs obvious everyday foods without a detail loop: %s', async (prompt) => {
+    const [response] = await runConversation([prompt]);
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items.length).toBeGreaterThanOrEqual(1);
+    expect(response.assistant_reply).not.toMatch(/need a little more detail/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
+
   it.each([
     ['2 eggs, toast, bacon, and orange juice', 4],
     ['McDouble and a medium fry', 2],
