@@ -426,7 +426,7 @@ describe('runMealAssistant', () => {
       },
     );
 
-    expect(response.assistant_reply).toBe('Got it, Iâ€™m checking that again.');
+    expect(response.assistant_reply).toBe("Got it, I'm checking that again.");
     expect(response.clarification_question).toBeNull();
     expect(response.next_state.pendingClarification).toBe(repeatedQuestion);
     expect(response.next_state.lastAssistantQuestion).toBe(repeatedQuestion);
@@ -572,6 +572,55 @@ describe('runMealAssistant', () => {
     expect(response.meal.items[0]?.food_name).not.toMatch(/chick-fil-a|nuggets/i);
     expect(response.assistant_reply).toMatch(/cottage cheese/i);
     expect(response.assistant_reply).not.toMatch(/chick-fil-a|nuggets/i);
+  });
+
+  it('bot QA: repairs generic bread matches when the user clearly logged toast', async () => {
+    const response = await runMealAssistant(
+      {
+        message: 'i had 2 pieces of toast',
+        state: buildState({ mealType: 'breakfast' }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'toast',
+                brand: null,
+                quantity: 2,
+                unit: 'slices',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: 'Bread',
+              quantity: 2,
+              unit: 'slice',
+              calories: 380,
+              protein: 14,
+              carbs: 72,
+              fat: 4,
+              source_type: 'AI_ESTIMATE',
+              source_name: 'AI estimate',
+              confidence_label: 'Estimated',
+            }),
+          ]),
+        ),
+      },
+    );
+
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe('Toast');
+    expect(response.meal.items[0]?.quantity).toBe(2);
+    expect(response.assistant_reply).toMatch(/toast/i);
+    expect(response.assistant_reply).not.toMatch(/\bbread\b/i);
   });
 
   it('keeps rice cakes plural when the user logs multiple rice cakes', async () => {
