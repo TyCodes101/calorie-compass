@@ -7,6 +7,16 @@ import { getRestaurantEstimate } from '@/lib/ai/restaurant';
 import { getTrustedCatalogEstimate } from '@/lib/ai/trusted';
 import type { ParsedMealResponse } from '@/lib/ai/types';
 
+function buildPreservedFallbackName(text: string) {
+  const cleaned = text
+    .trim()
+    .replace(/^(?:i\s+(?:had|ate|drank)|had|ate|drank)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[.?!]+$/, '');
+
+  return cleaned || 'meal';
+}
+
 export function getMockParsedMeal(text: string, mealType?: string): ParsedMealResponse {
   const lower = text.toLowerCase();
   const inferredMealType = inferMealType(mealType, text) as 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -54,13 +64,14 @@ export function getMockParsedMeal(text: string, mealType?: string): ParsedMealRe
       ],
     });
   } else {
+    const fallbackName = buildPreservedFallbackName(text);
     response = normalizeParsedMealResponse({
       needs_clarification: false,
       clarifying_question: null,
       meal_type: inferredMealType,
       confidence_score: 0.67,
       items: [
-        { food_name: 'Estimated mixed meal', quantity: 1, unit: 'meal', calories: 520, protein: 30, carbs: 45, fat: 20, fiber: 5, sugar: 6, sodium: 780, notes: 'General estimate based on the provided description' },
+        { food_name: fallbackName, quantity: 1, unit: 'meal', calories: 520, protein: 30, carbs: 45, fat: 20, fiber: 5, sugar: 6, sodium: 780, notes: 'General estimate based on the provided description' },
       ],
     });
   }
