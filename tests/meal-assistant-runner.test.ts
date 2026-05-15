@@ -465,4 +465,49 @@ describe('runMealAssistant', () => {
     expect(response.assistant_reply).not.toMatch(/estimated mixed meal/i);
   });
 
+  it('keeps rice cakes plural when the user logs multiple rice cakes', async () => {
+    const response = await runMealAssistant(
+      {
+        message: '2 rice cakes',
+        state: buildState({ mealType: 'snack' }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'rice cake',
+                brand: null,
+                quantity: 2,
+                unit: 'cake',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: 'Rice cake',
+              quantity: 2,
+              unit: 'cake',
+              calories: 70,
+              protein: 1,
+              carbs: 15,
+              fat: 0,
+              source_type: 'AI_ESTIMATE',
+              confidence_label: 'Estimated',
+            }),
+          ]),
+        ),
+      },
+    );
+
+    expect(response.meal.items[0]?.food_name).toBe('rice cakes');
+    expect(response.assistant_reply).toMatch(/2 rice cakes/i);
+  });
+
 });

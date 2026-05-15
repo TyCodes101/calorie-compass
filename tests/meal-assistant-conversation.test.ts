@@ -793,6 +793,23 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).not.toMatch(/^got it\.?$/i);
   });
 
+  it('treats snack-room phrasing like a snack guidance request even with an active meal', async () => {
+    const [response] = await runConversation(["I'm in the snack room"], {
+      context: buildContext({
+        remainingCalories: 420,
+        remainingProtein: 36,
+      }),
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Chipotle Chicken Bowl', unit: 'bowl', calories: 760, protein: 58, carbs: 62, fat: 24 })],
+        currentMealText: 'Chipotle Chicken Bowl',
+      }),
+    });
+
+    expect(response.intent).toBe('nutrition_guidance');
+    expect(response.assistant_reply).toMatch(/snack|420 calories|36g protein|yogurt|shake|room/i);
+    expect(response.assistant_reply).not.toMatch(/^i have chipotle chicken bowl/i);
+  });
+
   it('gives actual recommendation help for sweet-but-healthier prompts', async () => {
     const [response] = await runConversation(['something sweet but healthier'], {
       context: buildContext({

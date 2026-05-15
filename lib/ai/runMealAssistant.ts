@@ -42,7 +42,7 @@ const caloriesQuestionRegex = /\bcalories?\b/i;
 const onTrackRegex = /\bam i on track\b|\bhow am i doing\b|\bdid i hit my goal\b|\bon track\b/i;
 const dinnerSuggestionRegex = /\b(?:what should i eat tonight|what should i have tonight|what should i eat for dinner|what should i have for dinner|dinner idea|dinner ideas)\b/i;
 const snackSuggestionRegex = /\b(?:high protein snack|protein snack|snack idea|snack ideas|what should i snack on|what's a good snack|what is a good snack)\b/i;
-const snackRoomRegex = /\b(?:do i have room for a snack|room for a snack|can i have a snack|can i fit a snack)\b/i;
+const snackRoomRegex = /\b(?:do i have room for a snack|room for a snack|can i have a snack|can i fit a snack|i(?: am|'m) in the snack room|in the snack room)\b/i;
 const recommendationRegex = /\b(?:what should i eat|what should i have|what sounds good|give me (?:an?|some) ideas?|any ideas|recommend|suggest|something (?:sweet|lighter|healthy|healthier)|healthy snack|healthy dessert|dessert idea|quick meal|quick food|restaurant idea|healthier version|lighter version)\b/i;
 const sweetHealthyRegex = /\b(?:sweet|dessert)\b.*\b(?:healthy|healthier|lighter|light)\b|\b(?:healthy|healthier|lighter|light)\b.*\b(?:sweet|dessert)\b/i;
 const healthyTreatRegex = /\b(?:healthy treat|healthy snack|healthier treat|dessert|sweet snack)\b/i;
@@ -262,6 +262,17 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
         original_user_text: resolvedItem.original_user_text ?? lookupText,
       };
     }
+  }
+
+  if (item.quantity > 1 && /^rice cake$/i.test(resolvedItem.food_name.trim())) {
+    return {
+      ...resolvedItem,
+      food_name: 'rice cakes',
+      quantity: item.quantity || resolvedItem.quantity,
+      unit: item.unit?.trim() || resolvedItem.unit,
+      matched_query: resolvedItem.matched_query ?? lookupText,
+      original_user_text: resolvedItem.original_user_text ?? lookupText,
+    };
   }
 
   return resolvedItem;
