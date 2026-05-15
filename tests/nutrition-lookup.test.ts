@@ -117,6 +117,20 @@ const usdaFoodsByQuery: Record<string, unknown[]> = {
   ],
   'cottage cheese': [
     {
+      description: 'COTTAGE CHEESE',
+      brandOwner: 'Belfonte Ice Cream',
+      dataType: 'Branded',
+      servingSize: 100,
+      servingSizeUnit: 'g',
+      householdServingFullText: '100 g',
+      foodNutrients: [
+        { nutrientName: 'Energy', nutrientNumber: '1008', unitName: 'KCAL', value: 92.14 },
+        { nutrientName: 'Protein', nutrientNumber: '1003', value: 11.5 },
+        { nutrientName: 'Carbohydrate, by difference', nutrientNumber: '1005', value: 3.54 },
+        { nutrientName: 'Total lipid (fat)', nutrientNumber: '1004', value: 2.65 },
+      ],
+    },
+    {
       description: 'Cottage cheese, 2% milkfat',
       fdcId: 170851,
       dataType: 'Foundation',
