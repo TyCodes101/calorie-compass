@@ -82,6 +82,66 @@ function buildDecision(overrides?: Partial<MealAssistantModelOutput>): MealAssis
 }
 
 describe('runMealAssistant', () => {
+  it('passes recent chat history into the assistant classifier for ChatGPT-style context', async () => {
+    const classify = vi.fn().mockResolvedValue(
+      buildDecision({
+        intent: 'clarification_answer',
+        assistant_reply: 'I logged 2 slices from the pizza question.',
+        should_lookup_nutrition: true,
+        items: [
+          {
+            name: 'pizza',
+            brand: 'Little Caesars',
+            quantity: 2,
+            unit: 'slices',
+            modifiers: [],
+            action: 'add',
+          },
+        ],
+      }),
+    );
+
+    await runMealAssistant(
+      {
+        message: '2',
+        state: buildState(),
+        conversationHistory: [
+          { role: 'user', text: 'Little Caesars pizza' },
+          { role: 'assistant', text: 'For Little Caesars, was that one slice, a few slices, or a whole pizza?' },
+          { role: 'user', text: '2' },
+        ],
+      },
+      {
+        classify,
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: 'Little Caesars pizza',
+              quantity: 2,
+              unit: 'slices',
+              calories: 570,
+              protein: 24,
+              carbs: 72,
+              fat: 20,
+              source_type: 'AI_ESTIMATE',
+              source_name: 'Little Caesars-style fallback estimate',
+            }),
+          ]),
+        ),
+      },
+    );
+
+    expect(classify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationHistory: expect.arrayContaining([
+          { role: 'user', text: 'Little Caesars pizza' },
+          { role: 'assistant', text: 'For Little Caesars, was that one slice, a few slices, or a whole pizza?' },
+          { role: 'user', text: '2' },
+        ]),
+      }),
+    );
+  });
+
   it('handles a common food log and returns structured meal state', async () => {
     const item = buildItem();
     const response = await runMealAssistant(
@@ -366,7 +426,7 @@ describe('runMealAssistant', () => {
       },
     );
 
-    expect(response.assistant_reply).toBe('Got it, I’m checking that again.');
+    expect(response.assistant_reply).toBe('Got it, Iâ€™m checking that again.');
     expect(response.clarification_question).toBeNull();
     expect(response.next_state.pendingClarification).toBe(repeatedQuestion);
     expect(response.next_state.lastAssistantQuestion).toBe(repeatedQuestion);
@@ -569,7 +629,7 @@ describe('runMealAssistant', () => {
         classify: vi.fn().mockResolvedValue(
           buildDecision({
             intent: 'new_food_item',
-            assistant_reply: 'Alright, I’ve got 1 Chipotle white rice.',
+            assistant_reply: 'Alright, Iâ€™ve got 1 Chipotle white rice.',
             should_lookup_nutrition: true,
             items: [
               {
