@@ -57,9 +57,21 @@ function inferProviderUsed(item: ParsedFoodItem) {
 
 function buildItemLookupText(item: ParsedFoodItem) {
   const quantity = Number(item.quantity ?? 1);
+  const unit = item.unit?.trim() ?? '';
   const foodName = item.food_name.trim();
+  const normalizedFoodName = foodName.toLowerCase();
+  const normalizedUnit = unit.toLowerCase();
+  const measurementUnits = new Set(['g', 'gram', 'grams', 'oz', 'ounce', 'ounces', 'slice', 'slices', 'piece', 'pieces', 'cup', 'cups', 'tbsp', 'tablespoon', 'tablespoons', 'tsp', 'teaspoon', 'teaspoons']);
   if (!foodName) {
     return 'food';
+  }
+
+  if (unit && !/^(?:serving|servings|meal|meals|count|counts)$/i.test(unit) && (quantity !== 1 || measurementUnits.has(normalizedUnit))) {
+    if (normalizedFoodName.includes(normalizedUnit.replace(/s$/, ''))) {
+      return `${quantity} ${foodName}`.replace(/\s+/g, ' ').trim();
+    }
+
+    return `${quantity} ${unit} ${foodName}`.replace(/\s+/g, ' ').trim();
   }
 
   if (quantity > 1) {
