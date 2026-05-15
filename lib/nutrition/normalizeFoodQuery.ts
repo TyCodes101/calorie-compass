@@ -109,6 +109,28 @@ function extractQuantity(text: string) {
   return { quantity: 1, remainder: text };
 }
 
+function normalizeQuantityUnit(unit: string | undefined) {
+  const normalized = unit?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized === 'g' || normalized === 'gram' || normalized === 'grams') return 'g';
+  if (normalized === 'oz' || normalized === 'ounce' || normalized === 'ounces') return 'oz';
+  if (normalized === 'slice' || normalized === 'slices') return 'slice';
+  if (normalized === 'piece' || normalized === 'pieces') return 'piece';
+  if (normalized === 'cup' || normalized === 'cups') return 'cup';
+  if (normalized === 'tbsp' || normalized === 'tablespoon' || normalized === 'tablespoons') return 'tbsp';
+  if (normalized === 'tsp' || normalized === 'teaspoon' || normalized === 'teaspoons') return 'tsp';
+
+  return normalized;
+}
+
+function extractQuantityUnit(text: string) {
+  const match = text.match(/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|slices?|pieces?|cups?|tbsp|tablespoons?|tsp|teaspoons?)\b/);
+  return normalizeQuantityUnit(match?.[1]);
+}
+
 function singularize(text: string) {
   return text
     .replace(/\bmcdoubles\b/g, 'mcdouble')
@@ -237,6 +259,7 @@ export function normalizeFoodQuery(text: string): NormalizedFoodQuery {
     searchText: canonical.searchText,
     matchedQuery: canonical.matchedQuery,
     quantity,
+    quantityUnit: extractQuantityUnit(normalizedText),
     unitHint: canonical.unitHint,
     brandHint: detectBrandHint(canonical.searchText) ?? detectBrandHint(normalizedText),
   };
