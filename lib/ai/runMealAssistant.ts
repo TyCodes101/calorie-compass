@@ -941,6 +941,50 @@ function itemCoversTerm(items: ParsedFoodItem[], term: string) {
     .every((token) => haystack.includes(token));
 }
 
+function shouldTryOnlineHydration(item: ParsedFoodItem) {
+  return (
+    item.source_type === 'AI_ESTIMATE' &&
+    !/\b(?:pizza|little caesars|chipotle bowl)\b/i.test(`${item.food_name} ${item.source_name ?? ''}`)
+  );
+}
+
+function buildKnownEstimateLookupText(item: ParsedFoodItem) {
+  const quantity = formatDisplayQuantity(item.quantity);
+  const unit = item.unit?.trim() ?? '';
+
+  if (unit && !/^(?:serving|servings|meal|meals|count|counts)$/i.test(unit)) {
+    return `${quantity} ${unit} ${item.food_name}`.replace(/\s+/g, ' ').trim();
+  }
+
+  return `${quantity} ${item.food_name}`.replace(/\s+/g, ' ').trim();
+}
+
+async function hydrateKnownEstimatesWithProviders(items: ParsedFoodItem[], mealType: MealAssistantState['mealType']) {
+  const hydrated: ParsedFoodItem[] = [];
+
+  for (const item of items) {
+    if (!shouldTryOnlineHydration(item)) {
+      hydrated.push(item);
+      continue;
+    }
+
+    const resolved = await resolveNutritionEstimate({
+      text: buildKnownEstimateLookupText(item),
+      mealType,
+    });
+    const resolvedItem = resolved?.items[0] ?? null;
+
+    if (resolvedItem && itemCoversTerm([resolvedItem], item.food_name)) {
+      hydrated.push(resolvedItem);
+      continue;
+    }
+
+    hydrated.push(item);
+  }
+
+  return hydrated;
+}
+
 function messageHasRestaurantCue(message: string) {
   return /\b(?:chick\s*fil\s*a|chickfila|chipotle|mcdonald'?s?|taco bell|starbucks|wendy'?s|panera|subway|cava|panda express|little caesars?)\b/.test(normalizeFoodText(message));
 }
@@ -3132,10 +3176,11 @@ export async function runMealAssistant(
     && (!state.currentMealItems.length || state.saved || continuationRegex.test(stripEmotionalPreface(workingInput.message).toLowerCase()));
   const directKnownItems = canUseDirectKnownFood ? detectKnownFoodEstimates(workingInput.message) : [];
   if (directKnownItems.length) {
+    const hydratedItems = await hydrateKnownEstimatesWithProviders(directKnownItems, state.mealType);
     return finalizeResponse(buildDirectFoodEstimateResponse({
       input: workingInput,
       state,
-      items: directKnownItems,
+      items: hydratedItems,
       followUpMessage: mixedIntent.followUpMessage,
       context,
     }), workingInput, context);
@@ -3337,10 +3382,11 @@ export async function runMealAssistant(
     && (decision.intent === 'new_food_item' || decision.intent === 'add_to_current_meal')
     && (decision.should_ask_clarification || !decision.items.length || !decision.should_lookup_nutrition)
   ) {
+    const hydratedItems = await hydrateKnownEstimatesWithProviders(classifiedKnownItems, state.mealType);
     return finalizeResponse(buildDirectFoodEstimateResponse({
       input: workingInput,
       state,
-      items: classifiedKnownItems,
+      items: hydratedItems,
       intent: state.currentMealItems.length && !state.saved ? 'add_to_current_meal' : 'new_food_item',
       followUpMessage: mixedIntent.followUpMessage,
       context,
