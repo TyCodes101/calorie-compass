@@ -165,4 +165,11 @@ describe('trusted catalog integration', () => {
     expect(response.items[0]?.is_trusted).toBe(true);
     expect(response.items[0]?.food_name).toMatch(/fairlife/i);
   });
+
+  it('preserves the user food phrase for generic mock fallbacks', () => {
+    const response = getMockParsedMeal('homemade turkey chili with crackers', 'dinner');
+
+    expect(response.items[0]?.food_name).toBe('homemade turkey chili with crackers');
+    expect(response.items[0]?.food_name).not.toMatch(/estimated mixed meal/i);
+  });
 });
