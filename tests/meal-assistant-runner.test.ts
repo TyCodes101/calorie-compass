@@ -525,6 +525,55 @@ describe('runMealAssistant', () => {
     expect(response.assistant_reply).not.toMatch(/estimated mixed meal/i);
   });
 
+  it('bot QA: rejects unrelated restaurant matches for cottage cheese gram servings', async () => {
+    const response = await runMealAssistant(
+      {
+        message: 'i had about 24 grams of cottage cheese',
+        state: buildState({ mealType: 'snack' }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'cottage cheese',
+                brand: null,
+                quantity: 24,
+                unit: 'g',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: 'Chick-fil-A Nuggets 8 Count',
+              quantity: 1,
+              unit: 'count',
+              calories: 31.25,
+              protein: 3.13,
+              carbs: 1.38,
+              fat: 1.5,
+              source_type: 'OFFICIAL_RESTAURANT',
+              source_name: 'Chick-fil-A official nutrition',
+              confidence_label: 'Verified',
+            }),
+          ]),
+        ),
+      },
+    );
+
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(response.meal.items[0]?.food_name).not.toMatch(/chick-fil-a|nuggets/i);
+    expect(response.assistant_reply).toMatch(/cottage cheese/i);
+    expect(response.assistant_reply).not.toMatch(/chick-fil-a|nuggets/i);
+  });
+
   it('keeps rice cakes plural when the user logs multiple rice cakes', async () => {
     const response = await runMealAssistant(
       {
