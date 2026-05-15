@@ -40,7 +40,7 @@ const fatQuestionRegex = /\b(?:fat|fats)\b/i;
 const proteinQuestionRegex = /\bprotein\b/i;
 const caloriesQuestionRegex = /\bcalories?\b/i;
 const onTrackRegex = /\bam i on track\b|\bhow am i doing\b|\bdid i hit my goal\b|\bon track\b/i;
-const dinnerSuggestionRegex = /\b(?:what should i eat tonight|what should i have tonight|what should i eat for dinner|what should i have for dinner|dinner idea|dinner ideas)\b/i;
+const dinnerSuggestionRegex = /\b(?:what should i eat tonight|what should i have tonight|what should i eat for dinner|what should i have for dinner|dinner idea|dinner ideas|tonight idea|tonight ideas)\b/i;
 const snackSuggestionRegex = /\b(?:high protein snack|protein snack|snack idea|snack ideas|what should i snack on|what's a good snack|what is a good snack)\b/i;
 const snackRoomRegex = /\b(?:do i have room for a snack|room for a snack|can i have a snack|can i fit a snack|i(?: am|'m) in the snack room|in the snack room)\b/i;
 const recommendationRegex = /\b(?:what should i eat|what should i have|what sounds good|give me (?:an?|some) ideas?|any ideas|recommend|suggest|something (?:sweet|lighter|healthy|healthier)|healthy snack|healthy dessert|dessert idea|quick meal|quick food|restaurant idea|healthier version|lighter version)\b/i;
@@ -63,7 +63,7 @@ const sizeUpRegex = /\b(?:huge|massive|giant|really big|extra big|super big)\b/i
 const sizeDownRegex = /\b(?:small|tiny|light|not that much|pretty small)\b/i;
 const healthyCueRegex = /\b(?:healthy|balanced|pretty healthy|pretty balanced|not too bad|clean)\b/i;
 const mealDescriptorReferenceRegex = /\b(?:that|this|it|meal|burger|bowl|shake|sandwich|breakfast|lunch|dinner|snack)\b/i;
-const ambiguousFollowUpRegex = /^(?:what about that|what about it|how about that|how about it|is that okay|is it okay|does that work|which one|what do you mean|wait)\b/i;
+const ambiguousFollowUpRegex = /^(?:what about that|what about it|how about that|how about it|is that okay|is it okay|does that work|which one|what do you mean|what does that mean|wym|wait)\b/i;
 
 const genericResolvedFoodRegex = /^(?:estimated\s+)?(?:mixed\s+)?meal(?:\s+estimate)?$|^food(?:\s+item)?$|^item$/i;
 const pizzaNameRegex = /\bpizza\b/i;
@@ -443,6 +443,31 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (/\bpickles?\b/.test(normalized)) {
+    const countMatch = normalized.match(/\b(\d+(?:\.\d+)?)\s+pickles?\b/) ?? normalized.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+pickles?\b/);
+    const quantity = countMatch ? parseCount(countMatch[1] ?? '1') : 1;
+
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'pickles',
+          label: 'Pickles',
+          quantity,
+          unit: quantity === 1 ? 'pickle' : 'pickles',
+          calories: quantity * 5,
+          protein: 0,
+          carbs: quantity * 1,
+          fat: 0,
+          fiber: 0,
+          sugar: 0,
+          sodium: quantity * 280,
+          sourceName: 'Pickle common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
   return dedupeParsedItems(items);
 }
 
@@ -785,7 +810,25 @@ function getRecentMealOccurredAt(meal: MealAssistantContext['recentMeals'][numbe
 
 function splitMixedIntentMessage(message: string): MixedIntentSplit {
   const trimmed = message.trim();
-  const match = trimmed.match(/^(.*?)(?:,?\s+(?:and\s+)?(?:also\s+)?)((?:how much|how many|what about|how about|what should|what's|what is|am i|did i|is that|would that|can i)\b.*)$/i);
+  const lines = trimmed
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length > 1) {
+    const [firstLine, ...restLines] = lines;
+    const leadTokens = tokenizeText(firstLine);
+    const firstLineIsQuestion = /^(?:how|what|why|when|where|who|am|is|are|can|should|would|did|do|wait|protein left|calories left|tonight idea|dinner idea)\b/i.test(firstLine);
+
+    if (firstLine && leadTokens.length && !firstLineIsQuestion) {
+      return {
+        foodMessage: firstLine,
+        followUpMessage: restLines.join(' '),
+      };
+    }
+  }
+
+  const match = trimmed.match(/^(.*?)(?:,?\s+(?:and\s+)?(?:also\s+)?)((?:how much|how many|what about|how about|what should|what's|what is|am i|did i|is that|would that|can i|protein left|calories left|tonight idea|dinner idea)\b.*)$/i);
 
   if (!match) {
     return { foodMessage: null, followUpMessage: null };
@@ -1181,7 +1224,7 @@ function buildConversationRecoveryReply(input: MealAssistantRunInput, context: M
     (value) => value !== null && value !== undefined,
   );
 
-  if (input.state.pendingClarification && /^(?:wait|which one|what do you need|what do you mean)\b/i.test(normalized)) {
+  if (input.state.pendingClarification && /^(?:wait|which one|what do you need|what do you mean|what does that mean|wym)\b/i.test(normalized)) {
     return `I just need one detail to keep going: ${input.state.pendingClarification}`;
   }
 
@@ -1814,6 +1857,8 @@ function buildDirectFoodEstimateResponse(args: {
   state: MealAssistantState;
   items: ParsedFoodItem[];
   intent?: MealAssistantModelOutput['intent'];
+  followUpMessage?: string | null;
+  context?: MealAssistantContext;
 }) {
   const normalized = stripEmotionalPreface(args.input.message).toLowerCase();
   const intent = args.intent ?? (args.state.currentMealItems.length && continuationRegex.test(normalized) ? 'add_to_current_meal' : 'new_food_item');
@@ -1833,17 +1878,38 @@ function buildDirectFoodEstimateResponse(args: {
     editingMealId: intent === 'new_food_item' ? null : args.state.editingMealId,
   };
 
+  const primaryReply = buildReplyFromItems({
+    intent,
+    decisionReply: 'Got it.',
+    resolvedItems: intent === 'add_to_current_meal' ? currentMealItems : args.items,
+    message: args.input.message,
+  });
+  const followUpReply = args.followUpMessage && args.context ? buildInlineFollowUpReply(args.followUpMessage, nextState, args.context) : null;
+
   return buildDirectResponse({
     intent,
-    assistantReply: buildReplyFromItems({
-      intent,
-      decisionReply: 'Got it.',
-      resolvedItems: intent === 'add_to_current_meal' ? currentMealItems : args.items,
-      message: args.input.message,
-    }),
+    assistantReply: [primaryReply, followUpReply].filter(Boolean).join(' '),
     nextState,
     message: args.input.message,
   });
+}
+
+function buildInlineFollowUpReply(message: string, state: MealAssistantState, context: MealAssistantContext) {
+  const replies: string[] = [];
+
+  const macroReply = buildNutritionGuidanceReply({ message, state, context }, context);
+  if (macroReply) {
+    replies.push(macroReply);
+  }
+
+  if (dinnerSuggestionRegex.test(message) && !replies.some((reply) => /tonight|dinner|protein-forward|burrito bowl|grilled chicken/i.test(reply))) {
+    const dinnerReply = buildNutritionGuidanceReply({ message: 'tonight idea', state, context }, context);
+    if (dinnerReply) {
+      replies.push(dinnerReply);
+    }
+  }
+
+  return replies.length ? replies.join(' ') : null;
 }
 
 function getRemainingProtein(context: MealAssistantContext) {
@@ -2645,6 +2711,8 @@ export async function runMealAssistant(
       state,
       items: pizzaClarificationItems,
       intent: 'clarification_answer',
+      followUpMessage: mixedIntent.followUpMessage,
+      context,
     }), workingInput, context);
   }
 
@@ -2654,6 +2722,8 @@ export async function runMealAssistant(
       input: workingInput,
       state,
       items: directKnownItems,
+      followUpMessage: mixedIntent.followUpMessage,
+      context,
     }), workingInput, context);
   }
 
