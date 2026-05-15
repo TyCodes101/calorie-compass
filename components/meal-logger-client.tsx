@@ -153,6 +153,19 @@ function shorten(text: string, max = 90) {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}â€¦` : text;
 }
 
+function sanitizeChatText(text: string) {
+  return text
+    .replace(/\u00e2\u20ac\u2122/g, "'")
+    .replace(/\u00e2\u20ac\u0153/g, '"')
+    .replace(/\u00e2\u20ac\u009d/g, '"')
+    .replace(/\u00e2\u20ac\u00a6/g, '...')
+    .replace(/\u00e2\u20ac\u201c/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\u2026/g, '...')
+    .replace(/[\u2013\u2014]/g, '-');
+}
+
 function buildMealReference(prompt: string, items: ParsedFoodItem[]) {
   if (items.length === 1) {
     return items[0]?.food_name ?? shorten(cleanPromptForReply(prompt) || 'that meal');
@@ -549,7 +562,7 @@ function createChatMessage(role: ChatMessage['role'], text: string, options?: Pi
   return {
     id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     role,
-    text,
+    text: sanitizeChatText(text),
     tone: options?.tone ?? 'default',
     compact: options?.compact ?? role === 'assistant',
   };
@@ -951,7 +964,7 @@ export function MealLoggerClient({
   }, [loading, lastAssistantMessage, activePrompt]);
 
   function appendChatMessage(role: ChatMessage['role'], text: string, options?: Pick<ChatMessage, 'tone' | 'compact'>) {
-    const trimmed = text.trim();
+    const trimmed = sanitizeChatText(text).trim();
 
     if (!trimmed) {
       return;
