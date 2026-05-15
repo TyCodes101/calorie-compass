@@ -204,7 +204,7 @@ function rememberMealTiming(
   occurredAt: string | null | undefined,
 ) {
   const nextEntries = [...entries];
-  const hour = occurredAt ? new Date(occurredAt).getHours() : new Date().getHours();
+  const hour = occurredAt ? new Date(occurredAt).getUTCHours() : new Date().getHours();
   const index = nextEntries.findIndex((entry) => entry.mealType === mealType);
 
   if (index >= 0) {
