@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { MealAssistantModelOutput, MealAssistantState } from '@/lib/ai/mealAssistantSchema';
 import { runMealAssistant } from '@/lib/ai/runMealAssistant';
@@ -80,6 +80,12 @@ function buildDecision(overrides?: Partial<MealAssistantModelOutput>): MealAssis
     ...overrides,
   };
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('runMealAssistant', () => {
   it('passes recent chat history into the assistant classifier for ChatGPT-style context', async () => {
@@ -621,6 +627,50 @@ describe('runMealAssistant', () => {
     expect(response.meal.items[0]?.quantity).toBe(2);
     expect(response.assistant_reply).toMatch(/toast/i);
     expect(response.assistant_reply).not.toMatch(/\bbread\b/i);
+  });
+
+  it('bot QA: uses USDA lookup for direct typo cottage cheese instead of a local estimate when online data is available', async () => {
+    vi.stubEnv('OPENAI_API_KEY', '');
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            fdcId: 170851,
+            description: 'Cottage cheese, 2% milkfat',
+            dataType: 'Foundation',
+            servingSize: 100,
+            servingSizeUnit: 'g',
+            householdServingFullText: '100 g',
+            foodNutrients: [
+              { nutrientName: 'Energy', nutrientNumber: '1008', unitName: 'KCAL', value: 84 },
+              { nutrientName: 'Protein', nutrientNumber: '1003', value: 11 },
+              { nutrientName: 'Carbohydrate, by difference', nutrientNumber: '1005', value: 4.3 },
+              { nutrientName: 'Total lipid (fat)', nutrientNumber: '1004', value: 2.3 },
+            ],
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runMealAssistant({
+      message: 'i had 24 grams of cotaage cheese',
+      state: buildState({ mealType: 'snack' }),
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response.meal.items[0]).toMatchObject({
+      food_name: 'Cottage cheese, 2% milkfat',
+      quantity: 24,
+      unit: 'g',
+      provider_used: 'usda-fdc',
+      source_name: 'USDA FoodData Central',
+    });
+    expect(response.meal.totals.calories).toBeCloseTo(20.16, 2);
+    expect(response.assistant_reply).toMatch(/24g cottage cheese/i);
+    expect(response.assistant_reply).not.toMatch(/chipotle|chick-fil-a|24 Cottage cheese/i);
   });
 
   it('keeps rice cakes plural when the user logs multiple rice cakes', async () => {
