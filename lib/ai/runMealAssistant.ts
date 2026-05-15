@@ -65,6 +65,10 @@ const healthyCueRegex = /\b(?:healthy|balanced|pretty healthy|pretty balanced|no
 const mealDescriptorReferenceRegex = /\b(?:that|this|it|meal|burger|bowl|shake|sandwich|breakfast|lunch|dinner|snack)\b/i;
 const ambiguousFollowUpRegex = /^(?:what about that|what about it|how about that|how about it|is that okay|is it okay|does that work|which one|what do you mean|wait)\b/i;
 
+const genericResolvedFoodRegex = /^(?:estimated\s+)?(?:mixed\s+)?meal(?:\s+estimate)?$|^food(?:\s+item)?$|^item$/i;
+const pizzaNameRegex = /\bpizza\b/i;
+const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
+
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
   recentMeals: [],
@@ -185,6 +189,82 @@ function buildItemLookupText(item: MealAssistantItem) {
 
 function buildMealTextFromItems(items: ParsedFoodItem[]) {
   return items.map((item) => `${Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(1)} ${item.food_name}`).join(', ');
+}
+
+function buildHumanFoodNameFromAssistantItem(item: MealAssistantItem) {
+  const brand = item.brand?.trim() ? `${item.brand.trim()} ` : '';
+  const modifiers = item.modifiers.length ? `${item.modifiers.join(' ')} ` : '';
+  return `${brand}${modifiers}${item.name}`
+    .replace(/\bundefined\b/gi, '')
+    .replace(/\bnull\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function buildPizzaSliceEstimate(item: MealAssistantItem): ParsedFoodItem {
+  const quantity = Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : 1;
+  const perSlice = {
+    calories: 285,
+    protein: 12,
+    carbs: 36,
+    fat: 10,
+    fiber: 2,
+    sugar: 3,
+    sodium: 640,
+  };
+
+  return {
+    food_name: 'slices of pizza',
+    quantity,
+    unit: quantity === 1 ? 'slice' : 'slices',
+    calories: Math.round(perSlice.calories * quantity),
+    protein: Math.round(perSlice.protein * quantity),
+    carbs: Math.round(perSlice.carbs * quantity),
+    fat: Math.round(perSlice.fat * quantity),
+    fiber: Math.round(perSlice.fiber * quantity),
+    sugar: Math.round(perSlice.sugar * quantity),
+    sodium: Math.round(perSlice.sodium * quantity),
+    notes: 'Generic pizza estimate based on standard cheese/pepperoni-style slices; exact calories can vary by size, crust, and toppings.',
+    is_trusted: false,
+    source_type: 'AI_ESTIMATE',
+    source_name: 'Calorie Compass generic pizza estimate',
+    confidence_label: 'Estimated',
+    matched_query: buildItemLookupText(item),
+    original_user_text: buildItemLookupText(item),
+    provider_used: null,
+    used_ai_fallback: true,
+    catalog_food_id: null,
+  };
+}
+
+function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: ParsedFoodItem): ParsedFoodItem {
+  const lookupText = buildItemLookupText(item);
+  const isPizzaSlices = pizzaNameRegex.test(lookupText) && (pizzaSliceUnitRegex.test(lookupText) || item.quantity >= 2);
+
+  if (isPizzaSlices) {
+    const resolvedCalories = Number(resolvedItem.calories || 0);
+    const caloriesLookTooLow = item.quantity >= 2 && resolvedCalories < item.quantity * 180;
+    const genericName = genericResolvedFoodRegex.test(resolvedItem.food_name.trim());
+
+    if (genericName || caloriesLookTooLow) {
+      return buildPizzaSliceEstimate(item);
+    }
+  }
+
+  if (genericResolvedFoodRegex.test(resolvedItem.food_name.trim())) {
+    const humanName = buildHumanFoodNameFromAssistantItem(item);
+    if (humanName) {
+      return {
+        ...resolvedItem,
+        food_name: humanName,
+        quantity: item.quantity || resolvedItem.quantity,
+        unit: item.unit?.trim() || resolvedItem.unit,
+        matched_query: resolvedItem.matched_query ?? lookupText,
+        original_user_text: resolvedItem.original_user_text ?? lookupText,
+      };
+    }
+  }
+
+  return resolvedItem;
 }
 
 function getConfidenceScore(items: ParsedFoodItem[]) {
@@ -327,6 +407,55 @@ function splitMixedIntentMessage(message: string): MixedIntentSplit {
 
 function isGenericReply(reply: string) {
   return /^(?:got it|okay|alright|makes sense|tell me what you ate|what did you have|send the meal whenever you’re ready|saved\.?)/i.test(reply.trim());
+}
+
+function getReplyOpening(reply: string) {
+  return normalizeText(reply).split(' ').slice(0, 2).join(' ');
+}
+
+function isWeakStandaloneReply(reply: string) {
+  return /^(?:got it|okay|ok|alright|makes sense|sounds good|sure|yep|yes)[.!]*$/i.test(reply.trim());
+}
+
+function startsWithWeakAcknowledgment(reply: string) {
+  return /^(?:got it|okay|ok|alright|makes sense|sounds good|sure|yep)[,!. ]/i.test(reply.trim());
+}
+
+function buildContextualContinuityReply(state: MealAssistantState) {
+  const lastItem = state.currentMealItems.at(-1);
+
+  if (lastItem) {
+    return `I have ${shorten(lastItem.food_name, 48)} in this meal. Send another item, a correction, or save it when you’re ready.`;
+  }
+
+  if (state.pendingClarification) {
+    return `I just need one detail: ${state.pendingClarification}`;
+  }
+
+  return 'Tell me what you ate and I’ll break it down.';
+}
+
+function polishRepeatedOpening(reply: string, state: MealAssistantState) {
+  if (!state.lastAssistantReply) {
+    return reply;
+  }
+
+  const previousOpening = getReplyOpening(state.lastAssistantReply);
+  const nextOpening = getReplyOpening(reply);
+
+  if (!previousOpening || previousOpening !== nextOpening) {
+    return reply;
+  }
+
+  if (isWeakStandaloneReply(reply)) {
+    return buildContextualContinuityReply(state);
+  }
+
+  if (startsWithWeakAcknowledgment(reply)) {
+    return reply.replace(/^(?:got it|okay|ok|alright|makes sense|sounds good|sure|yep)[,!. ]+/i, '');
+  }
+
+  return reply;
 }
 
 function buildCurrentMealMacroReply(message: string, state: MealAssistantState) {
@@ -508,24 +637,28 @@ function postProcessAssistantReply(reply: string, state: MealAssistantState) {
     .replace(/\s+([?.!,])/g, '$1');
 
   if (!nextReply) {
-    nextReply = state.currentMealItems.length ? 'Got it.' : 'Tell me what you ate.';
+    nextReply = state.currentMealItems.length ? buildContextualContinuityReply(state) : 'Tell me what you ate.';
   }
+
+  if (isWeakStandaloneReply(nextReply) && state.currentMealItems.length) {
+    nextReply = buildContextualContinuityReply(state);
+  }
+
+  nextReply = polishRepeatedOpening(nextReply, state);
 
   if (!/[.!?]$/.test(nextReply)) {
     nextReply = `${nextReply}.`;
   }
 
-  if (nextReply.length > 170) {
-    nextReply = `${nextReply.slice(0, 167).trimEnd()}…`;
+  if (nextReply.length > 190) {
+    nextReply = `${nextReply.slice(0, 187).trimEnd()}…`;
   }
 
   if (state.lastAssistantReply && normalizeText(state.lastAssistantReply) === normalizeText(nextReply)) {
-    if (/^got it\b/i.test(nextReply)) {
-      nextReply = nextReply.replace(/^got it\b/i, 'Okay');
-    } else if (/^saved\b/i.test(nextReply)) {
+    if (/^saved\b/i.test(nextReply)) {
       nextReply = 'Saved. Ready for the next one?';
     } else {
-      nextReply = choosePhrase(nextReply, [nextReply, `Okay, ${nextReply.charAt(0).toLowerCase()}${nextReply.slice(1)}`]);
+      nextReply = buildContextualContinuityReply(state);
     }
   }
 
@@ -978,7 +1111,7 @@ function buildCasualReply(message: string, state: MealAssistantState) {
 
   if (casualRegex.test(normalized)) {
     return hasActiveMeal
-      ? choosePhrase(normalized, ['Got you. Keep going whenever you want.', 'All good. Send the next thing when you’re ready.'])
+      ? buildContextualContinuityReply(state)
       : choosePhrase(normalized, ['All good. What did you eat?', 'Yep, send the meal whenever you’re ready.']);
   }
 
@@ -1907,7 +2040,7 @@ async function resolveAssistantItems(
   for (const item of items) {
     const response = await resolveItemNutrition({ item, mealType });
     if (response?.items.length) {
-      resolved.push(...response.items);
+      resolved.push(...response.items.map((resolvedItem) => repairResolvedNutritionItem(item, resolvedItem)));
     }
   }
 

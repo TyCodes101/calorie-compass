@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -137,6 +137,29 @@ describe('meal logger client', () => {
     expect(screen.getByPlaceholderText('Tell me what you ate')).toBeInTheDocument();
     expect(screen.queryByText(/^log meal$/i)).not.toBeInTheDocument();
     expect(screen.getByText(/assistant/i)).toBeInTheDocument();
+  });
+
+
+  it('shows a polished starter panel with fast logging actions and today snapshot', () => {
+    render(
+      <MealLoggerClient
+        favoriteMeals={[]}
+        recentMeals={[]}
+        remainingCalories={640}
+        remainingProtein={38}
+        todayMealCount={2}
+      />,
+    );
+
+    const todaySnapshot = screen.getByLabelText(/today snapshot/i);
+
+    expect(todaySnapshot).toBeInTheDocument();
+    expect(within(todaySnapshot).getByText(/calories left/i)).toBeInTheDocument();
+    expect(within(todaySnapshot).getByText(/protein left/i)).toBeInTheDocument();
+    expect(screen.getByText(/fast ways to log/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /try example/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^barcode$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /nutrition label/i })).toBeInTheDocument();
   });
 
   it('hydrates assistant memory from server-seeded saved meals', async () => {
@@ -632,7 +655,7 @@ describe('meal logger client', () => {
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open helper actions' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Barcode' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Barcode' }).at(-1)!);
     fireEvent.change(screen.getByLabelText('Barcode digits'), {
       target: { value: '5449000000996' },
     });
@@ -687,7 +710,7 @@ describe('meal logger client', () => {
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open helper actions' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Nutrition label' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Nutrition label' }).at(-1)!);
     fireEvent.change(screen.getByLabelText('Product name'), {
       target: { value: 'Fairlife Core Power Elite' },
     });

@@ -277,6 +277,72 @@ describe('runMealAssistant', () => {
     expect(response.assistant_reply).toBe('I can keep working on this meal, or you can send the next food.');
   });
 
+
+  it('turns repeated bare acknowledgments into a contextual meal reply', async () => {
+    const currentItem = buildItem({ food_name: 'Fairlife protein shake', calories: 150, protein: 30, carbs: 4, fat: 2 });
+
+    const response = await runMealAssistant(
+      {
+        message: 'okay',
+        state: buildState({
+          currentMealItems: [currentItem],
+          currentMealText: 'Fairlife protein shake',
+          lastAssistantReply: 'Got it.',
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'casual_message',
+            assistant_reply: 'Got it.',
+          }),
+        ),
+      },
+    );
+
+    expect(response.assistant_reply).toMatch(/Fairlife protein shake/i);
+    expect(response.assistant_reply).not.toMatch(/^(got it|okay|alright|makes sense)[.!]?$/i);
+    expect(response.meal.items).toHaveLength(1);
+  });
+
+  it('removes repeated weak openings while preserving useful food-log content', async () => {
+    const currentItem = buildItem({ food_name: 'Quaker White Cheddar Rice Cakes', calories: 110, protein: 2, carbs: 22, fat: 2 });
+
+    const response = await runMealAssistant(
+      {
+        message: '2 white cheddar rice cakes',
+        state: buildState({
+          currentMealItems: [currentItem],
+          currentMealText: 'Quaker White Cheddar Rice Cakes',
+          lastAssistantReply: 'Got it, I added the protein shake.',
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            assistant_reply: 'Got it, I added the white cheddar rice cakes.',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'rice cakes',
+                brand: 'Quaker',
+                quantity: 2,
+                unit: 'cake',
+                modifiers: ['white cheddar'],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(buildParsedMealResponse([currentItem])),
+      },
+    );
+
+    expect(response.assistant_reply).toMatch(/white cheddar rice cakes/i);
+    expect(response.assistant_reply).not.toMatch(/^Got it,/i);
+  });
+
   it('suppresses repeated clarification loops when the same question comes back again', async () => {
     const repeatedQuestion = 'Was that rice or rice cakes?';
 
@@ -305,4 +371,98 @@ describe('runMealAssistant', () => {
     expect(response.next_state.pendingClarification).toBe(repeatedQuestion);
     expect(response.next_state.lastAssistantQuestion).toBe(repeatedQuestion);
   });
+
+
+  it('repairs suspicious generic estimates for multiple pizza slices', async () => {
+    const response = await runMealAssistant(
+      {
+        message: '5 slices of pizza',
+        state: buildState({ mealType: 'dinner' }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'pizza',
+                brand: null,
+                quantity: 5,
+                unit: 'slices',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: 'Estimated mixed meal',
+              quantity: 1,
+              unit: 'meal',
+              calories: 520,
+              protein: 30,
+              carbs: 45,
+              fat: 20,
+              source_type: 'AI_ESTIMATE',
+              source_name: 'AI estimate',
+              confidence_label: 'Estimated',
+            }),
+          ]),
+        ),
+      },
+    );
+
+    expect(response.meal.items[0]?.food_name).toBe('slices of pizza');
+    expect(response.meal.items[0]?.quantity).toBe(5);
+    expect(response.meal.totals.calories).toBeGreaterThan(1000);
+    expect(response.assistant_reply).toMatch(/5 slices of pizza/i);
+    expect(response.assistant_reply).not.toMatch(/estimated mixed meal/i);
+  });
+
+  it('renames generic resolver output back to the food the user actually logged', async () => {
+    const response = await runMealAssistant(
+      {
+        message: '2 chicken tacos',
+        state: buildState(),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'chicken tacos',
+                brand: null,
+                quantity: 2,
+                unit: 'tacos',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: 'Estimated mixed meal',
+              quantity: 1,
+              unit: 'meal',
+              calories: 420,
+              source_type: 'AI_ESTIMATE',
+              confidence_label: 'Estimated',
+            }),
+          ]),
+        ),
+      },
+    );
+
+    expect(response.meal.items[0]?.food_name).toBe('chicken tacos');
+    expect(response.meal.items[0]?.quantity).toBe(2);
+    expect(response.assistant_reply).not.toMatch(/estimated mixed meal/i);
+  });
+
 });

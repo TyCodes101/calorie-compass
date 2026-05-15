@@ -453,6 +453,50 @@ function buildQuickSuggestions(args: {
   return suggestions.slice(0, 4);
 }
 
+
+function formatGoalValue(value: number | null | undefined, suffix = '') {
+  if (value === null || value === undefined) {
+    return 'Set after onboarding';
+  }
+
+  const rounded = Math.round(value);
+  return `${rounded < 0 ? `+${Math.abs(rounded)}` : rounded}${suffix}`;
+}
+
+function buildLoggerSnapshot(args: {
+  remainingCalories?: number | null;
+  remainingProtein?: number | null;
+  todayMealCount?: number | null;
+}) {
+  return [
+    {
+      label: args.remainingCalories !== null && args.remainingCalories !== undefined && args.remainingCalories < 0 ? 'Over target' : 'Calories left',
+      value: formatGoalValue(args.remainingCalories, ''),
+      detail: args.remainingCalories !== null && args.remainingCalories !== undefined && args.remainingCalories < 0 ? 'Still useful data' : 'For today',
+    },
+    {
+      label: 'Protein left',
+      value: formatGoalValue(args.remainingProtein, 'g'),
+      detail: 'Toward your goal',
+    },
+    {
+      label: 'Meals today',
+      value: String(args.todayMealCount ?? 0),
+      detail: 'Logged so far',
+    },
+  ];
+}
+
+function shouldShowStarterPanel(args: {
+  itemsLength: number;
+  entryMode: EntryMode;
+  clarifyingQuestion: string | null;
+  loading: boolean;
+  chatHistoryLength: number;
+}) {
+  return args.itemsLength === 0 && args.entryMode === 'chat' && !args.clarifyingQuestion && !args.loading && args.chatHistoryLength <= 1;
+}
+
 function detectLocalAssistantAction(message: string): LocalAssistantAction {
   const normalized = message.trim().toLowerCase();
 
@@ -824,6 +868,17 @@ export function MealLoggerClient({
       }),
     [assistantMemory, favoriteMeals, recentMeals, remainingProtein, remainingCalories],
   );
+  const loggerSnapshot = useMemo(
+    () => buildLoggerSnapshot({ remainingCalories, remainingProtein, todayMealCount }),
+    [remainingCalories, remainingProtein, todayMealCount],
+  );
+  const showStarterPanel = shouldShowStarterPanel({
+    itemsLength: items.length,
+    entryMode,
+    clarifyingQuestion,
+    loading,
+    chatHistoryLength: chatHistory.length,
+  });
   const conversationLabel = useMemo(() => {
     switch (assistantState.activeMode) {
       case 'meal_building':
@@ -1785,6 +1840,16 @@ export function MealLoggerClient({
       </div>
 
       <section className="logger-assistant-thread-shell app-screen">
+        <div className="logger-session-strip" aria-label="Today snapshot">
+          {loggerSnapshot.map((item) => (
+            <div key={item.label} className="logger-session-pill">
+              <p className="logger-session-label">{item.label}</p>
+              <p className="logger-session-value">{item.value}</p>
+              <p className="logger-session-detail">{item.detail}</p>
+            </div>
+          ))}
+        </div>
+
         <div className="chat-thread">
           {!isOnline ? (
             <ChatBubble role="assistant" tone="warning" compact>
@@ -1803,6 +1868,36 @@ export function MealLoggerClient({
               <p className={clsx('text-sm leading-6', message.role === 'user' ? 'font-medium text-slate-950' : 'text-slate-700')}>{message.text}</p>
             </ChatBubble>
           ))}
+
+          {showStarterPanel ? (
+            <ChatBubble role="assistant" compact>
+              <div className="logger-starter-panel">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">Fast ways to log</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">Text a meal, scan a packaged food, or enter label numbers. I’ll keep the estimate reviewable before anything saves.</p>
+                </div>
+                <div className="logger-starter-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComposerText(promptExamples[0]);
+                      setUtilityMenuOpen(false);
+                      composerRef.current?.focus();
+                    }}
+                    className="logger-starter-action"
+                  >
+                    Try example
+                  </button>
+                  <button type="button" onClick={() => openEntryMode('barcode')} className="logger-starter-action">
+                    Barcode
+                  </button>
+                  <button type="button" onClick={() => openEntryMode('label')} className="logger-starter-action">
+                    Nutrition label
+                  </button>
+                </div>
+              </div>
+            </ChatBubble>
+          ) : null}
 
           {!items.length && entryMode === 'barcode' ? (
             <ChatBubble role="assistant" compact>

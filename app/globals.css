@@ -1064,3 +1064,105 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
     transition: none;
   }
 }
+
+.logger-session-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.2rem 0 0.65rem;
+}
+
+.logger-session-pill {
+  min-width: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.82));
+  padding: 0.62rem 0.68rem;
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.logger-session-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.logger-session-value {
+  margin-top: 0.22rem;
+  font-size: 0.98rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+
+.logger-session-detail {
+  margin-top: 0.08rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.65rem;
+  color: #7c8ba1;
+}
+
+.logger-starter-panel {
+  width: min(100%, 34rem);
+  display: grid;
+  gap: 0.85rem;
+}
+
+.logger-starter-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.logger-starter-action {
+  min-height: 2.6rem;
+  border-radius: 16px;
+  border: 1px solid rgba(214, 225, 237, 0.98);
+  background: rgba(248, 250, 252, 0.96);
+  padding: 0.55rem 0.62rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #334155;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.logger-starter-action:hover {
+  border-color: rgba(20, 184, 166, 0.24);
+  background: rgba(240, 253, 250, 0.98);
+  color: #0f766e;
+}
+
+.logger-starter-action:active {
+  transform: scale(0.985);
+}
+
+@media (max-width: 420px) {
+  .logger-session-strip {
+    gap: 0.38rem;
+  }
+
+  .logger-session-pill {
+    border-radius: 16px;
+    padding: 0.55rem 0.5rem;
+  }
+
+  .logger-session-label,
+  .logger-session-detail {
+    font-size: 0.58rem;
+  }
+
+  .logger-session-value {
+    font-size: 0.9rem;
+  }
+
+  .logger-starter-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
