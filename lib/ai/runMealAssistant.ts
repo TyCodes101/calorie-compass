@@ -145,12 +145,38 @@ function normalizeText(text: string) {
     .trim();
 }
 
+function normalizeKnownFoodTypos(text: string) {
+  return text
+    .replace(/\bcotaage\b/g, 'cottage')
+    .replace(/\bcotage\b/g, 'cottage')
+    .replace(/\bcottagee\b/g, 'cottage')
+    .replace(/\bceasers\b/g, 'caesars')
+    .replace(/\bcaesers\b/g, 'caesars');
+}
+
+function normalizeFoodText(text: string) {
+  return normalizeKnownFoodTypos(normalizeText(text));
+}
+
+function sanitizeAssistantText(text: string) {
+  return text
+    .replace(/\u00e2\u20ac\u2122/g, "'")
+    .replace(/\u00e2\u20ac\u0153/g, '"')
+    .replace(/\u00e2\u20ac\u009d/g, '"')
+    .replace(/\u00e2\u20ac\u00a6/g, '...')
+    .replace(/\u00e2\u20ac\u201c/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\u2026/g, '...')
+    .replace(/[\u2013\u2014]/g, '-');
+}
+
 function shorten(text: string, max = 72) {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}â€¦` : text;
 }
 
 function tokenizeText(text: string) {
-  return normalizeText(text)
+  return normalizeFoodText(text)
     .replace(stopWordRegex, ' ')
     .split(/\s+/)
     .map((token) => token.trim())
@@ -241,6 +267,7 @@ function buildPizzaSliceEstimate(item: MealAssistantItem): ParsedFoodItem {
 
 function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: ParsedFoodItem): ParsedFoodItem {
   const lookupText = buildItemLookupText(item);
+  const lookupNormalized = normalizeFoodText(lookupText);
   const isPizzaSlices = pizzaNameRegex.test(lookupText) && (pizzaSliceUnitRegex.test(lookupText) || item.quantity >= 2);
 
   if (isPizzaSlices) {
@@ -251,6 +278,22 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
     if (genericName || caloriesLookTooLow) {
       return buildPizzaSliceEstimate(item);
     }
+  }
+
+  if (/\btoast\b/.test(lookupNormalized) && /\bbread\b/i.test(resolvedItem.food_name.trim())) {
+    return {
+      ...resolvedItem,
+      food_name: 'Toast',
+      quantity: item.quantity || resolvedItem.quantity,
+      unit: item.unit?.trim() || (item.quantity === 1 ? 'slice' : 'slices'),
+      matched_query: resolvedItem.matched_query ?? lookupText,
+      original_user_text: resolvedItem.original_user_text ?? lookupText,
+      source_type: resolvedItem.source_type === 'OFFICIAL_RESTAURANT' ? 'AI_ESTIMATE' : resolvedItem.source_type,
+      source_name: resolvedItem.source_name ?? 'Toast common serving estimate',
+      confidence_label: resolvedItem.confidence_label ?? 'Estimated',
+      is_trusted: resolvedItem.source_type === 'OFFICIAL_RESTAURANT' ? false : resolvedItem.is_trusted,
+      used_ai_fallback: resolvedItem.source_type === 'OFFICIAL_RESTAURANT' ? true : resolvedItem.used_ai_fallback,
+    };
   }
 
   if (genericResolvedFoodRegex.test(resolvedItem.food_name.trim())) {
@@ -338,8 +381,8 @@ function dedupeParsedItems(items: ParsedFoodItem[]) {
 }
 
 function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
-  const normalized = normalizeText(message);
-  const lower = message.toLowerCase();
+  const normalized = normalizeFoodText(message);
+  const lower = normalizeKnownFoodTypos(message.toLowerCase());
   const items: ParsedFoodItem[] = [];
   const countWordPattern = 'one|two|three|four|five|six|seven|eight|nine|ten';
   const readCountBefore = (pattern: string, fallback = 1) => {
@@ -368,6 +411,29 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
           sugar: pizzaQuantity * 4,
           sodium: pizzaQuantity * 640,
           sourceName: isLittleCaesars ? 'Little Caesars-style fallback estimate' : 'Generic pizza slice fallback estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (!pizzaQuantity && /\b(?:a\s+)?(?:whole|entire)\s+(?:little caesars\s+|cheese\s+|pepperoni\s+)?(?:pizza|pie)\b/.test(normalized)) {
+    const isLittleCaesars = /\blittle caesars?\b/.test(normalized);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'whole pizza',
+          label: isLittleCaesars ? 'Little Caesars pizza' : 'Pizza',
+          quantity: 1,
+          unit: 'pizza',
+          calories: 2280,
+          protein: 96,
+          carbs: 288,
+          fat: 80,
+          fiber: 16,
+          sugar: 32,
+          sodium: 5120,
+          sourceName: isLittleCaesars ? 'Little Caesars-style fallback estimate' : 'Generic whole pizza fallback estimate',
         },
         message,
       ),
@@ -683,18 +749,45 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
 
 function resolvePizzaClarificationEstimate(message: string, state: MealAssistantState): ParsedFoodItem[] {
   const pendingQuestion = `${state.pendingClarification ?? ''} ${state.lastAssistantQuestion ?? ''}`;
-  if (!/\bpizza\b/i.test(pendingQuestion)) {
+  const normalizedPendingQuestion = normalizeFoodText(pendingQuestion);
+  if (!/\bpizza\b/.test(normalizedPendingQuestion)) {
     return [];
   }
 
-  const normalized = normalizeText(message);
+  const normalized = normalizeFoodText(message);
+  const isLittleCaesars = /\blittle caesars?\b/.test(normalizedPendingQuestion);
+
+  if (
+    /^(?:a |the )?(?:whole|entire) (?:little caesars |cheese |pepperoni )?(?:pizza|pie)$/.test(normalized) ||
+    /\b(?:whole|entire) (?:little caesars |cheese |pepperoni )?(?:pizza|pie)\b/.test(normalized)
+  ) {
+    return [
+      makeGenericEstimate(
+        {
+          key: 'whole pizza',
+          label: isLittleCaesars ? 'Little Caesars pizza' : 'Pizza',
+          quantity: 1,
+          unit: 'pizza',
+          calories: 2280,
+          protein: 96,
+          carbs: 288,
+          fat: 80,
+          fiber: 16,
+          sugar: 32,
+          sodium: 5120,
+          sourceName: isLittleCaesars ? 'Little Caesars-style fallback estimate' : 'Generic whole pizza fallback estimate',
+        },
+        `${isLittleCaesars ? 'whole Little Caesars pizza' : 'whole pizza'}`,
+      ),
+    ];
+  }
+
   const countMatch = normalized.match(/^(?:about |around )?(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)(?: slices?| pieces?)?$/);
   if (!countMatch) {
     return [];
   }
 
   const quantity = parseCount(countMatch[1] ?? '1');
-  const isLittleCaesars = /\blittle caesars?\b/i.test(pendingQuestion);
 
   return [
     makeGenericEstimate(
@@ -795,11 +888,11 @@ function itemCoversTerm(items: ParsedFoodItem[], term: string) {
 }
 
 function messageHasRestaurantCue(message: string) {
-  return /\b(?:chick\s*fil\s*a|chickfila|chipotle|mcdonald'?s?|taco bell|starbucks|wendy'?s|panera|subway|cava|panda express|little caesars?)\b/i.test(message);
+  return /\b(?:chick\s*fil\s*a|chickfila|chipotle|mcdonald'?s?|taco bell|starbucks|wendy'?s|panera|subway|cava|panda express|little caesars?)\b/.test(normalizeFoodText(message));
 }
 
 function shouldAskPizzaPortion(message: string, items: MealAssistantItem[]) {
-  const normalized = normalizeText(message);
+  const normalized = normalizeFoodText(message);
   if (!/\bpizza\b/.test(normalized)) {
     return false;
   }
@@ -809,14 +902,14 @@ function shouldAskPizzaPortion(message: string, items: MealAssistantItem[]) {
   if (/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:slices?|pieces?)\b/.test(normalized)) {
     return false;
   }
-  if (/\b(?:whole|entire)\s+(?:pizza|pie)\b/.test(normalized)) {
+  if (/\b(?:whole|entire)\s+(?:little caesars\s+|cheese\s+|pepperoni\s+)?(?:pizza|pie)\b/.test(normalized)) {
     return false;
   }
   return items.length <= 1;
 }
 
 function buildPizzaPortionQuestion(message: string) {
-  const normalized = normalizeText(message);
+  const normalized = normalizeFoodText(message);
   if (/\blittle caesars?\b/.test(normalized)) {
     return 'For Little Caesars, was that one slice, a few slices, or a whole pizza?';
   }
@@ -851,6 +944,14 @@ function hardenResolvedItems(args: { message: string; resolvedItems: ParsedFoodI
         item.source_type !== 'OFFICIAL_RESTAURANT' ||
         knownEstimates.some((estimate) => itemCoversTerm([item], estimate.food_name)),
     );
+  }
+
+  if (knownEstimates.some((estimate) => /\btoast\b/i.test(estimate.food_name))) {
+    nextItems = nextItems.filter((item) => !/\bbread\b/i.test(item.food_name) || itemCoversTerm([item], 'toast'));
+  }
+
+  if (knownEstimates.some((estimate) => /\bpizza\b/i.test(estimate.food_name)) && !/\b(?:bread|breadsticks?|toast)\b/i.test(message)) {
+    nextItems = nextItems.filter((item) => itemCoversTerm([item], 'pizza'));
   }
 
   for (const estimate of knownEstimates) {
@@ -1307,7 +1408,7 @@ function validateAssistantReply(args: {
 }
 
 function postProcessAssistantReply(reply: string, state: MealAssistantState, message?: string) {
-  let nextReply = reply
+  let nextReply = sanitizeAssistantText(reply)
     .trim()
     .replace(/\s+/g, ' ')
     .replace(/\s+([?.!,])/g, '$1');
@@ -1340,7 +1441,7 @@ function postProcessAssistantReply(reply: string, state: MealAssistantState, mes
     }
   }
 
-  return nextReply;
+  return sanitizeAssistantText(nextReply);
 }
 
 function getMemoryEntries(context: MealAssistantContext) {
@@ -3174,6 +3275,22 @@ export async function runMealAssistant(
     ...workingInput,
     context,
   });
+
+  const classifiedKnownItems = detectKnownFoodEstimates(workingInput.message);
+  if (
+    classifiedKnownItems.length
+    && (decision.intent === 'new_food_item' || decision.intent === 'add_to_current_meal')
+    && (decision.should_ask_clarification || !decision.items.length || !decision.should_lookup_nutrition)
+  ) {
+    return finalizeResponse(buildDirectFoodEstimateResponse({
+      input: workingInput,
+      state,
+      items: classifiedKnownItems,
+      intent: state.currentMealItems.length && !state.saved ? 'add_to_current_meal' : 'new_food_item',
+      followUpMessage: mixedIntent.followUpMessage,
+      context,
+    }), workingInput, context);
+  }
 
   let nextState: MealAssistantState = {
     ...state,
