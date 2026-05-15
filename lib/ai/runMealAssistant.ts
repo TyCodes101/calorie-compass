@@ -10,6 +10,7 @@ import {
   type MealAssistantModelOutput,
   type MealAssistantResponse,
   type MealAssistantState,
+  type MealAssistantTranscriptMessage,
   mealAssistantModelOutputSchema,
 } from '@/lib/ai/mealAssistantSchema';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
@@ -93,6 +94,7 @@ type MealAssistantRunInput = {
   state: MealAssistantState;
   context?: MealAssistantContext;
   userPreferences?: string | null;
+  conversationHistory?: MealAssistantTranscriptMessage[];
 };
 
 type NutritionResolver = (args: { item: MealAssistantItem; mealType: MealAssistantState['mealType'] }) => Promise<ParsedMealResponse | null>;
@@ -2717,6 +2719,14 @@ async function classifyWithModel(input: MealAssistantRunInput): Promise<MealAssi
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const transcriptMessages = (input.conversationHistory ?? [])
+    .slice(-12)
+    .filter((message) => message.text.trim())
+    .map((message) => ({
+      role: message.role,
+      content: message.text.slice(0, 1200),
+    }));
+
   const completion = await client.chat.completions.create({
     model,
     temperature: 0.2,
@@ -2726,14 +2736,19 @@ async function classifyWithModel(input: MealAssistantRunInput): Promise<MealAssi
         role: 'system',
         content: mealAssistantSystemPrompt,
       },
+      ...transcriptMessages,
       {
         role: 'user',
-        content: JSON.stringify({
-          message: input.message,
-          state: input.state,
-          context: input.context ?? emptyContext,
-          user_preferences: input.userPreferences ?? null,
-        }),
+        content: [
+          'Use the conversation above like a normal chat thread. The JSON below is private app state for the latest turn.',
+          'Return only the required JSON object for the latest user message.',
+          JSON.stringify({
+            latest_user_message: input.message,
+            state: input.state,
+            context: input.context ?? emptyContext,
+            user_preferences: input.userPreferences ?? null,
+          }),
+        ].join('\n\n'),
       },
     ],
   });
@@ -2944,6 +2959,7 @@ export async function runMealAssistant(
 
   const canUseDirectKnownFood =
     !dependencies.classify
+    && !process.env.OPENAI_API_KEY
     && !state.pendingClarification
     && (!state.currentMealItems.length || state.saved || continuationRegex.test(stripEmotionalPreface(workingInput.message).toLowerCase()));
   const directKnownItems = canUseDirectKnownFood ? detectKnownFoodEstimates(workingInput.message) : [];
