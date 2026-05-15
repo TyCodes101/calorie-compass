@@ -125,7 +125,7 @@ function scoreUsdaFood(food: UsdaFood, searchText: string, brandHint: string | n
     if (normalizedBrand.includes(normalizedHint) || normalizedDescription.includes(normalizedHint)) score += 40;
     else if (normalizedBrand) score -= 10;
   } else {
-    score += isBranded ? -8 : 10;
+    score += isBranded ? -36 : 14;
   }
 
   if (unitHint && servingText.includes(normalizeText(unitHint))) {
