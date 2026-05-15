@@ -145,6 +145,19 @@ const usdaFoodsByQuery: Record<string, unknown[]> = {
       ],
     },
   ],
+  'cheese cottage nfs': [
+    {
+      fdcId: 2705747,
+      description: 'Cheese, cottage, NFS',
+      dataType: 'Survey (FNDDS)',
+      foodNutrients: [
+        { nutrientName: 'Energy', nutrientNumber: '1008', unitName: 'KCAL', value: 98 },
+        { nutrientName: 'Protein', nutrientNumber: '1003', value: 11.1 },
+        { nutrientName: 'Carbohydrate, by difference', nutrientNumber: '1005', value: 3.4 },
+        { nutrientName: 'Total lipid (fat)', nutrientNumber: '1004', value: 4.3 },
+      ],
+    },
+  ],
 };
 
 function installUsdaFetchMock() {
@@ -374,6 +387,23 @@ describe('lookupNutrition', () => {
     });
     expect(response?.totals.calories).toBeCloseTo(20.16, 2);
     expect(response?.items[0]?.notes).toMatch(/FDC 170851/i);
+  });
+
+  it('treats generic USDA rows without serving units as per-100g for gram scaling', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = installUsdaFetchMock();
+
+    const response = await lookupNutrition({ text: '24 grams cheese cottage nfs', mealType: 'snack' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response?.items[0]).toMatchObject({
+      food_name: 'Cheese, cottage, NFS',
+      quantity: 24,
+      unit: 'g',
+      source_name: 'USDA FoodData Central',
+      provider_used: 'usda-fdc',
+    });
+    expect(response?.totals.calories).toBeCloseTo(23.52, 2);
   });
 
   it('does not mistake gram amounts for branded protein claims', async () => {
