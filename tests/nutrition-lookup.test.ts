@@ -4,6 +4,7 @@ import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
 import { hydrateParsedMealWithProviders, lookupNutrition } from '@/lib/nutrition/nutritionLookup';
 import { createAiEstimateProvider } from '@/lib/nutrition/providers/aiEstimate';
+import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
 
 const usdaFoodsByQuery: Record<string, unknown[]> = {
   banana: [
@@ -196,6 +197,18 @@ describe('normalizeFoodQuery', () => {
     expect(normalizeFoodQuery('they were rice cakes')).toMatchObject({
       searchText: 'rice cake',
     });
+
+    expect(normalizeFoodQuery('24 grams cottage cheese')).toMatchObject({
+      searchText: 'cottage cheese',
+      matchedQuery: 'Cottage Cheese',
+      quantity: 24,
+    });
+
+    expect(normalizeFoodQuery('2 pieces toast')).toMatchObject({
+      searchText: 'toast',
+      matchedQuery: 'Toast',
+      quantity: 2,
+    });
   });
 });
 
@@ -297,6 +310,15 @@ describe('lookupNutrition', () => {
       matched_query: 'Cottage Cheese',
     });
     expect(response?.totals.calories).toBe(90);
+  });
+
+  it('does not mistake gram amounts for branded protein claims', async () => {
+    const response = await lookupNutrition(
+      { text: '24 grams cottage cheese', mealType: 'snack' },
+      { providers: [localVerifiedCatalogProvider] },
+    );
+
+    expect(response).toBeNull();
   });
 
   it('uses the local verified override before USDA for mcdouble', async () => {
