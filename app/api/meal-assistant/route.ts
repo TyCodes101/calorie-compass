@@ -7,7 +7,7 @@ import { getCurrentUserWithProfile } from '@/lib/current-user';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, state, context } = mealAssistantRequestSchema.parse(body);
+    const { message, state, context, conversationHistory } = mealAssistantRequestSchema.parse(body);
     const user = await getCurrentUserWithProfile();
 
     const response = await runMealAssistant({
@@ -34,6 +34,7 @@ export async function POST(request: Request) {
         todayMealCount: context?.todayMealCount ?? null,
       },
       userPreferences: context?.nutritionPreferences ?? user?.profile?.aiPreferenceNotes ?? null,
+      conversationHistory: conversationHistory ?? [],
     });
 
     return NextResponse.json(response);
