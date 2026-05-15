@@ -27,7 +27,7 @@ const editRegex = /^(?:edit(?: it| that| this)?|change(?: it| that| this)?|tweak
 const reviewRegex = /\b(?:review (?:it|this|that)|show me (?:the )?(?:meal|review)|what do i have so far|show me what i have)\b/i;
 const quantityOnlyRegex = /^(?:actually|make that|update that to|it was|that was|no|i meant|instead)\s+(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const directQuantityRegex = /^(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
-const casualRegex = /^(?:hi|hello|hey|yo|sup|what(?:'|’)??s up|thanks|thank you|cool|okay|ok|nice|lol|how are you|how(?:'|’)??s your day)\b/i;
+const casualRegex = /^(?:hi|hello|hey|yo|sup|what(?:'|â€™)??s up|thanks|thank you|cool|okay|ok|nice|lol|how are you|how(?:'|â€™)??s your day)\b/i;
 const offTopicRegex = /\b(?:weather|movie|music|homework|code|browser|news|sports|joke)\b/i;
 const repeatYesterdayRegex = /\b(?:repeat|log|use|same as|what(?: did)? i (?:have|eat|log))\s+yesterday(?:'?s)?\b|\byesterday(?:'?s)?\b/i;
 const usualRegex = /\b(?:same as usual|my usual|the usual|usual)\b/i;
@@ -55,7 +55,7 @@ const currentMealCaloriesRegex = /\b(?:how many|how much|what(?:'s| is)).*calori
 const mealTypeHintRegex = /\b(breakfast|lunch|dinner|snack)\b/i;
 const weeklySummaryRegex = /\b(?:how(?:'s| is) (?:this|my) week|weekly summary|week so far|how am i doing this week|this week)\b/i;
 const stopWordRegex = /\b(i|me|my|mine|had|have|ate|drank|log|repeat|again|same|usual|use|using|as|the|a|an|for|to|of|this|that|yesterday|today|tonight|please|my|last|meal|food)\b/g;
-const laughRegex = /^(?:lol|lmao|haha+|hehe+|rofl|😂|🤣)+[!. ]*$/i;
+const laughRegex = /^(?:lol|lmao|haha+|hehe+|rofl|ðŸ˜‚|ðŸ¤£)+[!. ]*$/i;
 const appreciationRegex = /^(?:thanks|thank you|thx|appreciate it)[!. ]*$/i;
 const frustrationRegex = /\b(?:ugh|oops|my bad|sorry|whoops|damn|dang|frustrat(?:ed|ing))\b/i;
 const jokeRequestRegex = /\b(?:tell me a joke|say a joke|joke)\b/i;
@@ -144,7 +144,7 @@ function normalizeText(text: string) {
 }
 
 function shorten(text: string, max = 72) {
-  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}â€¦` : text;
 }
 
 function tokenizeText(text: string) {
@@ -337,6 +337,7 @@ function dedupeParsedItems(items: ParsedFoodItem[]) {
 
 function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   const normalized = normalizeText(message);
+  const lower = message.toLowerCase();
   const items: ParsedFoodItem[] = [];
 
   const sliceMatch = normalized.match(/\b(\d+(?:\.\d+)?)\s+(?:slices?|pieces?)\s+(?:of\s+)?(?:little caesars\s+)?(?:pizza|pepperoni pizza|cheese pizza)\b/);
@@ -349,7 +350,7 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
       makeGenericEstimate(
         {
           key: 'pizza',
-          label: isLittleCaesars ? 'Little Caesars pizza' : 'Pizza',
+          label: isLittleCaesars ? 'Little Caesars pizza' : 'slices of pizza',
           quantity: pizzaQuantity,
           unit: pizzaQuantity === 1 ? 'slice' : 'slices',
           calories: pizzaQuantity * 285,
@@ -409,7 +410,76 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (/\bcottage cheese\b/.test(normalized)) {
+    const gramMatch = lower.match(/\b(\d+(?:\.\d+)?)\s*(?:g|grams?)\b/) ?? lower.match(/\b(?:about|around)\s+(\d+(?:\.\d+)?)\b/);
+    const grams = gramMatch ? Number(gramMatch[1]) : null;
+    const isLowFat = /\blow fat\b|\blowfat\b|\b2%\b/.test(normalized);
+    const isDaisy = /\bdaisy\b/.test(normalized);
+    const quantity = grams && Number.isFinite(grams) && grams > 0 ? grams : 0.5;
+    const unit = grams && Number.isFinite(grams) && grams > 0 ? 'g' : 'cup';
+    const multiplier = grams && Number.isFinite(grams) && grams > 0 ? grams / 113 : 1;
+    const label = `${isDaisy ? 'Daisy ' : ''}${isLowFat ? 'Low fat ' : ''}cottage cheese`
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^./, (char) => char.toUpperCase());
+
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'cottage cheese',
+          label,
+          quantity,
+          unit,
+          calories: 90 * multiplier,
+          protein: 13 * multiplier,
+          carbs: 4 * multiplier,
+          fat: (isLowFat ? 2.5 : 5) * multiplier,
+          sugar: 3 * multiplier,
+          sodium: 350 * multiplier,
+          sourceName: 'Cottage cheese common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
   return dedupeParsedItems(items);
+}
+
+function resolvePizzaClarificationEstimate(message: string, state: MealAssistantState): ParsedFoodItem[] {
+  const pendingQuestion = `${state.pendingClarification ?? ''} ${state.lastAssistantQuestion ?? ''}`;
+  if (!/\bpizza\b/i.test(pendingQuestion)) {
+    return [];
+  }
+
+  const normalized = normalizeText(message);
+  const countMatch = normalized.match(/^(?:about |around )?(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)(?: slices?| pieces?)?$/);
+  if (!countMatch) {
+    return [];
+  }
+
+  const quantity = parseCount(countMatch[1] ?? '1');
+  const isLittleCaesars = /\blittle caesars?\b/i.test(pendingQuestion);
+
+  return [
+    makeGenericEstimate(
+      {
+        key: 'pizza',
+        label: isLittleCaesars ? 'Little Caesars pizza' : 'Pizza',
+        quantity,
+        unit: quantity === 1 ? 'slice' : 'slices',
+        calories: quantity * 285,
+        protein: quantity * 12,
+        carbs: quantity * 36,
+        fat: quantity * 10,
+        fiber: quantity * 2,
+        sugar: quantity * 4,
+        sodium: quantity * 640,
+        sourceName: isLittleCaesars ? 'Little Caesars-style fallback estimate' : 'Generic pizza slice fallback estimate',
+      },
+      `${quantity} ${quantity === 1 ? 'slice' : 'slices'} of ${isLittleCaesars ? 'Little Caesars ' : ''}pizza`,
+    ),
+  ];
 }
 
 function detectChipotleBowlEstimate(message: string): ParsedFoodItem | null {
@@ -740,7 +810,7 @@ function splitMixedIntentMessage(message: string): MixedIntentSplit {
 }
 
 function isGenericReply(reply: string) {
-  return /^(?:got it|okay|alright|makes sense|tell me what you ate|what did you have|send the meal whenever you’re ready|saved\.?)/i.test(reply.trim());
+  return /^(?:got it|okay|alright|makes sense|tell me what you ate|what did you have|send the meal whenever youâ€™re ready|saved\.?)/i.test(reply.trim());
 }
 
 function getReplyOpening(reply: string) {
@@ -759,14 +829,14 @@ function buildContextualContinuityReply(state: MealAssistantState) {
   const lastItem = state.currentMealItems.at(-1);
 
   if (lastItem) {
-    return `I have ${shorten(lastItem.food_name, 48)} in this meal. Send another item, a correction, or save it when you’re ready.`;
+    return `I have ${shorten(lastItem.food_name, 48)} in this meal. Send another item, a correction, or save it when youâ€™re ready.`;
   }
 
   if (state.pendingClarification) {
     return `I just need one detail: ${state.pendingClarification}`;
   }
 
-  return 'Tell me what you ate and I’ll break it down.';
+  return 'Tell me what you ate and Iâ€™ll break it down.';
 }
 
 function polishRepeatedOpening(reply: string, state: MealAssistantState) {
@@ -847,7 +917,7 @@ function buildRecommendationReply(input: MealAssistantRunInput, context: MealAss
 
   if (lighterVersionRegex.test(normalized) && input.state.currentMealItems.length) {
     const mealLabel = input.state.currentMealItems.at(-1)?.food_name ?? 'that meal';
-    return `For a lighter version of ${mealLabel}, I’d lean grilled instead of fried, skip heavy extras like cheese or mayo, and keep the side simpler.`;
+    return `For a lighter version of ${mealLabel}, Iâ€™d lean grilled instead of fried, skip heavy extras like cheese or mayo, and keep the side simpler.`;
   }
 
   if (/restaurant/.test(normalized) && suggestion) {
@@ -987,7 +1057,7 @@ function postProcessAssistantReply(reply: string, state: MealAssistantState, mes
   }
 
   if (nextReply.length > 190) {
-    nextReply = `${nextReply.slice(0, 187).trimEnd()}…`;
+    nextReply = `${nextReply.slice(0, 187).trimEnd()}â€¦`;
   }
 
   if (state.lastAssistantReply && normalizeText(state.lastAssistantReply) === normalizeText(nextReply)) {
@@ -1094,7 +1164,7 @@ function buildWeeklySummaryReply(context: MealAssistantContext) {
   }
 
   if (proteinForwardCount >= Math.ceil(recentWeek.length / 2)) {
-    return `${intro} You’ve been leaning pretty protein-forward more often than not.`;
+    return `${intro} Youâ€™ve been leaning pretty protein-forward more often than not.`;
   }
 
   if (topMealType) {
@@ -1118,7 +1188,7 @@ function buildConversationRecoveryReply(input: MealAssistantRunInput, context: M
   if (ambiguousFollowUpRegex.test(normalized) || (/\?$/.test(normalized) && /\b(?:it|that|this|those|them)\b/.test(normalized))) {
     if (!hasActiveMeal && (input.state.previousIntent || input.state.activeTopic)) {
       if (input.state.activeTopic === 'nutrition' || input.state.previousIntent === 'nutrition_guidance' || input.state.previousIntent === 'macro_question') {
-        return 'We were talking about your day overall. If you mean the meal instead, send the meal or ask about this meal once it’s in front of me.';
+        return 'We were talking about your day overall. If you mean the meal instead, send the meal or ask about this meal once itâ€™s in front of me.';
       }
 
       return 'We were between the meal thread and the day-level view. If you mean the meal, send it again or ask about this meal. If you mean today, ask what you have left.';
@@ -1132,7 +1202,7 @@ function buildConversationRecoveryReply(input: MealAssistantRunInput, context: M
       return 'I think I lost track of whether we were editing the meal or talking about today overall. If you mean the meal, ask about this meal. If you mean today, ask what you have left.';
     }
 
-    return 'I think I lost track of whether we were still editing the meal or starting a new question. Tell me the meal change or the macro question and I’ll stay on it.';
+    return 'I think I lost track of whether we were still editing the meal or starting a new question. Tell me the meal change or the macro question and Iâ€™ll stay on it.';
   }
 
   return null;
@@ -1149,7 +1219,7 @@ function buildCompanionInsight(args: { response: MealAssistantResponse; input: M
   }
 
   if (response.intent === 'nutrition_guidance' && proteinLeftRegex.test(normalized) && remainingProtein !== null && remainingProtein >= 40) {
-    return 'You’re still pretty low on protein today';
+    return 'Youâ€™re still pretty low on protein today';
   }
 
   if (!response.meal.items.length) {
@@ -1162,7 +1232,7 @@ function buildCompanionInsight(args: { response: MealAssistantResponse; input: M
   );
 
   if (yesterdayMatch && response.intent !== 'repeat_meal' && !repeatCueRegex.test(normalized)) {
-    return `That’s pretty close to yesterday’s ${yesterdayMatch.entry.mealType}`;
+    return `Thatâ€™s pretty close to yesterdayâ€™s ${yesterdayMatch.entry.mealType}`;
   }
 
   const usualMatch = findSimilarMealPattern(
@@ -1171,15 +1241,15 @@ function buildCompanionInsight(args: { response: MealAssistantResponse; input: M
   );
 
   if (usualMatch && response.intent === 'new_food_item' && !repeatCueRegex.test(normalized)) {
-    return `That’s close to one of your usual ${usualMatch.entry.mealType} picks`;
+    return `Thatâ€™s close to one of your usual ${usualMatch.entry.mealType} picks`;
   }
 
   if (remainingProtein !== null && remainingProtein >= 40 && response.meal.totals.protein < 20) {
-    return 'You’re still pretty low on protein today';
+    return 'Youâ€™re still pretty low on protein today';
   }
 
   if (response.next_state.mealType === 'dinner' && remainingCalories !== null && remainingCalories >= 200 && response.meal.totals.calories <= 750) {
-    return 'You’ve still got room for a snack tonight';
+    return 'Youâ€™ve still got room for a snack tonight';
   }
 
   return null;
@@ -1396,66 +1466,66 @@ function buildCasualReply(message: string, state: MealAssistantState) {
   const normalized = stripEmotionalPreface(message).toLowerCase();
   const hasActiveMeal = state.currentMealItems.length > 0;
 
-  if (/how(?:'|’)??s your day|how are you/.test(normalized)) {
+  if (/how(?:'|â€™)??s your day|how are you/.test(normalized)) {
     return hasActiveMeal
       ? choosePhrase(normalized, [
-          'Doing good, I’m still with this meal if you want to keep going.',
-          'I’m good, and I still have this meal in front of me if you want to keep building it.',
+          'Doing good, Iâ€™m still with this meal if you want to keep going.',
+          'Iâ€™m good, and I still have this meal in front of me if you want to keep building it.',
           'Doing alright. I can keep working on this meal, or you can send the next food.',
         ])
       : choosePhrase(normalized, [
           'Doing good. What did you eat?',
-          'I’m good, ready when you are. What’d you have?',
-          'I’m here and ready. What did you eat?',
+          'Iâ€™m good, ready when you are. Whatâ€™d you have?',
+          'Iâ€™m here and ready. What did you eat?',
         ]);
   }
 
   if (jokeRequestRegex.test(normalized)) {
     return hasActiveMeal
       ? choosePhrase(normalized, [
-          'I’m better at calories than stand-up, but I’m still holding this meal if you want to keep going.',
-          'Best joke I’ve got is that sauces count less than people think. I’ve still got this meal if you want to keep going.',
+          'Iâ€™m better at calories than stand-up, but Iâ€™m still holding this meal if you want to keep going.',
+          'Best joke Iâ€™ve got is that sauces count less than people think. Iâ€™ve still got this meal if you want to keep going.',
           'My jokes are mid, but the meal is still here. Want to keep going?',
         ])
       : choosePhrase(normalized, [
-          'I’m better at logging than stand-up, so give me a meal and I’ll do my best work.',
-          'My nutrition jokes are pretty average, but I can absolutely log your food. What’d you have?',
-          'I’ll spare you the bad joke and help with the meal instead. What did you eat?',
+          'Iâ€™m better at logging than stand-up, so give me a meal and Iâ€™ll do my best work.',
+          'My nutrition jokes are pretty average, but I can absolutely log your food. Whatâ€™d you have?',
+          'Iâ€™ll spare you the bad joke and help with the meal instead. What did you eat?',
         ]);
   }
 
   if (laughRegex.test(normalized)) {
     return hasActiveMeal
-      ? choosePhrase(normalized, ['😂 fair, what else went with it?', '😂 alright, what else did you eat?', '😂 got you, anything else in this meal?'])
-      : choosePhrase(normalized, ['😂 alright, what did you have?', '😂 fair, what’d you eat?', '😂 okay, send the meal whenever you want.']);
+      ? choosePhrase(normalized, ['ðŸ˜‚ fair, what else went with it?', 'ðŸ˜‚ alright, what else did you eat?', 'ðŸ˜‚ got you, anything else in this meal?'])
+      : choosePhrase(normalized, ['ðŸ˜‚ alright, what did you have?', 'ðŸ˜‚ fair, whatâ€™d you eat?', 'ðŸ˜‚ okay, send the meal whenever you want.']);
   }
 
   if (appreciationRegex.test(normalized)) {
     return hasActiveMeal
-      ? choosePhrase(normalized, ['Anytime. Want to add anything else to this meal?', 'Of course. Want to keep building this one?', 'Yep, I’ve got you. Anything else for this meal?'])
-      : choosePhrase(normalized, ['Anytime. Send the meal whenever you’re ready.', 'Of course. What did you have?', 'Yep, anytime. What are we logging?']);
+      ? choosePhrase(normalized, ['Anytime. Want to add anything else to this meal?', 'Of course. Want to keep building this one?', 'Yep, Iâ€™ve got you. Anything else for this meal?'])
+      : choosePhrase(normalized, ['Anytime. Send the meal whenever youâ€™re ready.', 'Of course. What did you have?', 'Yep, anytime. What are we logging?']);
   }
 
   if (frustrationRegex.test(normalized) && !/\b(?:no|actually|i meant|instead|make that|update that to|it was|that was)\b/i.test(normalized)) {
     return hasActiveMeal
-      ? choosePhrase(normalized, ['No worries, I can fix it. Tell me what needs to change.', 'All good, we can clean it up. What should I change?', 'No stress, I’ve got the meal. Tell me what to fix.'])
-      : choosePhrase(normalized, ['No worries, start with what you had and I’ll keep it simple.', 'All good. Just send the meal naturally and I’ll handle it.', 'No stress. Tell me what you ate and we’ll sort it out.']);
+      ? choosePhrase(normalized, ['No worries, I can fix it. Tell me what needs to change.', 'All good, we can clean it up. What should I change?', 'No stress, Iâ€™ve got the meal. Tell me what to fix.'])
+      : choosePhrase(normalized, ['No worries, start with what you had and Iâ€™ll keep it simple.', 'All good. Just send the meal naturally and Iâ€™ll handle it.', 'No stress. Tell me what you ate and weâ€™ll sort it out.']);
   }
 
   if (greetingRegex.test(normalized)) {
-    return hasActiveMeal ? 'Hey, I’m with you. Want to keep going on this meal?' : choosePhrase(normalized, ['Hey, what did you eat?', 'Hey, what are we logging?', 'I’m here. What’d you have?']);
+    return hasActiveMeal ? 'Hey, Iâ€™m with you. Want to keep going on this meal?' : choosePhrase(normalized, ['Hey, what did you eat?', 'Hey, what are we logging?', 'Iâ€™m here. Whatâ€™d you have?']);
   }
 
   if (casualRegex.test(normalized)) {
     return hasActiveMeal
       ? buildContextualContinuityReply(state)
-      : choosePhrase(normalized, ['All good. What did you eat?', 'Yep, send the meal whenever you’re ready.']);
+      : choosePhrase(normalized, ['All good. What did you eat?', 'Yep, send the meal whenever youâ€™re ready.']);
   }
 
   if (offTopicRegex.test(normalized)) {
     return hasActiveMeal
-      ? choosePhrase(normalized, ['I’m still holding this meal if you want to keep going.', 'I can keep working on this meal, or you can send the next food.', 'I’ve still got this meal here if you want to keep building it.'])
-      : choosePhrase(normalized, ['I’m here for the food side. What did you eat?', 'I can help most on the nutrition side. What’d you have?', 'I’m best at the food part. What are we logging?']);
+      ? choosePhrase(normalized, ['Iâ€™m still holding this meal if you want to keep going.', 'I can keep working on this meal, or you can send the next food.', 'Iâ€™ve still got this meal here if you want to keep building it.'])
+      : choosePhrase(normalized, ['Iâ€™m here for the food side. What did you eat?', 'I can help most on the nutrition side. Whatâ€™d you have?', 'Iâ€™m best at the food part. What are we logging?']);
   }
 
   return null;
@@ -1531,14 +1601,14 @@ function buildMealDescriptorReply(input: MealAssistantRunInput, context: MealAss
 
     const reply = sizeUpRegex.test(normalized)
       ? choosePhrase(`${normalized}:${targetItem.food_name}`, [
-          `Got you, I’ll lean bigger on ${targetItem.food_name}.`,
+          `Got you, Iâ€™ll lean bigger on ${targetItem.food_name}.`,
           `Okay, I bumped ${targetItem.food_name} up a bit.`,
-          `Makes sense, I’m treating ${targetItem.food_name} as a larger serving.`,
+          `Makes sense, Iâ€™m treating ${targetItem.food_name} as a larger serving.`,
         ])
       : choosePhrase(`${normalized}:${targetItem.food_name}`, [
-          `Got it, I’ll keep ${targetItem.food_name} a little lighter.`,
+          `Got it, Iâ€™ll keep ${targetItem.food_name} a little lighter.`,
           `Okay, I trimmed ${targetItem.food_name} down a bit.`,
-          `Makes sense, I’m leaning smaller on ${targetItem.food_name}.`,
+          `Makes sense, Iâ€™m leaning smaller on ${targetItem.food_name}.`,
         ]);
 
     return buildDirectResponse({
@@ -1614,7 +1684,7 @@ async function buildAdaptiveMealMutationReply(
         assistantReply: choosePhrase(`${normalized}:${targetItem.food_name}:${nextQuantity}`, [
           `Done, I changed that to ${nextQuantity} ${targetItem.food_name}.`,
           `Okay, I updated that to ${nextQuantity} ${targetItem.food_name}.`,
-          `Got you, that’s ${nextQuantity} ${targetItem.food_name} now.`,
+          `Got you, thatâ€™s ${nextQuantity} ${targetItem.food_name} now.`,
         ]),
         nextState,
         message: input.message,
@@ -1689,7 +1759,7 @@ async function buildAdaptiveMealMutationReply(
       assistantReply: choosePhrase(`${normalized}:${targetItem.food_name}`, [
         `Yep, I switched that to grilled.`,
         `Got it, I changed that to a grilled version.`,
-        `Okay, I’m treating that as grilled now.`,
+        `Okay, Iâ€™m treating that as grilled now.`,
       ]),
       nextState,
       message: input.message,
@@ -1737,6 +1807,43 @@ function buildDirectResponse(args: {
       lastAssistantReply: assistantReply,
     },
   } satisfies MealAssistantResponse;
+}
+
+function buildDirectFoodEstimateResponse(args: {
+  input: MealAssistantRunInput;
+  state: MealAssistantState;
+  items: ParsedFoodItem[];
+  intent?: MealAssistantModelOutput['intent'];
+}) {
+  const normalized = stripEmotionalPreface(args.input.message).toLowerCase();
+  const intent = args.intent ?? (args.state.currentMealItems.length && continuationRegex.test(normalized) ? 'add_to_current_meal' : 'new_food_item');
+  const currentMealItems = intent === 'add_to_current_meal'
+    ? [...args.state.currentMealItems, ...args.items]
+    : args.items;
+  const nextState: MealAssistantState = {
+    ...args.state,
+    currentMealItems,
+    userCorrections: intent === 'clarification_answer' ? [...args.state.userCorrections, args.input.message] : [...args.state.userCorrections],
+    currentMealText: buildMealTextFromItems(currentMealItems),
+    confidenceScore: getConfidenceScore(currentMealItems),
+    pendingClarification: null,
+    lastAssistantQuestion: null,
+    saved: false,
+    sourceReusableMealId: intent === 'new_food_item' ? null : args.state.sourceReusableMealId,
+    editingMealId: intent === 'new_food_item' ? null : args.state.editingMealId,
+  };
+
+  return buildDirectResponse({
+    intent,
+    assistantReply: buildReplyFromItems({
+      intent,
+      decisionReply: 'Got it.',
+      resolvedItems: intent === 'add_to_current_meal' ? currentMealItems : args.items,
+      message: args.input.message,
+    }),
+    nextState,
+    message: args.input.message,
+  });
 }
 
 function getRemainingProtein(context: MealAssistantContext) {
@@ -1921,18 +2028,18 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
 
     if (remainingCalories !== null && remainingCalories <= 120) {
       return remainingProtein !== null && remainingProtein > 0
-        ? `You still could, but keep it light. You’ve got about ${remainingCalories} calories and ${remainingProtein}g protein left.`
-        : `You still could, but keep it pretty light. You’ve got about ${remainingCalories} calories left.`;
+        ? `You still could, but keep it light. Youâ€™ve got about ${remainingCalories} calories and ${remainingProtein}g protein left.`
+        : `You still could, but keep it pretty light. Youâ€™ve got about ${remainingCalories} calories left.`;
     }
 
     if (remainingCalories !== null && remainingCalories > 120) {
       return remainingProtein !== null && remainingProtein > 20
-        ? `Yeah, you’ve got room. About ${remainingCalories} calories left, and you could still use roughly ${remainingProtein}g protein.`
-        : `Yeah, you’ve got room for one. About ${remainingCalories} calories left today.`;
+        ? `Yeah, youâ€™ve got room. About ${remainingCalories} calories left, and you could still use roughly ${remainingProtein}g protein.`
+        : `Yeah, youâ€™ve got room for one. About ${remainingCalories} calories left today.`;
     }
 
     return remainingProtein !== null && remainingProtein > 20
-      ? `Yeah, you’ve still got room, especially if you make it protein-forward. You’re about ${remainingProtein}g short on protein.`
+      ? `Yeah, youâ€™ve still got room, especially if you make it protein-forward. Youâ€™re about ${remainingProtein}g short on protein.`
       : 'Yeah, you should still have room for a snack.';
   }
 
@@ -2013,7 +2120,7 @@ function buildFallbackReply(input: string, state: MealAssistantState, context?: 
 
   return state.currentMealItems.length
     ? choosePhrase(input, ['Got it.', 'Okay.', 'Alright.', 'Makes sense.'])
-    : choosePhrase(input, ['Tell me what you ate.', 'What did you have?', 'Send the meal whenever you’re ready.']);
+    : choosePhrase(input, ['Tell me what you ate.', 'What did you have?', 'Send the meal whenever youâ€™re ready.']);
 }
 
 function extractFallbackItems(input: string, state: MealAssistantState): MealAssistantItem[] {
@@ -2101,7 +2208,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
   if (greetingRegex.test(normalized) && !hasActiveMeal) {
     return {
       intent: 'greeting',
-      assistant_reply: choosePhrase(normalized, ['Hey, what are we logging?', 'Hey, what did you eat?', 'I’m here. What did you have?']),
+      assistant_reply: choosePhrase(normalized, ['Hey, what are we logging?', 'Hey, what did you eat?', 'Iâ€™m here. What did you have?']),
       items: [],
       corrections: [],
       should_lookup_nutrition: false,
@@ -2115,7 +2222,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
   if (reviewRegex.test(normalized) && hasActiveMeal) {
     return {
       intent: 'meal_review',
-      assistant_reply: 'Here’s what I have so far.',
+      assistant_reply: 'Hereâ€™s what I have so far.',
       items: [],
       corrections: [],
       should_lookup_nutrition: false,
@@ -2199,7 +2306,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
   if (recommendationRegex.test(normalized) || lighterVersionRegex.test(normalized) || sweetHealthyRegex.test(normalized) || healthyTreatRegex.test(normalized)) {
     return {
       intent: 'recommendation_request',
-      assistant_reply: 'I’ve got a few ideas.',
+      assistant_reply: 'Iâ€™ve got a few ideas.',
       items: [],
       corrections: [],
       should_lookup_nutrition: false,
@@ -2415,7 +2522,7 @@ function buildReplyFromItems(args: {
   }
 
   if (intent === 'start_new_meal') {
-    return choosePhrase(decisionReply, ['Okay, starting fresh. What did you eat?', 'Alright, new meal. What’d you have?', 'Fresh start. What did you eat?']);
+    return choosePhrase(decisionReply, ['Okay, starting fresh. What did you eat?', 'Alright, new meal. Whatâ€™d you have?', 'Fresh start. What did you eat?']);
   }
 
   if (
@@ -2465,8 +2572,8 @@ function buildReplyFromItems(args: {
 
     return choosePhrase(seed, [
       `${quantityLead} to ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}.`,
-      `${quantityLead} I’ve got it as ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name} now.`,
-      `${quantityLead} That’s now ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}.`,
+      `${quantityLead} Iâ€™ve got it as ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name} now.`,
+      `${quantityLead} Thatâ€™s now ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}.`,
     ]);
   }
 
@@ -2476,8 +2583,8 @@ function buildReplyFromItems(args: {
       : choosePhrase(normalizedMessage || seed, ['Got you.', 'Okay, updating it.', 'That makes sense.']);
 
     return choosePhrase(seed, [
-      `${correctionLead} I’ve got it as ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, about ${totalCalories} calories total. ${sourceLabel}.`,
-      `${correctionLead} That’s now ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, roughly ${totalCalories} calories. ${sourceLabel}.`,
+      `${correctionLead} Iâ€™ve got it as ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, about ${totalCalories} calories total. ${sourceLabel}.`,
+      `${correctionLead} Thatâ€™s now ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, roughly ${totalCalories} calories. ${sourceLabel}.`,
       `${correctionLead} I switched it to ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}. About ${totalCalories} calories total. ${sourceLabel}.`,
     ]);
   }
@@ -2497,7 +2604,7 @@ function buildReplyFromItems(args: {
   if (intent === 'new_food_item' && mealAlreadySaved) {
     return choosePhrase(seed, [
       `Got it, starting a new meal with ${mainItem.food_name}. ${sourceLabel}.`,
-      `Alright, new meal. I’ve got ${mainItem.food_name}. ${sourceLabel}.`,
+      `Alright, new meal. Iâ€™ve got ${mainItem.food_name}. ${sourceLabel}.`,
       `Starting fresh with ${mainItem.food_name}. ${sourceLabel}.`,
     ]);
   }
@@ -2508,9 +2615,9 @@ function buildReplyFromItems(args: {
 
   return choosePhrase(seed, [
     `${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, about ${totalCalories} calories total. ${sourceLabel}.`,
-    `I’ve got ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, roughly ${totalCalories} calories. ${sourceLabel}.`,
+    `Iâ€™ve got ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, roughly ${totalCalories} calories. ${sourceLabel}.`,
     `That looks like ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}, around ${totalCalories} calories total. ${sourceLabel}.`,
-    `Alright, I’ve got ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}. That comes out to about ${totalCalories} calories. ${sourceLabel}.`,
+    `Alright, Iâ€™ve got ${Number.isInteger(mainItem.quantity) ? mainItem.quantity : mainItem.quantity.toFixed(1)} ${mainItem.food_name}. That comes out to about ${totalCalories} calories. ${sourceLabel}.`,
   ]);
 }
 
@@ -2530,6 +2637,25 @@ export async function runMealAssistant(
       }
     : input;
   const state = { ...workingInput.state };
+
+  const pizzaClarificationItems = resolvePizzaClarificationEstimate(workingInput.message, state);
+  if (pizzaClarificationItems.length) {
+    return finalizeResponse(buildDirectFoodEstimateResponse({
+      input: workingInput,
+      state,
+      items: pizzaClarificationItems,
+      intent: 'clarification_answer',
+    }), workingInput, context);
+  }
+
+  const directKnownItems = detectKnownFoodEstimates(workingInput.message);
+  if (directKnownItems.length) {
+    return finalizeResponse(buildDirectFoodEstimateResponse({
+      input: workingInput,
+      state,
+      items: directKnownItems,
+    }), workingInput, context);
+  }
 
   if (!dependencies.classify) {
     const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition);
@@ -2845,7 +2971,7 @@ export async function runMealAssistant(
     assistantReply: buildReplyFromItems({
       intent: decision.intent,
       decisionReply: suppressedClarification
-        ? 'Got it, I’m checking that again.'
+        ? 'Got it, Iâ€™m checking that again.'
         : decision.assistant_reply || buildFallbackReply(workingInput.message, state, context),
       resolvedItems: resolvedItems.length ? resolvedItems : mealItems,
       removedTargets,
