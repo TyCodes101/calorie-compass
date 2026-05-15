@@ -16,6 +16,7 @@ const brandHints = [
   { pattern: /\btaco bell\b/, brand: 'Taco Bell' },
   { pattern: /\bchipotle\b/, brand: 'Chipotle' },
   { pattern: /\bchick fil a\b|\bchickfila\b/, brand: 'Chick-fil-A' },
+  { pattern: /\blittle caesars\b/, brand: 'Little Caesars' },
   { pattern: /\bstarbucks\b/, brand: 'Starbucks' },
   { pattern: /\bfairlife\b/, brand: 'Fairlife' },
   { pattern: /\bcore power\b/, brand: 'Core Power' },
@@ -48,6 +49,11 @@ function cleanupFreeText(text: string) {
     .toLowerCase()
     .replace(/[â€™']/g, '')
     .replace(/\bchipolte\b/g, 'chipotle')
+    .replace(/\bcotaage\b/g, 'cottage')
+    .replace(/\bcotage\b/g, 'cottage')
+    .replace(/\bcottagee\b/g, 'cottage')
+    .replace(/\bceasers\b/g, 'caesars')
+    .replace(/\bcaesers\b/g, 'caesars')
     .replace(/\btacobell\b/g, 'taco bell')
     .replace(/\bmc\s*double\b/g, 'mcdouble')
     .replace(/\bmcdonalds?\b/g, 'mcdonalds')
