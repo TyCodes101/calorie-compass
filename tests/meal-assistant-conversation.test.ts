@@ -446,6 +446,16 @@ describe('meal assistant conversational coverage', () => {
     expectNoBadAssistantPatterns(response.assistant_reply);
   });
 
+  it('bot QA: keeps the right quantity for pieces of toast', async () => {
+    const [response] = await runConversation(['i had 2 pieces of toast']);
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items[0]?.food_name).toBe('Toast');
+    expect(response.meal.items[0]?.quantity).toBe(2);
+    expect(response.assistant_reply).toMatch(/2 Toast|2 toast/i);
+    expect(response.assistant_reply).not.toMatch(/1 Toast|need a little more detail/i);
+  });
+
   it.each([
     ['2 eggs, toast, bacon, and orange juice', 4],
     ['McDouble and a medium fry', 2],
