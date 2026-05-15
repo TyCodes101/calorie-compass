@@ -204,6 +204,17 @@ describe('normalizeFoodQuery', () => {
       quantity: 24,
     });
 
+    expect(normalizeFoodQuery('24 grams cotaage cheese')).toMatchObject({
+      searchText: 'cottage cheese',
+      matchedQuery: 'Cottage Cheese',
+      quantity: 24,
+    });
+
+    expect(normalizeFoodQuery('little ceasers pizza')).toMatchObject({
+      normalizedText: 'little caesars pizza',
+      brandHint: 'Little Caesars',
+    });
+
     expect(normalizeFoodQuery('2 pieces toast')).toMatchObject({
       searchText: 'toast',
       matchedQuery: 'Toast',
