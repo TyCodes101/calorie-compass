@@ -33,7 +33,7 @@ const repeatYesterdayRegex = /\b(?:repeat|log|use|same as|what(?: did)? i (?:hav
 const usualRegex = /\b(?:same as usual|my usual|the usual|usual)\b/i;
 const repeatCueRegex = /\b(?:same|usual|again|repeat|yesterday|last time)\b/i;
 const followUpMacroRegex = /\bwhat about (?:carbs?|protein|fat|calories?)\b|\bhow about (?:carbs?|protein|fat|calories?)\b/i;
-const calorieLeftRegex = /\b(?:how many|how much|what(?:'s| is))\s+calories?\s+(?:do i have\s+)?(?:left|remaining)\b|\bcalories?\s+left\b/i;
+const calorieLeftRegex = /\b(?:how many|how much|what(?:'s| is))\s+(?:calories?|cals?)\s+(?:do i have\s+)?(?:left|remaining)\b|\b(?:calories?|cals?|cal)\s+left\b/i;
 const proteinLeftRegex = /\b(?:how many|how much|what(?:'s| is))\s+protein\s+(?:do i have\s+)?(?:left|remaining)\b|\bprotein\s+left\b/i;
 const carbsQuestionRegex = /\b(?:carbs?|carbohydrates?)\b/i;
 const fatQuestionRegex = /\b(?:fat|fats)\b/i;
@@ -339,6 +339,11 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   const normalized = normalizeText(message);
   const lower = message.toLowerCase();
   const items: ParsedFoodItem[] = [];
+  const countWordPattern = 'one|two|three|four|five|six|seven|eight|nine|ten';
+  const readCountBefore = (pattern: string, fallback = 1) => {
+    const match = normalized.match(new RegExp(`\\b(\\d+(?:\\.\\d+)?|${countWordPattern})\\s+${pattern}\\b`));
+    return match ? parseCount(match[1] ?? '1') : fallback;
+  };
 
   const sliceMatch = normalized.match(/\b(\d+(?:\.\d+)?)\s+(?:slices?|pieces?)\s+(?:of\s+)?(?:little caesars\s+)?(?:pizza|pepperoni pizza|cheese pizza)\b/);
   const wordSliceMatch = normalized.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:slices?|pieces?)\s+(?:of\s+)?(?:little caesars\s+)?(?:pizza|pepperoni pizza|cheese pizza)\b/);
@@ -410,6 +415,92 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (/\beggs?\b/.test(normalized)) {
+    const quantity = readCountBefore('eggs?', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'eggs',
+          label: 'Eggs',
+          quantity,
+          unit: quantity === 1 ? 'egg' : 'eggs',
+          calories: quantity * 70,
+          protein: quantity * 6,
+          carbs: quantity * 0.5,
+          fat: quantity * 5,
+          sodium: quantity * 70,
+          sourceName: 'Egg common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\btoast\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:slices?\\s+of\\s+)?toast', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'toast',
+          label: 'Toast',
+          quantity,
+          unit: quantity === 1 ? 'slice' : 'slices',
+          calories: quantity * 100,
+          protein: quantity * 4,
+          carbs: quantity * 19,
+          fat: quantity * 1,
+          fiber: quantity * 1.5,
+          sugar: quantity * 2,
+          sodium: quantity * 150,
+          sourceName: 'Toast common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bbacon\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:slices?\\s+of\\s+)?bacon', 2);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'bacon',
+          label: 'Bacon',
+          quantity,
+          unit: quantity === 1 ? 'slice' : 'slices',
+          calories: quantity * 45,
+          protein: quantity * 3,
+          carbs: 0,
+          fat: quantity * 3.5,
+          sodium: quantity * 180,
+          sourceName: 'Bacon common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\borange juice\b/.test(normalized)) {
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'orange juice',
+          label: 'Orange juice',
+          quantity: 1,
+          unit: 'glass',
+          calories: 110,
+          protein: 2,
+          carbs: 26,
+          fat: 0,
+          sugar: 21,
+          sodium: 10,
+          sourceName: 'Orange juice common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
   if (/\bcottage cheese\b/.test(normalized)) {
     const gramMatch = lower.match(/\b(\d+(?:\.\d+)?)\s*(?:g|grams?)\b/) ?? lower.match(/\b(?:about|around)\s+(\d+(?:\.\d+)?)\b/);
     const grams = gramMatch ? Number(gramMatch[1]) : null;
@@ -462,6 +553,123 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
           sugar: 0,
           sodium: quantity * 280,
           sourceName: 'Pickle common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bbananas?\b/.test(normalized)) {
+    const quantity = readCountBefore('bananas?', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'banana',
+          label: quantity === 1 ? 'Banana' : 'Bananas',
+          quantity,
+          unit: quantity === 1 ? 'banana' : 'bananas',
+          calories: quantity * 105,
+          protein: quantity * 1.3,
+          carbs: quantity * 27,
+          fat: quantity * 0.4,
+          fiber: quantity * 3,
+          sugar: quantity * 14,
+          sodium: quantity * 1,
+          sourceName: 'Banana common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bapples?\b/.test(normalized)) {
+    const quantity = readCountBefore('apples?', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'apple',
+          label: quantity === 1 ? 'Apple' : 'Apples',
+          quantity,
+          unit: quantity === 1 ? 'apple' : 'apples',
+          calories: quantity * 95,
+          protein: quantity * 0.5,
+          carbs: quantity * 25,
+          fat: quantity * 0.3,
+          fiber: quantity * 4,
+          sugar: quantity * 19,
+          sodium: quantity * 2,
+          sourceName: 'Apple common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bpeanut butter\b/.test(normalized)) {
+    const tbspMatch = normalized.match(/\b(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:tbsp|tablespoons?)\s+(?:of\s+)?peanut butter\b/);
+    const quantity = tbspMatch ? parseCount(tbspMatch[1] ?? '1') : 1;
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'peanut butter',
+          label: 'Peanut butter',
+          quantity,
+          unit: quantity === 1 ? 'tbsp' : 'tbsp',
+          calories: quantity * 95,
+          protein: quantity * 4,
+          carbs: quantity * 3,
+          fat: quantity * 8,
+          fiber: quantity * 1,
+          sugar: quantity * 1,
+          sodium: quantity * 75,
+          sourceName: 'Peanut butter common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\brice cakes?\b/.test(normalized)) {
+    const quantity = readCountBefore('rice cakes?', 1);
+    const isQuaker = /\bquaker\b/.test(normalized);
+    const isWhiteCheddar = /\bwhite cheddar\b/.test(normalized);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'rice cakes',
+          label: `${isQuaker ? 'Quaker ' : ''}${isWhiteCheddar ? 'White cheddar ' : ''}rice cakes`.replace(/^./, (char) => char.toUpperCase()),
+          quantity,
+          unit: quantity === 1 ? 'cake' : 'cakes',
+          calories: quantity * (isWhiteCheddar ? 45 : 35),
+          protein: quantity * 1,
+          carbs: quantity * (isWhiteCheddar ? 9 : 7),
+          fat: quantity * (isWhiteCheddar ? 1.5 : 0),
+          fiber: quantity * 0.5,
+          sodium: quantity * (isWhiteCheddar ? 100 : 15),
+          sourceName: isQuaker ? 'Quaker-style rice cake estimate' : 'Rice cake common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bprotein bars?\b/.test(normalized)) {
+    const quantity = readCountBefore('protein bars?', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'protein bar',
+          label: quantity === 1 ? 'Protein bar' : 'Protein bars',
+          quantity,
+          unit: quantity === 1 ? 'bar' : 'bars',
+          calories: quantity * 200,
+          protein: quantity * 20,
+          carbs: quantity * 22,
+          fat: quantity * 7,
+          fiber: quantity * 5,
+          sugar: quantity * 4,
+          sodium: quantity * 180,
+          sourceName: 'Protein bar common serving estimate',
         },
         message,
       ),
@@ -808,6 +1016,10 @@ function getRecentMealOccurredAt(meal: MealAssistantContext['recentMeals'][numbe
   return meal.date ?? meal.createdAt ?? null;
 }
 
+function isQuestionLikeText(text: string) {
+  return /^(?:how|what|why|when|where|who|am|is|are|can|should|would|did|do|wait|protein left|calories left|cals left|cal left|tonight idea|dinner idea)\b/i.test(text.trim());
+}
+
 function splitMixedIntentMessage(message: string): MixedIntentSplit {
   const trimmed = message.trim();
   const lines = trimmed
@@ -816,19 +1028,22 @@ function splitMixedIntentMessage(message: string): MixedIntentSplit {
     .filter(Boolean);
 
   if (lines.length > 1) {
-    const [firstLine, ...restLines] = lines;
-    const leadTokens = tokenizeText(firstLine);
-    const firstLineIsQuestion = /^(?:how|what|why|when|where|who|am|is|are|can|should|would|did|do|wait|protein left|calories left|tonight idea|dinner idea)\b/i.test(firstLine);
+    const firstQuestionIndex = lines.findIndex(isQuestionLikeText);
+    const foodLines = firstQuestionIndex >= 0 ? lines.slice(0, firstQuestionIndex) : lines;
+    const followUpLines = firstQuestionIndex >= 0 ? lines.slice(firstQuestionIndex) : [];
+    const foodMessage = foodLines.join(' and ');
+    const followUpMessage = followUpLines.join(' ');
+    const leadTokens = tokenizeText(foodMessage);
 
-    if (firstLine && leadTokens.length && !firstLineIsQuestion) {
+    if (foodMessage && leadTokens.length && foodLines.every((line) => !isQuestionLikeText(line))) {
       return {
-        foodMessage: firstLine,
-        followUpMessage: restLines.join(' '),
+        foodMessage,
+        followUpMessage,
       };
     }
   }
 
-  const match = trimmed.match(/^(.*?)(?:,?\s+(?:and\s+)?(?:also\s+)?)((?:how much|how many|what about|how about|what should|what's|what is|am i|did i|is that|would that|can i|protein left|calories left|tonight idea|dinner idea)\b.*)$/i);
+  const match = trimmed.match(/^(.*?)(?:,?\s+(?:and\s+)?(?:also\s+)?)((?:how much|how many|what about|how about|what should|what's|what is|am i|did i|is that|would that|can i|protein left|calories left|cals left|cal left|tonight idea|dinner idea)\b.*)$/i);
 
   if (!match) {
     return { foodMessage: null, followUpMessage: null };
@@ -1099,8 +1314,8 @@ function postProcessAssistantReply(reply: string, state: MealAssistantState, mes
     nextReply = `${nextReply}.`;
   }
 
-  if (nextReply.length > 190) {
-    nextReply = `${nextReply.slice(0, 187).trimEnd()}â€¦`;
+  if (nextReply.length > 260) {
+    nextReply = `${nextReply.slice(0, 257).trimEnd()}â€¦`;
   }
 
   if (state.lastAssistantReply && normalizeText(state.lastAssistantReply) === normalizeText(nextReply)) {
@@ -1896,15 +2111,26 @@ function buildDirectFoodEstimateResponse(args: {
 
 function buildInlineFollowUpReply(message: string, state: MealAssistantState, context: MealAssistantContext) {
   const replies: string[] = [];
+  const seen = new Set<string>();
+  const segments = message
+    .split(/\r?\n+|(?<=[?.!])\s+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const candidates = segments.length ? segments : [message];
 
-  const macroReply = buildNutritionGuidanceReply({ message, state, context }, context);
-  if (macroReply) {
-    replies.push(macroReply);
+  for (const candidate of candidates) {
+    const macroReply = buildNutritionGuidanceReply({ message: candidate, state, context }, context);
+    const key = macroReply ? normalizeText(macroReply) : null;
+    if (macroReply && key && !seen.has(key)) {
+      replies.push(macroReply);
+      seen.add(key);
+    }
   }
 
   if (dinnerSuggestionRegex.test(message) && !replies.some((reply) => /tonight|dinner|protein-forward|burrito bowl|grilled chicken/i.test(reply))) {
     const dinnerReply = buildNutritionGuidanceReply({ message: 'tonight idea', state, context }, context);
-    if (dinnerReply) {
+    const key = dinnerReply ? normalizeText(dinnerReply) : null;
+    if (dinnerReply && key && !seen.has(key)) {
       replies.push(dinnerReply);
     }
   }
@@ -2716,7 +2942,11 @@ export async function runMealAssistant(
     }), workingInput, context);
   }
 
-  const directKnownItems = detectKnownFoodEstimates(workingInput.message);
+  const canUseDirectKnownFood =
+    !dependencies.classify
+    && !state.pendingClarification
+    && (!state.currentMealItems.length || state.saved || continuationRegex.test(stripEmotionalPreface(workingInput.message).toLowerCase()));
+  const directKnownItems = canUseDirectKnownFood ? detectKnownFoodEstimates(workingInput.message) : [];
   if (directKnownItems.length) {
     return finalizeResponse(buildDirectFoodEstimateResponse({
       input: workingInput,
