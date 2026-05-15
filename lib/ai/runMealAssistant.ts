@@ -439,7 +439,7 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   }
 
   if (/\btoast\b/.test(normalized)) {
-    const quantity = readCountBefore('(?:slices?\\s+of\\s+)?toast', 1);
+    const quantity = readCountBefore('(?:(?:slices?|pieces?)\\s+(?:of\\s+)?)?toast', 1);
     items.push(
       makeGenericEstimate(
         {
@@ -794,6 +794,10 @@ function itemCoversTerm(items: ParsedFoodItem[], term: string) {
     .every((token) => haystack.includes(token));
 }
 
+function messageHasRestaurantCue(message: string) {
+  return /\b(?:chick\s*fil\s*a|chickfila|chipotle|mcdonald'?s?|taco bell|starbucks|wendy'?s|panera|subway|cava|panda express|little caesars?)\b/i.test(message);
+}
+
 function shouldAskPizzaPortion(message: string, items: MealAssistantItem[]) {
   const normalized = normalizeText(message);
   if (!/\bpizza\b/.test(normalized)) {
@@ -839,6 +843,14 @@ function hardenResolvedItems(args: { message: string; resolvedItems: ParsedFoodI
 
   if (nextItems.some(isBadGenericResolvedItem)) {
     nextItems = [];
+  }
+
+  if (knownEstimates.length && !messageHasRestaurantCue(message)) {
+    nextItems = nextItems.filter(
+      (item) =>
+        item.source_type !== 'OFFICIAL_RESTAURANT' ||
+        knownEstimates.some((estimate) => itemCoversTerm([item], estimate.food_name)),
+    );
   }
 
   for (const estimate of knownEstimates) {
