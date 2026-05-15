@@ -525,7 +525,7 @@ function isBadGenericResolvedItem(item: ParsedFoodItem) {
 function hardenResolvedItems(args: { message: string; resolvedItems: ParsedFoodItem[] }) {
   const { message, resolvedItems } = args;
   const chipotleEstimate = detectChipotleBowlEstimate(message);
-  if (chipotleEstimate && (!resolvedItems.length || resolvedItems.length === 1 || !itemCoversTerm(resolvedItems, 'chipotle bowl'))) {
+  if (chipotleEstimate && (resolvedItems.length !== 1 || !/chipotle bowl/i.test(resolvedItems[0]?.food_name ?? ''))) {
     return [chipotleEstimate];
   }
 
