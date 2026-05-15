@@ -27,6 +27,7 @@ const brandHints = [
 const fillerRegex = /\b(?:which|that|are|is|were|was|they|them|the|a|an|my|had|ate|drank|with|and|for|of|about|around|roughly|like|plain|cooked|butter|oil|or|did|have|i|it|no|not|actually|sorry|correction|meant|just|each|cal|cals|calorie|calories)\b/g;
 
 const compoundFoodDefinitions = [
+  { pattern: /\bcottage cheese\b/, baseSearch: 'cottage cheese', matched: 'Cottage Cheese', unitHint: null },
   { pattern: /\bwhite cheddar rice cakes?\b/, baseSearch: 'white cheddar rice cake', matched: 'White cheddar rice cakes', unitHint: 'cake' },
   { pattern: /\brice cakes?\b/, baseSearch: 'rice cake', matched: 'Rice cakes', unitHint: 'cake' },
   { pattern: /\bprotein bars?\b/, baseSearch: 'protein bar', matched: 'Protein bar', unitHint: 'bar' },
@@ -45,7 +46,7 @@ const compoundFoodDefinitions = [
 function cleanupFreeText(text: string) {
   return text
     .toLowerCase()
-    .replace(/[’']/g, '')
+    .replace(/[â€™']/g, '')
     .replace(/\bchipolte\b/g, 'chipotle')
     .replace(/\btacobell\b/g, 'taco bell')
     .replace(/\bmc\s*double\b/g, 'mcdouble')
@@ -64,7 +65,7 @@ function titleCase(text: string) {
 }
 
 function extractConversationParts(text: string) {
-  const lower = text.toLowerCase().replace(/[’']/g, '');
+  const lower = text.toLowerCase().replace(/[â€™']/g, '');
   const extracted: string[] = [];
   let base = lower;
 
@@ -209,7 +210,9 @@ function buildNormalizedSearchText(base: string, details: string[]) {
   const combined = [base, detailText]
     .filter(Boolean)
     .join(' ')
-    .replace(/\b\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\b/g, ' ')
+    .replace(/\b(\d+(?:\.\d+)?)\s*(?:g|gram|grams)\s+(?=[a-z])/g, '$1 ')
+    .replace(/\b(\d+(?:\.\d+)?)\s*(?:piece|pieces)\s+(?=[a-z])/g, '$1 ')
+    .replace(/\b\d+(?:\.\d+)?\s*[-â€“]\s*\d+(?:\.\d+)?\b/g, ' ')
     .replace(fillerRegex, ' ')
     .replace(/\s+/g, ' ')
     .trim();
