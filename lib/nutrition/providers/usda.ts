@@ -17,6 +17,9 @@ type UsdaSearchResponse = {
   foods?: UsdaFood[];
 };
 
+const genericUsdaDataTypes = ['Foundation', 'SR Legacy', 'Survey (FNDDS)'];
+const allUsdaDataTypes = [...genericUsdaDataTypes, 'Branded'];
+
 function normalizeText(text: string) {
   return text
     .toLowerCase()
@@ -177,23 +180,29 @@ export const usdaProvider: NutritionLookupProvider = {
       return null;
     }
 
-    const payload = await fetchJson<UsdaSearchResponse>(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${apiKey}`, {
+    const fetchSearch = (dataType: string[]) => fetchJson<UsdaSearchResponse>(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: normalizedQuery.searchText,
         pageSize: 12,
-        dataType: ['Foundation', 'SR Legacy', 'Survey (FNDDS)', 'Branded'],
+        dataType,
       }),
     });
 
-    const bestMatch = (payload?.foods ?? [])
+    const chooseBestMatch = (foods: UsdaFood[] = []) => foods
       .map((food) => ({
         food,
         score: scoreUsdaFood(food, normalizedQuery.searchText, normalizedQuery.brandHint, normalizedQuery.unitHint),
       }))
       .filter((candidate) => candidate.score >= 44)
       .sort((left, right) => right.score - left.score)[0]?.food;
+
+    const primaryDataTypes = normalizedQuery.brandHint ? allUsdaDataTypes : genericUsdaDataTypes;
+    const primaryPayload = await fetchSearch(primaryDataTypes);
+    const primaryMatch = chooseBestMatch(primaryPayload?.foods ?? []);
+    const fallbackPayload = !primaryMatch && !normalizedQuery.brandHint ? await fetchSearch(allUsdaDataTypes) : null;
+    const bestMatch = primaryMatch ?? chooseBestMatch(fallbackPayload?.foods ?? []);
 
     if (!bestMatch) {
       return null;
