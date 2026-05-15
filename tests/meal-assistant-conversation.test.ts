@@ -381,6 +381,49 @@ describe('meal assistant conversational coverage', () => {
     expect(response?.assistant_reply).not.toMatch(/need a little more detail/i);
   });
 
+  it('starts a clean second meal after save and logs obvious countable foods', async () => {
+    const [response] = await runConversation(['30 pickles'], {
+      initialState: buildState({
+        saved: true,
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 })],
+        currentMealText: '2 Eggs',
+      }),
+    });
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe('Pickles');
+    expect(response.meal.items[0]?.quantity).toBe(30);
+    expect(response.assistant_reply).toMatch(/pickles/i);
+    expect(response.assistant_reply).not.toMatch(/need a little more detail/i);
+  });
+
+  it('explains shorthand confusion instead of logging it as food', async () => {
+    const [response] = await runConversation(['wym'], {
+      initialState: buildState({
+        pendingClarification: 'For Little Caesars, was that one slice, a few slices, or a whole pizza?',
+        lastAssistantQuestion: 'For Little Caesars, was that one slice, a few slices, or a whole pizza?',
+      }),
+    });
+
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.assistant_reply).toMatch(/one detail|little caesars|slice|whole pizza/i);
+    expect(response.assistant_reply).not.toMatch(/log wym|need a little more detail/i);
+  });
+
+  it('handles a chatbox-style meal plus follow-up questions in one message', async () => {
+    const [response] = await runConversation(['4 slices of pizza\nProtein left?\nTonight idea'], {
+      context: buildContext({ remainingProtein: 68, remainingCalories: 80 }),
+    });
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items[0]?.food_name).toBe('slices of pizza');
+    expect(response.meal.items[0]?.quantity).toBe(4);
+    expect(response.assistant_reply).toMatch(/pizza/i);
+    expect(response.assistant_reply).toMatch(/68g of protein left/i);
+    expect(response.assistant_reply).toMatch(/tonight|light|protein-forward|grilled chicken|cottage cheese/i);
+  });
+
   it.each([
     ['2 eggs, toast, bacon, and orange juice', 4],
     ['McDouble and a medium fry', 2],
