@@ -510,4 +510,140 @@ describe('runMealAssistant', () => {
     expect(response.assistant_reply).toMatch(/2 rice cakes/i);
   });
 
+  it('keeps blueberries alongside greek yogurt when the resolver only finds yogurt', async () => {
+    const response = await runMealAssistant(
+      {
+        message: 'Some blueberries with greek yogurt!',
+        state: buildState(),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            assistant_reply: 'Got it.',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'Greek yogurt',
+                brand: null,
+                quantity: 1,
+                unit: 'serving',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: 'Greek yogurt',
+              quantity: 1,
+              unit: 'serving',
+              calories: 100,
+              protein: 17,
+              carbs: 6,
+              fat: 0.5,
+              source_type: 'GENERIC_REFERENCE',
+              source_name: 'USDA-style reference',
+            }),
+          ]),
+        ),
+      },
+    );
+
+    const foodNames = response.meal.items.map((item) => item.food_name.toLowerCase()).join(' ');
+    expect(foodNames).toContain('greek yogurt');
+    expect(foodNames).toContain('blueberries');
+    expect(response.assistant_reply).toMatch(/blueberries/i);
+    expect(response.assistant_reply).not.toMatch(/^got it\.?$/i);
+  });
+
+  it('does not collapse a full chipotle bowl into only white rice', async () => {
+    const response = await runMealAssistant(
+      {
+        message: 'Chipotle bowl with white rice, double chicken, cheese, corn salsa, lettuce, and green salsa',
+        state: buildState(),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            assistant_reply: 'Alright, I’ve got 1 Chipotle white rice.',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'white rice',
+                brand: 'Chipotle',
+                quantity: 1,
+                unit: 'serving',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: 'Chipotle white rice',
+              quantity: 1,
+              unit: 'serving',
+              calories: 210,
+              protein: 4,
+              carbs: 40,
+              fat: 4,
+              source_type: 'OFFICIAL_RESTAURANT',
+              source_name: 'Chipotle official nutrition',
+            }),
+          ]),
+        ),
+      },
+    );
+
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/chipotle bowl/i);
+    expect(response.meal.items[0]?.food_name).toMatch(/double chicken/i);
+    expect(response.meal.totals.calories).toBeGreaterThan(700);
+    expect(response.assistant_reply).toMatch(/chipotle bowl/i);
+    expect(response.assistant_reply).not.toMatch(/chipotle white rice/i);
+  });
+
+  it('asks for pizza portion instead of replying only got it for vague little caesars pizza', async () => {
+    const resolveItemNutrition = vi.fn();
+
+    const response = await runMealAssistant(
+      {
+        message: 'Little Caesars pizza',
+        state: buildState(),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            assistant_reply: 'Got it.',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'pizza',
+                brand: 'Little Caesars',
+                quantity: 1,
+                unit: null,
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition,
+      },
+    );
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.assistant_reply).toMatch(/slice|whole|pizza/i);
+    expect(response.assistant_reply).not.toMatch(/^got it\.?$/i);
+    expect(response.should_ask_clarification).toBe(true);
+    expect(response.meal.items).toHaveLength(0);
+  });
+
 });
