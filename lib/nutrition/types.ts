@@ -22,6 +22,7 @@ export type NormalizedFoodQuery = {
   searchText: string;
   matchedQuery: string;
   quantity: number;
+  quantityUnit: string | null;
   unitHint: string | null;
   brandHint: string | null;
 };
