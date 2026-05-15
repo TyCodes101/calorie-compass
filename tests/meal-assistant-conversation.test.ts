@@ -356,6 +356,32 @@ describe('meal assistant conversational coverage', () => {
   });
 
   it.each([
+    'cottage cheese',
+    '20 grams of cottage cheese low fat',
+  ])('logs cottage cheese without a clarification loop: %s', async (prompt) => {
+    const [response] = await runConversation([prompt]);
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.clarification_question).toBeNull();
+    expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(response.assistant_reply).toMatch(/cottage cheese/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
+
+  it('uses a numeric reply to answer a pending Little Caesars pizza portion question', async () => {
+    const responses = await runConversation(['Little Caesars pizza', '2']);
+    const response = responses.at(-1);
+
+    expect(response?.should_ask_clarification).toBe(false);
+    expect(response?.clarification_question).toBeNull();
+    expect(response?.meal.items[0]?.food_name).toMatch(/little caesars pizza/i);
+    expect(response?.meal.items[0]?.quantity).toBe(2);
+    expect(response?.meal.totals.calories).toBeGreaterThan(500);
+    expect(response?.assistant_reply).toMatch(/little caesars pizza/i);
+    expect(response?.assistant_reply).not.toMatch(/need a little more detail/i);
+  });
+
+  it.each([
     ['2 eggs, toast, bacon, and orange juice', 4],
     ['McDouble and a medium fry', 2],
     ['Chipotle bowl with white rice, double chicken, corn salsa, cheese, and lettuce', 1],
@@ -895,7 +921,7 @@ describe('meal assistant conversational coverage', () => {
     expect(healthyReply.meal.items[0]?.food_name).toBe('Burger');
     expect(healthyReply.assistant_reply).toMatch(/balanced|protein/i);
     expect(laughReply.meal.items[0]?.food_name).toBe('Burger');
-    expect(laughReply.assistant_reply).toMatch(/😂|what else did you eat/i);
+    expect(laughReply.assistant_reply).toMatch(/ðŸ˜‚|what else did you eat/i);
   });
 
   it('updates quantity in place for a correction instead of starting a new item', async () => {
@@ -1095,7 +1121,7 @@ describe('meal assistant conversational coverage', () => {
     expect(response.meal.items[0]?.quantity).toBe(2);
   });
 
-  it.each(['how’s your day', "how's your day", 'tell me a joke'])('politely redirects off-topic prompts without breaking meal state: %s', async (prompt) => {
+  it.each(['howâ€™s your day', "how's your day", 'tell me a joke'])('politely redirects off-topic prompts without breaking meal state: %s', async (prompt) => {
     const currentMeal = createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 });
     const [response] = await runConversation([prompt], {
       initialState: buildState({
@@ -1142,7 +1168,7 @@ describe('meal assistant conversational coverage', () => {
     const second = responses[1];
 
     expect(first?.assistant_reply).toBe(repeatedQuestion);
-    expect(second?.assistant_reply).toBe('Got it, I’m checking that again.');
+    expect(second?.assistant_reply).toBe('Got it, Iâ€™m checking that again.');
     expect(second?.assistant_reply).not.toBe(repeatedQuestion);
     expect(second?.assistant_reply).not.toMatch(/i'?m with you/i);
     expect(second?.assistant_reply).not.toMatch(/barcode/i);
