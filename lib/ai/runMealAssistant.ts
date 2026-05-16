@@ -4847,17 +4847,19 @@ export async function runMealAssistant(
     },
     workingInput.message,
   );
-  const generatedAssistantReply = await generateAssistantReply({
-    input: workingInput,
-    decision,
-    draftReply: draftAssistantReply,
-    nextState,
-    mealItems,
-    context,
-    saved,
-    clarificationQuestion,
-    removedTargets,
-  });
+  const generatedAssistantReply = decision.intent === 'quantity_change'
+    ? null
+    : await generateAssistantReply({
+        input: workingInput,
+        decision,
+        draftReply: draftAssistantReply,
+        nextState,
+        mealItems,
+        context,
+        saved,
+        clarificationQuestion,
+        removedTargets,
+      });
   const assistantReply = generatedAssistantReply
     ? postProcessAssistantReply(generatedAssistantReply, { ...nextState, currentMealItems: mealItems }, workingInput.message)
     : draftAssistantReply;
