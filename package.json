@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "qa:assistant": "vitest run tests/assistant-qa.test.ts",
+    "test:assistant": "vitest run tests/assistant-qa.test.ts",
+    "predeploy:check": "vitest run && eslint && next build && vitest run tests/assistant-qa.test.ts",
     "catalog:sync": "node scripts/sync-nutrition-catalog.js",
     "postinstall": "prisma generate"
   },

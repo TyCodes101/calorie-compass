@@ -57,10 +57,19 @@ The seed script creates a demo user named **Tyler** with example entries like:
 
 ## Useful commands
 ```bash
-npm run test
+npm test
 npm run lint
 npm run build
+npm run qa:assistant
 ```
+
+Before deploy, run the full guard:
+
+```bash
+npm run predeploy:check
+```
+
+`npm run qa:assistant` runs the golden multi-turn chatbot QA suite. It checks logging accuracy, correction behavior, nutrition questions, recommendations, repeat-meal memory, active meal preservation, dead-end replies, unrelated food drift, and common nutrition sanity ranges.
 
 ## Important note
 Nutrition estimates are approximate and are not medical or dietary advice.
