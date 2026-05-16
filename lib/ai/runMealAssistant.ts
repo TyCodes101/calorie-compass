@@ -4099,7 +4099,8 @@ export async function runMealAssistant(
   const classify = dependencies.classify ?? classifyWithModel;
   const resolveItemNutrition = dependencies.resolveItemNutrition ?? defaultResolveItemNutrition;
   const saveMeal = dependencies.saveMeal ?? defaultSaveMeal;
-  const generateAssistantReply = dependencies.generateAssistantReply ?? generateAssistantReplyWithModel;
+  const generateAssistantReply = dependencies.generateAssistantReply
+    ?? (dependencies.classify ? (async () => null) : generateAssistantReplyWithModel);
   const context = input.context ?? emptyContext;
   const mixedIntent = splitMixedIntentMessage(input.message);
   const workingInput: MealAssistantRunInput = mixedIntent.foodMessage
