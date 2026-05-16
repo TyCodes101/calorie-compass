@@ -1125,6 +1125,31 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (/\bbeans\b/.test(normalized) && !/\b(?:black|pinto) beans\b/.test(normalized)) {
+    const quantity = /\bcans?\b/.test(normalized)
+      ? readCountBefore('cans?\\s+of\\s+beans', 1)
+      : readCountBefore('beans', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'beans',
+          label: 'Beans',
+          quantity,
+          unit: /\bcans?\b/.test(normalized) ? (quantity === 1 ? 'can' : 'cans') : 'serving',
+          calories: quantity * 120,
+          protein: quantity * 7,
+          carbs: quantity * 20,
+          fat: quantity * 0.5,
+          fiber: quantity * 7,
+          sugar: quantity * 1,
+          sodium: quantity * 440,
+          sourceName: 'Beans common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
   if (/\borange juice\b/.test(normalized)) {
     items.push(
       makeGenericEstimate(
@@ -1552,6 +1577,28 @@ function detectChipotleBowlEstimate(message: string): ParsedFoodItem | null {
   if (/\bguac(?:amole)?\b/.test(normalized)) add('guacamole', { calories: 230, protein: 2, carbs: 8, fat: 22, fiber: 6, sodium: 370 });
 
   if (components.length < 2) {
+    if (/^(?:a\s+)?chipotle bowl$/.test(normalized)) {
+      return makeGenericEstimate(
+        {
+          key: 'chipotle bowl',
+          label: 'Chipotle bowl with chicken, rice, and cheese',
+          quantity: 1,
+          unit: 'bowl',
+          calories: 500,
+          protein: 38,
+          carbs: 41,
+          fat: 19,
+          fiber: 3,
+          sugar: 1,
+          sodium: 850,
+          sourceName: 'Chipotle bowl fallback estimate',
+          sourceType: 'AI_ESTIMATE',
+          notes: 'Fallback estimate for a plain Chipotle bowl. Adjust ingredients if you know them.',
+        },
+        message,
+      );
+    }
+
     return null;
   }
 
@@ -2873,6 +2920,32 @@ function buildChipotleChipsGuacItem(message: string) {
   );
 }
 
+function removeChipotleCheese(item: ParsedFoodItem) {
+  const nextName = item.food_name
+    .replace(/,\s*cheese\b/gi, '')
+    .replace(/\band\s+cheese\b/gi, '')
+    .replace(/\bcheese,\s*/gi, '')
+    .replace(/\s+,/g, ',')
+    .replace(/,\s*,/g, ', ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/,\s*$/g, '')
+    .trim();
+  const adjusted = subtractNutrition(item, {
+    calories: 110,
+    protein: 6,
+    carbs: 1,
+    fat: 8,
+    sodium: 190,
+  });
+
+  return {
+    ...adjusted,
+    food_name: nextName || item.food_name,
+    notes: [item.notes, 'Removed cheese from the current Chipotle bowl.'].filter(Boolean).join(' '),
+    original_user_text: item.original_user_text ?? item.food_name,
+  };
+}
+
 async function buildAdaptiveMealMutationReply(
   input: MealAssistantRunInput,
   resolveItemNutrition: NutritionResolver,
@@ -2942,14 +3015,22 @@ async function buildAdaptiveMealMutationReply(
   const chipotleIndex = currentItems.findIndex((item) => /\bchipotle\b/i.test(item.food_name));
   const wantsRegularChicken = /\bregular chicken\b/.test(normalized) && /\b(?:double|extra)\b/.test(normalized);
   const wantsChipsGuac = /\bchips?\b/.test(normalized) && /\bguac(?:amole)?\b/.test(normalized);
+  const wantsRemoveCheese = /\b(?:remove|without|no)\s+cheese\b/.test(normalized);
 
-  if (chipotleIndex >= 0 && (wantsRegularChicken || wantsChipsGuac) && correctionCueRegex.test(normalized)) {
+  if (chipotleIndex >= 0 && (wantsRegularChicken || wantsChipsGuac || wantsRemoveCheese) && (correctionCueRegex.test(normalized) || wantsRemoveCheese)) {
     const nextItems = currentItems.map((item, index) => {
-      if (index !== chipotleIndex || !wantsRegularChicken) {
+      if (index !== chipotleIndex) {
         return item;
       }
 
-      return regularizeChipotleChicken(item);
+      let nextItem = item;
+      if (wantsRegularChicken) {
+        nextItem = regularizeChipotleChicken(nextItem);
+      }
+      if (wantsRemoveCheese && /\bcheese\b/i.test(nextItem.food_name)) {
+        nextItem = removeChipotleCheese(nextItem);
+      }
+      return nextItem;
     });
 
     if (wantsChipsGuac && !nextItems.some((item) => /\bchips?\b/i.test(item.food_name) && /\bguac/i.test(item.food_name))) {
@@ -2969,6 +3050,7 @@ async function buildAdaptiveMealMutationReply(
     const totalCalories = Math.round(sumTotals(nextItems).calories);
     const changeSummary = [
       wantsRegularChicken ? 'switched it to regular chicken' : null,
+      wantsRemoveCheese ? 'removed cheese' : null,
       wantsChipsGuac ? 'added chips with guac' : null,
     ].filter(Boolean).join(' and ');
 

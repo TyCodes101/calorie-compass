@@ -1723,6 +1723,32 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).not.toMatch(/usda|match|reference/i);
   });
 
+  it('handles the exact can-of-beans correction flow from scratch', async () => {
+    const responses = await runConversation(['I had a can of beans', 'actually two cans']);
+    const first = responses[0];
+    const second = responses[1];
+
+    expect(first?.meal.items[0]?.food_name).toBe('Beans');
+    expect(first?.meal.items[0]?.quantity).toBe(1);
+    expect(second?.intent).toBe('quantity_change');
+    expect(second?.meal.items[0]?.food_name).toBe('Beans');
+    expect(second?.meal.items[0]?.quantity).toBe(2);
+    expect(second?.assistant_reply).not.toMatch(/usda|match|reference/i);
+  });
+
+  it('handles a generic chipotle bowl and remove-cheese follow-up without restarting the meal', async () => {
+    const responses = await runConversation(['Chipotle bowl', 'remove cheese']);
+    const first = responses[0];
+    const second = responses[1];
+    const names = second?.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ') ?? '';
+
+    expect(first?.meal.items[0]?.food_name).toMatch(/chipotle bowl/i);
+    expect(second?.intent).toBe('correction');
+    expect(names).toContain('chipotle bowl');
+    expect(names).not.toContain('cheese');
+    expect(second?.assistant_reply).not.toMatch(/starting fresh|new meal|usda|match|reference/i);
+  });
+
   it.each(['how’s your day', "how's your day", 'tell me a joke'])('politely redirects off-topic prompts without breaking meal state: %s', async (prompt) => {
     const currentMeal = createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 });
     const [response] = await runConversation([prompt], {
