@@ -67,6 +67,7 @@ const healthyCueRegex = /\b(?:healthy|balanced|pretty healthy|pretty balanced|no
 const mealDescriptorReferenceRegex = /\b(?:that|this|it|meal|burger|bowl|shake|sandwich|breakfast|lunch|dinner|snack)\b/i;
 const ambiguousFollowUpRegex = /^(?:what about that|what about it|how about that|how about it|is that okay|is it okay|does that work|which one|what do you mean|what does that mean|wdym|wym|huh|wait)\b/i;
 const nothingYetRegex = /^(?:nothing|nothing yet|not yet|haven't eaten yet|havent eaten yet|no food yet|none yet|nothing today)\b/i;
+const alreadySentFoodRegex = /^(?:i did|i already did|i just did|already did|i told you|sent it|i sent it)\b/i;
 
 const genericResolvedFoodRegex = /^(?:estimated\s+)?(?:mixed\s+)?meal(?:\s+estimate)?$|^food(?:\s+item)?$|^item$/i;
 const pizzaNameRegex = /\bpizza\b/i;
@@ -332,8 +333,25 @@ function hasStrongFoodSignal(text: string) {
   return strongFoodSignalRegex.test(normalizeKnownFoodTypos(text.toLowerCase()));
 }
 
+function stripConversationalLeadIn(text: string) {
+  return text
+    .trim()
+    .replace(/^(?:okay|ok|yep|yeah|alright|cool|nice|sure|so)[\s,!.-]+/i, '')
+    .trim();
+}
+
+function hasFoodAfterConversationalLeadIn(message: string) {
+  const normalized = stripEmotionalPreface(message).toLowerCase();
+  const stripped = stripConversationalLeadIn(normalized);
+  return stripped !== normalized && hasStrongFoodSignal(stripped);
+}
+
 function isNonFoodDialogueMessage(message: string) {
   const normalized = stripEmotionalPreface(message).toLowerCase();
+  if (hasFoodAfterConversationalLeadIn(message)) {
+    return false;
+  }
+
   return (
     recommendationRegex.test(normalized) ||
     lighterVersionRegex.test(normalized) ||
@@ -347,6 +365,7 @@ function isNonFoodDialogueMessage(message: string) {
     weeklySummaryRegex.test(normalized) ||
     snackRoomRegex.test(normalized) ||
     nothingYetRegex.test(normalized) ||
+    alreadySentFoodRegex.test(normalized) ||
     confusionComplaintRegex.test(normalized) ||
     casualRegex.test(normalized) ||
     offTopicRegex.test(normalized) ||
@@ -2453,6 +2472,10 @@ function buildCasualReply(message: string, state: MealAssistantState) {
   const normalized = stripEmotionalPreface(message).toLowerCase();
   const hasActiveMeal = state.currentMealItems.length > 0;
 
+  if (hasFoodAfterConversationalLeadIn(message)) {
+    return null;
+  }
+
   if (/how(?:'|’)??s your day|how are you/.test(normalized)) {
     return hasActiveMeal
       ? choosePhrase(normalized, [
@@ -2471,6 +2494,12 @@ function buildCasualReply(message: string, state: MealAssistantState) {
     return hasActiveMeal
       ? 'No problem, I still have this meal here if you want to adjust it later.'
       : 'No worries. Send the first meal whenever you are ready.';
+  }
+
+  if (alreadySentFoodRegex.test(normalized)) {
+    return hasActiveMeal
+      ? 'You did - I have the meal here now. Tell me what to change or save it when it looks right.'
+      : 'You did. I missed that turn, so send the food one more time and I will log it instead of treating this as a meal.';
   }
 
   if (confusionComplaintRegex.test(normalized)) {
@@ -3907,7 +3936,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if (casualRegex.test(normalized) || offTopicRegex.test(normalized)) {
+  if ((casualRegex.test(normalized) && !hasFoodAfterConversationalLeadIn(message)) || offTopicRegex.test(normalized)) {
     return {
       intent: 'casual_message',
       assistant_reply: buildFallbackReply(message, state),
@@ -4615,7 +4644,7 @@ export async function runMealAssistant(
   const classifiedKnownItems = detectKnownFoodEstimates(workingInput.message);
   if (
     classifiedKnownItems.length
-    && (decision.intent === 'new_food_item' || decision.intent === 'add_to_current_meal')
+    && (hasFoodAfterConversationalLeadIn(workingInput.message) || decision.intent === 'new_food_item' || decision.intent === 'add_to_current_meal')
     && (decision.should_ask_clarification || !decision.items.length || !decision.should_lookup_nutrition)
   ) {
     const hydratedItems = await hydrateKnownEstimatesWithProviders(classifiedKnownItems, state.mealType);

@@ -118,6 +118,56 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectTotalCaloriesInRange(twoTurn, 130, 160);
   });
 
+  it('logs food after casual lead-ins and does not turn user pushback into food', async () => {
+    const conversation = await runQaScenario({
+      name: 'casual lead-in logging regression',
+      messages: ['nothing yet', 'okay, i had 2 large eggs', 'i did'],
+    });
+    const [nothingTurn, eggsTurn, pushbackTurn] = conversation.turns;
+
+    expectBaselineQuality(nothingTurn);
+    expectMealItemCount(nothingTurn, 0);
+
+    expectBaselineQuality(eggsTurn);
+    expectNoClarification(eggsTurn);
+    expectMealContains(eggsTurn, [/eggs?/i]);
+    expectTotalCaloriesInRange(eggsTurn, 130, 160);
+    expectNoUnrelatedFood(eggsTurn, [/milk/i, /frozen dinner/i]);
+
+    expectBaselineQuality(pushbackTurn);
+    expectMealUnchanged(pushbackTurn);
+    expectNoUnrelatedFood(pushbackTurn, [/milk/i, /frozen dinner/i, /nutritional powder/i]);
+  });
+
+  it('overrides a bad casual classifier when a lead-in contains obvious food', async () => {
+    const conversation = await runQaScenario({
+      name: 'bad classifier casual lead-in override',
+      messages: ['okay, i had 2 large eggs'],
+      classify: async () => ({
+        intent: 'casual_message',
+        assistant_reply: "Yep, send the meal whenever you're ready.",
+        contains_food_to_log: false,
+        contains_quantity_update: false,
+        target_item: null,
+        should_mutate_pending_meal: false,
+        assistant_reply_goal: 'casual acknowledgement',
+        items: [],
+        corrections: [],
+        should_lookup_nutrition: false,
+        should_save_meal: false,
+        should_ask_clarification: false,
+        clarification_question: null,
+        confidence: 'medium',
+      }),
+    });
+    const turn = conversation.turns[0];
+
+    expectBaselineQuality(turn);
+    expectMealContains(turn, [/eggs?/i]);
+    expectTotalCaloriesInRange(turn, 130, 160);
+    expectNoUnrelatedFood(turn, [/milk/i, /frozen dinner/i]);
+  });
+
   it('removes cheese from a composite restaurant meal without wiping the meal', async () => {
     const conversation = await runQaScenario({
       name: 'remove cheese from Chipotle bowl',

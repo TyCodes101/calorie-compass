@@ -1,6 +1,7 @@
 import type {
   MealAssistantContext,
   MealAssistantItem,
+  MealAssistantModelOutput,
   MealAssistantResponse,
   MealAssistantState,
   MealAssistantTranscriptMessage,
@@ -14,6 +15,12 @@ export type AssistantQaScenario = {
   initialState?: Partial<MealAssistantState>;
   context?: Partial<MealAssistantContext>;
   resolveItemNutrition?: typeof resolveQaNutrition;
+  classify?: (args: {
+    message: string;
+    state: MealAssistantState;
+    context?: MealAssistantContext;
+    conversationHistory?: MealAssistantTranscriptMessage[];
+  }) => Promise<MealAssistantModelOutput>;
 };
 
 export type AssistantQaTurn = {
@@ -230,6 +237,7 @@ export async function runQaScenario(scenario: AssistantQaScenario): Promise<Assi
         conversationHistory: [...conversationHistory],
       },
       {
+        classify: scenario.classify,
         resolveItemNutrition: scenario.resolveItemNutrition ?? resolveQaNutrition,
         saveMeal: async () => undefined,
       },
