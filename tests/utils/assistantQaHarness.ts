@@ -435,6 +435,15 @@ export function expectReplyMatches(turn: AssistantQaTurn, matcher: RegExp, expec
   );
 }
 
+export function expectReplyNotMatches(turn: AssistantQaTurn, matcher: RegExp, expectedBehavior: string) {
+  assertQa(
+    !matcher.test(turn.assistantReply),
+    turn,
+    `Assistant reply unexpectedly matched ${matcher}.`,
+    expectedBehavior,
+  );
+}
+
 export function expectCorrectionReply(turn: AssistantQaTurn) {
   assertQa(
     /\b(?:updated|changed|fixed|switched|removed|added|now|to)\b/i.test(turn.assistantReply),

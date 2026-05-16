@@ -75,7 +75,7 @@ const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
 const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
-const strongFoodSignalRegex = /\b(?:blueberr(?:y|ies)|greek yogurt|cottage cheese|rice cakes?|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|wendy'?s|sandwich|fries|fairlife|core power|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|shakes?|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?)\b/i;
+const strongFoodSignalRegex = /\b(?:blueberr(?:y|ies)|greek yogurt|cottage cheese|rice cakes?|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|wendy'?s|mcdouble|mc double|mcdonald'?s?|sandwich|fries|fry|fairlife|core power|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|shakes?|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -284,7 +284,7 @@ function normalizeQuantityUnit(unit: string | null | undefined) {
 }
 
 function parseCorrectedServing(message: string) {
-  const normalized = stripEmotionalPreface(message).toLowerCase();
+  const normalized = stripConversationalLeadIn(stripEmotionalPreface(message).toLowerCase());
   const quantityWords = 'a|an|one|two|three|four|five|six|seven|eight|nine|ten';
   const quantityPattern = `\\d+(?:\\.\\d+)?|\\.\\d+|${quantityWords}|a half|half|three quarters?|a quarter|quarter`;
   const match = normalized.match(
@@ -879,6 +879,30 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (/\bmcdouble\b|\bmc double\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:mc\\s*double|mcdouble)s?', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'mcdonalds mcdouble',
+          label: quantity === 1 ? 'McDouble' : 'McDoubles',
+          quantity,
+          unit: quantity === 1 ? 'burger' : 'burgers',
+          calories: quantity * 390,
+          protein: quantity * 22,
+          carbs: quantity * 33,
+          fat: quantity * 19,
+          fiber: quantity * 2,
+          sugar: quantity * 7,
+          sodium: quantity * 920,
+          sourceName: "McDonald's official nutrition",
+          sourceType: 'OFFICIAL_RESTAURANT',
+        },
+        message,
+      ),
+    );
+  }
+
   if (/\bbeans?\b/.test(normalized) && /\b(?:can|cans|canned)\b/.test(normalized)) {
     const countMatch =
       normalized.match(new RegExp(`\\b(\\d+(?:\\.\\d+)?|${countWordPattern})\\s+cans?\\s+(?:of\\s+)?beans?\\b`))
@@ -999,7 +1023,7 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (/\b(?:wendys|wendy s)\b/.test(normalized) && /\bfries?\b/.test(normalized)) {
+  if (/\b(?:wendys|wendy s)\b/.test(normalized) && /\b(?:fries|fry)\b/.test(normalized)) {
     const isMedium = /\bmedium\b/.test(normalized);
     items.push(
       makeGenericEstimate(
@@ -1022,23 +1046,30 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (!/\b(?:wendys|wendy s)\b/.test(normalized) && /\bfries?\b/.test(normalized)) {
+  if (!/\b(?:wendys|wendy s)\b/.test(normalized) && /\b(?:fries|fry)\b/.test(normalized)) {
     const isMedium = /\bmedium\b/.test(normalized);
-    const quantity = readCountBefore('(?:medium\\s+|large\\s+|small\\s+)?fries?', 1);
+    const isLarge = /\blarge\b/.test(normalized);
+    const isSmall = /\bsmall\b/.test(normalized);
+    const quantity = readCountBefore('(?:medium\\s+|large\\s+|small\\s+)?(?:fries|fry)', 1);
+    const orderCalories = isLarge ? 480 : isMedium ? 340 : isSmall ? 230 : 320;
+    const orderProtein = isLarge ? 6 : isSmall ? 3 : 4;
+    const orderCarbs = isLarge ? 66 : isMedium ? 44 : isSmall ? 30 : 42;
+    const orderFat = isLarge ? 23 : isMedium ? 16 : isSmall ? 11 : 15;
+    const orderSodium = isLarge ? 560 : isMedium ? 420 : isSmall ? 290 : 390;
     items.push(
       makeGenericEstimate(
         {
           key: 'fries',
-          label: isMedium ? 'Medium fries' : 'Fries',
+          label: isLarge ? 'Large fry' : isMedium ? 'Medium fries' : isSmall ? 'Small fries' : 'Fries',
           quantity,
-          unit: isMedium ? 'medium order' : quantity === 1 ? 'order' : 'orders',
-          calories: quantity * (isMedium ? 340 : 320),
-          protein: quantity * (isMedium ? 4 : 4),
-          carbs: quantity * (isMedium ? 44 : 42),
-          fat: quantity * (isMedium ? 16 : 15),
+          unit: isLarge ? 'large order' : isMedium ? 'medium order' : isSmall ? 'small order' : quantity === 1 ? 'order' : 'orders',
+          calories: quantity * orderCalories,
+          protein: quantity * orderProtein,
+          carbs: quantity * orderCarbs,
+          fat: quantity * orderFat,
           fiber: quantity * 4,
           sugar: 0,
-          sodium: quantity * (isMedium ? 420 : 390),
+          sodium: quantity * orderSodium,
           sourceName: 'Fries common serving estimate',
         },
         message,
@@ -2760,7 +2791,7 @@ function cleanMealMutationFoodText(text: string) {
 }
 
 function extractAddCommandFoodText(message: string) {
-  const normalized = stripEmotionalPreface(message).toLowerCase().trim();
+  const normalized = stripConversationalLeadIn(stripEmotionalPreface(message).toLowerCase()).trim();
   const match =
     normalized.match(/^(?:also\s+)?add\s+(.+)$/i)
     ?? normalized.match(/^(?:and|plus)\s+(.+)$/i);
@@ -3738,7 +3769,7 @@ function buildFallbackReply(input: string, state: MealAssistantState, context?: 
 }
 
 function extractFallbackItems(input: string, state: MealAssistantState): MealAssistantItem[] {
-  const normalized = stripEmotionalPreface(input).toLowerCase();
+  const normalized = stripConversationalLeadIn(stripEmotionalPreface(input).toLowerCase());
 
   if (removeRegex.test(normalized)) {
     const removeMatch = normalized.match(removeRegex);

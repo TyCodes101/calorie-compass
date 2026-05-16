@@ -14,6 +14,7 @@ import {
   expectNoUnrelatedFood,
   expectRecommendationReply,
   expectReplyMatches,
+  expectReplyNotMatches,
   expectTotalCaloriesInRange,
   runQaScenario,
 } from './utils/assistantQaHarness';
@@ -132,6 +133,7 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectNoClarification(eggsTurn);
     expectMealContains(eggsTurn, [/eggs?/i]);
     expectTotalCaloriesInRange(eggsTurn, 130, 160);
+    expectReplyNotMatches(eggsTurn, /send the meal whenever/i, 'Food after a casual lead-in should be logged, not brushed off.');
     expectNoUnrelatedFood(eggsTurn, [/milk/i, /frozen dinner/i]);
 
     expectBaselineQuality(pushbackTurn);
@@ -166,6 +168,112 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectMealContains(turn, [/eggs?/i]);
     expectTotalCaloriesInRange(turn, 130, 160);
     expectNoUnrelatedFood(turn, [/milk/i, /frozen dinner/i]);
+  });
+
+  it('handles casual lead-in food logs across common variations', async () => {
+    const cases = [
+      {
+        message: 'ok i had 2 large eggs',
+        expectedFoods: [/eggs?/i],
+        calorieRange: [130, 160] as const,
+        forbidden: [/milk/i, /frozen dinner/i],
+      },
+      {
+        message: 'yeah i had 2 large eggs',
+        expectedFoods: [/eggs?/i],
+        calorieRange: [130, 160] as const,
+        forbidden: [/milk/i, /frozen dinner/i],
+      },
+      {
+        message: 'alright, 2 eggs',
+        expectedFoods: [/eggs?/i],
+        calorieRange: [130, 160] as const,
+        forbidden: [/milk/i, /frozen dinner/i],
+      },
+      {
+        message: 'so i had 2 eggs and toast',
+        expectedFoods: [/eggs?/i, /toast/i],
+        calorieRange: [220, 280] as const,
+        forbidden: [/milk/i, /frozen dinner/i],
+      },
+      {
+        message: 'cool, i had a McDouble',
+        expectedFoods: [/mcdouble/i],
+        calorieRange: [330, 450] as const,
+        forbidden: [/milk/i, /frozen dinner/i],
+      },
+      {
+        message: 'nice, i had a Fairlife 42g shake',
+        expectedFoods: [/fairlife/i, /42g|elite|core power/i],
+        calorieRange: [200, 270] as const,
+        forbidden: [/milk, low fat/i, /frozen dinner/i],
+      },
+      {
+        message: 'okay i ate a can of beans',
+        expectedFoods: [/beans/i],
+        calorieRange: [220, 420] as const,
+        forbidden: [/milk/i, /frozen dinner/i],
+      },
+    ];
+
+    for (const qaCase of cases) {
+      const conversation = await runQaScenario({
+        name: `casual lead-in variation: ${qaCase.message}`,
+        messages: [qaCase.message],
+      });
+      const turn = conversation.turns[0];
+
+      expectBaselineQuality(turn);
+      expectNoClarification(turn);
+      expectMealContains(turn, qaCase.expectedFoods);
+      expectTotalCaloriesInRange(turn, qaCase.calorieRange[0], qaCase.calorieRange[1]);
+      expectReplyNotMatches(turn, /send the meal whenever/i, 'Casual lead-ins should not hide obvious food logs.');
+      expectNoUnrelatedFood(turn, qaCase.forbidden);
+    }
+  });
+
+  it('handles casual lead-ins for add and quantity corrections', async () => {
+    const addConversation = await runQaScenario({
+      name: 'sure add fries correction variation',
+      messages: ["McDouble from McDonald's", 'sure, add fries'],
+    });
+    const addTurn = addConversation.turns[1];
+
+    expectBaselineQuality(addTurn);
+    expectCorrectionReply(addTurn);
+    expectMealContains(addTurn, [/mcdouble/i, /fries/i]);
+    expectTotalCaloriesInRange(addTurn, 650, 780);
+    expectNoUnrelatedFood(addTurn, [/milk/i, /frozen dinner/i]);
+
+    const quantityConversation = await runQaScenario({
+      name: 'yep make that 3 correction variation',
+      messages: ['I had 2 eggs', 'yep make that 3'],
+    });
+    const quantityTurn = quantityConversation.turns[1];
+
+    expectBaselineQuality(quantityTurn);
+    expectCorrectionReply(quantityTurn);
+    expectMealItemCount(quantityTurn, 1);
+    expectMealContains(quantityTurn, [/eggs?/i]);
+    expectTotalCaloriesInRange(quantityTurn, 190, 230);
+    expectNoUnrelatedFood(quantityTurn, [/milk/i, /frozen dinner/i]);
+  });
+
+  it('keeps pushback variations from triggering nutrition lookup', async () => {
+    const pushbackMessages = ['i already did', 'i told you', 'sent it'];
+
+    for (const message of pushbackMessages) {
+      const conversation = await runQaScenario({
+        name: `pushback variation: ${message}`,
+        messages: ['I had 2 eggs', message],
+      });
+      const pushbackTurn = conversation.turns[1];
+
+      expectBaselineQuality(pushbackTurn);
+      expectMealUnchanged(pushbackTurn);
+      expectMealContains(pushbackTurn, [/eggs?/i]);
+      expectNoUnrelatedFood(pushbackTurn, [/milk/i, /frozen dinner/i, /nutritional powder/i]);
+    }
   });
 
   it('removes cheese from a composite restaurant meal without wiping the meal', async () => {
