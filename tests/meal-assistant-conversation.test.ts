@@ -1275,6 +1275,42 @@ describe('meal assistant conversational coverage', () => {
     expect(responses[1]?.assistant_reply).not.toMatch(/i can log|saved|added/i);
   });
 
+  it('does not recommend the just-logged McDouble back as tonight\'s dinner idea', async () => {
+    const responses = await runConversation(['I had a McDouble', 'what should I eat tonight?'], {
+      context: buildContext({
+        remainingCalories: 1910,
+        remainingProtein: 158,
+      }),
+    });
+
+    expect(responses[1]?.intent).toBe('recommendation_request');
+    expect(responses[1]?.meal.items[0]?.food_name).toBe('McDouble');
+    expect(responses[1]?.assistant_reply).toMatch(/tonight|dinner|chicken|turkey|salmon|bowl/i);
+    expect(responses[1]?.assistant_reply).not.toMatch(/mcdouble|fries/i);
+    expectNoBadAssistantPatterns(responses[1]?.assistant_reply ?? '');
+  });
+
+  it('keeps protein-focused snack follow-ups away from stale logged-meal context', async () => {
+    const responses = await runConversation(['healthy sweet snack?', 'something with more protein?'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'McDouble', quantity: 1, unit: 'burger', calories: 390, protein: 22, carbs: 33, fat: 19, source_type: 'OFFICIAL_RESTAURANT', source_name: "McDonald's official nutrition" })],
+        currentMealText: 'McDouble',
+        saved: true,
+        lastAssistantReply: 'I saved the McDouble.',
+      }),
+      context: buildContext({
+        remainingCalories: 360,
+        remainingProtein: 44,
+        nutritionPreferences: 'high protein',
+      }),
+    });
+
+    expect(responses[1]?.intent).toBe('recommendation_request');
+    expect(responses[1]?.meal.items).toEqual([]);
+    expect(responses[1]?.assistant_reply).toMatch(/fairlife|greek yogurt|cottage cheese|protein pudding|shake/i);
+    expect(responses[1]?.assistant_reply).not.toMatch(/mcdouble|fries|saved|added/i);
+  });
+
   it('adds calm meal-pattern guidance without sounding naggy', async () => {
     const [response] = await runConversation(['Chipotle bowl'], {
       context: buildContext({
@@ -1351,6 +1387,53 @@ describe('meal assistant conversational coverage', () => {
     for (let index = 1; index < normalizedReplies.length; index += 1) {
       expect(normalizedReplies[index]).not.toBe(normalizedReplies[index - 1]);
     }
+  });
+
+  it('treats a McDonalds large fry as a restaurant item with sane calories', async () => {
+    const [response] = await runConversation(["large fry from McDonald's"]);
+
+    expect(response.intent).toBe('new_food_item');
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items[0]?.food_name).toMatch(/large fry|fries/i);
+    expect(response.meal.items[0]?.source_type).toBe('OFFICIAL_RESTAURANT');
+    expect(response.meal.items[0]?.calories).toBeGreaterThanOrEqual(430);
+    expect(response.meal.items[0]?.calories).toBeLessThanOrEqual(560);
+    expect(response.assistant_reply).not.toMatch(/hash brown|usda/i);
+  });
+
+  it('logs a generic protein shake without forcing a clarification', async () => {
+    const [response] = await runConversation(['protein shake']);
+
+    expect(response.intent).toBe('new_food_item');
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items[0]?.food_name).toMatch(/protein shake/i);
+    expect(response.meal.items[0]?.calories).toBeGreaterThanOrEqual(120);
+    expect(response.meal.items[0]?.calories).toBeLessThanOrEqual(260);
+    expect(response.assistant_reply).toMatch(/shake/i);
+  });
+
+  it('keeps half-cup cottage cheese estimates aligned to the serving amount', async () => {
+    const [response] = await runConversation(['half a cup of cottage cheese']);
+
+    expect(response.intent).toBe('new_food_item');
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(response.meal.items[0]?.quantity).toBe(0.5);
+    expect(response.meal.items[0]?.unit).toBe('cup');
+    expect(response.meal.items[0]?.calories).toBeGreaterThanOrEqual(70);
+    expect(response.meal.items[0]?.calories).toBeLessThanOrEqual(120);
+  });
+
+  it('does not undercount a Chipotle bowl with double chicken as only chicken', async () => {
+    const [response] = await runConversation(['Chipotle bowl with double chicken']);
+
+    expect(response.intent).toBe('new_food_item');
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items[0]?.food_name).toMatch(/chipotle/i);
+    expect(response.meal.items[0]?.food_name).toMatch(/bowl/i);
+    expect(response.meal.items[0]?.calories).toBeGreaterThanOrEqual(500);
+    expect(response.meal.items[0]?.calories).toBeLessThanOrEqual(950);
+    expect(response.assistant_reply).not.toMatch(/just chicken|plain chicken/i);
   });
 
   it('keeps append-style food turns attached to the active meal after recommendation and casual turns', async () => {

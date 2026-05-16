@@ -1330,7 +1330,33 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (!/\b(?:wendys|wendy s)\b/.test(normalized) && /\b(?:fries|fry)\b/.test(normalized)) {
+  if (/\bmcdonald'?s?\b/.test(normalized) && /\b(?:fries|fry)\b/.test(normalized)) {
+    const isMedium = /\bmedium\b/.test(normalized);
+    const isLarge = /\blarge\b/.test(normalized);
+    const isSmall = /\bsmall\b/.test(normalized);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'mcdonalds fries',
+          label: isLarge ? 'McDonald\'s large fry' : isMedium ? 'McDonald\'s medium fries' : isSmall ? 'McDonald\'s small fries' : 'McDonald\'s fries',
+          quantity: 1,
+          unit: isLarge ? 'large order' : isMedium ? 'medium order' : isSmall ? 'small order' : 'order',
+          calories: isLarge ? 480 : isMedium ? 340 : isSmall ? 230 : 320,
+          protein: isLarge ? 6 : isMedium ? 4 : isSmall ? 3 : 4,
+          carbs: isLarge ? 66 : isMedium ? 44 : isSmall ? 30 : 42,
+          fat: isLarge ? 23 : isMedium ? 16 : isSmall ? 11 : 15,
+          fiber: isLarge ? 6 : 4,
+          sugar: 0,
+          sodium: isLarge ? 560 : isMedium ? 420 : isSmall ? 290 : 390,
+          sourceName: "McDonald's official nutrition",
+          sourceType: 'OFFICIAL_RESTAURANT',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (!/\b(?:wendys|wendy s|mcdonald'?s?)\b/.test(normalized) && /\b(?:fries|fry)\b/.test(normalized)) {
     const isMedium = /\bmedium\b/.test(normalized);
     const isLarge = /\blarge\b/.test(normalized);
     const isSmall = /\bsmall\b/.test(normalized);
@@ -1661,6 +1687,10 @@ function detectChipotleBowlEstimate(message: string): ParsedFoodItem | null {
     return null;
   }
 
+  const hasBowl = /\bbowl\b/.test(normalized);
+  const hasBaseComponent = /\b(?:white rice|brown rice|rice|black beans|pinto beans|beans|fajita(?: veggies| vegetables)?)\b/.test(normalized);
+  const hasProteinComponent = /\b(?:double chicken|chicken)\b/.test(normalized);
+
   const components: string[] = [];
   let calories = 0;
   let protein = 0;
@@ -1687,6 +1717,11 @@ function detectChipotleBowlEstimate(message: string): ParsedFoodItem | null {
 
   if (/\bdouble chicken\b/.test(normalized)) add('double chicken', { calories: 360, protein: 64, carbs: 0, fat: 14, sodium: 620 });
   else if (/\bchicken\b/.test(normalized)) add('chicken', { calories: 180, protein: 32, carbs: 0, fat: 7, sodium: 310 });
+
+  if (hasBowl && hasProteinComponent && !hasBaseComponent) {
+    add('white rice', { calories: 210, protein: 4, carbs: 40, fat: 4, fiber: 1, sodium: 350 });
+    add('black beans', { calories: 130, protein: 8, carbs: 22, fat: 1.5, fiber: 8, sodium: 210 });
+  }
 
   if (/\bcheese\b/.test(normalized)) add('cheese', { calories: 110, protein: 6, carbs: 1, fat: 8, sodium: 190 });
   if (/\bcorn(?: salsa)?\b/.test(normalized)) add('corn salsa', { calories: 80, protein: 3, carbs: 16, fat: 1.5, fiber: 3, sugar: 4, sodium: 330 });
@@ -1884,6 +1919,14 @@ function hardenResolvedItems(args: { message: string; resolvedItems: ParsedFoodI
   }
 
   for (const estimate of knownEstimates) {
+    if (
+      /\bchipotle\b/i.test(estimate.food_name)
+      && /\bbowl\b/i.test(estimate.food_name)
+      && nextItems.some((item) => /\bchipotle\b/i.test(item.food_name) && /\bbowl\b/i.test(item.food_name))
+    ) {
+      continue;
+    }
+
     if (!itemCoversTerm(nextItems, estimate.food_name)) {
       nextItems.push(estimate);
     }
@@ -2340,6 +2383,28 @@ function buildRecentDuplicationPenalty(label: string, context: MealAssistantCont
   }, 0);
 }
 
+function isFastFoodLikeRecommendation(label: string) {
+  return /burger|mcdouble|big mac|fries|fry|pizza|nuggets?|taco bell|wendy|mcdonald|little caesars/i.test(label);
+}
+
+function matchesCurrentMealRecommendation(label: string, state: MealAssistantState) {
+  const normalizedLabel = normalizeText(label);
+  const normalizedMealText = normalizeText(state.currentMealText ?? '');
+
+  if (!normalizedLabel) {
+    return false;
+  }
+
+  if (normalizedMealText && (normalizedLabel.includes(normalizedMealText) || normalizedMealText.includes(normalizedLabel))) {
+    return true;
+  }
+
+  return state.currentMealItems.some((item) => {
+    const normalizedItem = normalizeText(item.food_name);
+    return normalizedItem && (normalizedLabel.includes(normalizedItem) || normalizedItem.includes(normalizedLabel));
+  });
+}
+
 function scoreRecommendationLabel(args: {
   label: string;
   mealType: MealAssistantState['mealType'];
@@ -2379,6 +2444,10 @@ function scoreRecommendationLabel(args: {
     score += tags.includes('restaurant') ? 6 : -2;
   }
 
+  if (!profile.wantsRestaurant && isFastFoodLikeRecommendation(label)) {
+    score -= profile.mealType === 'dinner' || profile.wantsHealthy ? 10 : 6;
+  }
+
   if (profile.wantsQuick) {
     score += tags.includes('quick') ? 4 : 0;
   }
@@ -2405,6 +2474,7 @@ function scoreRecommendationLabel(args: {
 }
 
 function findPersonalizedRecommendationCandidate(input: MealAssistantRunInput, context: MealAssistantContext, profile: RecommendationProfile) {
+  const allowCurrentMealEcho = /\b(?:same|usual|again|repeat|my usual)\b/i.test(input.message);
   const entries = getMemoryEntries(context).filter((entry) => entry.items.length > 0);
 
   const ranked = entries
@@ -2435,6 +2505,7 @@ function findPersonalizedRecommendationCandidate(input: MealAssistantRunInput, c
         }),
       };
     })
+    .filter((entry) => allowCurrentMealEcho || !matchesCurrentMealRecommendation(entry.label, input.state))
     .filter((entry) => entry.totals.protein >= Math.max(8, profile.minProtein - 8))
     .sort((a, b) => b.score - a.score);
 
@@ -3857,8 +3928,6 @@ function buildDirectResponse(args: {
   message?: string;
   activeQuestion?: string | null;
 }) {
-  const mealItems = args.nextState.currentMealItems;
-  const totals = sumTotals(mealItems);
   const assistantReply = postProcessAssistantReply(args.assistantReply, args.nextState, args.message);
   const nextState = args.message
     ? updateConversationState(args.nextState, {
@@ -3867,6 +3936,9 @@ function buildDirectResponse(args: {
         activeQuestion: args.activeQuestion,
       })
     : args.nextState;
+  const showMealItems = !(args.intent === 'recommendation_request' && nextState.saved);
+  const mealItems = showMealItems ? nextState.currentMealItems : [];
+  const totals = sumTotals(mealItems);
 
   return {
     intent: args.intent,

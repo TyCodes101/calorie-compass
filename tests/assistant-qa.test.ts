@@ -75,6 +75,22 @@ describe('assistant chatbot QA golden scenarios', () => {
       itemRange: [/chipotle/i, 500, 1100] as const,
       forbidden: [/cottage cheese/i, /frozen dinner/i, /nutritional powder/i],
     },
+    {
+      name: 'logs a McDonalds large fry as restaurant nutrition',
+      message: "large fry from McDonald's",
+      contains: [/large fry|fries/i],
+      calorieRange: [430, 560] as const,
+      itemRange: [/large fry|fries/i, 430, 560] as const,
+      forbidden: [/hash browns?/i, /baked potato/i, /frozen dinner/i],
+    },
+    {
+      name: 'logs a generic protein shake without a clarification loop',
+      message: 'protein shake',
+      contains: [/protein shake/i],
+      calorieRange: [120, 260] as const,
+      itemRange: [/protein shake/i, 120, 260] as const,
+      forbidden: [/frozen dinner/i, /cottage cheese/i],
+    },
   ];
 
   for (const qaCase of basicLoggingCases) {
@@ -257,6 +273,38 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectMealContains(quantityTurn, [/eggs?/i]);
     expectTotalCaloriesInRange(quantityTurn, 190, 230);
     expectNoUnrelatedFood(quantityTurn, [/milk/i, /frozen dinner/i]);
+  });
+
+  it('does not recommend the just-logged burger back to the user for dinner ideas', async () => {
+    const conversation = await runQaScenario({
+      name: 'avoid recent burger echo in dinner recommendations',
+      messages: ["I had a McDouble", 'what should I eat tonight?'],
+    });
+    const dinnerTurn = conversation.turns[1];
+
+    expectBaselineQuality(dinnerTurn);
+    expectRecommendationReply(dinnerTurn);
+    expectReplyNotMatches(dinnerTurn, /mcdouble|big mac|fries/i, 'Dinner recommendations should not just echo the last fast-food meal back to the user.');
+    expectReplyMatches(dinnerTurn, /chicken|turkey|salmon|bowl|dinner|tonight/i, 'Dinner recommendations should sound like actual dinner ideas.');
+  });
+
+  it('keeps protein-focused snack follow-ups in recommendation mode without stale meal drift', async () => {
+    const conversation = await runQaScenario({
+      name: 'protein snack follow-up stays recommendation-only',
+      messages: ['healthy sweet snack', 'something with more protein'],
+      context: {
+        remainingCalories: 360,
+        remainingProtein: 44,
+        nutritionPreferences: 'high protein',
+      },
+    });
+    const followUpTurn = conversation.turns[1];
+
+    expectBaselineQuality(followUpTurn);
+    expectRecommendationReply(followUpTurn);
+    expectMealItemCount(followUpTurn, 0);
+    expectReplyMatches(followUpTurn, /fairlife|greek yogurt|cottage cheese|protein pudding|shake/i, 'Protein follow-ups should stay on high-protein snack ideas.');
+    expectReplyNotMatches(followUpTurn, /mcdouble|fries|saved|added/i, 'Recommendation follow-ups should not drift into meal logging or stale fast-food context.');
   });
 
   it('keeps pushback variations from triggering nutrition lookup', async () => {
