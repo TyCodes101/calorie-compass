@@ -42,12 +42,13 @@ const proteinQuestionRegex = /\bprotein\b/i;
 const caloriesQuestionRegex = /\bcalories?\b/i;
 const onTrackRegex = /\bam i on track\b|\bhow am i doing\b|\bdid i hit my goal\b|\bon track\b/i;
 const dinnerSuggestionRegex = /\b(?:what should i eat tonight|what should i have tonight|what should i eat for dinner|what should i have for dinner|dinner idea|dinner ideas|dinner diea|dinner dieas|idea for dinner|ideas for dinner|good idea for dinner|good dinner idea|good dinner ideas|yummy dinner|tonight idea|tonight ideas)\b/i;
-const snackSuggestionRegex = /\b(?:high protein snack|protein snack|snack idea|snack ideas|what should i snack on|what's a good snack|what is a good snack)\b/i;
+const snackSuggestionRegex = /\b(?:high protein snack|protein snack|sweet snack|healthy sweet snack|snack idea|snack ideas|what should i snack on|what's a good snack|what is a good snack)\b/i;
 const snackRoomRegex = /\b(?:do i have room for a snack|room for a snack|can i have a snack|can i fit a snack|i(?: am|'m) in the snack room|in the snack room)\b/i;
-const recommendationRegex = /\b(?:what should i eat|what should i have|what sounds good|give me (?:an?|some)?\s*(?:yummy\s+)?(?:dinner\s+)?(?:ideas?|dieas?)|any ideas?|recommend|suggest|something (?:sweet|lighter|healthy|healthier)|healthy snack|healthy dessert|dessert idea|quick meal|quick food|restaurant idea|healthier version|lighter version|good idea for dinner|good dinner idea|yummy dinner)\b/i;
+const recommendationRegex = /\b(?:what should i eat|what should i have|what sounds good|give me (?:an?|some)?\s*(?:yummy\s+)?(?:dinner\s+)?(?:ideas?|dieas?)|any ideas?|recommend|suggest|something (?:sweet|lighter|healthy|healthier)|healthy snack|healthy dessert|dessert idea|quick meal|quick food|restaurant idea|healthier version|lighter version|good idea for dinner|good dinner idea|yummy dinner|high protein breakfast|breakfast idea|breakfast ideas|healthy breakfast|what should i eat for breakfast|what should i have for breakfast)\b/i;
 const sweetHealthyRegex = /\b(?:sweet|dessert)\b.*\b(?:healthy|healthier|lighter|light)\b|\b(?:healthy|healthier|lighter|light)\b.*\b(?:sweet|dessert)\b/i;
 const healthyTreatRegex = /\b(?:healthy treat|healthy snack|healthier treat|dessert|sweet snack)\b/i;
 const lighterVersionRegex = /\b(?:lighter|healthier)\s+(?:version|option)\b|\bsomething lighter\b|\bhealthier version\b/i;
+const recommendationFollowUpRegex = /^(?:something|anything|maybe|more|less|lower|higher|another|other|different|not that|not really|too heavy|too much|too many|sweeter|sweet|savory|lighter|healthier|quicker|quick|easy|easier|more protein|higher protein|high protein|lower carb|less carb|more filling|filling|dessert|snacky)\b/i;
 const grilledSwapRegex = /\b(?:make it grilled|grilled instead|swap .* for grilled|make that grilled)\b/i;
 const doubleThatRegex = /^(?:double that|double it|make it double|double this)\b/i;
 const comparisonRegex = /\b(?:better than|vs\.?|versus|compare)\b/i;
@@ -95,6 +96,23 @@ const emptyContext: MealAssistantContext = {
   todayMealCount: null,
 };
 
+const fallbackRecommendationOptions: FallbackRecommendationOption[] = [
+  { label: 'Greek yogurt with berries', mealType: 'snack', calories: 180, protein: 17, carbs: 18, fat: 0, tags: ['sweet', 'healthy', 'quick', 'light', 'high_protein'] },
+  { label: 'Fairlife shake and fruit', mealType: 'snack', calories: 230, protein: 30, carbs: 20, fat: 3, tags: ['sweet', 'healthy', 'quick', 'high_protein'] },
+  { label: 'Cottage cheese with pineapple', mealType: 'snack', calories: 190, protein: 18, carbs: 16, fat: 4, tags: ['sweet', 'healthy', 'light', 'high_protein'] },
+  { label: 'Protein pudding', mealType: 'snack', calories: 180, protein: 20, carbs: 14, fat: 4, tags: ['sweet', 'healthy', 'quick', 'light', 'high_protein'] },
+  { label: 'Eggs, toast, and fruit', mealType: 'breakfast', calories: 410, protein: 26, carbs: 30, fat: 18, tags: ['healthy', 'high_protein', 'balanced'] },
+  { label: 'Fairlife shake with oatmeal', mealType: 'breakfast', calories: 360, protein: 34, carbs: 34, fat: 7, tags: ['quick', 'high_protein', 'balanced'] },
+  { label: 'Greek yogurt bowl with berries and granola', mealType: 'breakfast', calories: 320, protein: 24, carbs: 34, fat: 8, tags: ['sweet', 'healthy', 'high_protein'] },
+  { label: 'Protein oatmeal with berries', mealType: 'breakfast', calories: 340, protein: 28, carbs: 38, fat: 7, tags: ['sweet', 'healthy', 'high_protein'] },
+  { label: 'Chicken rice bowl', mealType: 'dinner', calories: 560, protein: 42, carbs: 48, fat: 16, tags: ['balanced', 'high_protein'] },
+  { label: 'Chipotle bowl with extra chicken', mealType: 'dinner', calories: 670, protein: 48, carbs: 52, fat: 22, tags: ['restaurant', 'high_protein', 'balanced'] },
+  { label: 'Turkey burger with potatoes', mealType: 'dinner', calories: 590, protein: 39, carbs: 44, fat: 24, tags: ['balanced', 'high_protein'] },
+  { label: 'Salmon with potatoes', mealType: 'dinner', calories: 610, protein: 40, carbs: 36, fat: 28, tags: ['balanced', 'high_protein'] },
+  { label: 'Turkey sandwich and fruit', mealType: 'lunch', calories: 460, protein: 32, carbs: 41, fat: 14, tags: ['quick', 'balanced', 'high_protein'] },
+  { label: 'Chicken wrap with fruit', mealType: 'lunch', calories: 500, protein: 35, carbs: 42, fat: 16, tags: ['quick', 'balanced', 'high_protein'] },
+];
+
 type MealAssistantRunInput = {
   message: string;
   state: MealAssistantState;
@@ -133,6 +151,30 @@ type MemoryMatch = {
   candidate: MemoryEntry;
   mode: 'yesterday' | 'usual' | 'recent';
   appendToCurrentMeal: boolean;
+};
+
+type RecommendationProfile = {
+  mealType: MealAssistantState['mealType'] | null;
+  wantsSweet: boolean;
+  wantsHighProtein: boolean;
+  wantsLight: boolean;
+  wantsRestaurant: boolean;
+  wantsQuick: boolean;
+  wantsHealthy: boolean;
+  wantsLowerCarb: boolean;
+  prefersCurrentRecommendationThread: boolean;
+  maxCalories: number | null;
+  minProtein: number;
+};
+
+type FallbackRecommendationOption = {
+  label: string;
+  mealType: MealAssistantState['mealType'];
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  tags: string[];
 };
 
 type MixedIntentSplit = {
@@ -386,6 +428,238 @@ function isRecommendationRequestMessage(message: string) {
   );
 }
 
+function isRecommendationFollowUpMessage(message: string, state: MealAssistantState) {
+  const normalized = stripEmotionalPreface(message).toLowerCase().trim();
+
+  if (state.activeTopic !== 'recommendation' && state.previousIntent !== 'recommendation_request') {
+    return false;
+  }
+
+  if (hasStrongFoodSignal(normalized) || correctionCueRegex.test(normalized) || saveRegex.test(normalized)) {
+    return false;
+  }
+
+  return recommendationFollowUpRegex.test(normalized) || /^what about\b/i.test(normalized);
+}
+
+function shouldAppendToCurrentMeal(message: string, state: MealAssistantState) {
+  if (!state.currentMealItems.length || state.saved) {
+    return false;
+  }
+
+  const normalized = stripCorrectionLeadIn(stripEmotionalPreface(message)).toLowerCase().trim();
+  return (
+    continuationRegex.test(normalized)
+    || /^(?:add|include|throw in|put in)\b/i.test(normalized)
+    || /\b(?:too|as well)\b/i.test(normalized)
+    || /\b(?:another|one more)\b/i.test(normalized)
+  );
+}
+
+function isObviousActiveMealCorrection(message: string, state: MealAssistantState) {
+  if (!state.currentMealItems.length || state.saved) {
+    return false;
+  }
+
+  const normalized = stripCorrectionLeadIn(stripEmotionalPreface(message)).toLowerCase();
+  return correctionCueRegex.test(normalized) && Boolean(parseCorrectedServing(normalized));
+}
+
+function inferActionFromIntent(intent: MealAssistantModelOutput['intent']): MealAssistantAction {
+  switch (intent) {
+    case 'new_food_item':
+    case 'add_to_current_meal':
+    case 'repeat_meal':
+    case 'clarification_answer':
+      return 'add_food';
+    case 'quantity_change':
+      return 'update_item_quantity';
+    case 'correction':
+    case 'edit_command':
+      return 'update_item_name';
+    case 'remove_item':
+    case 'delete_command':
+      return 'remove_item';
+    case 'recommendation_request':
+      return 'recommend_food';
+    case 'save_meal':
+      return 'save_meal';
+    case 'greeting':
+    case 'casual_message':
+      return 'casual_reply';
+    case 'nutrition_question':
+    case 'nutrition_guidance':
+    case 'macro_question':
+    case 'meal_feedback':
+    case 'meal_review':
+    case 'comparison_question':
+    case 'goal_question':
+      return 'answer_question';
+    default:
+      return 'unclear';
+  }
+}
+
+function resolveDecisionTargetIndex(decision: MealAssistantModelOutput, state: MealAssistantState, message?: string) {
+  if (!state.currentMealItems.length) {
+    return -1;
+  }
+
+  if (typeof decision.target_item_index === 'number' && state.currentMealItems[decision.target_item_index]) {
+    return decision.target_item_index;
+  }
+
+  if (decision.target_item_id) {
+    const idIndex = state.currentMealItems.findIndex((item, index) => buildActiveItemId(item, index) === decision.target_item_id);
+    if (idIndex >= 0) {
+      return idIndex;
+    }
+  }
+
+  if (decision.target_item) {
+    const namedIndex = findItemIndex(state.currentMealItems, decision.target_item);
+    if (namedIndex >= 0) {
+      return namedIndex;
+    }
+  }
+
+  return message ? findContextualItemIndex(message, state.currentMealItems) : state.currentMealItems.length - 1;
+}
+
+function normalizeAssistantDecision(decision: MealAssistantModelOutput, input: MealAssistantRunInput): MealAssistantModelOutput {
+  const state = input.state;
+  const hasActiveMeal = state.currentMealItems.length > 0 && !state.saved;
+  const normalizedMessage = stripCorrectionLeadIn(stripEmotionalPreface(input.message)).toLowerCase();
+  const correctedServing = parseCorrectedServing(input.message);
+  const fallbackAction = inferActionFromIntent(decision.intent);
+  let nextDecision: MealAssistantModelOutput = {
+    ...decision,
+    action: decision.action ?? fallbackAction,
+    target_item: decision.target_item ?? null,
+    target_item_id: decision.target_item_id ?? null,
+    target_item_index: decision.target_item_index ?? null,
+  };
+
+  if (nextDecision.action === 'unclear') {
+    nextDecision.action = fallbackAction;
+  }
+
+  if (hasActiveMeal && correctedServing && (correctionCueRegex.test(normalizedMessage) || quantityOnlyRegex.test(normalizedMessage) || directQuantityRegex.test(normalizedMessage))) {
+    const targetIndex = resolveDecisionTargetIndex(nextDecision, state, input.message);
+    const targetItem = targetIndex >= 0 ? state.currentMealItems[targetIndex] : state.currentMealItems.at(-1) ?? null;
+
+    if (targetItem) {
+      nextDecision = {
+        ...nextDecision,
+        action: 'update_item_quantity',
+        intent: 'quantity_change',
+        target_item: targetItem.food_name,
+        target_item_id: buildActiveItemId(targetItem, targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1),
+        target_item_index: targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1,
+        contains_food_to_log: false,
+        contains_quantity_update: true,
+        should_mutate_pending_meal: true,
+        should_lookup_nutrition: false,
+        should_ask_clarification: false,
+        clarification_question: null,
+        items: [
+          {
+            name: targetItem.food_name,
+            brand: null,
+            quantity: correctedServing.quantity,
+            unit: correctedServing.unit ?? targetItem.unit ?? null,
+            modifiers: [],
+            action: 'update',
+          },
+        ],
+        corrections: [{ target: targetItem.food_name, change: input.message }],
+      };
+    }
+  }
+
+  if (nextDecision.action === 'update_item_quantity') {
+    return {
+      ...nextDecision,
+      intent: 'quantity_change',
+      contains_food_to_log: false,
+      contains_quantity_update: true,
+      should_mutate_pending_meal: true,
+      should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'recommend_food') {
+    return {
+      ...nextDecision,
+      intent: 'recommendation_request',
+      items: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'answer_question') {
+    return {
+      ...nextDecision,
+      items: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'casual_reply') {
+    return {
+      ...nextDecision,
+      intent: nextDecision.intent === 'greeting' ? 'greeting' : 'casual_message',
+      items: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'save_meal') {
+    return {
+      ...nextDecision,
+      intent: 'save_meal',
+      items: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_save_meal: true,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'add_food') {
+    const nextIntent = shouldAppendToCurrentMeal(input.message, state) ? 'add_to_current_meal' : nextDecision.intent === 'repeat_meal' ? 'repeat_meal' : 'new_food_item';
+    return {
+      ...nextDecision,
+      intent: nextIntent,
+      contains_food_to_log: nextDecision.items.length > 0,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: nextDecision.items.length > 0,
+      should_lookup_nutrition: nextDecision.items.length > 0,
+    };
+  }
+
+  return nextDecision;
+}
 function isNonMutatingIntent(intent: MealAssistantModelOutput['intent']) {
   return (
     intent === 'recommendation_request' ||
@@ -1900,44 +2174,278 @@ function buildCurrentMealMacroReply(message: string, state: MealAssistantState) 
   return null;
 }
 
-function buildRecommendationReply(input: MealAssistantRunInput, context: MealAssistantContext) {
-  const normalized = input.message.trim().toLowerCase();
-  const remainingProtein = getRemainingProtein(context);
-  const remainingCalories = getRemainingCalories(context);
-  const suggestion = findSuggestionCandidate(context, {
-    mealType: input.state.mealType,
-    maxCalories: remainingCalories !== null && remainingCalories > 0 ? Math.min(remainingCalories, 550) : 550,
-    minProtein: remainingProtein !== null && remainingProtein > 20 ? 18 : 10,
-  });
+function getRecommendationPreferenceTokens(context: MealAssistantContext) {
+  return tokenizeText(context.nutritionPreferences ?? '').filter((token) => token.length > 2);
+}
 
-  if (!isRecommendationRequestMessage(normalized)) {
-    return null;
+function inferRecommendationMealType(message: string, state: MealAssistantState): MealAssistantState['mealType'] | null {
+  const normalized = stripEmotionalPreface(message).toLowerCase();
+  const explicit = extractMealTypeHint(message);
+
+  if (explicit) {
+    return explicit;
   }
 
   if (dinnerSuggestionRegex.test(normalized)) {
-    const macroLead = remainingCalories !== null && remainingProtein !== null
-      ? `You've got about ${remainingCalories} calories and ${remainingProtein}g protein left`
-      : remainingProtein !== null
-        ? `You've still got about ${remainingProtein}g protein left`
-        : remainingCalories !== null
-          ? `You've got about ${remainingCalories} calories left`
-          : 'For dinner';
-
-    return remainingProtein !== null && remainingProtein >= 35
-      ? `${macroLead}, so I would make it protein-forward tonight. A chicken rice bowl, turkey burger with potatoes, salmon and rice, or steak tacos would all fit pretty well.`
-      : `${macroLead}, so I would keep it balanced. A chicken rice bowl, salmon with potatoes, steak tacos, or a turkey burger would all work.`;
+    return 'dinner';
   }
 
-  if (sweetHealthyRegex.test(normalized)) {
-    return remainingCalories !== null && remainingCalories < 220
-      ? 'Try something sweet but still light, like Greek yogurt with berries, a Yasso bar, or protein pudding.'
-      : 'A good sweet-but-better option would be Greek yogurt with fruit, protein pudding, a Yasso bar, or dark chocolate with berries.';
+  if (snackSuggestionRegex.test(normalized) || snackRoomRegex.test(normalized) || healthyTreatRegex.test(normalized) || sweetHealthyRegex.test(normalized)) {
+    return 'snack';
   }
 
-  if (healthyTreatRegex.test(normalized)) {
-    return remainingCalories !== null && remainingCalories < 220
-      ? 'A good healthy treat would be Greek yogurt with berries, a Yasso bar, protein pudding, or a Fairlife shake if you want something easy.'
-      : 'A few solid healthy treats would be Greek yogurt with fruit, protein pudding, a Yasso bar, cottage cheese with fruit, or a Fairlife shake.';
+  if (/\bbreakfast\b/.test(normalized)) {
+    return 'breakfast';
+  }
+
+  if (/\blunch\b/.test(normalized)) {
+    return 'lunch';
+  }
+
+  if (isRecommendationFollowUpMessage(message, state) && state.previousUserMessage) {
+    return inferRecommendationMealType(state.previousUserMessage, {
+      ...state,
+      previousUserMessage: null,
+    });
+  }
+
+  return null;
+}
+
+function buildRecommendationProfile(input: MealAssistantRunInput, context: MealAssistantContext): RecommendationProfile | null {
+  const normalized = stripEmotionalPreface(input.message).toLowerCase();
+  const remainingCalories = getRemainingCalories(context);
+  const remainingProtein = getRemainingProtein(context);
+  const preferenceText = `${context.nutritionPreferences ?? ''} ${input.userPreferences ?? ''}`.toLowerCase();
+
+  if (!isRecommendationRequestMessage(normalized) && !isRecommendationFollowUpMessage(input.message, input.state)) {
+    return null;
+  }
+
+  const mealType = inferRecommendationMealType(input.message, input.state);
+  const wantsSweet = sweetHealthyRegex.test(normalized) || /\b(?:sweet|dessert|treat)\b/.test(normalized);
+  const wantsHighProtein = /\b(?:protein|high protein)\b/.test(normalized) || /\bhigh protein\b/.test(preferenceText);
+  const wantsLight = lighterVersionRegex.test(normalized) || /\b(?:light|lighter|lean|lower calorie|low calorie)\b/.test(normalized);
+  const wantsRestaurant = /\brestaurant\b/.test(normalized);
+  const wantsQuick = /\b(?:quick|easy|fast|grab and go|on the go)\b/.test(normalized);
+  const wantsHealthy = /\b(?:healthy|healthier|balanced|clean)\b/.test(normalized) || /\bhigh protein\b/.test(preferenceText);
+  const wantsLowerCarb = /\b(?:lower carb|low carb|less carbs?|fewer carbs?)\b/.test(normalized) || /\blow carb\b/.test(preferenceText);
+  const prefersCurrentRecommendationThread = isRecommendationFollowUpMessage(input.message, input.state);
+  const maxCalories = remainingCalories !== null && remainingCalories > 0
+    ? Math.max(180, Math.min(remainingCalories, mealType === 'dinner' ? 900 : mealType === 'breakfast' ? 550 : 400))
+    : mealType === 'dinner'
+      ? 900
+      : mealType === 'breakfast'
+        ? 550
+        : 400;
+  const minProtein = wantsHighProtein || (remainingProtein !== null && remainingProtein >= 35)
+    ? mealType === 'breakfast'
+      ? 24
+      : mealType === 'snack'
+        ? 16
+        : 30
+    : mealType === 'snack'
+      ? 10
+      : 18;
+
+  return {
+    mealType,
+    wantsSweet,
+    wantsHighProtein,
+    wantsLight,
+    wantsRestaurant,
+    wantsQuick,
+    wantsHealthy,
+    wantsLowerCarb,
+    prefersCurrentRecommendationThread,
+    maxCalories,
+    minProtein,
+  };
+}
+
+function getHabitSignals(context: MealAssistantContext) {
+  const recurringFoods = (context.assistantMemory?.recurringFoods ?? []).map((entry) => normalizeText(entry.name));
+  const commonBrands = (context.assistantMemory?.commonBrands ?? []).map((entry) => normalizeText(entry.name));
+  const commonRestaurants = (context.assistantMemory?.commonRestaurants ?? []).map((entry) => normalizeText(entry.name));
+  const preferenceTokens = getRecommendationPreferenceTokens(context);
+
+  return {
+    recurringFoods,
+    commonBrands,
+    commonRestaurants,
+    preferenceTokens,
+  };
+}
+
+function countTokenMatches(haystack: string, tokens: string[]) {
+  return tokens.filter((token) => haystack.includes(token)).length;
+}
+
+function buildRecentDuplicationPenalty(label: string, context: MealAssistantContext) {
+  const normalizedLabel = normalizeText(label);
+  const recent = (context.recentMeals ?? [])
+    .slice(0, 4)
+    .map((meal) => normalizeText([meal.title, meal.rawText ?? '', ...meal.items.map((item) => item.food_name)].join(' ')));
+
+  return recent.reduce((penalty, mealText, index) => {
+    if (!mealText || !normalizedLabel) {
+      return penalty;
+    }
+
+    if (mealText.includes(normalizedLabel) || normalizedLabel.includes(mealText)) {
+      return penalty + (index === 0 ? 7 : 4);
+    }
+
+    return penalty;
+  }, 0);
+}
+
+function scoreRecommendationLabel(args: {
+  label: string;
+  mealType: MealAssistantState['mealType'];
+  calories: number;
+  protein: number;
+  carbs: number;
+  tags: string[];
+  context: MealAssistantContext;
+  profile: RecommendationProfile;
+  sourceBonus?: number;
+}) {
+  const { label, mealType, calories, protein, carbs, tags, context, profile, sourceBonus = 0 } = args;
+  const normalizedLabel = normalizeText(label);
+  const signals = getHabitSignals(context);
+
+  let score = sourceBonus;
+
+  if (profile.mealType) {
+    score += mealType === profile.mealType ? 10 : -3;
+  }
+
+  score += Math.min(protein, 45) * (profile.wantsHighProtein ? 0.9 : 0.35);
+
+  if (profile.maxCalories !== null) {
+    score += calories <= profile.maxCalories ? 5 : -((calories - profile.maxCalories) / 35);
+  }
+
+  if (profile.wantsSweet) {
+    score += tags.includes('sweet') ? 6 : -4;
+  }
+
+  if (profile.wantsLight) {
+    score += calories <= 350 ? 5 : calories <= 500 ? 2 : -4;
+  }
+
+  if (profile.wantsRestaurant) {
+    score += tags.includes('restaurant') ? 6 : -2;
+  }
+
+  if (profile.wantsQuick) {
+    score += tags.includes('quick') ? 4 : 0;
+  }
+
+  if (profile.wantsHealthy) {
+    score += tags.includes('healthy') || tags.includes('balanced') ? 4 : 0;
+  }
+
+  if (profile.wantsLowerCarb) {
+    score += carbs <= 30 ? 4 : carbs <= 40 ? 1 : -3;
+  }
+
+  if (protein < profile.minProtein) {
+    score -= (profile.minProtein - protein) * 0.8;
+  }
+
+  score += countTokenMatches(normalizedLabel, signals.recurringFoods) * 2.5;
+  score += countTokenMatches(normalizedLabel, signals.commonBrands) * 2;
+  score += countTokenMatches(normalizedLabel, signals.commonRestaurants) * 2;
+  score += countTokenMatches(normalizedLabel, signals.preferenceTokens) * 1.4;
+  score -= buildRecentDuplicationPenalty(label, context);
+
+  return score;
+}
+
+function findPersonalizedRecommendationCandidate(input: MealAssistantRunInput, context: MealAssistantContext, profile: RecommendationProfile) {
+  const entries = getMemoryEntries(context).filter((entry) => entry.items.length > 0);
+
+  const ranked = entries
+    .map((entry) => {
+      const totals = sumTotals(entry.items);
+      const label = buildMemoryReference(entry);
+      return {
+        entry,
+        label,
+        totals,
+        score: scoreRecommendationLabel({
+          label,
+          mealType: entry.mealType,
+          calories: totals.calories,
+          protein: totals.protein,
+          carbs: totals.carbs,
+          tags: [
+            /shake|yogurt|berries|fruit|pudding|bar/i.test(label) ? 'sweet' : '',
+            /chipotle|mcdonald|taco bell|starbucks|wendy|panera|subway/i.test(label) ? 'restaurant' : '',
+            /shake|yogurt|wrap|sandwich|cottage cheese/i.test(label) ? 'quick' : '',
+            totals.protein >= 20 ? 'high_protein' : '',
+            totals.calories <= 350 ? 'light' : '',
+            'balanced',
+          ].filter(Boolean),
+          context,
+          profile,
+          sourceBonus: entry.source === 'favorite' ? 4 : entry.source === 'memory' ? 2 : 0,
+        }),
+      };
+    })
+    .filter((entry) => entry.totals.protein >= Math.max(8, profile.minProtein - 8))
+    .sort((a, b) => b.score - a.score);
+
+  const best = ranked[0];
+  return best && best.score >= 12 ? best : null;
+}
+
+function findFallbackRecommendationOptions(context: MealAssistantContext, profile: RecommendationProfile) {
+  return fallbackRecommendationOptions
+    .map((option) => ({
+      ...option,
+      score: scoreRecommendationLabel({
+        label: option.label,
+        mealType: option.mealType,
+        calories: option.calories,
+        protein: option.protein,
+        carbs: option.carbs,
+        tags: option.tags,
+        context,
+        profile,
+      }),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
+function buildRecommendationLead(context: MealAssistantContext, profile: RecommendationProfile) {
+  const remainingCalories = getRemainingCalories(context);
+  const remainingProtein = getRemainingProtein(context);
+
+  if (remainingCalories !== null && remainingProtein !== null && (profile.mealType === 'dinner' || profile.wantsHighProtein)) {
+    return `You’ve got about ${remainingCalories} calories and ${remainingProtein}g protein left, so `;
+  }
+
+  if (remainingProtein !== null && profile.wantsHighProtein) {
+    return `Protein-wise, `;
+  }
+
+  if (remainingCalories !== null && (profile.mealType === 'snack' || profile.wantsLight)) {
+    return `You’ve got about ${remainingCalories} calories left, so `;
+  }
+
+  return '';
+}
+
+function buildRecommendationReply(input: MealAssistantRunInput, context: MealAssistantContext) {
+  const normalized = input.message.trim().toLowerCase();
+  const profile = buildRecommendationProfile(input, context);
+
+  if (!profile) {
+    return null;
   }
 
   if (lighterVersionRegex.test(normalized) && input.state.currentMealItems.length) {
@@ -1945,25 +2453,55 @@ function buildRecommendationReply(input: MealAssistantRunInput, context: MealAss
     return `For a lighter version of ${mealLabel}, I’d lean grilled instead of fried, skip heavy extras like cheese or mayo, and keep the side simpler.`;
   }
 
-  if (/restaurant/.test(normalized) && suggestion) {
-    return `Restaurant-wise, ${suggestion.entry.source === 'favorite' ? 'your usual ' : ''}${buildMemoryReference(suggestion.entry)} would fit pretty well.`;
+  const lead = buildRecommendationLead(context, profile);
+  const personalized = findPersonalizedRecommendationCandidate(input, context, profile);
+
+  if (personalized) {
+    const usualPrefix = personalized.entry.source === 'favorite' || personalized.entry.source === 'memory' ? 'your usual ' : '';
+
+    if (profile.wantsSweet) {
+      return `${lead}${usualPrefix}${personalized.label} would be a good sweet option here.`;
+    }
+
+    if (profile.mealType === 'dinner') {
+      return `${lead}${usualPrefix}${personalized.label} would fit pretty well tonight.`;
+    }
+
+    if (profile.mealType === 'breakfast') {
+      return `${lead}${usualPrefix}${personalized.label} would be a strong breakfast move.`;
+    }
+
+    return `${lead}${usualPrefix}${personalized.label} would fit well here.`;
   }
 
-  if (/protein/.test(normalized)) {
-    return remainingProtein !== null && remainingProtein > 25
-      ? 'Go easy and protein-forward, like a Fairlife shake, Greek yogurt, cottage cheese, turkey jerky, or grilled chicken.'
-      : 'Protein-wise, a shake, Greek yogurt, cottage cheese, jerky, or grilled chicken would all work.';
+  const fallback = findFallbackRecommendationOptions(context, profile);
+  const [first, second] = fallback;
+
+  if (!first) {
+    return null;
   }
 
-  if (suggestion) {
-    return `A solid option would be ${suggestion.entry.source === 'favorite' ? 'your usual ' : ''}${buildMemoryReference(suggestion.entry)}.`;
+  if (profile.wantsSweet) {
+    return second
+      ? `${lead}${first.label} or ${second.label} would both work and keep it on the lighter side.`
+      : `${lead}${first.label} would be a good sweet option.`;
   }
 
-  if (/lighter|light|low calorie/.test(normalized)) {
-    return 'Something lighter could be grilled chicken, a yogurt bowl, eggs and fruit, or a simple wrap with lean protein.';
+  if (profile.mealType === 'dinner') {
+    return second
+      ? `${lead}${first.label} or ${second.label} would both fit pretty well tonight.`
+      : `${lead}${first.label} would fit pretty well tonight.`;
   }
 
-  return 'A few good options would be a shake, Greek yogurt with fruit, eggs and toast, or a grilled chicken bowl depending on what sounds good.';
+  if (profile.mealType === 'breakfast') {
+    return second
+      ? `${lead}${first.label} or ${second.label} would both be strong breakfast options.`
+      : `${lead}${first.label} would be a strong breakfast option.`;
+  }
+
+  return second
+    ? `${lead}${first.label} or ${second.label} would both work well.`
+    : `${lead}${first.label} would work well.`;
 }
 
 function buildComparisonReply(input: MealAssistantRunInput) {
@@ -2199,6 +2737,81 @@ function buildWeeklySummaryReply(context: MealAssistantContext) {
   return intro;
 }
 
+function getMealPatternSample(context: MealAssistantContext, mealType: MealAssistantState['mealType']) {
+  const recentSample = (context.recentMeals ?? [])
+    .filter((meal) => meal.mealType === mealType && meal.items.length > 0)
+    .slice(0, 6)
+    .map((meal) => sumTotals(meal.items));
+
+  if (recentSample.length >= 3) {
+    return recentSample;
+  }
+
+  const memorySample = (context.assistantMemory?.recurringMeals ?? [])
+    .filter((meal) => meal.mealType === mealType && meal.items.length > 0)
+    .slice(0, 6)
+    .map((meal) => sumTotals(meal.items));
+
+  return [...recentSample, ...memorySample].slice(0, 6);
+}
+
+function averageMealTotals(sample: ReturnType<typeof sumTotals>[]) {
+  if (!sample.length) {
+    return null;
+  }
+
+  const combined = sample.reduce(
+    (acc, totals) => ({
+      calories: acc.calories + totals.calories,
+      protein: acc.protein + totals.protein,
+      carbs: acc.carbs + totals.carbs,
+      fat: acc.fat + totals.fat,
+      fiber: acc.fiber + totals.fiber,
+      sugar: acc.sugar + totals.sugar,
+      sodium: acc.sodium + totals.sodium,
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 },
+  );
+
+  return {
+    calories: combined.calories / sample.length,
+    protein: combined.protein / sample.length,
+    carbs: combined.carbs / sample.length,
+    fat: combined.fat / sample.length,
+  };
+}
+
+function buildMealPatternInsight(response: MealAssistantResponse, context: MealAssistantContext) {
+  const mealType = response.next_state.mealType;
+  const sample = getMealPatternSample(context, mealType);
+
+  if (sample.length < 3) {
+    return null;
+  }
+
+  const average = averageMealTotals(sample);
+  if (!average) {
+    return null;
+  }
+
+  const { calories, protein, carbs } = response.meal.totals;
+  const mealLabel = mealType === 'snack' ? 'snack' : mealType;
+
+  if (carbs >= average.carbs + 12 && carbs >= average.carbs * 1.15) {
+    return `That’s a little higher carb than your normal ${mealLabel}.`;
+  }
+
+  if (protein >= average.protein + 12 && protein >= average.protein * 1.2) {
+    return `That’s more protein than your usual ${mealLabel}.`;
+  }
+
+  if (calories <= average.calories - 180 && calories <= average.calories * 0.75) {
+    return `That’s lighter than your usual ${mealLabel}.`;
+  }
+
+  return null;
+}
+
 function buildConversationRecoveryReply(input: MealAssistantRunInput, context: MealAssistantContext) {
   const normalized = input.message.trim().toLowerCase();
   const hasActiveMeal = input.state.currentMealItems.length > 0;
@@ -2255,12 +2868,15 @@ function buildCompanionInsight(args: { response: MealAssistantResponse; input: M
     return null;
   }
 
-  if (response.intent === 'nutrition_guidance' && proteinLeftRegex.test(normalized) && remainingProtein !== null && remainingProtein >= 40) {
-    return 'You’re still pretty low on protein today';
-  }
-
   if (!response.meal.items.length) {
     return null;
+  }
+
+  if (['new_food_item', 'add_to_current_meal', 'clarification_answer'].includes(response.intent)) {
+    const patternInsight = buildMealPatternInsight(response, context);
+    if (patternInsight) {
+      return patternInsight;
+    }
   }
 
   const yesterdayMatch = findSimilarMealPattern(
@@ -2282,7 +2898,7 @@ function buildCompanionInsight(args: { response: MealAssistantResponse; input: M
   }
 
   if (remainingProtein !== null && remainingProtein >= 40 && response.meal.totals.protein < 20) {
-    return 'You’re still pretty low on protein today';
+    return 'That keeps this one on the lighter side for protein today.';
   }
 
   if (response.next_state.mealType === 'dinner' && remainingCalories !== null && remainingCalories >= 200 && response.meal.totals.calories <= 750) {
@@ -3953,7 +4569,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if (isRecommendationRequestMessage(normalized)) {
+  if (isRecommendationRequestMessage(normalized) || isRecommendationFollowUpMessage(message, state)) {
     return {
       intent: 'recommendation_request',
       assistant_reply: 'I’ve got a few ideas.',
@@ -4141,6 +4757,8 @@ async function generateAssistantReplyWithModel(args: Parameters<AssistantReplyGe
             'Rewrite the draft into one concise, natural user-facing reply.',
             'Use the final app action exactly as truth. Do not invent foods, calories, or edits.',
             'Do not log anything new for recommendation, nutrition, clarification, rejection, casual, or unknown intents.',
+            'For quantity-change actions, keep the reply focused on the correction itself. Do not mention source labels, USDA, restaurant databases, or that a lookup happened.',
+            'Recommendation and proactive replies should sound calm, personalized, and low-pressure, never naggy or influencer-style.',
             'Never say only "Got it" or "Okay". Never mention internal JSON, lookups, routing, or guardrails.',
             'Keep it mobile-friendly: usually one sentence, two short sentences max.',
           ].join('\n'),

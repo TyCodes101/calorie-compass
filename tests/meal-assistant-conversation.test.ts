@@ -309,6 +309,8 @@ function expectNoBadAssistantPatterns(reply: string) {
   expect(reply).not.toMatch(/butter|oil/i);
   expect(reply).not.toMatch(/barcode/i);
   expect(reply).not.toMatch(/i'?m with you/i);
+  expect(reply).not.toMatch(/you got this|let'?s go|crush it|stay strong|no excuses|cheat day|earn it/i);
+  expect(reply).not.toMatch(/got it\.?$|okay\.?$|sounds good\.?$/i);
   expect(reply).not.toMatch(/\u00e2|\u2018|\u2019|\u2026/);
 }
 
@@ -926,7 +928,8 @@ describe('meal assistant conversational coverage', () => {
 
     expect(response.intent).toBe('new_food_item');
     expect(response.assistant_reply).toMatch(/toast/i);
-    expect(response.assistant_reply).toMatch(/low on protein today/i);
+    expect(response.assistant_reply).toMatch(/lighter side for protein today/i);
+    expect(response.assistant_reply).not.toMatch(/bad|cheat|crush it|let'?s go/i);
   });
 
   it('can give a lightweight weekly summary without turning into an analytics dashboard', async () => {
@@ -1211,6 +1214,143 @@ describe('meal assistant conversational coverage', () => {
 
     expect(response.assistant_reply).toMatch(/shake|greek yogurt|cottage cheese|fruit|yasso|pudding/i);
     expect(response.assistant_reply).not.toMatch(/balanced/i);
+  });
+
+  it('uses habits, preferences, and remaining macros for high-protein breakfast recommendations', async () => {
+    const [response] = await runConversation(['high protein breakfast?'], {
+      context: buildContext({
+        remainingCalories: 620,
+        remainingProtein: 58,
+        nutritionPreferences: 'high protein, simple breakfasts, likes Fairlife and Greek yogurt',
+        assistantMemory: {
+          version: 1,
+          syncStatus: 'local',
+          updatedAt: null,
+          recurringMeals: [],
+          recurringFoods: [
+            { name: 'Greek yogurt', count: 4, lastUsedAt: null },
+            { name: 'Eggs', count: 5, lastUsedAt: null },
+          ],
+          commonRestaurants: [],
+          commonBrands: [{ name: 'Fairlife', count: 6, lastUsedAt: null }],
+          preferredServingSizes: [],
+          commonCorrections: [],
+          mealTiming: [],
+        },
+      }),
+    });
+
+    expect(response.intent).toBe('recommendation_request');
+    expect(response.assistant_reply).toMatch(/fairlife|greek yogurt|eggs/i);
+    expect(response.assistant_reply).toMatch(/breakfast|protein/i);
+    expect(response.assistant_reply).not.toMatch(/fries|pizza|snack room/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
+
+  it('keeps recommendation follow-ups inside the same thread instead of turning them into meal logs', async () => {
+    const responses = await runConversation(['healthy sweet snack?', 'something with more protein?'], {
+      context: buildContext({
+        remainingCalories: 300,
+        remainingProtein: 42,
+        nutritionPreferences: 'high protein',
+        assistantMemory: {
+          version: 1,
+          syncStatus: 'local',
+          updatedAt: null,
+          recurringMeals: [],
+          recurringFoods: [{ name: 'Greek yogurt', count: 4, lastUsedAt: null }],
+          commonRestaurants: [],
+          commonBrands: [{ name: 'Fairlife', count: 5, lastUsedAt: null }],
+          preferredServingSizes: [],
+          commonCorrections: [],
+          mealTiming: [],
+        },
+      }),
+    });
+
+    expect(responses[0]?.intent).toBe('recommendation_request');
+    expect(responses[1]?.intent).toBe('recommendation_request');
+    expect(responses[1]?.meal.items).toEqual([]);
+    expect(responses[1]?.assistant_reply).toMatch(/fairlife|greek yogurt|protein pudding|cottage cheese/i);
+    expect(responses[1]?.assistant_reply).not.toMatch(/i can log|saved|added/i);
+  });
+
+  it('adds calm meal-pattern guidance without sounding naggy', async () => {
+    const [response] = await runConversation(['Chipotle bowl'], {
+      context: buildContext({
+        recentMeals: [
+          {
+            id: 'lunch-1',
+            title: 'Chicken salad lunch',
+            rawText: 'Chicken salad lunch',
+            mealType: 'lunch',
+            totalCalories: 420,
+            confidenceScore: 0.92,
+            items: [createItem({ food_name: 'Chicken Salad', calories: 420, protein: 34, carbs: 18, fat: 18 })],
+          },
+          {
+            id: 'lunch-2',
+            title: 'Turkey wrap',
+            rawText: 'Turkey wrap',
+            mealType: 'lunch',
+            totalCalories: 460,
+            confidenceScore: 0.92,
+            items: [createItem({ food_name: 'Turkey Wrap', calories: 460, protein: 32, carbs: 28, fat: 16 })],
+          },
+          {
+            id: 'lunch-3',
+            title: 'Chicken rice bowl',
+            rawText: 'Chicken rice bowl',
+            mealType: 'lunch',
+            totalCalories: 510,
+            confidenceScore: 0.92,
+            items: [createItem({ food_name: 'Chicken Rice Bowl', calories: 510, protein: 36, carbs: 34, fat: 14 })],
+          },
+        ],
+      }),
+    });
+
+    expect(response.assistant_reply).toMatch(/higher carb than your normal lunch/i);
+    expect(response.assistant_reply).not.toMatch(/bad|cheat|crush it|let'?s go|no excuses/i);
+  });
+
+  it('does not reuse stale recommendation context after switching back to meal logging', async () => {
+    const [recommendation, logged, macroReply] = await runConversation(['healthy sweet snack?', '2 eggs and toast', 'what about carbs?'], {
+      context: buildContext({
+        remainingCalories: 320,
+        remainingProtein: 36,
+      }),
+    });
+
+    expect(recommendation.intent).toBe('recommendation_request');
+    expect(logged.meal.items.map((item) => item.food_name)).toEqual(['Eggs', 'Toast']);
+    expect(macroReply.intent).toBe('macro_question');
+    expect(macroReply.assistant_reply).toMatch(/carbs/i);
+    expect(macroReply.assistant_reply).not.toMatch(/greek yogurt|fairlife|yasso|protein pudding/i);
+  });
+
+  it('stays varied and calm across a longer repeated-use session', async () => {
+    const responses = await runConversation([
+      '2 eggs',
+      'add toast',
+      'what should I eat tonight?',
+      'healthy sweet snack?',
+      'I had a can of beans',
+      'actually two cans',
+    ], {
+      context: buildContext({
+        remainingCalories: 840,
+        remainingProtein: 54,
+        nutritionPreferences: 'high protein',
+      }),
+    });
+
+    const normalizedReplies = responses.map((response) => normalize(response.assistant_reply));
+
+    normalizedReplies.forEach((reply) => expectNoBadAssistantPatterns(reply));
+    for (let index = 1; index < normalizedReplies.length; index += 1) {
+      expect(normalizedReplies[index]).not.toBe(normalizedReplies[index - 1]);
+    }
   });
 
   it('keeps append-style food turns attached to the active meal after recommendation and casual turns', async () => {
