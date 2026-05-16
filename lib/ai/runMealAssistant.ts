@@ -4074,6 +4074,7 @@ async function generateAssistantReplyWithModel(args: Parameters<AssistantReplyGe
             'Rewrite the draft into one concise, natural user-facing reply.',
             'Use the final app action exactly as truth. Do not invent foods, calories, or edits.',
             'Do not log anything new for recommendation, nutrition, clarification, rejection, casual, or unknown intents.',
+            'For quantity-change actions, keep the reply focused on the correction itself. Do not mention source labels, USDA, restaurant databases, or that a lookup happened.',
             'Never say only "Got it" or "Okay". Never mention internal JSON, lookups, routing, or guardrails.',
             'Keep it mobile-friendly: usually one sentence, two short sentences max.',
           ].join('\n'),
@@ -4083,6 +4084,7 @@ async function generateAssistantReplyWithModel(args: Parameters<AssistantReplyGe
           content: JSON.stringify({
             latest_user_message: args.input.message,
             intent: args.decision.intent,
+            assistant_action: args.decision.action ?? inferActionFromIntent(args.decision.intent),
             assistant_reply_goal: args.decision.assistant_reply_goal ?? null,
             draft_reply: args.draftReply,
             action: {
@@ -4098,7 +4100,7 @@ async function generateAssistantReplyWithModel(args: Parameters<AssistantReplyGe
               unit: item.unit,
               calories: Math.round(item.calories),
               protein: Math.round(item.protein),
-              source_label: getSourceLabel(item),
+              source_label: args.decision.intent === 'quantity_change' ? null : getSourceLabel(item),
             })),
             meal_totals: {
               calories: Math.round(totals.calories),
