@@ -370,6 +370,64 @@ describe('meal assistant conversational coverage', () => {
     expectNoBadAssistantPatterns(response.assistant_reply);
   });
 
+  it('updates cottage cheese quantity from a correction instead of removing it', async () => {
+    const responses = await runConversation(['I had some cottage cheese', 'no i had 1 cup']);
+    const first = responses[0];
+    const correction = responses[1];
+
+    expect(first?.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(first?.meal.items[0]?.quantity).toBe(0.5);
+    expect(correction?.intent).toBe('quantity_change');
+    expect(correction?.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(correction?.meal.items[0]?.quantity).toBe(1);
+    expect(correction?.meal.items[0]?.unit).toBe('cup');
+    expect(correction?.meal.totals.calories).toBeGreaterThan(first?.meal.totals.calories ?? 0);
+    expect(correction?.assistant_reply).toMatch(/switched|1 cup|cottage cheese/i);
+    expect(correction?.assistant_reply).not.toMatch(/out now|need a little more detail|i can log/i);
+  });
+
+  it('keeps huh and frustrated replies conversational after an active meal', async () => {
+    const responses = await runConversation(['I had some cottage cheese', 'huh', 'wtf man']);
+    const huh = responses[1];
+    const frustrated = responses[2];
+
+    expect(huh?.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(frustrated?.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(huh?.assistant_reply).not.toMatch(/i can log huh|need a little more detail/i);
+    expect(frustrated?.assistant_reply).not.toMatch(/i can log wtf|need a little more detail/i);
+    expect(frustrated?.assistant_reply).toMatch(/fix|clean|change/i);
+  });
+
+  it('prevents a bad model removal for no-i-had quantity corrections', async () => {
+    const classify = vi.fn().mockResolvedValue({
+      intent: 'remove_item',
+      assistant_reply: 'Cottage cheese is out now.',
+      items: [{ name: 'i had 1 cup of cottage cheese', brand: null, quantity: 1, unit: null, modifiers: [], action: 'remove' }],
+      corrections: [],
+      should_lookup_nutrition: false,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'high',
+    } satisfies MealAssistantModelOutput);
+    const activeState = buildState({
+      currentMealItems: [
+        createItem({ food_name: 'Cottage cheese', quantity: 0.5, unit: 'cup', calories: 90, protein: 13, carbs: 4, fat: 2, source_type: 'AI_ESTIMATE' }),
+      ],
+      currentMealText: '0.5 cups Cottage cheese',
+    });
+
+    const [response] = await runConversation(['no i had 1 cup of cottage cheese'], {
+      initialState: activeState,
+      classify,
+    });
+
+    expect(classify).not.toHaveBeenCalled();
+    expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(response.meal.items[0]?.quantity).toBe(1);
+    expect(response.assistant_reply).not.toMatch(/out now|need a little more detail|i can log/i);
+  });
+
   it('uses a numeric reply to answer a pending Little Caesars pizza portion question', async () => {
     const responses = await runConversation(['Little Caesars pizza', '2']);
     const response = responses.at(-1);

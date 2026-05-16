@@ -20,7 +20,7 @@ import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
 const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
 const continuationRegex = /^(and|also|plus|with)\b/i;
-const removeRegex = /^(?:remove|without|no|hold the|skip the)\s+(.+)$/i;
+const removeRegex = /^(?:remove|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
 const startNewRegex = /^(?:start over|new meal|clear this|reset|fresh one|different meal)\b/i;
 const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)|done)\b/i;
 const explicitQuantityUpdateRegex = /^(?:actually\s+)?(?:make|change|update)\s+(?:it|that|this)(?:\s+to)?\s+(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
@@ -58,13 +58,13 @@ const weeklySummaryRegex = /\b(?:how(?:'s| is) (?:this|my) week|weekly summary|w
 const stopWordRegex = /\b(i|me|my|mine|had|have|ate|drank|log|repeat|again|same|usual|use|using|as|the|a|an|for|to|of|this|that|yesterday|today|tonight|please|my|last|meal|food)\b/g;
 const laughRegex = /^(?:lol|lmao|haha+|hehe+|rofl|😂|🤣)+[!. ]*$/i;
 const appreciationRegex = /^(?:thanks|thank you|thx|appreciate it)[!. ]*$/i;
-const frustrationRegex = /\b(?:ugh|oops|my bad|sorry|whoops|damn|dang|frustrat(?:ed|ing))\b/i;
+const frustrationRegex = /\b(?:ugh|oops|my bad|sorry|whoops|damn|dang|wtf|fuck|fucking|shit|frustrat(?:ed|ing))\b/i;
 const jokeRequestRegex = /\b(?:tell me a joke|say a joke|joke)\b/i;
 const sizeUpRegex = /\b(?:huge|massive|giant|really big|extra big|super big)\b/i;
 const sizeDownRegex = /\b(?:small|tiny|light|not that much|pretty small)\b/i;
 const healthyCueRegex = /\b(?:healthy|balanced|pretty healthy|pretty balanced|not too bad|clean)\b/i;
 const mealDescriptorReferenceRegex = /\b(?:that|this|it|meal|burger|bowl|shake|sandwich|breakfast|lunch|dinner|snack)\b/i;
-const ambiguousFollowUpRegex = /^(?:what about that|what about it|how about that|how about it|is that okay|is it okay|does that work|which one|what do you mean|what does that mean|wym|wait)\b/i;
+const ambiguousFollowUpRegex = /^(?:what about that|what about it|how about that|how about it|is that okay|is it okay|does that work|which one|what do you mean|what does that mean|wym|huh|wait)\b/i;
 
 const genericResolvedFoodRegex = /^(?:estimated\s+)?(?:mixed\s+)?meal(?:\s+estimate)?$|^food(?:\s+item)?$|^item$/i;
 const pizzaNameRegex = /\bpizza\b/i;
@@ -209,6 +209,64 @@ function parseCount(value: string) {
 
   const numeric = Number(normalized);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
+}
+
+function normalizeQuantityUnit(unit: string | null | undefined) {
+  if (!unit) {
+    return null;
+  }
+
+  const normalized = unit.toLowerCase().trim();
+  if (normalized === 'g' || normalized === 'gram' || normalized === 'grams') {
+    return 'g';
+  }
+
+  if (normalized === 'cup' || normalized === 'cups') {
+    return 'cup';
+  }
+
+  if (normalized === 'slice' || normalized === 'slices') {
+    return 'slice';
+  }
+
+  if (normalized === 'piece' || normalized === 'pieces') {
+    return 'piece';
+  }
+
+  if (normalized === 'serving' || normalized === 'servings') {
+    return 'serving';
+  }
+
+  if (normalized === 'cake' || normalized === 'cakes') {
+    return 'cake';
+  }
+
+  if (normalized === 'egg' || normalized === 'eggs') {
+    return 'egg';
+  }
+
+  if (normalized === 'bottle' || normalized === 'bottles') {
+    return 'bottle';
+  }
+
+  return normalized;
+}
+
+function parseCorrectedServing(message: string) {
+  const normalized = stripEmotionalPreface(message).toLowerCase();
+  const quantityWords = 'a|an|one|two|three|four|five|six|seven|eight|nine|ten';
+  const match = normalized.match(
+    new RegExp(`^(?:no|nah|actually|i meant|instead|it was|that was|make that|update that to|change that to|make it|change it to|update it to)\\s+(?:i\\s+(?:had|ate|drank)\\s+)?(?:about\\s+|around\\s+)?(\\d+(?:\\.\\d+)?|${quantityWords})\\s*(cups?|grams?|g|slices?|pieces?|servings?|cakes?|eggs?|bottles?)?\\b`),
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    quantity: parseCount(match[1] ?? '1'),
+    unit: normalizeQuantityUnit(match[2]),
+  };
 }
 
 function buildItemLookupText(item: MealAssistantItem) {
@@ -2479,6 +2537,55 @@ async function buildAdaptiveMealMutationReply(
     return null;
   }
 
+  const correctedServing = parseCorrectedServing(input.message);
+  if (correctedServing) {
+    const targetUnit = normalizeQuantityUnit(targetItem.unit);
+    const nextUnit = correctedServing.unit ?? targetUnit;
+    const canScaleDirectly = !correctedServing.unit || !targetUnit || correctedServing.unit === targetUnit;
+
+    if (canScaleDirectly) {
+      const nextItems = currentItems.map((item, index) => {
+        if (index !== targetIndex) {
+          return item;
+        }
+
+        const scaled = scaleParsedItems([item], correctedServing.quantity)[0] ?? item;
+        return {
+          ...scaled,
+          unit: nextUnit ?? scaled.unit,
+          notes: [
+            scaled.notes,
+            `Adjusted to ${formatDisplayQuantity(correctedServing.quantity)}${nextUnit ? ` ${formatUnitForQuantity(nextUnit, correctedServing.quantity)}` : ''} from conversational correction.`,
+          ].filter(Boolean).join(' '),
+        };
+      });
+      const adjustedItem = nextItems[targetIndex] ?? targetItem;
+      const nextState: MealAssistantState = {
+        ...input.state,
+        currentMealItems: nextItems,
+        userCorrections: [...input.state.userCorrections, input.message],
+        currentMealText: buildMealTextFromItems(nextItems),
+        confidenceScore: getConfidenceScore(nextItems),
+        saved: false,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      };
+      const portionLabel = [formatDisplayQuantity(correctedServing.quantity), nextUnit ? formatUnitForQuantity(nextUnit, correctedServing.quantity) : null]
+        .filter(Boolean)
+        .join(' ');
+      const replyPrefix = frustrationRegex.test(input.message)
+        ? 'No worries, fixed that'
+        : `Updated that to ${portionLabel || formatDisplayQuantity(correctedServing.quantity)}`;
+
+      return buildDirectResponse({
+        intent: 'quantity_change',
+        assistantReply: `${replyPrefix} for ${adjustedItem.food_name}. About ${Math.round(sumTotals(nextItems).calories)} calories total. ${getSourceLabel(adjustedItem)}.`,
+        nextState,
+        message: input.message,
+      });
+    }
+  }
+
   const chipotleIndex = currentItems.findIndex((item) => /\bchipotle\b/i.test(item.food_name));
   const wantsRegularChicken = /\bregular chicken\b/.test(normalized) && /\b(?:double|extra)\b/.test(normalized);
   const wantsChipsGuac = /\bchips?\b/.test(normalized) && /\bguac(?:amole)?\b/.test(normalized);
@@ -3230,7 +3337,8 @@ function extractFallbackItems(input: string, state: MealAssistantState): MealAss
   const normalized = stripEmotionalPreface(input).toLowerCase();
 
   if (removeRegex.test(normalized)) {
-    const target = normalized.match(removeRegex)?.[1] ?? '';
+    const removeMatch = normalized.match(removeRegex);
+    const target = removeMatch?.[1] ?? removeMatch?.[2] ?? '';
     return [
       {
         name: target,
