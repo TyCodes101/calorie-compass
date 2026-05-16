@@ -15,6 +15,7 @@ import {
   expectRecommendationReply,
   expectReplyMatches,
   expectReplyNotMatches,
+  expectTrustedSourceFor,
   expectTotalCaloriesInRange,
   runQaScenario,
 } from './utils/assistantQaHarness';
@@ -424,6 +425,103 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectMealContains(finalTurn, [/fairlife/i]);
     expectTotalCaloriesInRange(finalTurn, 430, 500);
     expectReplyMatches(finalTurn, /saved|logged/i, 'Compound quantity and save turns should confirm both actions.');
+  });
+
+  it('keeps updating cottage cheese through messy portion corrections', async () => {
+    const conversation = await runQaScenario({
+      name: 'messy cottage cheese correction flow',
+      messages: ['I had some cottage cheese', 'no i had 1 whole cup', 'nvm i only had .75 of a cup', 'i had half a cup'],
+    });
+    const [initialTurn, oneCupTurn, threeQuarterTurn, halfCupTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/cottage cheese/i]);
+
+    expectBaselineQuality(oneCupTurn);
+    expectCorrectionReply(oneCupTurn);
+    expectMealItemCount(oneCupTurn, 1);
+    expectMealContains(oneCupTurn, [/cottage cheese/i]);
+    expectTotalCaloriesInRange(oneCupTurn, 170, 190);
+
+    expectBaselineQuality(threeQuarterTurn);
+    expectCorrectionReply(threeQuarterTurn);
+    expectMealItemCount(threeQuarterTurn, 1);
+    expectMealContains(threeQuarterTurn, [/cottage cheese/i]);
+    expectTotalCaloriesInRange(threeQuarterTurn, 130, 145);
+    expectReplyNotMatches(threeQuarterTurn, /need a little more detail|what food/i, 'Fractional corrections should use the active cottage cheese item.');
+
+    expectBaselineQuality(halfCupTurn);
+    expectCorrectionReply(halfCupTurn);
+    expectMealItemCount(halfCupTurn, 1);
+    expectMealContains(halfCupTurn, [/cottage cheese/i]);
+    expectTotalCaloriesInRange(halfCupTurn, 85, 95);
+  });
+
+  it('adds peanut butter to oatmeal and blueberries without dropping fruit context', async () => {
+    const conversation = await runQaScenario({
+      name: 'oatmeal blueberries add peanut butter flow',
+      messages: ['I had oatmeal with blueberries', 'actually add peanut butter too'],
+    });
+    const [initialTurn, addTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/oatmeal/i, /blueberries/i]);
+    expectTrustedSourceFor(initialTurn, /oatmeal/i);
+    expectTrustedSourceFor(initialTurn, /blueberries/i);
+
+    expectBaselineQuality(addTurn);
+    expectCorrectionReply(addTurn);
+    expectMealContains(addTurn, [/oatmeal/i, /blueberries/i, /peanut butter/i]);
+    expectNoUnrelatedFood(addTurn, [/frozen dinner/i, /milk, low fat/i]);
+  });
+
+  it('handles broader compound edit grammar for portions, additions, removals, and save', async () => {
+    const cottageConversation = await runQaScenario({
+      name: 'compound cottage cheese portion plus berries',
+      messages: ['I had cottage cheese', 'change the cottage cheese to .75 cup and add blueberries'],
+    });
+    const cottageTurn = cottageConversation.turns[1];
+
+    expectBaselineQuality(cottageTurn);
+    expectCorrectionReply(cottageTurn);
+    expectMealContains(cottageTurn, [/cottage cheese/i, /blueberries/i]);
+    expectTotalCaloriesInRange(cottageTurn, 200, 235);
+
+    const burgerConversation = await runQaScenario({
+      name: 'compound burger target grammar',
+      messages: ['McDouble and medium fry', 'remove the fries and make the burger two'],
+    });
+    const burgerTurn = burgerConversation.turns[1];
+
+    expectBaselineQuality(burgerTurn);
+    expectCorrectionReply(burgerTurn);
+    expectMealItemCount(burgerTurn, 1);
+    expectMealContains(burgerTurn, [/mcdouble/i]);
+    expectMealDoesNotContain(burgerTurn, [/fries/i]);
+    expectTotalCaloriesInRange(burgerTurn, 740, 820);
+
+    const chipotleConversation = await runQaScenario({
+      name: 'compound chipotle double chicken removal',
+      messages: ['Chipotle bowl with white rice, chicken, cheese', 'actually make the chicken double and remove cheese'],
+    });
+    const chipotleTurn = chipotleConversation.turns[1];
+
+    expectBaselineQuality(chipotleTurn);
+    expectCorrectionReply(chipotleTurn);
+    expectMealContains(chipotleTurn, [/chipotle/i, /double chicken/i]);
+    expectMealDoesNotContain(chipotleTurn, [/\bcheese\b/i]);
+
+    const cokeConversation = await runQaScenario({
+      name: 'compound add coke zero save',
+      messages: ['I had a McDouble', 'add a Coke Zero and save it'],
+    });
+    const cokeTurn = cokeConversation.turns[1];
+
+    expectBaselineQuality(cokeTurn);
+    expectCorrectionReply(cokeTurn);
+    expectMealContains(cokeTurn, [/mcdouble/i, /coke zero/i]);
+    expectReplyMatches(cokeTurn, /saved|logged/i, 'Compound add-and-save should confirm the save.');
+    expectMealItemCount(cokeTurn, 2);
   });
 
   const conversationOnlyCases = [

@@ -181,6 +181,30 @@ export async function resolveQaNutrition(args: { item: MealAssistantItem; mealTy
     ], args.mealType);
   }
 
+  if (phrase.includes('oatmeal') || phrase.includes('oats')) {
+    return buildQaMealResponse([
+      createQaItem({ food_name: 'Oatmeal', quantity, unit: args.item.unit ?? 'serving', calories: 150 * quantity, protein: 5 * quantity, carbs: 27 * quantity, fat: 3 * quantity, fiber: 4 * quantity, source_type: 'GENERIC_REFERENCE', source_name: 'Oatmeal reference' }),
+    ], args.mealType);
+  }
+
+  if (phrase.includes('blueberries')) {
+    return buildQaMealResponse([
+      createQaItem({ food_name: 'Blueberries', quantity, unit: args.item.unit ?? 'cup', calories: 85 * quantity, protein: 1 * quantity, carbs: 21 * quantity, fat: 0.5 * quantity, fiber: 3.5 * quantity, source_type: 'GENERIC_REFERENCE', source_name: 'Blueberry reference' }),
+    ], args.mealType);
+  }
+
+  if (phrase.includes('peanut butter')) {
+    return buildQaMealResponse([
+      createQaItem({ food_name: 'Peanut butter', quantity, unit: args.item.unit ?? 'tbsp', calories: 95 * quantity, protein: 4 * quantity, carbs: 3 * quantity, fat: 8 * quantity, fiber: 1 * quantity, source_type: 'GENERIC_REFERENCE', source_name: 'Peanut butter reference' }),
+    ], args.mealType);
+  }
+
+  if (phrase.includes('coke zero') || phrase.includes('diet coke')) {
+    return buildQaMealResponse([
+      createQaItem({ food_name: 'Coke Zero', quantity, unit: 'can', calories: 0, protein: 0, carbs: 0, fat: 0, source_type: 'GENERIC_REFERENCE', source_name: 'Coke Zero nutrition reference' }),
+    ], args.mealType);
+  }
+
   if (phrase.includes('fries') || phrase.includes('fry')) {
     return buildQaMealResponse([
       createQaItem({ food_name: 'Fries', quantity, unit: quantity === 1 ? 'order' : 'orders', calories: 340 * quantity, protein: 4 * quantity, carbs: 44 * quantity, fat: 16 * quantity, source_type: 'AI_ESTIMATE', source_name: 'Fries common estimate' }),
@@ -475,6 +499,20 @@ export function expectNoUnrelatedFood(turn: AssistantQaTurn, forbiddenFoods: Reg
       `Reply and meal state should avoid ${forbiddenFood}.`,
     );
   }
+}
+
+export function expectTrustedSourceFor(turn: AssistantQaTurn, itemMatcher: RegExp) {
+  const item = turn.response.next_state.currentMealItems.find((candidate) => itemMatcher.test(candidate.food_name));
+  if (!item) {
+    throw qaFailure(turn, `Expected food was missing for trust check: ${itemMatcher}.`, `Meal should include ${itemMatcher}.`);
+  }
+
+  assertQa(
+    item.is_trusted && item.source_type !== 'AI_ESTIMATE' && !item.used_ai_fallback,
+    turn,
+    `${item.food_name} was not marked as a trusted/provider-backed match.`,
+    `${item.food_name} should preserve trusted source metadata when the resolver provides it.`,
+  );
 }
 
 function cloneState(state: MealAssistantState): MealAssistantState {

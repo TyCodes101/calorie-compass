@@ -138,6 +138,24 @@ async function resolveConversationNutrition(args: {
     ], args.mealType);
   }
 
+  if (phrase.includes('oatmeal') || phrase.includes('oats')) {
+    return buildParsedMealResponse([
+      createItem({ food_name: 'Oatmeal', quantity, unit: args.item.unit ?? 'serving', calories: 150 * quantity, protein: 5 * quantity, carbs: 27 * quantity, fat: 3 * quantity, fiber: 4 * quantity, source_name: 'Oatmeal reference' }),
+    ], args.mealType);
+  }
+
+  if (phrase.includes('blueberries')) {
+    return buildParsedMealResponse([
+      createItem({ food_name: 'Blueberries', quantity, unit: args.item.unit ?? 'cup', calories: 85 * quantity, protein: 1 * quantity, carbs: 21 * quantity, fat: 0.5 * quantity, fiber: 3.5 * quantity, source_name: 'Blueberry reference' }),
+    ], args.mealType);
+  }
+
+  if (phrase.includes('coke zero') || phrase.includes('diet coke')) {
+    return buildParsedMealResponse([
+      createItem({ food_name: 'Coke Zero', unit: 'can', calories: 0, protein: 0, carbs: 0, fat: 0, source_name: 'Coke Zero nutrition reference' }),
+    ], args.mealType);
+  }
+
   if (phrase.includes('daisy') || phrase.includes('cottage cheese')) {
     return buildParsedMealResponse([
       createItem({ food_name: 'Daisy Low Fat Cottage Cheese', unit: 'serving', calories: 90, protein: 13, carbs: 4, fat: 2, source_name: 'Daisy nutrition reference' }),
@@ -306,7 +324,7 @@ async function runConversation(
 
 function expectNoBadAssistantPatterns(reply: string) {
   expect(reply).not.toMatch(/how (?:was|were) .*rice cakes? cooked/i);
-  expect(reply).not.toMatch(/butter|oil/i);
+  expect(reply).not.toMatch(/\b(?:butter|oil)\b.*\?/i);
   expect(reply).not.toMatch(/barcode/i);
   expect(reply).not.toMatch(/i'?m with you/i);
   expect(reply).not.toMatch(/you got this|let'?s go|crush it|stay strong|no excuses|cheat day|earn it/i);
