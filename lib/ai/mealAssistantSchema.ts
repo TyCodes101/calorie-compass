@@ -52,6 +52,11 @@ export const mealAssistantTranscriptMessageSchema = z.object({
 export const mealAssistantModelOutputSchema = z.object({
   intent: mealAssistantIntentSchema,
   assistant_reply: z.string().min(1),
+  contains_food_to_log: z.boolean().optional(),
+  contains_quantity_update: z.boolean().optional(),
+  target_item: z.string().nullable().optional(),
+  should_mutate_pending_meal: z.boolean().optional(),
+  assistant_reply_goal: z.string().nullable().optional(),
   items: z.array(mealAssistantItemSchema).default([]),
   corrections: z.array(mealAssistantCorrectionSchema).default([]),
   should_lookup_nutrition: z.boolean(),

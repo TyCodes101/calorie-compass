@@ -41,10 +41,10 @@ const fatQuestionRegex = /\b(?:fat|fats)\b/i;
 const proteinQuestionRegex = /\bprotein\b/i;
 const caloriesQuestionRegex = /\bcalories?\b/i;
 const onTrackRegex = /\bam i on track\b|\bhow am i doing\b|\bdid i hit my goal\b|\bon track\b/i;
-const dinnerSuggestionRegex = /\b(?:what should i eat tonight|what should i have tonight|what should i eat for dinner|what should i have for dinner|dinner idea|dinner ideas|tonight idea|tonight ideas)\b/i;
+const dinnerSuggestionRegex = /\b(?:what should i eat tonight|what should i have tonight|what should i eat for dinner|what should i have for dinner|dinner idea|dinner ideas|dinner diea|dinner dieas|idea for dinner|ideas for dinner|good idea for dinner|good dinner idea|good dinner ideas|yummy dinner|tonight idea|tonight ideas)\b/i;
 const snackSuggestionRegex = /\b(?:high protein snack|protein snack|snack idea|snack ideas|what should i snack on|what's a good snack|what is a good snack)\b/i;
 const snackRoomRegex = /\b(?:do i have room for a snack|room for a snack|can i have a snack|can i fit a snack|i(?: am|'m) in the snack room|in the snack room)\b/i;
-const recommendationRegex = /\b(?:what should i eat|what should i have|what sounds good|give me (?:an?|some) ideas?|any ideas|recommend|suggest|something (?:sweet|lighter|healthy|healthier)|healthy snack|healthy dessert|dessert idea|quick meal|quick food|restaurant idea|healthier version|lighter version)\b/i;
+const recommendationRegex = /\b(?:what should i eat|what should i have|what sounds good|give me (?:an?|some)?\s*(?:yummy\s+)?(?:dinner\s+)?(?:ideas?|dieas?)|any ideas?|recommend|suggest|something (?:sweet|lighter|healthy|healthier)|healthy snack|healthy dessert|dessert idea|quick meal|quick food|restaurant idea|healthier version|lighter version|good idea for dinner|good dinner idea|yummy dinner)\b/i;
 const sweetHealthyRegex = /\b(?:sweet|dessert)\b.*\b(?:healthy|healthier|lighter|light)\b|\b(?:healthy|healthier|lighter|light)\b.*\b(?:sweet|dessert)\b/i;
 const healthyTreatRegex = /\b(?:healthy treat|healthy snack|healthier treat|dessert|sweet snack)\b/i;
 const lighterVersionRegex = /\b(?:lighter|healthier)\s+(?:version|option)\b|\bsomething lighter\b|\bhealthier version\b/i;
@@ -103,11 +103,23 @@ type MealAssistantRunInput = {
 type NutritionResolver = (args: { item: MealAssistantItem; mealType: MealAssistantState['mealType'] }) => Promise<ParsedMealResponse | null>;
 type ModelClassifier = (args: MealAssistantRunInput) => Promise<MealAssistantModelOutput>;
 type SaveExecutor = (args: { state: MealAssistantState; items: ParsedFoodItem[] }) => Promise<void>;
+type AssistantReplyGenerator = (args: {
+  input: MealAssistantRunInput;
+  decision: MealAssistantModelOutput;
+  draftReply: string;
+  nextState: MealAssistantState;
+  mealItems: ParsedFoodItem[];
+  context: MealAssistantContext;
+  saved: boolean;
+  clarificationQuestion: string | null;
+  removedTargets: string[];
+}) => Promise<string | null>;
 
 type MealAssistantDependencies = {
   classify?: ModelClassifier;
   resolveItemNutrition?: NutritionResolver;
   saveMeal?: SaveExecutor;
+  generateAssistantReply?: AssistantReplyGenerator;
 };
 
 type MemoryEntry = MealAssistantMemoryMeal & {
@@ -188,6 +200,14 @@ function tokenizeText(text: string) {
 
 function parseCount(value: string) {
   const normalized = value.trim().toLowerCase();
+  const fractionMap: Record<string, number> = {
+    half: 0.5,
+    'a half': 0.5,
+    quarter: 0.25,
+    'a quarter': 0.25,
+    'three quarters': 0.75,
+    'three quarter': 0.75,
+  };
   const wordMap: Record<string, number> = {
     a: 1,
     an: 1,
@@ -202,6 +222,10 @@ function parseCount(value: string) {
     nine: 9,
     ten: 10,
   };
+
+  if (fractionMap[normalized] !== undefined) {
+    return fractionMap[normalized];
+  }
 
   if (wordMap[normalized] !== undefined) {
     return wordMap[normalized];
@@ -255,17 +279,24 @@ function normalizeQuantityUnit(unit: string | null | undefined) {
 function parseCorrectedServing(message: string) {
   const normalized = stripEmotionalPreface(message).toLowerCase();
   const quantityWords = 'a|an|one|two|three|four|five|six|seven|eight|nine|ten';
+  const quantityPattern = `\\d+(?:\\.\\d+)?|\\.\\d+|${quantityWords}|a half|half|three quarters?|a quarter|quarter`;
   const match = normalized.match(
-    new RegExp(`^(?:no|nah|actually|i meant|instead|it was|that was|make that|update that to|change that to|make it|change it to|update it to)\\s+(?:i\\s+(?:had|ate|drank)\\s+)?(?:about\\s+|around\\s+)?(\\d+(?:\\.\\d+)?|${quantityWords})\\s*(cups?|grams?|g|slices?|pieces?|servings?|cakes?|eggs?|bottles?)?\\b`),
+    new RegExp(`^(?:(?:no|nah|actually|i meant|instead|it was|that was|make that|update that to|change that to|make it|change it to|update it to|nvm|nevermind|never mind)\\s+)?(?:i\\s+)?(?:(?:only\\s+)?(?:had|ate|drank)\\s+)?(?:about\\s+|around\\s+)?(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(cups?|grams?|g|slices?|pieces?|servings?|cakes?|eggs?|bottles?)?\\b`),
   );
 
   if (!match) {
     return null;
   }
 
+  const rawQuantity = match[1] ?? '1';
+  const unit = normalizeQuantityUnit(match[2]);
+  if ((rawQuantity === 'a' || rawQuantity === 'an') && !unit) {
+    return null;
+  }
+
   return {
-    quantity: parseCount(match[1] ?? '1'),
-    unit: normalizeQuantityUnit(match[2]),
+    quantity: parseCount(rawQuantity),
+    unit,
   };
 }
 
@@ -314,6 +345,50 @@ function isNonFoodDialogueMessage(message: string) {
     jokeRequestRegex.test(normalized) ||
     (isQuestionLikeText(normalized) && !hasStrongFoodSignal(normalized))
   );
+}
+
+function isRecommendationRequestMessage(message: string) {
+  const normalized = stripEmotionalPreface(message).toLowerCase();
+  return (
+    recommendationRegex.test(normalized) ||
+    dinnerSuggestionRegex.test(normalized) ||
+    snackSuggestionRegex.test(normalized) ||
+    lighterVersionRegex.test(normalized) ||
+    sweetHealthyRegex.test(normalized) ||
+    healthyTreatRegex.test(normalized)
+  );
+}
+
+function isNonMutatingIntent(intent: MealAssistantModelOutput['intent']) {
+  return (
+    intent === 'recommendation_request' ||
+    intent === 'nutrition_guidance' ||
+    intent === 'nutrition_question' ||
+    intent === 'macro_question' ||
+    intent === 'goal_question' ||
+    intent === 'comparison_question' ||
+    intent === 'meal_feedback' ||
+    intent === 'meal_review' ||
+    intent === 'casual_message' ||
+    intent === 'greeting' ||
+    intent === 'unknown'
+  );
+}
+
+function shouldLookupNutritionForDecision(decision: MealAssistantModelOutput, message: string) {
+  if (!decision.should_lookup_nutrition) {
+    return false;
+  }
+
+  if (decision.contains_food_to_log === false || decision.should_mutate_pending_meal === false) {
+    return false;
+  }
+
+  if (isNonMutatingIntent(decision.intent) || isNonFoodDialogueMessage(message)) {
+    return false;
+  }
+
+  return decision.items.length > 0;
 }
 
 function looksLikeRawConversationalFoodText(foodText: string, message: string) {
@@ -1556,7 +1631,7 @@ function cleanMealReferenceText(text: string | null | undefined) {
 }
 
 function stripEmotionalPreface(text: string) {
-  return text.trim().replace(/^(?:ugh|oops|sorry|my bad|whoops|damn|dang)[\s,!.-]+/i, '').trim();
+  return text.trim().replace(/^(?:ugh|oops|sorry|my bad|whoops|damn|dang|nvm|nevermind|never mind)[\s,!.-]+/i, '').trim();
 }
 
 function buildMemoryReference(candidate: Pick<MemoryEntry, 'items' | 'title' | 'rawText'>) {
@@ -1720,8 +1795,22 @@ function buildRecommendationReply(input: MealAssistantRunInput, context: MealAss
     minProtein: remainingProtein !== null && remainingProtein > 20 ? 18 : 10,
   });
 
-  if (!recommendationRegex.test(normalized) && !lighterVersionRegex.test(normalized) && !sweetHealthyRegex.test(normalized) && !healthyTreatRegex.test(normalized)) {
+  if (!isRecommendationRequestMessage(normalized)) {
     return null;
+  }
+
+  if (dinnerSuggestionRegex.test(normalized)) {
+    const macroLead = remainingCalories !== null && remainingProtein !== null
+      ? `You've got about ${remainingCalories} calories and ${remainingProtein}g protein left`
+      : remainingProtein !== null
+        ? `You've still got about ${remainingProtein}g protein left`
+        : remainingCalories !== null
+          ? `You've got about ${remainingCalories} calories left`
+          : 'For dinner';
+
+    return remainingProtein !== null && remainingProtein >= 35
+      ? `${macroLead}, so I would make it protein-forward tonight. A chicken rice bowl, turkey burger with potatoes, salmon and rice, or steak tacos would all fit pretty well.`
+      : `${macroLead}, so I would keep it balanced. A chicken rice bowl, salmon with potatoes, steak tacos, or a turkey burger would all work.`;
   }
 
   if (sweetHealthyRegex.test(normalized)) {
@@ -1840,7 +1929,7 @@ function validateAssistantReply(args: {
     return nutritionReply;
   }
 
-  if ((args.intent === 'recommendation_request' || recommendationRegex.test(args.message)) && recommendationReply) {
+  if ((args.intent === 'recommendation_request' || isRecommendationRequestMessage(args.message)) && recommendationReply) {
     return recommendationReply;
   }
 
@@ -2004,6 +2093,18 @@ function buildConversationRecoveryReply(input: MealAssistantRunInput, context: M
 
   if (input.state.pendingClarification && /^(?:wait|which one|what do you need|what do you mean|what does that mean|wym)\b/i.test(normalized)) {
     return `I just need one detail to keep going: ${input.state.pendingClarification}`;
+  }
+
+  if (/\b(?:what|which)\s+(?:detail|details|info|information)\b|\bwhat do you need\b|\bwhat detail do you need\b/i.test(normalized)) {
+    if (input.state.pendingClarification) {
+      return `I just need one detail to keep going: ${input.state.pendingClarification}`;
+    }
+
+    if (hasActiveMeal) {
+      return 'For this meal, the useful details are amount, brand, or prep style. You can also just send a correction like "make it half a cup."';
+    }
+
+    return 'Usually amount, brand, or prep style helps most. You can still log it naturally and I will ask only if something truly matters.';
   }
 
   if (ambiguousFollowUpRegex.test(normalized) || (/\?$/.test(normalized) && /\b(?:it|that|this|those|them)\b/.test(normalized))) {
@@ -2524,7 +2625,7 @@ async function buildAdaptiveMealMutationReply(
   input: MealAssistantRunInput,
   resolveItemNutrition: NutritionResolver,
 ): Promise<MealAssistantResponse | null> {
-  if (!input.state.currentMealItems.length) {
+  if (!input.state.currentMealItems.length || input.state.saved) {
     return null;
   }
 
@@ -2844,11 +2945,6 @@ async function buildDeterministicDialogueResponse(
     });
   }
 
-  const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(input, resolveItemNutrition);
-  if (adaptiveMealMutationReply) {
-    return adaptiveMealMutationReply;
-  }
-
   const recommendationReply = buildRecommendationReply(input, context);
   if (recommendationReply) {
     return buildDirectResponse({
@@ -2863,6 +2959,11 @@ async function buildDeterministicDialogueResponse(
       message: input.message,
       activeQuestion: input.message,
     });
+  }
+
+  const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(input, resolveItemNutrition);
+  if (adaptiveMealMutationReply) {
+    return adaptiveMealMutationReply;
   }
 
   const descriptorReply = buildMealDescriptorReply(input, context);
@@ -3518,7 +3619,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if (recommendationRegex.test(normalized) || lighterVersionRegex.test(normalized) || sweetHealthyRegex.test(normalized) || healthyTreatRegex.test(normalized)) {
+  if (isRecommendationRequestMessage(normalized)) {
     return {
       intent: 'recommendation_request',
       assistant_reply: 'I’ve got a few ideas.',
@@ -3683,6 +3784,82 @@ async function classifyWithModel(input: MealAssistantRunInput): Promise<MealAssi
     return mealAssistantModelOutputSchema.parse(JSON.parse(content));
   } catch {
     return classifyFallback(input);
+  }
+}
+
+async function generateAssistantReplyWithModel(args: Parameters<AssistantReplyGenerator>[0]) {
+  if (!process.env.OPENAI_API_KEY) {
+    return null;
+  }
+
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const totals = sumTotals(args.mealItems);
+
+  try {
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: 0.35,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are Calorie Compass, a calm premium food logging assistant.',
+            'Rewrite the draft into one concise, natural user-facing reply.',
+            'Use the final app action exactly as truth. Do not invent foods, calories, or edits.',
+            'Do not log anything new for recommendation, nutrition, clarification, rejection, casual, or unknown intents.',
+            'Never say only "Got it" or "Okay". Never mention internal JSON, lookups, routing, or guardrails.',
+            'Keep it mobile-friendly: usually one sentence, two short sentences max.',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            latest_user_message: args.input.message,
+            intent: args.decision.intent,
+            assistant_reply_goal: args.decision.assistant_reply_goal ?? null,
+            draft_reply: args.draftReply,
+            action: {
+              saved: args.saved,
+              clarification_question: args.clarificationQuestion,
+              removed_targets: args.removedTargets,
+              should_lookup_nutrition: args.decision.should_lookup_nutrition,
+              should_mutate_pending_meal: args.decision.should_mutate_pending_meal ?? null,
+            },
+            final_meal_items: args.mealItems.map((item) => ({
+              food_name: item.food_name,
+              quantity: item.quantity,
+              unit: item.unit,
+              calories: Math.round(item.calories),
+              protein: Math.round(item.protein),
+              source_label: getSourceLabel(item),
+            })),
+            meal_totals: {
+              calories: Math.round(totals.calories),
+              protein: Math.round(totals.protein),
+              carbs: Math.round(totals.carbs),
+              fat: Math.round(totals.fat),
+            },
+            daily_context: {
+              remaining_calories: getRemainingCalories(args.context),
+              remaining_protein: getRemainingProtein(args.context),
+              today_meal_count: args.context.todayMealCount ?? null,
+              nutrition_preferences: args.context.nutritionPreferences ?? null,
+            },
+            conversation_state: {
+              last_assistant_reply: args.input.state.lastAssistantReply ?? null,
+              pending_clarification: args.input.state.pendingClarification ?? null,
+              previous_intent: args.input.state.previousIntent ?? null,
+              active_topic: args.input.state.activeTopic ?? null,
+            },
+          }),
+        },
+      ],
+    });
+
+    const text = completion.choices[0]?.message?.content?.trim();
+    return text ? sanitizeAssistantText(text) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -3859,14 +4036,32 @@ function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealA
   const safeItems = decision.items.filter((item) => !isUnsafeLookupItem(item, input.message));
   const droppedItems = safeItems.length !== decision.items.length;
 
-  if (isNonFoodDialogueMessage(input.message)) {
+  if (
+    decision.should_ask_clarification &&
+    decision.clarification_question &&
+    !isNonFoodDialogueMessage(input.message)
+  ) {
     return {
       ...decision,
-      intent: recommendationRegex.test(input.message) ? 'recommendation_request' : decision.intent,
+      items: safeItems,
+      should_lookup_nutrition: false,
+    };
+  }
+
+  if (isNonFoodDialogueMessage(input.message) || isNonMutatingIntent(decision.intent) || decision.contains_food_to_log === false || decision.should_mutate_pending_meal === false) {
+    const recommendationReply = isRecommendationRequestMessage(input.message)
+      ? buildRecommendationReply(input, input.context ?? emptyContext)
+      : null;
+    return {
+      ...decision,
+      intent: isRecommendationRequestMessage(input.message) ? 'recommendation_request' : decision.intent,
+      assistant_reply: recommendationReply ?? decision.assistant_reply,
       items: [],
       should_lookup_nutrition: false,
       should_ask_clarification: false,
       clarification_question: null,
+      contains_food_to_log: false,
+      should_mutate_pending_meal: false,
     };
   }
 
@@ -3883,13 +4078,15 @@ function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealA
       should_lookup_nutrition: false,
       should_ask_clarification: false,
       clarification_question: null,
+      contains_food_to_log: false,
+      should_mutate_pending_meal: false,
     };
   }
 
   return {
     ...decision,
     items: safeItems,
-    should_lookup_nutrition: safeItems.length > 0 && decision.should_lookup_nutrition,
+    should_lookup_nutrition: safeItems.length > 0 && shouldLookupNutritionForDecision({ ...decision, items: safeItems }, input.message),
     should_ask_clarification: safeItems.length ? decision.should_ask_clarification : false,
     clarification_question: safeItems.length ? decision.clarification_question : null,
   };
@@ -3902,6 +4099,7 @@ export async function runMealAssistant(
   const classify = dependencies.classify ?? classifyWithModel;
   const resolveItemNutrition = dependencies.resolveItemNutrition ?? defaultResolveItemNutrition;
   const saveMeal = dependencies.saveMeal ?? defaultSaveMeal;
+  const generateAssistantReply = dependencies.generateAssistantReply ?? generateAssistantReplyWithModel;
   const context = input.context ?? emptyContext;
   const mixedIntent = splitMixedIntentMessage(input.message);
   const workingInput: MealAssistantRunInput = mixedIntent.foodMessage
@@ -3911,47 +4109,44 @@ export async function runMealAssistant(
       }
     : input;
   const state = { ...workingInput.state };
+  const shouldUseModelIntentFirst = Boolean(process.env.OPENAI_API_KEY) && !dependencies.classify;
 
-  const pizzaClarificationItems = resolvePizzaClarificationEstimate(workingInput.message, state);
-  if (pizzaClarificationItems.length) {
-    return finalizeResponse(buildDirectFoodEstimateResponse({
-      input: workingInput,
-      state,
-      items: pizzaClarificationItems,
-      intent: 'clarification_answer',
-      followUpMessage: mixedIntent.followUpMessage,
-      context,
-    }), workingInput, context);
-  }
-
-  const deterministicDialogueResponse = await buildDeterministicDialogueResponse(workingInput, context, resolveItemNutrition, saveMeal);
-  if (deterministicDialogueResponse) {
-    return finalizeResponse(deterministicDialogueResponse, workingInput, context);
-  }
-
-  const canUseDirectKnownFood =
-    !dependencies.classify
-    && !process.env.OPENAI_API_KEY
-    && !state.pendingClarification
-    && (!state.currentMealItems.length || state.saved || continuationRegex.test(stripEmotionalPreface(workingInput.message).toLowerCase()));
-  const directKnownItems = canUseDirectKnownFood ? detectKnownFoodEstimates(workingInput.message) : [];
-  if (directKnownItems.length) {
-    const hydratedItems = await hydrateKnownEstimatesWithProviders(directKnownItems, state.mealType);
-    return finalizeResponse(buildDirectFoodEstimateResponse({
-      input: workingInput,
-      state,
-      items: hydratedItems,
-      followUpMessage: mixedIntent.followUpMessage,
-      context,
-    }), workingInput, context);
-  }
-
-  if (!dependencies.classify) {
-    const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition);
-    if (adaptiveMealMutationReply) {
-      return finalizeResponse(adaptiveMealMutationReply, workingInput, context);
+  if (!shouldUseModelIntentFirst) {
+    const pizzaClarificationItems = resolvePizzaClarificationEstimate(workingInput.message, state);
+    if (pizzaClarificationItems.length) {
+      return finalizeResponse(buildDirectFoodEstimateResponse({
+        input: workingInput,
+        state,
+        items: pizzaClarificationItems,
+        intent: 'clarification_answer',
+        followUpMessage: mixedIntent.followUpMessage,
+        context,
+      }), workingInput, context);
     }
 
+    const deterministicDialogueResponse = await buildDeterministicDialogueResponse(workingInput, context, resolveItemNutrition, saveMeal);
+    if (deterministicDialogueResponse) {
+      return finalizeResponse(deterministicDialogueResponse, workingInput, context);
+    }
+
+    const canUseDirectKnownFood =
+      !dependencies.classify
+      && !process.env.OPENAI_API_KEY
+      && !state.pendingClarification
+      && (!state.currentMealItems.length || state.saved || continuationRegex.test(stripEmotionalPreface(workingInput.message).toLowerCase()));
+    const directKnownItems = canUseDirectKnownFood ? detectKnownFoodEstimates(workingInput.message) : [];
+    if (directKnownItems.length) {
+      const hydratedItems = await hydrateKnownEstimatesWithProviders(directKnownItems, state.mealType);
+      return finalizeResponse(buildDirectFoodEstimateResponse({
+        input: workingInput,
+        state,
+        items: hydratedItems,
+        followUpMessage: mixedIntent.followUpMessage,
+        context,
+      }), workingInput, context);
+    }
+
+    if (!dependencies.classify) {
     const recommendationReply = buildRecommendationReply(workingInput, context);
     if (recommendationReply) {
       return finalizeResponse(buildDirectResponse({
@@ -3966,6 +4161,11 @@ export async function runMealAssistant(
         message: workingInput.message,
         activeQuestion: workingInput.message,
       }), workingInput, context);
+    }
+
+    const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition);
+    if (adaptiveMealMutationReply) {
+      return finalizeResponse(adaptiveMealMutationReply, workingInput, context);
     }
 
     const descriptorReply = buildMealDescriptorReply(workingInput, context);
@@ -4129,6 +4329,7 @@ export async function runMealAssistant(
         activeQuestion: workingInput.message,
       }), workingInput, context);
     }
+    }
   }
 
   let decision = await classify({
@@ -4245,7 +4446,7 @@ export async function runMealAssistant(
       nextState.confidenceScore = getConfidenceScore(nextState.currentMealItems);
       resolvedItems = nextState.currentMealItems;
     } else {
-      const lookedUpItems = decision.should_lookup_nutrition
+      const lookedUpItems = shouldLookupNutritionForDecision(decision, workingInput.message)
         ? await resolveAssistantItems(decision.items, nextState.mealType, resolveItemNutrition, workingInput.message)
         : [];
 
@@ -4349,7 +4550,7 @@ export async function runMealAssistant(
       })
     : null;
 
-  const assistantReply = postProcessAssistantReply(
+  const draftAssistantReply = postProcessAssistantReply(
     [primaryReply, followUpReply].filter(Boolean).join(' '),
     {
       ...nextState,
@@ -4357,6 +4558,20 @@ export async function runMealAssistant(
     },
     workingInput.message,
   );
+  const generatedAssistantReply = await generateAssistantReply({
+    input: workingInput,
+    decision,
+    draftReply: draftAssistantReply,
+    nextState,
+    mealItems,
+    context,
+    saved,
+    clarificationQuestion,
+    removedTargets,
+  });
+  const assistantReply = generatedAssistantReply
+    ? postProcessAssistantReply(generatedAssistantReply, { ...nextState, currentMealItems: mealItems }, workingInput.message)
+    : draftAssistantReply;
 
   nextState = updateConversationState(nextState, {
     intent: decision.intent,

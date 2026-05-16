@@ -386,6 +386,104 @@ describe('meal assistant conversational coverage', () => {
     expect(correction?.assistant_reply).not.toMatch(/out now|need a little more detail|i can log/i);
   });
 
+  it('updates fractional cottage cheese serving corrections without asking for more detail', async () => {
+    const responses = await runConversation([
+      'I had some cottage cheese',
+      'no i had 1 whole cup',
+      'nvm i only had .75 of a cup',
+      'i had half a cup',
+    ]);
+    const oneCup = responses[1];
+    const threeQuarterCup = responses[2];
+    const halfCup = responses[3];
+
+    expect(oneCup?.meal.items).toHaveLength(1);
+    expect(oneCup?.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(oneCup?.meal.items[0]?.quantity).toBe(1);
+    expect(threeQuarterCup?.meal.items[0]?.quantity).toBe(0.75);
+    expect(halfCup?.meal.items[0]?.quantity).toBe(0.5);
+    for (const response of responses.slice(1)) {
+      expect(response.assistant_reply).not.toMatch(/need a little more detail|i can log|out now/i);
+      expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    }
+  });
+
+  it('answers clarification-detail questions without turning them into food', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const [response] = await runConversation(['what detail do you need'], {
+      resolveItemNutrition,
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Cottage cheese', quantity: 0.5, unit: 'cup', calories: 90, protein: 13, carbs: 4, fat: 2, source_type: 'AI_ESTIMATE' })],
+        currentMealText: '0.5 cups Cottage cheese',
+      }),
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(response.assistant_reply).toMatch(/amount|brand|prep|detail/i);
+    expect(response.assistant_reply).not.toMatch(/i can log what detail|need a little more detail/i);
+  });
+
+  it('keeps dinner idea requests as recommendations even when phrased like a rejection', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const responses = await runConversation([
+      'give me a yummy dinner diea',
+      'no a yummy dinner ideas',
+      'no i want a good idea for dinner',
+    ], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Cottage cheese', quantity: 0.5, unit: 'cup', calories: 90, protein: 13, carbs: 4, fat: 2, source_type: 'AI_ESTIMATE' })],
+        currentMealText: '0.5 cups Cottage cheese',
+      }),
+      resolveItemNutrition,
+      context: buildContext({ remainingCalories: 720, remainingProtein: 63 }),
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    for (const response of responses) {
+      expect(response.intent).toBe('recommendation_request');
+      expect(response.meal.items).toHaveLength(1);
+      expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+      expect(response.assistant_reply).toMatch(/protein|dinner|chicken|turkey|salmon|steak/i);
+      expect(response.assistant_reply).not.toMatch(/frozen dinner|usda match|calories total|i can log/i);
+    }
+  });
+
+  it('uses model intent flags to prevent recommendation text from hitting nutrition lookup', async () => {
+    const classify = vi.fn().mockResolvedValue({
+      intent: 'recommendation_request',
+      assistant_reply: 'You should go protein-forward for dinner.',
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      target_item: null,
+      should_mutate_pending_meal: false,
+      assistant_reply_goal: 'Give a dinner recommendation using remaining calories and protein.',
+      items: [{ name: 'Frozen dinner, NFS', brand: null, quantity: 100, unit: 'g', modifiers: [], action: 'add' }],
+      corrections: [],
+      should_lookup_nutrition: true,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'medium',
+    } satisfies MealAssistantModelOutput);
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+
+    const [response] = await runConversation(['recommend a good dinner'], {
+      classify,
+      resolveItemNutrition,
+      context: buildContext({ remainingCalories: 720, remainingProtein: 63 }),
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Cottage cheese', quantity: 0.5, unit: 'cup', calories: 90, protein: 13, carbs: 4, fat: 2, source_type: 'AI_ESTIMATE' })],
+        currentMealText: '0.5 cups Cottage cheese',
+      }),
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('recommendation_request');
+    expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
+    expect(response.assistant_reply).not.toMatch(/frozen dinner|usda match/i);
+  });
+
   it('keeps huh and frustrated replies conversational after an active meal', async () => {
     const responses = await runConversation(['I had some cottage cheese', 'huh', 'wtf man']);
     const huh = responses[1];
