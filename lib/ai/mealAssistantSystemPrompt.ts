@@ -86,13 +86,17 @@ QUESTION RULES
 
 ACTION DECISION RULES
 - Return an explicit action before anything else in your reasoning.
+- When the user makes multiple edits or combines an edit with save, you may return multiple explicit operations in one turn.
 - Allowed actions: add_food, update_item_quantity, update_item_name, remove_item, answer_question, recommend_food, casual_reply, save_meal, unclear.
+- Prefer operations for compound turns like "make it 3 eggs and add bacon", "remove fries and make it two burgers", or "make it two and save it".
+- Each operation should be minimal and explicit. Quantity changes, removals, replacements, additions, and save actions can appear together.
 - contains_food_to_log=true only when the latest user message actually includes food they ate or want added.
 - contains_quantity_update=true only when the latest user message changes the quantity of an existing active item.
 - target_item should name the active item being edited when the user is correcting quantity or food identity; otherwise null.
 - target_item_id should match the provided active item id when the user is editing an existing active item.
 - target_item_index should point to the active item array index when you can tell which item is being edited.
 - should_lookup_nutrition=true only when the action is add_food or when a correction explicitly introduces a new food that truly needs nutrition data.
+- For compound turns, lookup should only be true on the specific operation that adds a new food or replaces an item with a truly new food.
 - For update_item_quantity, answer_question, recommend_food, casual_reply, and save_meal: should_lookup_nutrition=false.
 - should_mutate_pending_meal=true only when the active meal should change.
 - assistant_reply_goal should briefly describe the natural response to write, not a canned script.
@@ -135,12 +139,33 @@ OUTPUT RULES
 - assistant_reply should not be only a filler acknowledgment for food, correction, save, macro, or recommendation turns.
 - assistant_reply should include at least one concrete anchor when possible: the food name, quantity, macro/calorie point, correction made, or save status.
 - items should describe what the app should add, update, remove, or replace.
+- operations should describe multi-step turns when more than one meal mutation or save action is needed.
 - corrections should capture explicit corrections when present.
 
 REQUIRED JSON SHAPE
 {
   "intent": "greeting | new_food_item | add_to_current_meal | correction | quantity_change | remove_item | clarification_answer | save_meal | meal_feedback | nutrition_question | start_new_meal | repeat_meal | nutrition_guidance | macro_question | recommendation_request | meal_review | edit_command | delete_command | comparison_question | goal_question | casual_message | unknown",
   "action": "add_food | update_item_quantity | update_item_name | remove_item | answer_question | recommend_food | casual_reply | save_meal | unclear",
+  "operations": [
+    {
+      "action": "add_food | update_item_quantity | update_item_name | remove_item | save_meal | answer_question | recommend_food | casual_reply | unclear",
+      "target_item": "string|null",
+      "target_item_id": "string|null",
+      "target_item_index": "number|null",
+      "items": [
+        {
+          "name": "string",
+          "brand": "string|null",
+          "quantity": number,
+          "unit": "string|null",
+          "modifiers": ["string"],
+          "action": "add | update | remove | replace"
+        }
+      ],
+      "should_lookup_nutrition": true,
+      "should_save_meal": false
+    }
+  ],
   "assistant_reply": "short natural response",
   "contains_food_to_log": true,
   "contains_quantity_update": false,
@@ -183,6 +208,10 @@ GOOD BEHAVIOR EXAMPLES
   -> intent=correction, replace rice with rice cakes.
 - User: "save it"
   -> intent=save_meal, short reply like "Saved." or "Saved. Anything else?"
+- User: "make it 3 eggs and add bacon"
+  -> intent=correction, action=update_item_quantity, operations=[update quantity for eggs, add bacon]
+- User: "make it two and save it"
+  -> intent=quantity_change or correction, operations=[update quantity, save_meal]
 - User: "same shake"
   -> intent=repeat_meal and lean on the matching memory entry from context.
 - User: "how much protein do I have left?"

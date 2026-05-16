@@ -2211,4 +2211,106 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).toMatch(/protein|grilled chicken|burrito bowl|tonight|dinner/i);
     expect(response.assistant_reply).not.toMatch(/trying to cut weight|food item|estimated mixed meal/i);
   });
+
+  it('handles compound chipotle edit turns naturally', async () => {
+    const [response] = await runConversation(['make it regular chicken and remove cheese'], {
+      initialState: buildState({
+        currentMealItems: [createItem({
+          food_name: 'Chipotle bowl with white rice, double chicken, cheese, corn salsa, lettuce, and green salsa',
+          quantity: 1,
+          unit: 'bowl',
+          calories: 980,
+          protein: 68,
+          carbs: 74,
+          fat: 34,
+          fiber: 10,
+          sodium: 1760,
+          source_type: 'OFFICIAL_RESTAURANT',
+          source_name: 'Chipotle official nutrition',
+        })],
+        currentMealText: '1 Chipotle bowl with white rice, double chicken, cheese, corn salsa, lettuce, and green salsa',
+      }),
+    });
+
+    expect(response.intent).toBe('correction');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/chipotle bowl/i);
+    expect(response.meal.items[0]?.food_name).not.toMatch(/double chicken/i);
+    expect(response.meal.items[0]?.food_name).not.toMatch(/\bcheese\b/i);
+    expect(response.meal.totals.calories).toBeLessThan(980);
+    expect(response.assistant_reply).toMatch(/regular chicken|cheese/i);
+    expect(response.assistant_reply).not.toMatch(/usda|need a little more detail/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
+
+  it('handles compound remove and quantity edits for active restaurant meals', async () => {
+    const [response] = await runConversation(['remove fries and make it two burgers'], {
+      initialState: buildState({
+        currentMealItems: [
+          createItem({ food_name: 'McDouble', quantity: 1, unit: 'burger', calories: 390, protein: 22, carbs: 33, fat: 19, source_type: 'OFFICIAL_RESTAURANT', source_name: "McDonald's official nutrition" }),
+          createItem({ food_name: 'Medium Fry', quantity: 1, unit: 'order', calories: 340, protein: 4, carbs: 44, fat: 16, source_type: 'OFFICIAL_RESTAURANT', source_name: "McDonald's official nutrition" }),
+        ],
+        currentMealText: '1 McDouble, 1 Medium Fry',
+      }),
+    });
+
+    expect(response.intent).toBe('correction');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/mcdouble/i);
+    expect(response.meal.items[0]?.quantity).toBe(2);
+    expect(response.meal.totals.calories).toBe(780);
+    expect(response.assistant_reply).toMatch(/fries|burger|mcdouble/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
+
+  it('handles compound quantity and add edits for simple meals', async () => {
+    const [response] = await runConversation(['make it 3 eggs and add bacon'], {
+      initialState: buildState({
+        currentMealItems: [
+          createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 }),
+          createItem({ food_name: 'Toast', quantity: 1, unit: 'slice', calories: 100, protein: 4, carbs: 19, fat: 1 }),
+        ],
+        currentMealText: '2 Eggs, 1 slice Toast',
+      }),
+    });
+
+    expect(response.intent).toBe('correction');
+    expect(response.meal.items.some((item) => /eggs?/i.test(item.food_name) && item.quantity === 3)).toBe(true);
+    expect(response.meal.items.some((item) => /toast/i.test(item.food_name))).toBe(true);
+    expect(response.meal.items.some((item) => /bacon/i.test(item.food_name))).toBe(true);
+    expect(response.meal.totals.calories).toBeGreaterThan(240);
+    expect(response.assistant_reply).toMatch(/3|bacon|eggs?/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
+
+  it('handles compound quantity and save turns in one reply', async () => {
+    const saveMeal = vi.fn().mockResolvedValue(undefined);
+    const [response] = await runConversation(['make it two and save it'], {
+      saveMeal,
+      initialState: buildState({
+        currentMealItems: [createItem({
+          food_name: 'Fairlife Core Power Elite 42g Protein Shake',
+          quantity: 1,
+          unit: 'bottle',
+          calories: 230,
+          protein: 42,
+          carbs: 8,
+          fat: 3.5,
+          source_type: 'GENERIC_REFERENCE',
+          source_name: 'Fairlife nutrition reference',
+        })],
+        currentMealText: '1 bottle Fairlife Core Power Elite 42g Protein Shake',
+        mealType: 'snack',
+      }),
+    });
+
+    expect(saveMeal).toHaveBeenCalledTimes(1);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/fairlife/i);
+    expect(response.meal.items[0]?.quantity).toBe(2);
+    expect(response.meal.totals.calories).toBe(460);
+    expect(response.next_state.saved).toBe(true);
+    expect(response.assistant_reply).toMatch(/saved|logged|all set/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
 });

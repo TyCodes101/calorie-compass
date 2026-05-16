@@ -56,6 +56,16 @@ export const mealAssistantCorrectionSchema = z.object({
   change: z.string().min(1),
 });
 
+export const mealAssistantOperationSchema = z.object({
+  action: mealAssistantActionSchema,
+  target_item: z.string().nullable().optional(),
+  target_item_id: z.string().nullable().optional(),
+  target_item_index: z.number().int().nonnegative().nullable().optional(),
+  items: z.array(mealAssistantItemSchema).default([]),
+  should_lookup_nutrition: z.boolean().optional(),
+  should_save_meal: z.boolean().optional(),
+});
+
 export const mealAssistantTranscriptMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
   text: z.string().min(1),
@@ -64,6 +74,7 @@ export const mealAssistantTranscriptMessageSchema = z.object({
 export const mealAssistantModelOutputSchema = z.object({
   intent: mealAssistantIntentSchema,
   action: mealAssistantActionSchema.optional(),
+  operations: z.array(mealAssistantOperationSchema).optional(),
   assistant_reply: z.string().min(1),
   contains_food_to_log: z.boolean().optional(),
   contains_quantity_update: z.boolean().optional(),
@@ -166,6 +177,7 @@ export type MealAssistantAction = z.infer<typeof mealAssistantActionSchema>;
 export type MealAssistantItemAction = z.infer<typeof mealAssistantItemActionSchema>;
 export type MealAssistantItem = z.infer<typeof mealAssistantItemSchema>;
 export type MealAssistantCorrection = z.infer<typeof mealAssistantCorrectionSchema>;
+export type MealAssistantOperation = z.infer<typeof mealAssistantOperationSchema>;
 export type MealAssistantTranscriptMessage = z.infer<typeof mealAssistantTranscriptMessageSchema>;
 export type MealAssistantModelOutput = z.infer<typeof mealAssistantModelOutputSchema>;
 export type MealAssistantState = z.infer<typeof mealAssistantStateSchema>;

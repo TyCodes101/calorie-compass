@@ -9,6 +9,7 @@ import {
   type MealAssistantItem,
   type MealAssistantMemoryMeal,
   type MealAssistantModelOutput,
+  type MealAssistantOperation,
   type MealAssistantResponse,
   type MealAssistantState,
   type MealAssistantTranscriptMessage,
@@ -125,6 +126,25 @@ type MealAssistantRunInput = {
 type NutritionResolver = (args: { item: MealAssistantItem; mealType: MealAssistantState['mealType'] }) => Promise<ParsedMealResponse | null>;
 type ModelClassifier = (args: MealAssistantRunInput) => Promise<MealAssistantModelOutput>;
 type SaveExecutor = (args: { state: MealAssistantState; items: ParsedFoodItem[] }) => Promise<void>;
+type NormalizedMealAssistantOperation = {
+  action: MealAssistantAction;
+  target_item: string | null;
+  target_item_id: string | null;
+  target_item_index: number | null;
+  items: MealAssistantItem[];
+  should_lookup_nutrition: boolean;
+  should_save_meal: boolean;
+};
+
+type OperationApplicationResult = {
+  nextItems: ParsedFoodItem[];
+  removedTargets: string[];
+  summaryParts: string[];
+  resolvedItems: ParsedFoodItem[];
+  shouldSaveMeal: boolean;
+  mutated: boolean;
+};
+
 type AssistantReplyGenerator = (args: {
   input: MealAssistantRunInput;
   decision: MealAssistantModelOutput;
@@ -522,6 +542,432 @@ function resolveDecisionTargetIndex(decision: MealAssistantModelOutput, state: M
   return message ? findContextualItemIndex(message, state.currentMealItems) : state.currentMealItems.length - 1;
 }
 
+function isMutatingOperationAction(action: MealAssistantAction) {
+  return action === 'add_food' || action === 'update_item_quantity' || action === 'update_item_name' || action === 'remove_item';
+}
+
+function buildItemTargetHints(item: ParsedFoodItem) {
+  const hints = new Set<string>();
+  const normalizedName = normalizeText(item.food_name);
+  const normalizedUnit = normalizeQuantityUnit(item.unit) ?? '';
+
+  normalizedName.split(' ').filter(Boolean).forEach((token) => {
+    if (token.length >= 3) {
+      hints.add(token);
+    }
+  });
+
+  if (normalizedUnit) {
+    hints.add(normalizedUnit);
+    if (!normalizedUnit.endsWith('s')) {
+      hints.add(`${normalizedUnit}s`);
+    }
+  }
+
+  if (/mcdouble|burger/i.test(item.food_name)) {
+    hints.add('burger');
+    hints.add('burgers');
+  }
+
+  if (/fr(?:y|ies)/i.test(item.food_name)) {
+    hints.add('fry');
+    hints.add('fries');
+  }
+
+  if (/egg/i.test(item.food_name)) {
+    hints.add('egg');
+    hints.add('eggs');
+  }
+
+  if (/shake|fairlife/i.test(item.food_name)) {
+    hints.add('shake');
+    hints.add('shakes');
+    hints.add('bottle');
+    hints.add('bottles');
+  }
+
+  if (/chipotle|bowl/i.test(item.food_name)) {
+    hints.add('chipotle');
+    hints.add('bowl');
+    hints.add('bowls');
+  }
+
+  return [...hints];
+}
+
+function findOperationTargetIndexByHint(text: string, items: ParsedFoodItem[]) {
+  const normalizedText = normalizeText(text);
+  if (!normalizedText) {
+    return -1;
+  }
+
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (!item) {
+      continue;
+    }
+
+    const normalizedName = normalizeText(item.food_name);
+    if (normalizedText.includes(normalizedName)) {
+      return index;
+    }
+
+    const hints = buildItemTargetHints(item);
+    if (hints.some((hint) => normalizedText.includes(hint))) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function resolveOperationTargetIndex(operation: NormalizedMealAssistantOperation, items: ParsedFoodItem[], message?: string) {
+  if (!items.length) {
+    return -1;
+  }
+
+  if (typeof operation.target_item_index === 'number' && items[operation.target_item_index]) {
+    return operation.target_item_index;
+  }
+
+  if (operation.target_item_id) {
+    const byId = items.findIndex((item, index) => buildActiveItemId(item, index) === operation.target_item_id);
+    if (byId >= 0) {
+      return byId;
+    }
+  }
+
+  if (operation.target_item) {
+    const byTarget = findOperationTargetIndexByHint(operation.target_item, items);
+    if (byTarget >= 0) {
+      return byTarget;
+    }
+  }
+
+  const firstItemName = operation.items[0] ? buildHumanFoodNameFromAssistantItem(operation.items[0]) : '';
+  if (firstItemName) {
+    const byItem = findOperationTargetIndexByHint(firstItemName, items);
+    if (byItem >= 0) {
+      return byItem;
+    }
+  }
+
+  if (message) {
+    const byMessage = findOperationTargetIndexByHint(message, items);
+    if (byMessage >= 0) {
+      return byMessage;
+    }
+  }
+
+  return items.length - 1;
+}
+
+function normalizeAssistantOperation(args: {
+  operation?: MealAssistantOperation | null;
+  decision: MealAssistantModelOutput;
+}): NormalizedMealAssistantOperation {
+  const { operation, decision } = args;
+  const fallbackAction = operation?.action ?? decision.action ?? inferActionFromIntent(decision.intent);
+  const baseItems = operation?.items ?? decision.items ?? [];
+
+  return {
+    action: fallbackAction,
+    target_item: operation?.target_item ?? decision.target_item ?? null,
+    target_item_id: operation?.target_item_id ?? decision.target_item_id ?? null,
+    target_item_index: operation?.target_item_index ?? decision.target_item_index ?? null,
+    items: baseItems,
+    should_lookup_nutrition: operation?.should_lookup_nutrition
+      ?? (((fallbackAction === 'add_food' || fallbackAction === 'update_item_name') && baseItems.length > 0)),
+    should_save_meal: operation?.should_save_meal ?? (fallbackAction === 'save_meal' || decision.should_save_meal),
+  };
+}
+
+function normalizeDecisionOperations(decision: MealAssistantModelOutput, input: MealAssistantRunInput) {
+  const rawOperations = decision.operations?.length
+    ? decision.operations
+    : [null];
+
+  const operations = rawOperations
+    .map((operation) => normalizeAssistantOperation({ operation, decision }))
+    .filter((operation) => operation.action !== 'unclear' || operation.items.length || operation.should_save_meal);
+
+  return operations;
+}
+
+function splitCompoundEditClauses(message: string) {
+  const cleaned = stripEmotionalPreface(message)
+    .replace(/,/g, ' and ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned.split(/\s+and\s+/i).map((part) => part.trim()).filter(Boolean);
+}
+
+function extractQuantityTargetText(clause: string) {
+  const normalized = stripConversationalLeadIn(stripEmotionalPreface(clause).toLowerCase()).trim();
+  const match = normalized.match(/^(?:actually\s+)?(?:make|change|update)\s+(?:it|that|this)(?:\s+to)?\s+(?:\d+(?:\.\d+)?|\.\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(.+)$/i);
+  return cleanMealMutationFoodText(match?.[1] ?? '');
+}
+
+function extractHeuristicMutationOperations(message: string, state: MealAssistantState): NormalizedMealAssistantOperation[] {
+  if (!state.currentMealItems.length || state.saved) {
+    return [];
+  }
+
+  const clauses = splitCompoundEditClauses(message);
+  if (clauses.length < 2) {
+    return [];
+  }
+
+  const operations: NormalizedMealAssistantOperation[] = [];
+
+  for (const clause of clauses) {
+    const normalizedClause = stripConversationalLeadIn(stripEmotionalPreface(clause).toLowerCase()).trim();
+
+    if (saveRegex.test(normalizedClause)) {
+      operations.push({
+        action: 'save_meal',
+        target_item: null,
+        target_item_id: null,
+        target_item_index: null,
+        items: [],
+        should_lookup_nutrition: false,
+        should_save_meal: true,
+      });
+      continue;
+    }
+
+    const removeMatch = normalizedClause.match(removeRegex);
+    const removeTarget = cleanMealMutationFoodText(removeMatch?.[1] ?? removeMatch?.[2] ?? '');
+    if (removeTarget) {
+      operations.push({
+        action: 'remove_item',
+        target_item: removeTarget,
+        target_item_id: null,
+        target_item_index: null,
+        items: [{ name: removeTarget, brand: null, quantity: 1, unit: null, modifiers: [], action: 'remove' }],
+        should_lookup_nutrition: false,
+        should_save_meal: false,
+      });
+      continue;
+    }
+
+    const addFoodText = extractAddCommandFoodText(clause);
+    if (addFoodText) {
+      operations.push({
+        action: 'add_food',
+        target_item: null,
+        target_item_id: null,
+        target_item_index: null,
+        items: [{ name: addFoodText, brand: null, quantity: 1, unit: null, modifiers: [], action: 'add' }],
+        should_lookup_nutrition: true,
+        should_save_meal: false,
+      });
+      continue;
+    }
+
+    const correctedServing = parseCorrectedServing(clause);
+    if (correctedServing) {
+      const targetHint = extractQuantityTargetText(clause);
+      const targetIndex = targetHint ? findOperationTargetIndexByHint(targetHint, state.currentMealItems) : state.currentMealItems.length - 1;
+      const targetItem = state.currentMealItems[targetIndex] ?? state.currentMealItems.at(-1) ?? null;
+      if (targetItem) {
+        operations.push({
+          action: 'update_item_quantity',
+          target_item: targetItem.food_name,
+          target_item_id: buildActiveItemId(targetItem, targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1),
+          target_item_index: targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1,
+          items: [{
+            name: targetItem.food_name,
+            brand: null,
+            quantity: correctedServing.quantity,
+            unit: correctedServing.unit ?? targetItem.unit ?? null,
+            modifiers: [],
+            action: 'update',
+          }],
+          should_lookup_nutrition: false,
+          should_save_meal: false,
+        });
+        continue;
+      }
+    }
+
+    if (/\bregular chicken\b/.test(normalizedClause) && state.currentMealItems.some((item) => /chipotle|bowl/i.test(item.food_name))) {
+      const targetIndex = state.currentMealItems.findIndex((item) => /chipotle|bowl/i.test(item.food_name));
+      const targetItem = state.currentMealItems[targetIndex] ?? state.currentMealItems.at(-1) ?? null;
+      if (targetItem) {
+        const replacementName = targetItem.food_name.replace(/\bdouble chicken\b/gi, 'chicken').replace(/\bextra chicken\b/gi, 'chicken');
+        operations.push({
+          action: 'update_item_name',
+          target_item: targetItem.food_name,
+          target_item_id: buildActiveItemId(targetItem, targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1),
+          target_item_index: targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1,
+          items: [{ name: replacementName, brand: 'Chipotle', quantity: targetItem.quantity, unit: targetItem.unit ?? null, modifiers: [], action: 'replace' }],
+          should_lookup_nutrition: false,
+          should_save_meal: false,
+        });
+        continue;
+      }
+    }
+  }
+
+  return operations.length > 1 ? operations : [];
+}
+
+function joinSummaryParts(parts: string[]) {
+  if (!parts.length) {
+    return '';
+  }
+
+  if (parts.length === 1) {
+    return parts[0] ?? '';
+  }
+
+  if (parts.length === 2) {
+    return `${parts[0]} and ${parts[1]}`;
+  }
+
+  return `${parts.slice(0, -1).join(', ')}, and ${parts.at(-1)}`;
+}
+
+function buildOperationLookupMessage(operation: NormalizedMealAssistantOperation, fallbackMessage: string) {
+  const itemText = operation.items
+    .map((item) => buildItemLookupText(item))
+    .filter(Boolean)
+    .join(', ')
+    .trim();
+
+  if (itemText) {
+    return itemText;
+  }
+
+  return operation.target_item?.trim() || fallbackMessage;
+}
+
+function buildCompoundOperationReply(args: {
+  summaryParts: string[];
+  nextItems: ParsedFoodItem[];
+  saved: boolean;
+}) {
+  const summary = joinSummaryParts(args.summaryParts);
+  const calories = Math.round(sumTotals(args.nextItems).calories);
+  const base = summary ? `Done, I ${summary}.` : 'Done.';
+  const caloriesText = args.nextItems.length ? ` About ${calories} calories total.` : '';
+  const savedText = args.saved ? ' Saved it too.' : '';
+  return `${base}${caloriesText}${savedText}`.trim();
+}
+
+async function applyDecisionOperations(args: {
+  operations: NormalizedMealAssistantOperation[];
+  state: MealAssistantState;
+  message: string;
+  resolveItemNutrition: NutritionResolver;
+}): Promise<OperationApplicationResult> {
+  const nextItems = cloneParsedItems(args.state.currentMealItems);
+  const removedTargets: string[] = [];
+  const summaryParts: string[] = [];
+  let resolvedItems: ParsedFoodItem[] = [];
+  let shouldSaveMeal = false;
+  let mutated = false;
+
+  for (const operation of args.operations) {
+    if (operation.action === 'save_meal' || operation.should_save_meal) {
+      shouldSaveMeal = true;
+      continue;
+    }
+
+    if (operation.action === 'remove_item') {
+      const targetIndex = resolveOperationTargetIndex(operation, nextItems, args.message);
+      const targetText = operation.target_item ?? buildHumanFoodNameFromAssistantItem(operation.items[0] ?? { name: '', brand: null, quantity: 1, unit: null, modifiers: [], action: 'remove' });
+
+      if (targetIndex >= 0) {
+        const targetItem = nextItems[targetIndex];
+        if (targetItem && /\bcheese\b/i.test(targetText) && /chipotle|bowl/i.test(targetItem.food_name)) {
+          nextItems[targetIndex] = removeChipotleCheese(targetItem);
+          summaryParts.push('removed cheese');
+          mutated = true;
+          continue;
+        }
+
+        if (targetItem) {
+          removedTargets.push(targetItem.food_name);
+          summaryParts.push(`removed ${targetItem.food_name}`);
+          nextItems.splice(targetIndex, 1);
+          mutated = true;
+        }
+      }
+      continue;
+    }
+
+    if (operation.action === 'update_item_quantity') {
+      const targetIndex = resolveOperationTargetIndex(operation, nextItems, args.message);
+      const targetItem = targetIndex >= 0 ? nextItems[targetIndex] : null;
+      const nextQuantity = operation.items[0]?.quantity ?? targetItem?.quantity ?? null;
+
+      if (targetItem && nextQuantity && nextQuantity > 0) {
+        const updatedItem = scaleParsedItems([targetItem], nextQuantity)[0] ?? targetItem;
+        nextItems[targetIndex] = {
+          ...updatedItem,
+          unit: operation.items[0]?.unit ?? updatedItem.unit,
+        };
+        summaryParts.push(`changed ${formatParsedItemLabel(nextItems[targetIndex])}`);
+        resolvedItems = [nextItems[targetIndex]];
+        mutated = true;
+      }
+      continue;
+    }
+
+    if (operation.action === 'update_item_name') {
+      const targetIndex = resolveOperationTargetIndex(operation, nextItems, args.message);
+      const targetItem = targetIndex >= 0 ? nextItems[targetIndex] : null;
+      if (!targetItem) {
+        continue;
+      }
+
+      let replacementItems: ParsedFoodItem[] = [];
+      const replacementText = buildHumanFoodNameFromAssistantItem(operation.items[0] ?? { name: '', brand: null, quantity: 1, unit: null, modifiers: [], action: 'replace' });
+      const operationLookupMessage = buildOperationLookupMessage(operation, args.message);
+
+      if (/chipotle|bowl/i.test(targetItem.food_name) && /\bregular chicken\b/i.test(`${replacementText} ${operationLookupMessage} ${args.message}`)) {
+        replacementItems = [regularizeChipotleChicken(targetItem)];
+      } else if (operation.should_lookup_nutrition && operation.items.length) {
+        replacementItems = await resolveAssistantItems(operation.items, args.state.mealType, args.resolveItemNutrition, operationLookupMessage);
+      }
+
+      if (replacementItems.length) {
+        nextItems.splice(targetIndex, 1, ...replacementItems);
+        resolvedItems = replacementItems;
+        summaryParts.push(`switched ${targetItem.food_name} to ${replacementItems.map((item) => item.food_name).join(' and ')}`);
+        mutated = true;
+      }
+      continue;
+    }
+
+    if (operation.action === 'add_food' && operation.items.length) {
+      const operationLookupMessage = buildOperationLookupMessage(operation, args.message);
+      const addedItems = operation.should_lookup_nutrition
+        ? await resolveAssistantItems(operation.items, args.state.mealType, args.resolveItemNutrition, operationLookupMessage)
+        : [];
+
+      if (addedItems.length) {
+        nextItems.push(...addedItems);
+        resolvedItems = addedItems;
+        summaryParts.push(`added ${addedItems.map((item) => item.food_name).join(' and ')}`);
+        mutated = true;
+      }
+    }
+  }
+
+  return {
+    nextItems,
+    removedTargets,
+    summaryParts,
+    resolvedItems,
+    shouldSaveMeal,
+    mutated,
+  };
+}
+
 function normalizeAssistantDecision(decision: MealAssistantModelOutput, input: MealAssistantRunInput): MealAssistantModelOutput {
   const state = input.state;
   const hasActiveMeal = state.currentMealItems.length > 0 && !state.saved;
@@ -535,6 +981,18 @@ function normalizeAssistantDecision(decision: MealAssistantModelOutput, input: M
     target_item_id: decision.target_item_id ?? null,
     target_item_index: decision.target_item_index ?? null,
   };
+
+  const normalizedOperations = normalizeDecisionOperations(nextDecision, input);
+  if ((decision.operations?.length ?? 0) > 0 || normalizedOperations.length > 1) {
+    nextDecision.operations = normalizedOperations;
+    if (normalizedOperations.length > 1 && normalizedOperations.some((operation) => isMutatingOperationAction(operation.action) || operation.should_save_meal)) {
+      nextDecision.intent = 'correction';
+      nextDecision.action = normalizedOperations[0]?.action ?? nextDecision.action;
+      nextDecision.should_save_meal = normalizedOperations.some((operation) => operation.should_save_meal);
+      nextDecision.should_lookup_nutrition = normalizedOperations.some((operation) => operation.should_lookup_nutrition);
+      nextDecision.should_mutate_pending_meal = normalizedOperations.some((operation) => isMutatingOperationAction(operation.action));
+    }
+  }
 
   if (nextDecision.action === 'unclear') {
     nextDecision.action = fallbackAction;
@@ -3549,7 +4007,9 @@ function extractAddCommandFoodText(message: string) {
   const match =
     normalized.match(/^(?:also\s+)?add\s+(.+)$/i)
     ?? normalized.match(/^(?:and|plus)\s+(.+)$/i);
-  const foodText = match ? cleanMealMutationFoodText(match[1] ?? '') : null;
+  const foodText = match
+    ? cleanMealMutationFoodText(match[1] ?? '').replace(/\bguac\b/gi, 'guacamole')
+    : null;
 
   if (!foodText || !hasStrongFoodSignal(foodText) || isNonFoodDialogueMessage(foodText)) {
     return null;
@@ -3615,6 +4075,7 @@ async function resolveFoodTextForMealMutation(args: {
 async function buildAdaptiveMealMutationReply(
   input: MealAssistantRunInput,
   resolveItemNutrition: NutritionResolver,
+  saveMeal: SaveExecutor = defaultSaveMeal,
 ): Promise<MealAssistantResponse | null> {
   if (!input.state.currentMealItems.length || input.state.saved) {
     return null;
@@ -3627,6 +4088,43 @@ async function buildAdaptiveMealMutationReply(
 
   if (!targetItem) {
     return null;
+  }
+
+  const heuristicOperations = extractHeuristicMutationOperations(input.message, input.state);
+  if (heuristicOperations.length) {
+    const applied = await applyDecisionOperations({
+      operations: heuristicOperations,
+      state: input.state,
+      message: input.message,
+      resolveItemNutrition,
+    });
+
+    const nextState: MealAssistantState = {
+      ...input.state,
+      currentMealItems: applied.nextItems,
+      userCorrections: [...input.state.userCorrections, input.message],
+      currentMealText: buildMealTextFromItems(applied.nextItems),
+      confidenceScore: getConfidenceScore(applied.nextItems),
+      saved: false,
+      pendingClarification: null,
+      lastAssistantQuestion: null,
+    };
+
+    if (applied.shouldSaveMeal && applied.nextItems.length) {
+      await saveMeal({ state: nextState, items: applied.nextItems });
+      nextState.saved = true;
+    }
+
+    return buildDirectResponse({
+      intent: 'correction',
+      assistantReply: buildCompoundOperationReply({
+        summaryParts: applied.summaryParts,
+        nextItems: applied.nextItems,
+        saved: nextState.saved,
+      }),
+      nextState,
+      message: input.message,
+    });
   }
 
   const removeMatch = normalized.match(removeRegex);
@@ -4050,7 +4548,7 @@ async function buildDeterministicDialogueResponse(
     });
   }
 
-  const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(input, resolveItemNutrition);
+  const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(input, resolveItemNutrition, saveMeal);
   if (adaptiveMealMutationReply) {
     return adaptiveMealMutationReply;
   }
@@ -5125,6 +5623,10 @@ function buildReplyFromItems(args: {
 
 function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealAssistantRunInput): MealAssistantModelOutput {
   const safeItems = decision.items.filter((item) => !isUnsafeLookupItem(item, input.message));
+  const safeOperations = decision.operations?.map((operation) => ({
+    ...operation,
+    items: operation.items.filter((item) => !isUnsafeLookupItem(item, input.message)),
+  })) ?? [];
   const droppedItems = safeItems.length !== decision.items.length;
   const isExplicitMealMutation =
     decision.should_mutate_pending_meal === true ||
@@ -5155,6 +5657,7 @@ function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealA
       ...decision,
       intent: isRecommendationRequestMessage(input.message) ? 'recommendation_request' : decision.intent,
       assistant_reply: recommendationReply ?? decision.assistant_reply,
+      operations: [],
       items: [],
       should_lookup_nutrition: false,
       should_ask_clarification: false,
@@ -5184,6 +5687,7 @@ function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealA
 
   return {
     ...decision,
+    operations: safeOperations,
     items: safeItems,
     should_lookup_nutrition: safeItems.length > 0 && shouldLookupNutritionForDecision({ ...decision, items: safeItems }, input.message),
     should_ask_clarification: safeItems.length ? decision.should_ask_clarification : false,
@@ -5262,7 +5766,7 @@ export async function runMealAssistant(
       }), workingInput, context);
     }
 
-    const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition);
+    const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition, saveMeal);
     if (adaptiveMealMutationReply) {
       return finalizeResponse(adaptiveMealMutationReply, workingInput, context);
     }
@@ -5437,6 +5941,19 @@ export async function runMealAssistant(
   });
   decision = normalizeAssistantDecision(decision, workingInput);
   decision = guardAssistantDecision(decision, workingInput);
+  const normalizedOperations = normalizeDecisionOperations(decision, workingInput);
+  const hasCompoundOperations = Boolean(decision.operations?.length) || normalizedOperations.length > 1;
+  if (hasCompoundOperations && normalizedOperations.some((operation) => isMutatingOperationAction(operation.action) || operation.should_save_meal)) {
+    decision = {
+      ...decision,
+      intent: 'correction',
+      action: normalizedOperations[0]?.action ?? decision.action,
+      operations: normalizedOperations,
+      should_save_meal: normalizedOperations.some((operation) => operation.should_save_meal),
+      should_lookup_nutrition: normalizedOperations.some((operation) => operation.should_lookup_nutrition),
+      should_mutate_pending_meal: normalizedOperations.some((operation) => isMutatingOperationAction(operation.action)),
+    };
+  }
 
   const classifiedKnownItems = detectKnownFoodEstimates(workingInput.message);
   if (
@@ -5491,13 +6008,55 @@ export async function runMealAssistant(
       sourceReusableMealId: null,
       editingMealId: null,
     };
-  } else if (decision.intent === 'save_meal' || decision.should_save_meal) {
+  } else if ((decision.intent === 'save_meal' || decision.should_save_meal) && !hasCompoundOperations) {
     if (nextState.currentMealItems.length) {
       await saveMeal({ state: nextState, items: nextState.currentMealItems });
       nextState.saved = true;
       nextState.pendingClarification = null;
       nextState.lastAssistantQuestion = null;
       saved = true;
+    }
+  } else if (hasCompoundOperations) {
+    const applied = await applyDecisionOperations({
+      operations: normalizedOperations,
+      state: nextState,
+      message: workingInput.message,
+      resolveItemNutrition,
+    });
+
+    if (applied.mutated) {
+      nextState.currentMealItems = applied.nextItems;
+      nextState.currentMealText = buildMealTextFromItems(nextState.currentMealItems);
+      nextState.pendingClarification = null;
+      nextState.lastAssistantQuestion = null;
+      nextState.saved = false;
+      nextState.confidenceScore = getConfidenceScore(nextState.currentMealItems);
+      resolvedItems = applied.resolvedItems.length ? applied.resolvedItems : nextState.currentMealItems;
+      removedTargets = applied.removedTargets;
+      if (decision.intent === 'new_food_item') {
+        decision.intent = 'correction';
+      }
+      if (decision.intent === 'quantity_change' && normalizedOperations.length > 1) {
+        decision.intent = 'correction';
+      }
+      (decision as MealAssistantModelOutput & { compound_reply?: string }).compound_reply = buildCompoundOperationReply({
+        summaryParts: applied.summaryParts,
+        nextItems: nextState.currentMealItems,
+        saved: false,
+      });
+    }
+
+    if (applied.shouldSaveMeal && nextState.currentMealItems.length) {
+      await saveMeal({ state: nextState, items: nextState.currentMealItems });
+      nextState.saved = true;
+      nextState.pendingClarification = null;
+      nextState.lastAssistantQuestion = null;
+      saved = true;
+      (decision as MealAssistantModelOutput & { compound_reply?: string }).compound_reply = buildCompoundOperationReply({
+        summaryParts: applied.summaryParts,
+        nextItems: nextState.currentMealItems,
+        saved: true,
+      });
     }
   } else if (decision.should_ask_clarification && decision.clarification_question && decision.clarification_question !== state.lastAssistantQuestion) {
     clarificationQuestion = decision.clarification_question;
@@ -5574,9 +6133,10 @@ export async function runMealAssistant(
 
   const mealItems = nextState.currentMealItems;
   const totals = sumTotals(mealItems);
+  const compoundReply = (decision as MealAssistantModelOutput & { compound_reply?: string }).compound_reply ?? null;
   const primaryReply = validateAssistantReply({
     message: workingInput.message,
-    assistantReply: buildReplyFromItems({
+    assistantReply: compoundReply || buildReplyFromItems({
       intent: decision.intent,
       decisionReply: suppressedClarification
         ? 'Got it, I’m checking that again.'

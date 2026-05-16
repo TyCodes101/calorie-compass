@@ -909,4 +909,118 @@ describe('runMealAssistant', () => {
     expect(response.meal.items).toHaveLength(0);
   });
 
+  it('applies compound operations atomically from structured assistant output', async () => {
+    const resolveItemNutrition = vi.fn();
+
+    const response = await runMealAssistant(
+      {
+        message: 'remove fries and make it two burgers',
+        state: buildState({
+          currentMealItems: [
+            buildItem({ food_name: 'McDouble', quantity: 1, unit: 'burger', calories: 390, protein: 22, carbs: 33, fat: 19 }),
+            buildItem({ food_name: 'Medium Fry', quantity: 1, unit: 'order', calories: 340, protein: 4, carbs: 44, fat: 16 }),
+          ],
+          currentMealText: '1 McDouble, 1 Medium Fry',
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'correction',
+            assistant_reply: 'Done.',
+            action: 'update_item_quantity',
+            operations: [
+              {
+                action: 'remove_item',
+                target_item: 'Medium Fry',
+                target_item_index: 1,
+                items: [{ name: 'fries', brand: null, quantity: 1, unit: 'order', modifiers: [], action: 'remove' }],
+              },
+              {
+                action: 'update_item_quantity',
+                target_item: 'McDouble',
+                target_item_id: '0:mcdouble',
+                target_item_index: 0,
+                items: [{ name: 'McDouble', brand: "McDonald's", quantity: 2, unit: 'burger', modifiers: [], action: 'update' }],
+              },
+            ],
+            should_lookup_nutrition: false,
+          }),
+        ),
+        resolveItemNutrition,
+      },
+    );
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe('McDouble');
+    expect(response.meal.items[0]?.quantity).toBe(2);
+    expect(response.meal.totals.calories).toBe(780);
+    expect(response.assistant_reply).toMatch(/removed|fries/i);
+    expect(response.assistant_reply).toMatch(/2|two/i);
+    expect(response.next_state.saved).toBe(false);
+  });
+
+  it('supports compound quantity-plus-save operations in one turn', async () => {
+    const saveMeal = vi.fn().mockResolvedValue(undefined);
+    const resolveItemNutrition = vi.fn();
+
+    const response = await runMealAssistant(
+      {
+        message: 'make it two and save it',
+        state: buildState({
+          currentMealItems: [
+            buildItem({
+              food_name: 'Fairlife Core Power Elite 42g Protein Shake',
+              quantity: 1,
+              unit: 'bottle',
+              calories: 230,
+              protein: 42,
+              carbs: 8,
+              fat: 3.5,
+              source_type: 'GENERIC_REFERENCE',
+              source_name: 'Fairlife nutrition reference',
+            }),
+          ],
+          currentMealText: '1 bottle Fairlife Core Power Elite 42g Protein Shake',
+          mealType: 'snack',
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'quantity_change',
+            assistant_reply: 'Done.',
+            action: 'update_item_quantity',
+            operations: [
+              {
+                action: 'update_item_quantity',
+                target_item: 'Fairlife Core Power Elite 42g Protein Shake',
+                target_item_id: '0:fairlife core power elite 42g protein shake',
+                target_item_index: 0,
+                items: [{ name: 'Fairlife Core Power Elite 42g Protein Shake', brand: 'Fairlife', quantity: 2, unit: 'bottle', modifiers: [], action: 'update' }],
+              },
+              {
+                action: 'save_meal',
+                items: [],
+              },
+            ],
+            should_lookup_nutrition: false,
+            should_save_meal: false,
+          }),
+        ),
+        resolveItemNutrition,
+        saveMeal,
+      },
+    );
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(saveMeal).toHaveBeenCalledTimes(1);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.quantity).toBe(2);
+    expect(response.meal.totals.calories).toBe(460);
+    expect(response.next_state.saved).toBe(true);
+    expect(response.assistant_reply).toMatch(/saved|logged/i);
+  });
+
 });

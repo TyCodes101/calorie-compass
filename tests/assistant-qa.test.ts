@@ -365,6 +365,67 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectTotalCaloriesInRange(correctionTurn, 20, 60);
   });
 
+  it('handles compound chipotle edits without losing the active meal', async () => {
+    const conversation = await runQaScenario({
+      name: 'compound chipotle edit flow',
+      messages: ['Chipotle bowl with double chicken and cheese', 'make it regular chicken and remove cheese'],
+    });
+    const finalTurn = conversation.turns[1];
+
+    expectBaselineQuality(finalTurn);
+    expectCorrectionReply(finalTurn);
+    expectMealItemCount(finalTurn, 1);
+    expectMealContains(finalTurn, [/chipotle/i, /bowl/i]);
+    expectMealDoesNotContain(finalTurn, [/double chicken/i, /\bcheese\b/i]);
+    expectReplyMatches(finalTurn, /regular chicken|cheese/i, 'Compound Chipotle edits should mention the actual changes.');
+    expectReplyNotMatches(finalTurn, /need a little more detail|barcode|usda/i, 'Compound edits should stay concise and not fall into clarification or source-label noise.');
+  });
+
+  it('handles compound remove and quantity edits on restaurant meals', async () => {
+    const conversation = await runQaScenario({
+      name: 'compound burger edit flow',
+      messages: ['McDouble and medium fry', 'remove fries and make it two burgers'],
+    });
+    const finalTurn = conversation.turns[1];
+
+    expectBaselineQuality(finalTurn);
+    expectCorrectionReply(finalTurn);
+    expectMealItemCount(finalTurn, 1);
+    expectMealContains(finalTurn, [/mcdouble/i]);
+    expectMealDoesNotContain(finalTurn, [/fries/i]);
+    expectTotalCaloriesInRange(finalTurn, 740, 820);
+    expectReplyMatches(finalTurn, /fries|burger|mcdouble/i, 'Compound burger edits should summarize both the removal and quantity change.');
+  });
+
+  it('handles compound add and quantity edits on simple meals', async () => {
+    const conversation = await runQaScenario({
+      name: 'compound breakfast edit flow',
+      messages: ['2 eggs and toast', 'make it 3 eggs and add bacon'],
+    });
+    const finalTurn = conversation.turns[1];
+
+    expectBaselineQuality(finalTurn);
+    expectCorrectionReply(finalTurn);
+    expectMealContains(finalTurn, [/eggs?/i, /toast/i, /bacon/i]);
+    expectTotalCaloriesInRange(finalTurn, 280, 460);
+    expectReplyMatches(finalTurn, /3|bacon|eggs?/i, 'Compound breakfast edits should mention the updated eggs and added bacon.');
+  });
+
+  it('handles compound quantity and save turns naturally', async () => {
+    const conversation = await runQaScenario({
+      name: 'compound shake save flow',
+      messages: ['Fairlife 42g shake', 'make it two and save it'],
+    });
+    const finalTurn = conversation.turns[1];
+
+    expectBaselineQuality(finalTurn);
+    expectCorrectionReply(finalTurn);
+    expectMealItemCount(finalTurn, 1);
+    expectMealContains(finalTurn, [/fairlife/i]);
+    expectTotalCaloriesInRange(finalTurn, 430, 500);
+    expectReplyMatches(finalTurn, /saved|logged/i, 'Compound quantity and save turns should confirm both actions.');
+  });
+
   const conversationOnlyCases = [
     'hi',
     'nothing yet',
