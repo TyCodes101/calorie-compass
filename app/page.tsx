@@ -86,24 +86,43 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </section>
 
         <section className="grid min-w-0 gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-          <div className="app-card min-w-0 rounded-[32px] p-6 md:p-7">
+          <div className="app-card min-w-0 rounded-[32px] p-5 md:p-6">
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <p className="app-section-label">Today’s progress</p>
-                <h3 className="mt-3 text-[1.45rem] font-semibold tracking-[-0.03em] text-slate-950">Macros and trust</h3>
+                <h3 className="mt-2 text-[1.5rem] font-semibold tracking-[-0.04em] text-slate-950">Macros</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-500">A clean read on today’s macro targets.</p>
               </div>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-500">{dashboard.trustSummary.headline}</span>
             </div>
 
-            <div className="mt-5 space-y-3">
-              <MacroProgress label="Protein" current={dashboard.totals.protein} goal={dashboard.macroGoals.protein} percent={dashboard.macroProgress.protein} colorClass="bg-teal-500" />
-              <MacroProgress label="Carbs" current={dashboard.totals.carbs} goal={dashboard.macroGoals.carbs} percent={dashboard.macroProgress.carbs} colorClass="bg-sky-500" />
-              <MacroProgress label="Fat" current={dashboard.totals.fat} goal={dashboard.macroGoals.fat} percent={dashboard.macroProgress.fat} colorClass="bg-amber-400" />
-            </div>
-
-            <div className="mt-5 rounded-[20px] border border-slate-200/80 bg-slate-50/78 px-4 py-3 text-sm text-slate-600">
-              <p className="font-medium text-slate-900">{dashboard.trustSummary.detail}</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">{dashboard.disclaimer}</p>
+            <div className="mt-5 grid gap-3.5">
+              <MacroProgress
+                label="Protein"
+                current={dashboard.totals.protein}
+                goal={dashboard.macroGoals.protein}
+                percent={dashboard.macroProgress.protein}
+                colorClass="bg-teal-500"
+                trackClass="bg-teal-100/85"
+                pillClass="border-teal-100 bg-teal-50 text-teal-700"
+              />
+              <MacroProgress
+                label="Carbs"
+                current={dashboard.totals.carbs}
+                goal={dashboard.macroGoals.carbs}
+                percent={dashboard.macroProgress.carbs}
+                colorClass="bg-sky-500"
+                trackClass="bg-sky-100/85"
+                pillClass="border-sky-100 bg-sky-50 text-sky-700"
+              />
+              <MacroProgress
+                label="Fat"
+                current={dashboard.totals.fat}
+                goal={dashboard.macroGoals.fat}
+                percent={dashboard.macroProgress.fat}
+                colorClass="bg-amber-400"
+                trackClass="bg-amber-100/90"
+                pillClass="border-amber-100 bg-amber-50 text-amber-700"
+              />
             </div>
           </div>
 
