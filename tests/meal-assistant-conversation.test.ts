@@ -1597,7 +1597,7 @@ describe('meal assistant conversational coverage', () => {
     expect(response.meal.items[0]?.food_name).toBe('Eggs');
     expect(response.meal.items[0]?.quantity).toBe(5);
     expect(response.assistant_reply).toMatch(/5/i);
-    expect(response.assistant_reply).not.toMatch(/candies|chocolate|usda match/i);
+    expect(response.assistant_reply).not.toMatch(/candies|chocolate|usda|match|reference/i);
   });
 
   it('uses a plain numeric follow-up to update the active egg item after a recall', async () => {
@@ -1629,7 +1629,7 @@ describe('meal assistant conversational coverage', () => {
     expect(response.intent).toBe('quantity_change');
     expect(response.meal.items[0]?.food_name).toBe('McDouble');
     expect(response.meal.items[0]?.quantity).toBe(2);
-    expect(response.assistant_reply).not.toMatch(/chocolate|candy|usda/i);
+    expect(response.assistant_reply).not.toMatch(/chocolate|candy|usda|match|reference/i);
   });
 
   it('updates fairlife shake quantity for make-it-3 corrections without lookup drift', async () => {
@@ -1645,6 +1645,7 @@ describe('meal assistant conversational coverage', () => {
     expect(response.meal.items[0]?.food_name).toBe('Fairlife Chocolate Protein Shake');
     expect(response.meal.items[0]?.quantity).toBe(3);
     expect(response.assistant_reply).toMatch(/3/i);
+    expect(response.assistant_reply).not.toMatch(/usda|match|reference/i);
   });
 
   it('treats a bare number as the quantity answer after an assistant quantity question', async () => {
@@ -1705,6 +1706,21 @@ describe('meal assistant conversational coverage', () => {
     expect(response.meal.items[0]?.food_name).toBe('Eggs');
     expect(response.meal.items[0]?.quantity).toBe(5);
     expect(response.assistant_reply).not.toMatch(/dark chocolate|candy|usda/i);
+  });
+
+  it('updates canned beans quantity without adding source-label chatter', async () => {
+    const [response] = await runConversation(['actually two cans'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Beans', quantity: 1, unit: 'can', calories: 120, protein: 7, carbs: 20, fat: 0.5 })],
+        currentMealText: 'Beans',
+        lastAssistantReply: 'I added a can of beans.',
+      }),
+    });
+
+    expect(response.intent).toBe('quantity_change');
+    expect(response.meal.items[0]?.food_name).toBe('Beans');
+    expect(response.meal.items[0]?.quantity).toBe(2);
+    expect(response.assistant_reply).not.toMatch(/usda|match|reference/i);
   });
 
   it.each(['how’s your day', "how's your day", 'tell me a joke'])('politely redirects off-topic prompts without breaking meal state: %s', async (prompt) => {
@@ -1817,6 +1833,7 @@ describe('meal assistant conversational coverage', () => {
     expect(names).not.toContain('double chicken');
     expect(names).toContain('chips with guacamole');
     expect(response.assistant_reply).toMatch(/regular chicken|chips with guac/i);
+    expect(response.assistant_reply).not.toMatch(/usda|match|reference/i);
   });
 
   it('keeps Wendy sandwich and fries as separate represented foods', async () => {

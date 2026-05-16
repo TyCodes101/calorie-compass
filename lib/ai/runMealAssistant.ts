@@ -4100,7 +4100,9 @@ async function generateAssistantReplyWithModel(args: Parameters<AssistantReplyGe
               unit: item.unit,
               calories: Math.round(item.calories),
               protein: Math.round(item.protein),
-              source_label: args.decision.intent === 'quantity_change' ? null : getSourceLabel(item),
+              source_label: args.decision.intent === 'quantity_change' || args.decision.intent === 'correction'
+                ? null
+                : getSourceLabel(item),
             })),
             meal_totals: {
               calories: Math.round(totals.calories),
@@ -4263,9 +4265,9 @@ function buildReplyFromItems(args: {
       : choosePhrase(normalizedMessage || seed, ['Got you.', 'Okay, updating it.', 'That makes sense.']);
 
     return choosePhrase(seed, [
-      `${correctionLead} I've got it as ${mainItemLabel}, about ${totalCalories} calories total. ${sourceLabel}.`,
-      `${correctionLead} That's now ${mainItemLabel}, roughly ${totalCalories} calories. ${sourceLabel}.`,
-      `${correctionLead} I switched it to ${mainItemLabel}. About ${totalCalories} calories total. ${sourceLabel}.`,
+      `${correctionLead} I've got it as ${mainItemLabel}, about ${totalCalories} calories total.`,
+      `${correctionLead} That's now ${mainItemLabel}, roughly ${totalCalories} calories.`,
+      `${correctionLead} I switched it to ${mainItemLabel}. About ${totalCalories} calories total.`,
     ]);
   }
 
