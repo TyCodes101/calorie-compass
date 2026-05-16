@@ -4,6 +4,7 @@ import { getMockParsedMeal } from '@/lib/ai/mock';
 import { parseMealText } from '@/lib/ai/openai';
 import { mealAssistantSystemPrompt } from '@/lib/ai/mealAssistantSystemPrompt';
 import {
+  type MealAssistantAction,
   type MealAssistantContext,
   type MealAssistantItem,
   type MealAssistantMemoryMeal,
@@ -26,7 +27,7 @@ const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)|done)\b/i
 const explicitQuantityUpdateRegex = /^(?:actually\s+)?(?:make|change|update)\s+(?:it|that|this)(?:\s+to)?\s+(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const editRegex = /^(?:edit(?: it| that| this)?|change(?: it| that| this)?|tweak(?: it| that| this)?|adjust(?: it| that| this)?)\b/i;
 const reviewRegex = /\b(?:review (?:it|this|that)|show me (?:the )?(?:meal|review)|what do i have so far|show me what i have)\b/i;
-const quantityOnlyRegex = /^(?:actually|make that|update that to|it was|that was|no|i meant|instead)\s+(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
+const quantityOnlyRegex = /^(?:(?:oh|ah|uh|um|wait)\s+)?(?:actually|make that|update that to|it was|that was|no|i meant|instead)\s+(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const directQuantityRegex = /^(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const casualRegex = /^(?:hi|hello|hey|yo|sup|what(?:'|’)??s up|thanks|thank you|cool|okay|ok|nice|lol|how are you|how(?:'|’)??s your day)\b/i;
 const offTopicRegex = /\b(?:weather|movie|music|homework|code|browser|news|sports|joke)\b/i;
@@ -70,7 +71,7 @@ const genericResolvedFoodRegex = /^(?:estimated\s+)?(?:mixed\s+)?meal(?:\s+estim
 const pizzaNameRegex = /\bpizza\b/i;
 const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
-const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|instead|not )\b/i;
+const correctionCueRegex = /^(?:(?:oh|ah|uh|um|wait)\s+)?(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
 const strongFoodSignalRegex = /\b(?:blueberr(?:y|ies)|greek yogurt|cottage cheese|rice cakes?|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|wendy'?s|sandwich|fries|fairlife|core power|pickles?|bananas?|apples?|protein bars?|protein shake|shakes?|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?)\b/i;
 
@@ -171,6 +172,34 @@ function normalizeKnownFoodTypos(text: string) {
 
 function normalizeFoodText(text: string) {
   return normalizeKnownFoodTypos(normalizeText(text));
+}
+
+function buildActiveItemId(item: ParsedFoodItem, index: number) {
+  const slug = normalizeText(item.food_name).replace(/\s+/g, '_') || 'item';
+  return `${slug}_${index + 1}`;
+}
+
+function getActiveMealModelContext(state: MealAssistantState) {
+  const activeItems = state.currentMealItems.map((item, index) => ({
+    item_id: buildActiveItemId(item, index),
+    item_index: index,
+    food_name: item.food_name,
+    quantity: item.quantity,
+    unit: item.unit,
+    calories: Math.round(item.calories),
+    protein: Math.round(item.protein),
+    carbs: Math.round(item.carbs),
+    fat: Math.round(item.fat),
+  }));
+
+  return {
+    active_items: activeItems,
+    most_recent_item: activeItems.at(-1) ?? null,
+    current_review_card: {
+      item_count: activeItems.length,
+      meal_text: state.currentMealText ?? null,
+    },
+  };
 }
 
 function sanitizeAssistantText(text: string) {
@@ -276,8 +305,12 @@ function normalizeQuantityUnit(unit: string | null | undefined) {
   return normalized;
 }
 
+function stripCorrectionLeadIn(text: string) {
+  return text.trim().replace(/^(?:oh|ah|uh|um|wait)[\s,!.-]+/i, '').trim();
+}
+
 function parseCorrectedServing(message: string) {
-  const normalized = stripEmotionalPreface(message).toLowerCase();
+  const normalized = stripCorrectionLeadIn(stripEmotionalPreface(message)).toLowerCase();
   const quantityWords = 'a|an|one|two|three|four|five|six|seven|eight|nine|ten';
   const quantityPattern = `\\d+(?:\\.\\d+)?|\\.\\d+|${quantityWords}|a half|half|three quarters?|a quarter|quarter`;
   const match = normalized.match(
@@ -364,13 +397,218 @@ function shouldAppendToCurrentMeal(message: string, state: MealAssistantState) {
     return false;
   }
 
-  const normalized = stripEmotionalPreface(message).toLowerCase().trim();
+  const normalized = stripCorrectionLeadIn(stripEmotionalPreface(message)).toLowerCase().trim();
   return (
     continuationRegex.test(normalized)
     || /^(?:add|include|throw in|put in)\b/i.test(normalized)
     || /\b(?:too|as well)\b/i.test(normalized)
     || /\b(?:another|one more)\b/i.test(normalized)
   );
+}
+
+function isObviousActiveMealCorrection(message: string, state: MealAssistantState) {
+  if (!state.currentMealItems.length || state.saved) {
+    return false;
+  }
+
+  const normalized = stripCorrectionLeadIn(stripEmotionalPreface(message)).toLowerCase();
+  return correctionCueRegex.test(normalized) && Boolean(parseCorrectedServing(normalized));
+}
+
+function inferActionFromIntent(intent: MealAssistantModelOutput['intent']): MealAssistantAction {
+  switch (intent) {
+    case 'new_food_item':
+    case 'add_to_current_meal':
+    case 'repeat_meal':
+    case 'clarification_answer':
+      return 'add_food';
+    case 'quantity_change':
+      return 'update_item_quantity';
+    case 'correction':
+    case 'edit_command':
+      return 'update_item_name';
+    case 'remove_item':
+    case 'delete_command':
+      return 'remove_item';
+    case 'recommendation_request':
+      return 'recommend_food';
+    case 'save_meal':
+      return 'save_meal';
+    case 'greeting':
+    case 'casual_message':
+      return 'casual_reply';
+    case 'nutrition_question':
+    case 'nutrition_guidance':
+    case 'macro_question':
+    case 'meal_feedback':
+    case 'meal_review':
+    case 'comparison_question':
+    case 'goal_question':
+      return 'answer_question';
+    default:
+      return 'unclear';
+  }
+}
+
+function resolveDecisionTargetIndex(decision: MealAssistantModelOutput, state: MealAssistantState, message?: string) {
+  if (!state.currentMealItems.length) {
+    return -1;
+  }
+
+  if (typeof decision.target_item_index === 'number' && state.currentMealItems[decision.target_item_index]) {
+    return decision.target_item_index;
+  }
+
+  if (decision.target_item_id) {
+    const idIndex = state.currentMealItems.findIndex((item, index) => buildActiveItemId(item, index) === decision.target_item_id);
+    if (idIndex >= 0) {
+      return idIndex;
+    }
+  }
+
+  if (decision.target_item) {
+    const namedIndex = findItemIndex(state.currentMealItems, decision.target_item);
+    if (namedIndex >= 0) {
+      return namedIndex;
+    }
+  }
+
+  return message ? findContextualItemIndex(message, state.currentMealItems) : state.currentMealItems.length - 1;
+}
+
+function normalizeAssistantDecision(decision: MealAssistantModelOutput, input: MealAssistantRunInput): MealAssistantModelOutput {
+  const state = input.state;
+  const hasActiveMeal = state.currentMealItems.length > 0 && !state.saved;
+  const normalizedMessage = stripCorrectionLeadIn(stripEmotionalPreface(input.message)).toLowerCase();
+  const correctedServing = parseCorrectedServing(input.message);
+  const fallbackAction = inferActionFromIntent(decision.intent);
+  let nextDecision: MealAssistantModelOutput = {
+    ...decision,
+    action: decision.action ?? fallbackAction,
+    target_item: decision.target_item ?? null,
+    target_item_id: decision.target_item_id ?? null,
+    target_item_index: decision.target_item_index ?? null,
+  };
+
+  if (nextDecision.action === 'unclear') {
+    nextDecision.action = fallbackAction;
+  }
+
+  if (hasActiveMeal && correctedServing && (correctionCueRegex.test(normalizedMessage) || quantityOnlyRegex.test(normalizedMessage) || directQuantityRegex.test(normalizedMessage))) {
+    const targetIndex = resolveDecisionTargetIndex(nextDecision, state, input.message);
+    const targetItem = targetIndex >= 0 ? state.currentMealItems[targetIndex] : state.currentMealItems.at(-1) ?? null;
+
+    if (targetItem) {
+      nextDecision = {
+        ...nextDecision,
+        action: 'update_item_quantity',
+        intent: 'quantity_change',
+        target_item: targetItem.food_name,
+        target_item_id: buildActiveItemId(targetItem, targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1),
+        target_item_index: targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1,
+        contains_food_to_log: false,
+        contains_quantity_update: true,
+        should_mutate_pending_meal: true,
+        should_lookup_nutrition: false,
+        should_ask_clarification: false,
+        clarification_question: null,
+        items: [
+          {
+            name: targetItem.food_name,
+            brand: null,
+            quantity: correctedServing.quantity,
+            unit: correctedServing.unit ?? targetItem.unit ?? null,
+            modifiers: [],
+            action: 'update',
+          },
+        ],
+        corrections: [{ target: targetItem.food_name, change: input.message }],
+      };
+    }
+  }
+
+  if (nextDecision.action === 'update_item_quantity') {
+    return {
+      ...nextDecision,
+      intent: 'quantity_change',
+      contains_food_to_log: false,
+      contains_quantity_update: true,
+      should_mutate_pending_meal: true,
+      should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'recommend_food') {
+    return {
+      ...nextDecision,
+      intent: 'recommendation_request',
+      items: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'answer_question') {
+    return {
+      ...nextDecision,
+      items: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'casual_reply') {
+    return {
+      ...nextDecision,
+      intent: nextDecision.intent === 'greeting' ? 'greeting' : 'casual_message',
+      items: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'save_meal') {
+    return {
+      ...nextDecision,
+      intent: 'save_meal',
+      items: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_save_meal: true,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'add_food') {
+    const nextIntent = shouldAppendToCurrentMeal(input.message, state) ? 'add_to_current_meal' : nextDecision.intent === 'repeat_meal' ? 'repeat_meal' : 'new_food_item';
+    return {
+      ...nextDecision,
+      intent: nextIntent,
+      contains_food_to_log: nextDecision.items.length > 0,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: nextDecision.items.length > 0,
+      should_lookup_nutrition: nextDecision.items.length > 0,
+    };
+  }
+
+  return nextDecision;
 }
 
 function isNonMutatingIntent(intent: MealAssistantModelOutput['intent']) {
@@ -3762,6 +4000,8 @@ async function classifyWithModel(input: MealAssistantRunInput): Promise<MealAssi
       content: message.text.slice(0, 1200),
     }));
 
+  const activeMealContext = getActiveMealModelContext(input.state);
+
   const completion = await client.chat.completions.create({
     model,
     temperature: 0.2,
@@ -3776,11 +4016,25 @@ async function classifyWithModel(input: MealAssistantRunInput): Promise<MealAssi
         role: 'user',
         content: [
           'Use the conversation above like a normal chat thread. The JSON below is private app state for the latest turn.',
-          'Return only the required JSON object for the latest user message.',
+          'Choose the action first, then return only the required JSON object for the latest user message.',
           JSON.stringify({
             latest_user_message: input.message,
-            state: input.state,
-            context: input.context ?? emptyContext,
+            active_meal_context: activeMealContext,
+            state: {
+              ...input.state,
+              previousUserMessage: input.state.previousUserMessage ?? null,
+              previousAssistantReply: input.state.lastAssistantReply ?? null,
+              pendingCorrectionOrClarification: input.state.pendingClarification ?? null,
+            },
+            context: {
+              ...(input.context ?? emptyContext),
+              todays_totals: {
+                calories: input.context?.todayCalories ?? null,
+                protein: input.context?.todayProtein ?? null,
+                carbs: input.context?.todayCarbs ?? null,
+                fat: input.context?.todayFat ?? null,
+              },
+            },
             user_preferences: input.userPreferences ?? null,
           }),
         ].join('\n\n'),
@@ -4066,9 +4320,11 @@ function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealA
     const recommendationReply = isRecommendationRequestMessage(input.message)
       ? buildRecommendationReply(input, input.context ?? emptyContext)
       : null;
+    const safeIntent = isRecommendationRequestMessage(input.message) ? 'recommendation_request' : decision.intent;
     return {
       ...decision,
-      intent: isRecommendationRequestMessage(input.message) ? 'recommendation_request' : decision.intent,
+      action: isRecommendationRequestMessage(input.message) ? 'recommend_food' : inferActionFromIntent(safeIntent),
+      intent: safeIntent,
       assistant_reply: recommendationReply ?? decision.assistant_reply,
       items: [],
       should_lookup_nutrition: false,
@@ -4130,7 +4386,14 @@ export async function runMealAssistant(
       }
     : input;
   const state = { ...workingInput.state };
-  const shouldUseModelIntentFirst = Boolean(process.env.OPENAI_API_KEY) && !dependencies.classify;
+  const shouldUseModelIntentFirst = Boolean(process.env.OPENAI_API_KEY) || Boolean(dependencies.classify);
+
+  if (!shouldUseModelIntentFirst && isObviousActiveMealCorrection(workingInput.message, state)) {
+    const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition);
+    if (adaptiveMealMutationReply) {
+      return finalizeResponse(adaptiveMealMutationReply, workingInput, context);
+    }
+  }
 
   if (!shouldUseModelIntentFirst) {
     const pizzaClarificationItems = resolvePizzaClarificationEstimate(workingInput.message, state);
@@ -4357,11 +4620,14 @@ export async function runMealAssistant(
     ...workingInput,
     context,
   });
+  decision = normalizeAssistantDecision(decision, workingInput);
   decision = guardAssistantDecision(decision, workingInput);
+  decision = normalizeAssistantDecision(decision, workingInput);
 
   const classifiedKnownItems = detectKnownFoodEstimates(workingInput.message);
   if (
     classifiedKnownItems.length
+    && decision.action === 'add_food'
     && (decision.intent === 'new_food_item' || decision.intent === 'add_to_current_meal')
     && (decision.should_ask_clarification || !decision.items.length || !decision.should_lookup_nutrition)
   ) {
@@ -4452,9 +4718,9 @@ export async function runMealAssistant(
 
     if (decision.intent === 'quantity_change' && state.currentMealItems.length) {
       const updateItem = decision.items[0];
-      const targetIndex = findItemIndex(nextState.currentMealItems, updateItem.name);
-      const nextQuantity = updateItem.quantity;
-      if (targetIndex >= 0) {
+      const targetIndex = resolveDecisionTargetIndex(decision, nextState, workingInput.message);
+      const nextQuantity = updateItem?.quantity ?? parseCorrectedServing(workingInput.message)?.quantity ?? null;
+      if (targetIndex >= 0 && typeof nextQuantity === 'number') {
         const target = nextState.currentMealItems[targetIndex];
         const updatedItems = scaleParsedItems([target], nextQuantity);
         nextState.currentMealItems = nextState.currentMealItems.map((item, index) => (index === targetIndex ? updatedItems[0] : item));

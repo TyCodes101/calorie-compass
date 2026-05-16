@@ -520,7 +520,7 @@ describe('meal assistant conversational coverage', () => {
       classify,
     });
 
-    expect(classify).not.toHaveBeenCalled();
+    expect(classify).toHaveBeenCalledTimes(1);
     expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
     expect(response.meal.items[0]?.quantity).toBe(1);
     expect(response.assistant_reply).not.toMatch(/out now|need a little more detail|i can log/i);
@@ -1581,6 +1581,132 @@ describe('meal assistant conversational coverage', () => {
     expect(response.meal.items[0]?.quantity).toBe(2);
   });
 
+  it('treats oh-i-meant quantity follow-ups as corrections instead of new food lookups', async () => {
+    const [response] = await runConversation(['Oh i meant 5'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 4, unit: 'egg', calories: 280, protein: 24, fat: 20 })],
+        currentMealText: '4 Eggs',
+        previousIntent: 'repeat_meal',
+        previousUserMessage: 'same 4 large egg',
+        lastAssistantReply: "I've got your usual 4 Large egg.",
+      }),
+    });
+
+    expect(response.intent).toBe('quantity_change');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe('Eggs');
+    expect(response.meal.items[0]?.quantity).toBe(5);
+    expect(response.assistant_reply).toMatch(/5/i);
+    expect(response.assistant_reply).not.toMatch(/candies|chocolate|usda match/i);
+  });
+
+  it('uses a plain numeric follow-up to update the active egg item after a recall', async () => {
+    const [response] = await runConversation(['5'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 4, unit: 'egg', calories: 280, protein: 24, fat: 20 })],
+        currentMealText: '4 Eggs',
+        previousIntent: 'repeat_meal',
+        previousUserMessage: 'same 4 large egg',
+        lastAssistantReply: '4 large eggs, about 280 calories and 24g protein.',
+      }),
+    });
+
+    expect(response.intent).toBe('quantity_change');
+    expect(response.meal.items[0]?.food_name).toBe('Eggs');
+    expect(response.meal.items[0]?.quantity).toBe(5);
+    expect(response.assistant_reply).toMatch(/5/i);
+  });
+
+  it('updates mcdouble quantity for actually-2 corrections without creating a new food', async () => {
+    const [response] = await runConversation(['actually 2'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'McDouble', quantity: 1, unit: 'burger', calories: 390, protein: 22, carbs: 33, fat: 19, source_type: 'OFFICIAL_RESTAURANT', source_name: "McDonald's official nutrition" })],
+        currentMealText: 'McDouble',
+        lastAssistantReply: 'I added the McDouble.',
+      }),
+    });
+
+    expect(response.intent).toBe('quantity_change');
+    expect(response.meal.items[0]?.food_name).toBe('McDouble');
+    expect(response.meal.items[0]?.quantity).toBe(2);
+    expect(response.assistant_reply).not.toMatch(/chocolate|candy|usda/i);
+  });
+
+  it('updates fairlife shake quantity for make-it-3 corrections without lookup drift', async () => {
+    const [response] = await runConversation(['make it 3'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Fairlife Chocolate Protein Shake', quantity: 1, unit: 'bottle', calories: 150, protein: 30, carbs: 4, fat: 2, source_name: 'Fairlife nutrition reference' })],
+        currentMealText: 'Fairlife Chocolate Protein Shake',
+        lastAssistantReply: 'I added the Fairlife shake.',
+      }),
+    });
+
+    expect(response.intent).toBe('quantity_change');
+    expect(response.meal.items[0]?.food_name).toBe('Fairlife Chocolate Protein Shake');
+    expect(response.meal.items[0]?.quantity).toBe(3);
+    expect(response.assistant_reply).toMatch(/3/i);
+  });
+
+  it('treats a bare number as the quantity answer after an assistant quantity question', async () => {
+    const [response] = await runConversation(['2'], {
+      initialState: buildState({
+        pendingClarification: 'For Little Caesars, was that one slice, a few slices, or a whole pizza?',
+        lastAssistantQuestion: 'For Little Caesars, was that one slice, a few slices, or a whole pizza?',
+        previousUserMessage: 'Little Caesars pizza',
+        lastAssistantReply: 'For Little Caesars, was that one slice, a few slices, or a whole pizza?',
+      }),
+    });
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items[0]?.food_name).toMatch(/pizza/i);
+    expect(response.meal.items[0]?.quantity).toBe(2);
+  });
+
+  it('blocks unrelated lookup items on correction turns and updates the active food instead', async () => {
+    const resolveItemNutrition = vi.fn(async () => {
+      throw new Error('lookup should not run for quantity corrections');
+    });
+    const classify = vi.fn().mockResolvedValue({
+      intent: 'new_food_item',
+      action: 'add_food',
+      assistant_reply: 'I found a USDA match for dark chocolate candy.',
+      contains_food_to_log: true,
+      contains_quantity_update: false,
+      target_item: null,
+      target_item_id: null,
+      target_item_index: null,
+      should_mutate_pending_meal: true,
+      assistant_reply_goal: 'Explain the new food lookup',
+      items: [{ name: 'Dark chocolate candy', brand: null, quantity: 1, unit: 'serving', modifiers: [], action: 'add' }],
+      corrections: [],
+      should_lookup_nutrition: true,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'low',
+    } satisfies MealAssistantModelOutput);
+
+    const [response] = await runConversation(['Oh i meant 5'], {
+      classify,
+      resolveItemNutrition: resolveItemNutrition as typeof resolveConversationNutrition,
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 4, unit: 'egg', calories: 280, protein: 24, fat: 20 })],
+        currentMealText: '4 Eggs',
+        previousIntent: 'repeat_meal',
+        previousUserMessage: 'same 4 large egg',
+        lastAssistantReply: '4 large eggs, about 280 calories and 24g protein.',
+      }),
+    });
+
+    expect(classify).toHaveBeenCalledTimes(1);
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('quantity_change');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe('Eggs');
+    expect(response.meal.items[0]?.quantity).toBe(5);
+    expect(response.assistant_reply).not.toMatch(/dark chocolate|candy|usda/i);
+  });
+
   it.each(['how’s your day', "how's your day", 'tell me a joke'])('politely redirects off-topic prompts without breaking meal state: %s', async (prompt) => {
     const currentMeal = createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 });
     const [response] = await runConversation([prompt], {
@@ -1654,7 +1780,7 @@ describe('meal assistant conversational coverage', () => {
       context: buildContext({ remainingCalories: 420, remainingProtein: 68, todayCarbs: 220 }),
     });
 
-    expect(classify).not.toHaveBeenCalled();
+    expect(classify).toHaveBeenCalledTimes(1);
     expect(resolveItemNutrition).not.toHaveBeenCalled();
     expect(response.intent).toBe('recommendation_request');
     expect(response.meal.items).toHaveLength(0);
