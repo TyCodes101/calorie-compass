@@ -2932,7 +2932,7 @@ async function buildAdaptiveMealMutationReply(
 
       return buildDirectResponse({
         intent: 'quantity_change',
-        assistantReply: `${replyPrefix} for ${adjustedItem.food_name}. About ${Math.round(sumTotals(nextItems).calories)} calories total. ${getSourceLabel(adjustedItem)}.`,
+        assistantReply: `${replyPrefix} for ${adjustedItem.food_name}. About ${Math.round(sumTotals(nextItems).calories)} calories total.`,
         nextState,
         message: input.message,
       });
