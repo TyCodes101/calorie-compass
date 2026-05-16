@@ -150,7 +150,7 @@ function cleanPromptForReply(text: string) {
 }
 
 function shorten(text: string, max = 90) {
-  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}â€¦` : text;
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 }
 
 function sanitizeChatText(text: string) {
@@ -347,13 +347,13 @@ function buildTypingCopy(message: string) {
   if (/\b(?:protein|calories|on track|tonight|snack)\b/i.test(message)) {
     return {
       title: 'Checking today so far',
-      subtitle: 'Using your goals and what youâ€™ve logged already.',
+      subtitle: 'Using your goals and what you’ve logged already.',
     };
   }
 
   return {
     title: 'Give me a second',
-    subtitle: 'Iâ€™m checking the closest match.',
+    subtitle: 'I’m checking the closest match.',
   };
 }
 
@@ -371,7 +371,7 @@ function buildTypingSequence(message: string) {
   if (/\b(?:what about|how about|carbs?|fat|protein|compare|versus|vs\b)\b/i.test(message)) {
     return [
       first,
-      { title: 'Still on it', subtitle: 'Holding the meal and todayâ€™s context together.' },
+      { title: 'Still on it', subtitle: 'Holding the meal and today’s context together.' },
       { title: 'Almost there', subtitle: 'Making sure the answer stays on the same thread.' },
     ];
   }
@@ -387,7 +387,7 @@ function buildTypingSequence(message: string) {
   if (/\b(?:protein|calories|on track|tonight|snack)\b/i.test(message)) {
     return [
       first,
-      { title: 'Still checking', subtitle: 'Using todayâ€™s goals and what youâ€™ve logged so far.' },
+      { title: 'Still checking', subtitle: 'Using today’s goals and what you’ve logged so far.' },
       { title: 'Almost there', subtitle: 'Keeping the answer short and useful.' },
     ];
   }
@@ -520,21 +520,21 @@ function detectLocalAssistantAction(message: string): LocalAssistantAction {
   if ((/\b(?:scan|use|open|check)\b.*\bbarcode\b/i.test(normalized) || /^barcode\b/i.test(normalized)) && !/\d{8,}/.test(normalized)) {
     return {
       kind: 'barcode',
-      reply: 'Barcode mode is open. Scan it or type the digits and Iâ€™ll check the packaged-food match first.',
+      reply: 'Barcode mode is open. Scan it or type the digits and I’ll check the packaged-food match first.',
     };
   }
 
   if (/\b(?:scan|use|open|read|enter)\b.*\b(?:nutrition label|label)\b/i.test(normalized) || /^nutrition label\b/i.test(normalized)) {
     return {
       kind: 'label',
-      reply: 'Label mode is open. Drop in the numbers and Iâ€™ll turn it into a clean packaged-food entry.',
+      reply: 'Label mode is open. Drop in the numbers and I’ll turn it into a clean packaged-food entry.',
     };
   }
 
   if (/\b(?:voice|log by voice|voice log|speak instead|talk instead)\b/i.test(normalized)) {
     return {
       kind: 'voice',
-      reply: 'Voice logging is next up. For now, just text it naturally and Iâ€™ll keep the flow moving.',
+      reply: 'Voice logging is next up. For now, just text it naturally and I’ll keep the flow moving.',
     };
   }
 
@@ -587,11 +587,11 @@ function buildInitialAssistantMessage(options: {
   const intro = `Hey${options.firstName ? ` ${options.firstName}` : ''}, what'd you eat today?`;
 
   if ((options.todayMealCount ?? 0) >= 1) {
-    return `${intro} Youâ€™re already checked in today, so we can just keep building from there.`;
+    return `${intro} You’re already checked in today, so we can just keep building from there.`;
   }
 
   if (streak >= 4) {
-    return `${intro} Youâ€™ve been pretty steady lately, so letâ€™s keep this one easy.`;
+    return `${intro} You’ve been pretty steady lately, so let’s keep this one easy.`;
   }
 
   if ((options.recentMeals ?? []).length >= 4) {
@@ -769,7 +769,7 @@ function ChatBubble({
   );
 }
 
-function TypingBubble({ title = 'Give me a second', subtitle = 'Iâ€™m checking the closest match.' }: { title?: string; subtitle?: string }) {
+function TypingBubble({ title = 'Give me a second', subtitle = 'I’m checking the closest match.' }: { title?: string; subtitle?: string }) {
   return (
     <ChatBubble role="assistant" compact>
       <div className="flex items-center gap-3 text-sm text-slate-600">
@@ -1186,7 +1186,7 @@ export function MealLoggerClient({
     }
   }
 
-  function startAnotherMeal(message = 'Ready for the next one. Whatâ€™d you eat?') {
+  function startAnotherMeal(message = 'Ready for the next one. What’d you eat?') {
     resetDraft({ preserveThread: true });
     appendChatMessage('assistant', message, { compact: true });
   }
@@ -1205,7 +1205,7 @@ export function MealLoggerClient({
       editingMealId,
     }));
     setExpandedIndex(nextIndex);
-    appendChatMessage('assistant', 'I added a custom item. Fill in what looks right and Iâ€™ll keep the rest in place.', { compact: true });
+    appendChatMessage('assistant', 'I added a custom item. Fill in what looks right and I’ll keep the rest in place.', { compact: true });
   }
 
   function loadRecentMealIntoDraft(meal: RecentMealQuickLog, triggerText?: string) {
@@ -1248,7 +1248,7 @@ export function MealLoggerClient({
       appendChatMessage('user', triggerText, { compact: true });
     }
 
-    appendChatMessage('assistant', `Got it, I loaded ${meal.title} again. Iâ€™ll keep it here so you can save it or tweak it first.`);
+    appendChatMessage('assistant', `Got it, I loaded ${meal.title} again. I’ll keep it here so you can save it or tweak it first.`);
     rememberMealLocally({
       title: meal.title,
       rawText: meal.rawText,
@@ -1598,7 +1598,7 @@ export function MealLoggerClient({
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError(data?.error ?? 'We couldnâ€™t save your meal right now. Please try again.');
+        setError(data?.error ?? 'We couldn’t save your meal right now. Please try again.');
         setErrorAction('save');
         setSaving(false);
         return;
@@ -1629,7 +1629,7 @@ export function MealLoggerClient({
       router.refresh();
     } catch {
       setSaving(false);
-      setError('We couldnâ€™t save your meal right now. Please try again.');
+      setError('We couldn’t save your meal right now. Please try again.');
       setErrorAction('save');
     }
   }
@@ -1663,7 +1663,7 @@ export function MealLoggerClient({
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError(data?.error ?? 'We couldnâ€™t save your favorite right now. Please try again.');
+        setError(data?.error ?? 'We couldn’t save your favorite right now. Please try again.');
         setErrorAction('favorite');
         setFavoriteSaving(false);
         return;
@@ -1686,7 +1686,7 @@ export function MealLoggerClient({
       router.refresh();
     } catch {
       setFavoriteSaving(false);
-      setError('We couldnâ€™t save your favorite right now. Please try again.');
+      setError('We couldn’t save your favorite right now. Please try again.');
       setErrorAction('favorite');
     }
   }
@@ -1714,7 +1714,7 @@ export function MealLoggerClient({
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError(data?.error ?? 'We couldnâ€™t remove that favorite right now. Please try again.');
+        setError(data?.error ?? 'We couldn’t remove that favorite right now. Please try again.');
         setErrorAction('removeFavorite');
         setFavoriteSaving(false);
         return;
@@ -1737,7 +1737,7 @@ export function MealLoggerClient({
       router.refresh();
     } catch {
       setFavoriteSaving(false);
-      setError('We couldnâ€™t remove that favorite right now. Please try again.');
+      setError('We couldn’t remove that favorite right now. Please try again.');
       setErrorAction('removeFavorite');
     }
   }
@@ -1883,7 +1883,7 @@ export function MealLoggerClient({
               <div className="flex items-start gap-3">
                 <WifiOff className="mt-0.5 h-4 w-4" />
                 <div>
-                  <p className="text-sm font-medium text-slate-900">Youâ€™re offline right now.</p>
+                  <p className="text-sm font-medium text-slate-900">You’re offline right now.</p>
                   <p className="mt-1 text-sm leading-6 text-slate-700">You can still review meals, but estimating and saving need a connection.</p>
                 </div>
               </div>
@@ -1901,7 +1901,7 @@ export function MealLoggerClient({
               <div className="logger-starter-panel">
                 <div>
                   <p className="text-sm font-semibold text-slate-950">Fast ways to log</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Text a meal, scan a packaged food, or enter label numbers. Iâ€™ll keep the estimate reviewable before anything saves.</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">Text a meal, scan a packaged food, or enter label numbers. I’ll keep the estimate reviewable before anything saves.</p>
                 </div>
                 <div className="logger-starter-actions">
                   <button
@@ -1931,7 +1931,7 @@ export function MealLoggerClient({
               <div className="chat-inline-tool-panel space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-950">Barcode lookup</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Type the digits under the barcode and Iâ€™ll check the packaged-food match first.</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">Type the digits under the barcode and I’ll check the packaged-food match first.</p>
                 </div>
 
                 <label className="space-y-2 text-xs text-slate-500">
@@ -1954,7 +1954,7 @@ export function MealLoggerClient({
 
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={lookupBarcode} disabled={!canLookupBarcode} className="app-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70">
-                    {loading ? 'Looking upâ€¦' : 'Use barcode'}
+                    {loading ? 'Looking up…' : 'Use barcode'}
                   </button>
                   <button type="button" onClick={closeEntryMode} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
                     Cancel
@@ -2027,7 +2027,7 @@ export function MealLoggerClient({
 
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={useNutritionLabel} disabled={loading || !isOnline} className="app-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70">
-                    {loading ? 'Building itemâ€¦' : 'Use label'}
+                    {loading ? 'Building item…' : 'Use label'}
                   </button>
                   <button type="button" onClick={closeEntryMode} className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
                     Cancel
@@ -2188,7 +2188,7 @@ export function MealLoggerClient({
                     className="app-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <CheckCircle2 className="h-4 w-4" />
-                    {hasSavedCurrentDraft ? 'Saved' : saving ? 'Savingâ€¦' : 'Save it'}
+                    {hasSavedCurrentDraft ? 'Saved' : saving ? 'Saving…' : 'Save it'}
                   </button>
                   <button
                     type="button"
@@ -2214,7 +2214,7 @@ export function MealLoggerClient({
                   >
                     <BookmarkPlus className="h-4 w-4" />
                     {favoriteSaving
-                      ? 'Savingâ€¦'
+                      ? 'Saving…'
                       : sourceReusableMealId
                         ? favoriteState === 'dirty'
                           ? 'Update favorite'
@@ -2229,7 +2229,7 @@ export function MealLoggerClient({
                       className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <Star className="h-4 w-4" />
-                      {favoriteSaving ? 'Removingâ€¦' : 'Remove favorite'}
+                      {favoriteSaving ? 'Removing…' : 'Remove favorite'}
                     </button>
                   ) : null}
                 </div>

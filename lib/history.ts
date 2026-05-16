@@ -1,5 +1,5 @@
 import type { ParsedFoodItem } from '@/lib/ai/types';
-import { getCurrentUserId } from '@/lib/current-user';
+import { getCurrentUserId, hasDatabaseConnectionString } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { isoDay } from '@/lib/date';
 import { summarizeStoredItems } from '@/lib/trust';
@@ -35,6 +35,10 @@ export type RecentMealQuickLog = {
 };
 
 export async function getMealHistory(): Promise<MealHistoryGroup[]> {
+  if (!hasDatabaseConnectionString()) {
+    return [];
+  }
+
   const userId = await getCurrentUserId();
 
   if (!userId) {
@@ -80,6 +84,10 @@ export async function getMealHistory(): Promise<MealHistoryGroup[]> {
 }
 
 export async function getRecentMealsForQuickLog(limit = 6): Promise<RecentMealQuickLog[]> {
+  if (!hasDatabaseConnectionString()) {
+    return [];
+  }
+
   const userId = await getCurrentUserId();
 
   if (!userId) {

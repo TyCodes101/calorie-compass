@@ -1,6 +1,6 @@
 import type { ParsedFoodItem } from '@/lib/ai/types';
 import { getPersistableCatalogFoodIds } from '@/lib/catalog-persistence';
-import { getCurrentUserWithProfile } from '@/lib/current-user';
+import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/current-user';
 import { logConnectionReady, logWriteFailure, logWriteStart, logWriteSuccess } from '@/lib/persistence';
 import { prisma } from '@/lib/prisma';
 
@@ -182,6 +182,10 @@ export function buildLoggerDraftFromReusableMealRecord(record: {
 }
 
 export async function getLoggerDraft(options: { mealId?: string | null; reusableMealId?: string | null; editMealId?: string | null }) {
+  if (!hasDatabaseConnectionString()) {
+    return null;
+  }
+
   const user = await getCurrentUserWithProfile();
   if (!user) {
     return null;
@@ -400,6 +404,10 @@ export async function removeFavoriteMealTemplate(reusableMealId: string) {
 }
 
 export async function getFavoriteMeals(): Promise<FavoriteMealSummary[]> {
+  if (!hasDatabaseConnectionString()) {
+    return [];
+  }
+
   const user = await getCurrentUserWithProfile();
   if (!user) {
     return [];

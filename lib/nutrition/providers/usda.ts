@@ -44,6 +44,13 @@ function normalizeUnit(unit: string | null | undefined) {
   if (['oz', 'ounce', 'ounces'].includes(normalized)) return 'oz';
   if (['slice', 'slices'].includes(normalized)) return 'slice';
   if (['piece', 'pieces'].includes(normalized)) return 'piece';
+  if (['cake', 'cakes'].includes(normalized)) return 'cake';
+  if (['bar', 'bars'].includes(normalized)) return 'bar';
+  if (['bottle', 'bottles'].includes(normalized)) return 'bottle';
+  if (['egg', 'eggs'].includes(normalized)) return 'egg';
+  if (['sandwich', 'sandwiches'].includes(normalized)) return 'sandwich';
+  if (['order', 'orders'].includes(normalized)) return 'order';
+  if (['pizza', 'pizzas'].includes(normalized)) return 'pizza';
   if (['cup', 'cups'].includes(normalized)) return 'cup';
   if (['tbsp', 'tablespoon', 'tablespoons'].includes(normalized)) return 'tbsp';
   if (['tsp', 'teaspoon', 'teaspoons'].includes(normalized)) return 'tsp';

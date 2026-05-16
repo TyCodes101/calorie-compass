@@ -777,7 +777,7 @@ describe('runMealAssistant', () => {
         classify: vi.fn().mockResolvedValue(
           buildDecision({
             intent: 'new_food_item',
-            assistant_reply: 'Alright, Iâ€™ve got 1 Chipotle white rice.',
+            assistant_reply: 'Alright, I’ve got 1 Chipotle white rice.',
             should_lookup_nutrition: true,
             items: [
               {

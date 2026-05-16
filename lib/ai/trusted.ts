@@ -497,6 +497,17 @@ function estimateFallbackSegment(segment: string): ParsedFoodItem | null {
     );
   }
 
+  if (segment.includes('fries') || segment.includes('fry')) {
+    const isMedium = segment.includes('medium');
+    return makeEstimatedItem(
+      isMedium ? 'Medium fries' : 'Fries',
+      1,
+      isMedium ? 'medium order' : 'order',
+      { calories: isMedium ? 350 : 320, protein: isMedium ? 5 : 4, carbs: isMedium ? 48 : 43, fat: isMedium ? 16 : 15, fiber: 5, sugar: 0, sodium: isMedium ? 520 : 470 },
+      'Estimated fallback for unmatched restaurant fries'
+    );
+  }
+
   if (segment.includes('cookie')) {
     return makeEstimatedItem(
       'Cookie',

@@ -47,7 +47,7 @@ const compoundFoodDefinitions = [
 function cleanupFreeText(text: string) {
   return text
     .toLowerCase()
-    .replace(/[â€™']/g, '')
+    .replace(/[’']/g, '')
     .replace(/\bchipolte\b/g, 'chipotle')
     .replace(/\bcotaage\b/g, 'cottage')
     .replace(/\bcotage\b/g, 'cottage')
@@ -71,7 +71,7 @@ function titleCase(text: string) {
 }
 
 function extractConversationParts(text: string) {
-  const lower = text.toLowerCase().replace(/[â€™']/g, '');
+  const lower = text.toLowerCase().replace(/[’']/g, '');
   const extracted: string[] = [];
   let base = lower;
 
@@ -119,6 +119,10 @@ function normalizeQuantityUnit(unit: string | undefined) {
   if (normalized === 'oz' || normalized === 'ounce' || normalized === 'ounces') return 'oz';
   if (normalized === 'slice' || normalized === 'slices') return 'slice';
   if (normalized === 'piece' || normalized === 'pieces') return 'piece';
+  if (normalized === 'cake' || normalized === 'cakes') return 'cake';
+  if (normalized === 'bar' || normalized === 'bars') return 'bar';
+  if (normalized === 'bottle' || normalized === 'bottles') return 'bottle';
+  if (normalized === 'egg' || normalized === 'eggs') return 'egg';
   if (normalized === 'cup' || normalized === 'cups') return 'cup';
   if (normalized === 'tbsp' || normalized === 'tablespoon' || normalized === 'tablespoons') return 'tbsp';
   if (normalized === 'tsp' || normalized === 'teaspoon' || normalized === 'teaspoons') return 'tsp';
@@ -127,7 +131,7 @@ function normalizeQuantityUnit(unit: string | undefined) {
 }
 
 function extractQuantityUnit(text: string) {
-  const match = text.match(/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|slices?|pieces?|cups?|tbsp|tablespoons?|tsp|teaspoons?)\b/);
+  const match = text.match(/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|slices?|pieces?|cakes?|bars?|bottles?|eggs?|cups?|tbsp|tablespoons?|tsp|teaspoons?)\b/);
   return normalizeQuantityUnit(match?.[1]);
 }
 
@@ -240,7 +244,7 @@ function buildNormalizedSearchText(base: string, details: string[]) {
     .join(' ')
     .replace(/\b(\d+(?:\.\d+)?)\s*(?:g|gram|grams)\s+(?=[a-z])/g, '$1 ')
     .replace(/\b(\d+(?:\.\d+)?)\s*(?:piece|pieces)\s+(?=[a-z])/g, '$1 ')
-    .replace(/\b\d+(?:\.\d+)?\s*[-â€“]\s*\d+(?:\.\d+)?\b/g, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\b/g, ' ')
     .replace(fillerRegex, ' ')
     .replace(/\s+/g, ' ')
     .trim();

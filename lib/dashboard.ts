@@ -5,7 +5,7 @@ import { addDaysUtc, startOfDayUtc } from '@/lib/date';
 import { buildWeeklyTrendFromMeals, sumMealTotals } from '@/lib/dashboard-aggregation';
 import { calculateRemainingCalories, toProgressValue } from '@/lib/nutrition';
 import { summarizeStoredItems } from '@/lib/trust';
-import { getCurrentUserWithProfile } from '@/lib/current-user';
+import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/current-user';
 
 type DashboardWriteClient = PrismaClient | Prisma.TransactionClient;
 
@@ -60,6 +60,59 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
   const profile = user.profile;
   const date = startOfDayUtc(inputDate);
   const nextDay = addDaysUtc(date, 1);
+
+  if (!hasDatabaseConnectionString()) {
+    const carbGoal = Math.round((profile.dailyCalorieGoal * 0.4) / 4);
+    const fatGoal = Math.round((profile.dailyCalorieGoal * 0.3) / 9);
+
+    return {
+      user: {
+        id: user.id,
+        name: user.name,
+      },
+      profile,
+      date: date.toISOString().slice(0, 10),
+      totals: {
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        fiber: 0,
+        sugar: 0,
+        sodium: 0,
+      },
+      mealCount: 0,
+      remainingCalories: profile.dailyCalorieGoal,
+      dailySummary: {
+        title: 'Nothing logged yet today',
+        description: 'Start with one natural message and the assistant will build the rest around it.',
+      },
+      macroGoals: {
+        calories: profile.dailyCalorieGoal,
+        protein: profile.proteinGoal,
+        carbs: carbGoal,
+        fat: fatGoal,
+      },
+      macroProgress: {
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+      },
+      trustSummary: {
+        totalCount: 0,
+        trustedCount: 0,
+        estimatedCount: 0,
+        coveragePercent: 0,
+        coverageSummary: 'No foods logged yet',
+        estimatedSummary: 'No estimates yet',
+        headline: 'No meals logged yet',
+        detail: 'Log a meal to see verified coverage and source transparency.',
+      },
+      recentMeals: [],
+      weeklyTrend: buildWeeklyTrendFromMeals([], date, profile.dailyCalorieGoal),
+      disclaimer: 'Nutrition estimates are approximate and are not medical or dietary advice.',
+    };
+  }
 
   const todayMeals = await prisma.meal.findMany({
     where: {

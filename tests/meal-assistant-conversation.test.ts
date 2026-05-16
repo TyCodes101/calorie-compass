@@ -1076,7 +1076,7 @@ describe('meal assistant conversational coverage', () => {
     expect(healthyReply.meal.items[0]?.food_name).toBe('Burger');
     expect(healthyReply.assistant_reply).toMatch(/balanced|protein/i);
     expect(laughReply.meal.items[0]?.food_name).toBe('Burger');
-    expect(laughReply.assistant_reply).toMatch(/ðŸ˜‚|what else did you eat/i);
+    expect(laughReply.assistant_reply).toMatch(/😂|what else did you eat/i);
   });
 
   it('updates quantity in place for a correction instead of starting a new item', async () => {
@@ -1276,7 +1276,7 @@ describe('meal assistant conversational coverage', () => {
     expect(response.meal.items[0]?.quantity).toBe(2);
   });
 
-  it.each(['howâ€™s your day', "how's your day", 'tell me a joke'])('politely redirects off-topic prompts without breaking meal state: %s', async (prompt) => {
+  it.each(['how’s your day', "how's your day", 'tell me a joke'])('politely redirects off-topic prompts without breaking meal state: %s', async (prompt) => {
     const currentMeal = createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 });
     const [response] = await runConversation([prompt], {
       initialState: buildState({
@@ -1327,5 +1327,191 @@ describe('meal assistant conversational coverage', () => {
     expect(second?.assistant_reply).not.toBe(repeatedQuestion);
     expect(second?.assistant_reply).not.toMatch(/i'?m with you/i);
     expect(second?.assistant_reply).not.toMatch(/barcode/i);
+  });
+
+  it('treats dinner advice as a recommendation, not a food lookup', async () => {
+    const classify = vi.fn().mockResolvedValue({
+      intent: 'new_food_item',
+      assistant_reply: 'Got it.',
+      items: [{ name: 'high protein nutritional powder mix', brand: null, quantity: 1, unit: 'serving', modifiers: [], action: 'add' }],
+      corrections: [],
+      should_lookup_nutrition: true,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'medium',
+    } satisfies MealAssistantModelOutput);
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+
+    const [response] = await runConversation(['what should I eat tonight?'], {
+      classify,
+      resolveItemNutrition,
+      context: buildContext({ remainingCalories: 420, remainingProtein: 68, todayCarbs: 220 }),
+    });
+
+    expect(classify).not.toHaveBeenCalled();
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('recommendation_request');
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.assistant_reply).toMatch(/protein|chicken|burrito bowl|dinner|tonight/i);
+    expect(response.assistant_reply).not.toMatch(/powder|pizza|logged|calories total/i);
+  });
+
+  it('edits the active Chipotle bowl instead of logging the correction sentence', async () => {
+    const currentBowl = createItem({
+      food_name: 'Chipotle bowl with white rice, double chicken, cheese, corn salsa, lettuce, and green salsa',
+      unit: 'bowl',
+      calories: 780,
+      protein: 73,
+      carbs: 62,
+      fat: 28,
+      fiber: 5,
+      sodium: 1715,
+      source_type: 'AI_ESTIMATE',
+      source_name: 'Chipotle component fallback estimate',
+    });
+
+    const [response] = await runConversation(['Actually make that regular chicken instead of double, and add chips with guac too.'], {
+      initialState: buildState({
+        currentMealItems: [currentBowl],
+        currentMealText: currentBowl.food_name,
+      }),
+    });
+
+    const names = response.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ');
+    expect(response.intent).toBe('correction');
+    expect(response.meal.items).toHaveLength(2);
+    expect(names).toContain('chipotle bowl');
+    expect(names).not.toContain('actually make');
+    expect(names).not.toContain('double chicken');
+    expect(names).toContain('chips with guacamole');
+    expect(response.assistant_reply).toMatch(/regular chicken|chips with guac/i);
+  });
+
+  it('keeps Wendy sandwich and fries as separate represented foods', async () => {
+    const [response] = await runConversation(["Wendy's spicy chicken sandwich and medium fries"]);
+    const names = response.meal.items.map((item) => item.food_name.toLowerCase());
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(names.some((name) => name.includes('spicy chicken sandwich'))).toBe(true);
+    expect(names.some((name) => name.includes('fries'))).toBe(true);
+    expect(response.assistant_reply).toMatch(/spicy chicken sandwich|fries/i);
+  });
+
+  it('preserves broad breakfast messages instead of only extracting eggs and toast', async () => {
+    const [response] = await runConversation(['breakfast was 2 eggs, toast, bacon, hash browns, and orange juice']);
+    const names = response.meal.items.map((item) => item.food_name.toLowerCase()).join(' ');
+
+    expect(names).toContain('eggs');
+    expect(names).toContain('toast');
+    expect(names).toContain('bacon');
+    expect(names).toContain('hash browns');
+    expect(names).toContain('orange juice');
+    expect(response.meal.items.length).toBeGreaterThanOrEqual(5);
+    expect(response.assistant_reply).not.toMatch(/estimated mixed meal|need a little more detail/i);
+  });
+
+  it('keeps rice cakes as countable cakes while preserving toppings and fruit', async () => {
+    const [response] = await runConversation(['2 rice cakes with peanut butter and blueberries']);
+    const names = response.meal.items.map((item) => item.food_name.toLowerCase()).join(' ');
+    const riceCake = response.meal.items.find((item) => /rice cakes?/i.test(item.food_name));
+
+    expect(names).toContain('rice cakes');
+    expect(names).toContain('peanut butter');
+    expect(names).toContain('blueberries');
+    expect(riceCake?.quantity).toBe(2);
+    expect(riceCake?.unit).toMatch(/cakes?/i);
+    expect(riceCake?.unit).not.toBe('g');
+  });
+
+  it('drops raw conversational correction items before nutrition lookup', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const classify = vi.fn().mockResolvedValue({
+      intent: 'correction',
+      assistant_reply: 'Got it.',
+      items: [{ name: 'actually change that instead', brand: null, quantity: 1, unit: null, modifiers: [], action: 'replace' }],
+      corrections: [{ target: 'Eggs', change: 'Actually change that instead' }],
+      should_lookup_nutrition: true,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'low',
+    } satisfies MealAssistantModelOutput);
+
+    const [response] = await runConversation(['Actually change that instead'], {
+      classify,
+      resolveItemNutrition,
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 })],
+        currentMealText: '2 Eggs',
+      }),
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.meal.items[0]?.food_name).toBe('Eggs');
+    expect(response.assistant_reply).not.toMatch(/actually change that instead|estimated mixed meal/i);
+  });
+
+  it('requested regression: preserves a full Chipotle bowl plus Coke Zero', async () => {
+    const [response] = await runConversation(['I just had a Chipotle bowl with white rice, black beans, double chicken, corn salsa, cheese, lettuce, and green salsa plus a Coke Zero.']);
+    const names = response.meal.items.map((item) => item.food_name.toLowerCase()).join(' ');
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(names).toContain('chipotle bowl');
+    expect(names).toContain('white rice');
+    expect(names).toContain('black beans');
+    expect(names).toContain('double chicken');
+    expect(names).toContain('corn salsa');
+    expect(names).toContain('cheese');
+    expect(names).toContain('lettuce');
+    expect(names).toContain('green salsa');
+    expect(names).toContain('coke zero');
+    expect(response.assistant_reply).not.toMatch(/estimated mixed meal|chipotle white rice/i);
+  });
+
+  it('requested regression: handles breakfast details and Fairlife Core Power Elite', async () => {
+    const [response] = await runConversation(['Breakfast was 3 scrambled eggs, turkey sausage, buttered toast, and a protein shake. The shake was Fairlife Core Power Elite.']);
+    const names = response.meal.items.map((item) => item.food_name.toLowerCase()).join(' ');
+
+    expect(names).toContain('scrambled eggs');
+    expect(names).toContain('turkey sausage');
+    expect(names).toContain('buttered toast');
+    expect(names).toContain('fairlife core power elite');
+    expect(response.meal.items.length).toBeGreaterThanOrEqual(4);
+    expect(response.assistant_reply).toMatch(/scrambled eggs|turkey sausage|fairlife|shake/i);
+    expect(response.assistant_reply).not.toMatch(/estimated mixed meal|need a little more detail/i);
+  });
+
+  it('requested regression: keeps rice cakes, toppings, fruit, Wendy sandwich, and fries', async () => {
+    const [response] = await runConversation(["I had two rice cakes with peanut butter and blueberries before the gym, then later a spicy chicken sandwich and medium fries from Wendy's."]);
+    const names = response.meal.items.map((item) => item.food_name.toLowerCase()).join(' ');
+
+    expect(names).toContain('rice cakes');
+    expect(names).toContain('peanut butter');
+    expect(names).toContain('blueberries');
+    expect(names).toContain('spicy chicken sandwich');
+    expect(names).toContain('fries');
+    expect(response.meal.items.length).toBeGreaterThanOrEqual(5);
+    expect(response.assistant_reply).not.toMatch(/estimated mixed meal|need a little more detail/i);
+  });
+
+  it('requested regression: advice based on today never becomes a food entity', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const [response] = await runConversation(["I'm trying to cut weight but still hit high protein. Based on what I logged today, what should I eat tonight?"], {
+      resolveItemNutrition,
+      context: buildContext({
+        remainingCalories: 520,
+        remainingProtein: 72,
+        todayCalories: 1880,
+        todayProtein: 108,
+        todayCarbs: 210,
+      }),
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('recommendation_request');
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.assistant_reply).toMatch(/protein|grilled chicken|burrito bowl|tonight|dinner/i);
+    expect(response.assistant_reply).not.toMatch(/trying to cut weight|food item|estimated mixed meal/i);
   });
 });

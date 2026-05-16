@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getDashboardData } from '@/lib/dashboard';
+import { hasDatabaseConnectionString } from '@/lib/current-user';
 import { saveConfirmedMeal } from '@/lib/meals';
 import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
 
@@ -42,6 +43,21 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const payload = requestSchema.parse(body);
+    if (!hasDatabaseConnectionString()) {
+      const dashboard = await getDashboardData(payload.date ?? new Date());
+      return NextResponse.json({
+        meal: {
+          id: `local-${Date.now()}`,
+          mealType: payload.meal_type.toUpperCase(),
+          rawText: payload.raw_text ?? null,
+          confidenceScore: payload.confidence_score,
+          items: payload.items,
+        },
+        dashboard,
+        localOnly: true,
+      });
+    }
+
     const meal = await saveConfirmedMeal(payload);
     const dashboard = await getDashboardData(payload.date ?? new Date());
 

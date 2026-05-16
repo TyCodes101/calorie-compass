@@ -3,6 +3,36 @@ import { cookies } from 'next/headers';
 import { buildGuestUserEmail, getGuestPlaceholderName, guestSessionCookieName } from '@/lib/auth-session';
 import { prisma } from '@/lib/prisma';
 
+export function hasDatabaseConnectionString() {
+  return Boolean(process.env.DATABASE_URL);
+}
+
+function buildLocalMockUserWithProfile() {
+  const now = new Date();
+  return {
+    id: 'local-demo-user',
+    name: 'Tyler',
+    email: 'local-demo@guest.caloriecompass.local',
+    demo: true,
+    createdAt: now,
+    updatedAt: now,
+    profile: {
+      id: 'local-demo-profile',
+      userId: 'local-demo-user',
+      age: null,
+      heightCm: null,
+      weightLbs: null,
+      goal: 'MAINTAIN' as const,
+      activityLevel: 'MODERATE' as const,
+      dailyCalorieGoal: 2200,
+      proteinGoal: 160,
+      aiPreferenceNotes: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+  };
+}
+
 async function readGuestSessionId() {
   try {
     const cookieStore = await cookies();
@@ -66,6 +96,10 @@ async function getOrCreateGuestUserId() {
 }
 
 export async function getCurrentUserWithProfile() {
+  if (!hasDatabaseConnectionString()) {
+    return buildLocalMockUserWithProfile();
+  }
+
   const guestUser = await getOrCreateGuestUserWithProfile();
   if (guestUser) {
     return guestUser;
@@ -78,6 +112,10 @@ export async function getCurrentUserWithProfile() {
 }
 
 export async function getCurrentUserId() {
+  if (!hasDatabaseConnectionString()) {
+    return 'local-demo-user';
+  }
+
   const guestUser = await getOrCreateGuestUserId();
   if (guestUser) {
     return guestUser.id;
