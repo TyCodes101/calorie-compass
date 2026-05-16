@@ -1,7 +1,7 @@
 import type { ParsedFoodItem } from '@/lib/ai/types';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import type { MealTypeValue } from '@/lib/ai/orchestrate';
-import { getCurrentUserId } from '@/lib/current-user';
+import { getCurrentUserId, hasDatabaseConnectionString } from '@/lib/current-user';
 import { lookupNutrition } from '@/lib/nutrition/nutritionLookup';
 import type { NutritionLabelInput } from '@/lib/nutrition/types';
 import { prisma } from '@/lib/prisma';
@@ -68,6 +68,10 @@ async function fetchJson<T>(url: string, init?: RequestInit) {
 
 async function resolveFromSavedCorrection(text: string, mealType: MealTypeValue) {
   try {
+    if (!hasDatabaseConnectionString()) {
+      return null;
+    }
+
     const userId = await getCurrentUserId();
     if (!userId) {
       return null;
