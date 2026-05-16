@@ -1213,6 +1213,155 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).not.toMatch(/balanced/i);
   });
 
+  it('keeps append-style food turns attached to the active meal after recommendation and casual turns', async () => {
+    const classify = vi.fn(async ({ message }: { message: string; state: MealAssistantState }) => {
+      const normalized = normalize(message);
+
+      if (normalized === 'what should i eat for lunch') {
+        return {
+          intent: 'recommendation_request',
+          assistant_reply: 'A chicken bowl would work well.',
+          contains_food_to_log: false,
+          contains_quantity_update: false,
+          target_item: null,
+          should_mutate_pending_meal: false,
+          assistant_reply_goal: 'Give a lunch recommendation only.',
+          items: [],
+          corrections: [],
+          should_lookup_nutrition: false,
+          should_save_meal: false,
+          should_ask_clarification: false,
+          clarification_question: null,
+          confidence: 'high',
+        } satisfies MealAssistantModelOutput;
+      }
+
+      if (normalized === 'lol not that') {
+        return {
+          intent: 'casual_message',
+          assistant_reply: 'Fair enough.',
+          contains_food_to_log: false,
+          contains_quantity_update: false,
+          target_item: null,
+          should_mutate_pending_meal: false,
+          assistant_reply_goal: 'Reply casually without changing the meal.',
+          items: [],
+          corrections: [],
+          should_lookup_nutrition: false,
+          should_save_meal: false,
+          should_ask_clarification: false,
+          clarification_question: null,
+          confidence: 'high',
+        } satisfies MealAssistantModelOutput;
+      }
+
+      return {
+        intent: 'new_food_item',
+        assistant_reply: 'Got it.',
+        contains_food_to_log: true,
+        contains_quantity_update: false,
+        target_item: null,
+        should_mutate_pending_meal: true,
+        assistant_reply_goal: 'Log the added food.',
+        items: [{ name: 'Greek yogurt', brand: null, quantity: 1, unit: 'cup', modifiers: [], action: 'add' }],
+        corrections: [],
+        should_lookup_nutrition: true,
+        should_save_meal: false,
+        should_ask_clarification: false,
+        clarification_question: null,
+        confidence: 'medium',
+      } satisfies MealAssistantModelOutput;
+    });
+
+    const [recommendation, casual, added] = await runConversation(['what should I eat for lunch?', 'lol not that', 'add a greek yogurt too'], {
+      classify,
+      initialState: buildState({
+        currentMealItems: [
+          createItem({ food_name: 'Eggs', quantity: 3, unit: 'egg', calories: 210, protein: 18, fat: 15 }),
+          createItem({ food_name: 'Toast', quantity: 2, unit: 'slice', calories: 200, protein: 8, carbs: 38, fat: 2 }),
+        ],
+        currentMealText: '3 Eggs, Toast',
+      }),
+    });
+
+    expect(recommendation.meal.items.map((item) => item.food_name)).toEqual(['Eggs', 'Toast']);
+    expect(casual.meal.items.map((item) => item.food_name)).toEqual(['Eggs', 'Toast']);
+    expect(added.intent).toBe('add_to_current_meal');
+    expect(added.meal.items.map((item) => item.food_name)).toEqual(['Eggs', 'Toast', 'Greek yogurt']);
+    expect(added.assistant_reply).toMatch(/greek yogurt/i);
+  });
+
+  it('covers the core chatbot smoke flow without mutating meals on question and recommendation turns', async () => {
+    const yesterdayMeal = {
+      id: 'yesterday-chipotle',
+      title: 'Chipotle bowl with white rice and double chicken',
+      rawText: 'Chipotle bowl with white rice and double chicken',
+      mealType: 'dinner' as const,
+      totalCalories: 760,
+      confidenceScore: 0.98,
+      date: '2026-05-15T19:00:00.000Z',
+      createdAt: '2026-05-15T19:00:00.000Z',
+      lastUsedAt: '2026-05-15T19:00:00.000Z',
+      items: [
+        createItem({
+          food_name: 'Chipotle Chicken Bowl',
+          unit: 'bowl',
+          calories: 760,
+          protein: 58,
+          carbs: 62,
+          fat: 24,
+          source_type: 'OFFICIAL_RESTAURANT',
+          source_name: 'Chipotle official nutrition',
+        }),
+      ],
+    };
+
+    const saveMeal = vi.fn().mockResolvedValue(undefined);
+
+    const [logged, question, corrected, recommendation, casual, added, saved, repeated] = await runConversation(
+      [
+        '2 eggs and 2 slices of toast',
+        'how much protein is that?',
+        'actually make that 3 eggs',
+        'what should I eat for lunch?',
+        'lol not that',
+        'add a greek yogurt too',
+        'save it',
+        'same as yesterday',
+      ],
+      {
+        context: buildContext({
+          recentMeals: [yesterdayMeal],
+        }),
+        saveMeal,
+      },
+    );
+
+    expect(logged.meal.items.map((item) => item.food_name.toLowerCase()).join(' ')).toMatch(/egg/);
+    expect(logged.meal.items.map((item) => item.food_name.toLowerCase()).join(' ')).toMatch(/toast/);
+
+    expect(question.meal.items).toEqual(logged.meal.items);
+    expect(question.assistant_reply).toMatch(/protein/i);
+
+    expect(corrected.meal.items.map((item) => `${item.food_name}:${item.quantity}`).join(' | ')).toMatch(/egg.*3/i);
+    expect(corrected.meal.items.map((item) => item.food_name.toLowerCase()).join(' ')).toMatch(/toast/);
+
+    expect(recommendation.meal.items).toEqual(corrected.meal.items);
+    expect(recommendation.assistant_reply).not.toMatch(/frozen dinner|i can log/i);
+
+    expect(casual.meal.items).toEqual(corrected.meal.items);
+    expect(casual.assistant_reply).not.toMatch(/i can log lol not that/i);
+
+    expect(added.meal.items.map((item) => item.food_name.toLowerCase()).join(' ')).toMatch(/greek yogurt/);
+    expect(added.meal.items.map((item) => item.food_name.toLowerCase()).join(' ')).toMatch(/toast/);
+
+    expect(saved.next_state.saved).toBe(true);
+    expect(saved.assistant_reply).toMatch(/saved|ready for the next one/i);
+
+    expect(repeated.meal.items.map((item) => item.food_name.toLowerCase()).join(' ')).toMatch(/chipotle chicken bowl/);
+    expect(repeated.assistant_reply).toMatch(/yesterday|loaded|using|pulled/i);
+  });
+
   it('handles casual and descriptive follow-ups without dropping the active meal', async () => {
     const currentMeal = createItem({ food_name: 'Burger', unit: 'burger', calories: 500, protein: 28, carbs: 38, fat: 24 });
 

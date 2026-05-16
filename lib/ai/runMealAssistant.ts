@@ -359,6 +359,20 @@ function isRecommendationRequestMessage(message: string) {
   );
 }
 
+function shouldAppendToCurrentMeal(message: string, state: MealAssistantState) {
+  if (!state.currentMealItems.length || state.saved) {
+    return false;
+  }
+
+  const normalized = stripEmotionalPreface(message).toLowerCase().trim();
+  return (
+    continuationRegex.test(normalized)
+    || /^(?:add|include|throw in|put in)\b/i.test(normalized)
+    || /\b(?:too|as well)\b/i.test(normalized)
+    || /\b(?:another|one more)\b/i.test(normalized)
+  );
+}
+
 function isNonMutatingIntent(intent: MealAssistantModelOutput['intent']) {
   return (
     intent === 'recommendation_request' ||
@@ -2313,7 +2327,7 @@ function findMatchingMemoryMeal(input: MealAssistantRunInput, context: MealAssis
   }
 
   const mealTypeHint = extractMealTypeHint(input.message) ?? null;
-  const appendToCurrentMeal = input.state.currentMealItems.length > 0 && continuationRegex.test(normalized);
+  const appendToCurrentMeal = shouldAppendToCurrentMeal(input.message, input.state);
   const requireYesterday = repeatYesterdayRegex.test(normalized);
   const preferFavorite = usualRegex.test(normalized) || /\bmy usual\b/i.test(normalized);
   const targetText = buildMemoryTarget(input.message);
@@ -2881,8 +2895,7 @@ function buildDirectFoodEstimateResponse(args: {
   followUpMessage?: string | null;
   context?: MealAssistantContext;
 }) {
-  const normalized = stripEmotionalPreface(args.input.message).toLowerCase();
-  const intent = args.intent ?? (args.state.currentMealItems.length && continuationRegex.test(normalized) ? 'add_to_current_meal' : 'new_food_item');
+  const intent = args.intent ?? (shouldAppendToCurrentMeal(args.input.message, args.state) ? 'add_to_current_meal' : 'new_food_item');
   const currentMealItems = intent === 'add_to_current_meal'
     ? [...args.state.currentMealItems, ...args.items]
     : args.items;
@@ -3723,7 +3736,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
   const items = extractFallbackItems(message, state);
 
   return {
-    intent: hasActiveMeal && continuationRegex.test(normalized) ? 'add_to_current_meal' : 'new_food_item',
+    intent: shouldAppendToCurrentMeal(message, state) ? 'add_to_current_meal' : 'new_food_item',
     assistant_reply: 'Got it.',
     items,
     corrections: [],
@@ -4035,6 +4048,7 @@ function buildReplyFromItems(args: {
 function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealAssistantRunInput): MealAssistantModelOutput {
   const safeItems = decision.items.filter((item) => !isUnsafeLookupItem(item, input.message));
   const droppedItems = safeItems.length !== decision.items.length;
+  const shouldCoerceAppend = decision.intent === 'new_food_item' && shouldAppendToCurrentMeal(input.message, input.state) && safeItems.length > 0;
 
   if (
     decision.should_ask_clarification &&
@@ -4066,7 +4080,12 @@ function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealA
   }
 
   if (!droppedItems) {
-    return decision;
+    return shouldCoerceAppend
+      ? {
+          ...decision,
+          intent: 'add_to_current_meal',
+        }
+      : decision;
   }
 
   if (!safeItems.length && correctionCueRegex.test(input.message) && input.state.currentMealItems.length) {
@@ -4085,8 +4104,9 @@ function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealA
 
   return {
     ...decision,
+    intent: shouldCoerceAppend ? 'add_to_current_meal' : decision.intent,
     items: safeItems,
-    should_lookup_nutrition: safeItems.length > 0 && shouldLookupNutritionForDecision({ ...decision, items: safeItems }, input.message),
+    should_lookup_nutrition: safeItems.length > 0 && shouldLookupNutritionForDecision({ ...decision, intent: shouldCoerceAppend ? 'add_to_current_meal' : decision.intent, items: safeItems }, input.message),
     should_ask_clarification: safeItems.length ? decision.should_ask_clarification : false,
     clarification_question: safeItems.length ? decision.clarification_question : null,
   };
@@ -4134,7 +4154,7 @@ export async function runMealAssistant(
       !dependencies.classify
       && !process.env.OPENAI_API_KEY
       && !state.pendingClarification
-      && (!state.currentMealItems.length || state.saved || continuationRegex.test(stripEmotionalPreface(workingInput.message).toLowerCase()));
+      && (!state.currentMealItems.length || state.saved || shouldAppendToCurrentMeal(workingInput.message, state));
     const directKnownItems = canUseDirectKnownFood ? detectKnownFoodEstimates(workingInput.message) : [];
     if (directKnownItems.length) {
       const hydratedItems = await hydrateKnownEstimatesWithProviders(directKnownItems, state.mealType);
