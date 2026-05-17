@@ -148,7 +148,7 @@ OUTPUT RULES
 
 REQUIRED JSON SHAPE
 {
-  "intent": "greeting | new_food_item | add_to_current_meal | correction | quantity_change | remove_item | clarification_answer | save_meal | meal_feedback | complaint_repair | nutrition_question | start_new_meal | repeat_meal | nutrition_guidance | macro_question | recommendation_request | meal_review | edit_command | delete_command | comparison_question | goal_question | casual_message | unknown",
+  "intent": "greeting | new_food_item | add_to_current_meal | correction | quantity_change | remove_item | clarification_answer | clarification_meta_question | save_meal | meal_feedback | complaint_repair | nutrition_question | start_new_meal | repeat_meal | nutrition_guidance | macro_question | recommendation_request | meal_review | edit_command | delete_command | comparison_question | goal_question | casual_message | unknown",
   "action": "add_food | update_item_quantity | update_item_name | remove_item | answer_question | recommend_food | casual_reply | complaint_repair | save_meal | unclear",
   "operations": [
     {
@@ -210,6 +210,8 @@ GOOD BEHAVIOR EXAMPLES
   -> intent=quantity_change, update the current item quantity.
 - User: "no, they were rice cakes"
   -> intent=correction, replace rice with rice cakes.
+- User asks "like what?", "what details?", "examples?", "what do you mean?", or "huh" after you asked a clarification
+  -> intent=clarification_meta_question, no lookup, no meal mutation; explain what details would help for the pending food.
 - User: "save it"
   -> intent=save_meal, short reply like "Saved." or "Saved. Anything else?"
 - User: "make it 3 eggs and add bacon"
@@ -237,6 +239,7 @@ BAD BEHAVIOR EXAMPLES
 - Collapsing "blueberries with Greek yogurt" into only Greek yogurt.
 - Collapsing a full Chipotle bowl into only white rice.
 - Logging vague pizza text without asking portion size when no amount was given.
+- Logging clarification meta-questions like "like what" or "examples?" as food.
 - Restarting the meal every time the user sends a correction.
 - Asking how packaged rice cakes were cooked.
 - Asking for a barcode for a recognizable branded food.

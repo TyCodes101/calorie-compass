@@ -70,6 +70,7 @@ const sizeDownRegex = /\b(?:small|tiny|light|not that much|pretty small)\b/i;
 const healthyCueRegex = /\b(?:healthy|balanced|pretty healthy|pretty balanced|not too bad|clean)\b/i;
 const mealDescriptorReferenceRegex = /\b(?:that|this|it|meal|burger|bowl|shake|sandwich|breakfast|lunch|dinner|snack)\b/i;
 const ambiguousFollowUpRegex = /^(?:what about that|what about it|how about that|how about it|is that okay|is it okay|does that work|which one|what do you mean|what does that mean|wdym|wym|huh|wait)\b/i;
+const clarificationMetaQuestionRegex = /^(?:like what|what details?|what detail do you need|what do you need|what info|what information|what kind of details?|what do you mean|what does that mean|wdym|wym|huh|examples?\??|such as\??|like\??)$/i;
 const nothingYetRegex = /^(?:nothing|nothing yet|not yet|haven't eaten yet|havent eaten yet|no food yet|none yet|nothing today)\b/i;
 const alreadySentFoodRegex = /^(?:i did|i already did|i just did|already did|i told you|sent it|i sent it)\b/i;
 
@@ -3713,6 +3714,9 @@ function updateConversationState(
   } else if (args.intent === 'complaint_repair') {
     activeTopic = nextState.currentMealItems.length ? 'meal' : 'review';
     activeMode = nextState.currentMealItems.length ? 'correction_mode' : 'review_save';
+  } else if (args.intent === 'clarification_meta_question' || args.intent === 'clarification_answer') {
+    activeTopic = 'clarification';
+    activeMode = 'logging_mode';
   } else if (args.intent === 'save_meal' || args.intent === 'meal_review' || args.intent === 'meal_feedback') {
     activeTopic = 'review';
     activeMode = 'review_save';
@@ -3991,8 +3995,8 @@ function buildConversationRecoveryReply(input: MealAssistantRunInput, context: M
     (value) => value !== null && value !== undefined,
   );
 
-  if (input.state.pendingClarification && /^(?:wait|which one|what do you need|what do you mean|what does that mean|wym)\b/i.test(normalized)) {
-    return `I just need one detail to keep going: ${input.state.pendingClarification}`;
+  if (input.state.pendingClarification && isClarificationMetaQuestion(input.message)) {
+    return buildClarificationMetaReply(input.state);
   }
 
   if (/\b(?:what|which)\s+(?:detail|details|info|information)\b|\bwhat do you need\b|\bwhat detail do you need\b/i.test(normalized)) {
@@ -4028,6 +4032,37 @@ function buildConversationRecoveryReply(input: MealAssistantRunInput, context: M
   }
 
   return null;
+}
+
+function isClarificationMetaQuestion(message: string) {
+  return clarificationMetaQuestionRegex.test(message.trim().toLowerCase().replace(/[.!]+$/g, ''));
+}
+
+function buildClarificationMetaReply(state: MealAssistantState) {
+  const pending = state.pendingClarification ?? state.lastAssistantQuestion ?? '';
+  const contextText = `${state.currentMealText ?? ''} ${pending}`.toLowerCase();
+
+  if (/\bomelette|omelet|hash\s*browns?|hashbrowns?\b/.test(contextText)) {
+    return 'For the omelette, the main things are how many eggs, any cheese/meat/veggies, and roughly how much hashbrowns. A simple estimate like "2 eggs with cheese and a cup of hashbrowns" works.';
+  }
+
+  if (/\bcottage cheese\b/.test(contextText)) {
+    return 'For cottage cheese, the most useful detail is the amount. Something like "half a cup," "1 cup," or "150 grams" is enough; brand or low-fat helps if you know it.';
+  }
+
+  if (/\bsandwich\b/.test(contextText)) {
+    return 'For a sandwich, the useful details are bread, main filling, cheese or sauces, and rough size. Something like "turkey sandwich on wheat with cheese" works.';
+  }
+
+  if (/\bsalad\b/.test(contextText)) {
+    return 'For a salad, the biggest helpers are protein, dressing amount, and calorie-dense toppings like cheese, nuts, or croutons. A rough bowl size is fine.';
+  }
+
+  if (/\bsmoothie\b/.test(contextText)) {
+    return 'For a smoothie, the useful details are size and what went in it: fruit, milk or yogurt, protein powder, nut butter, or juice. A rough estimate is fine.';
+  }
+
+  return `I just need enough detail to estimate it fairly: amount, main ingredients, and any calorie-heavy add-ons. ${pending}`;
 }
 
 function buildCompanionInsight(args: { response: MealAssistantResponse; input: MealAssistantRunInput; context: MealAssistantContext }) {
@@ -5219,6 +5254,24 @@ async function buildDeterministicDialogueResponse(
 ) {
   const state = input.state;
   const normalized = stripEmotionalPreface(input.message).toLowerCase();
+
+  if (state.pendingClarification && isClarificationMetaQuestion(input.message)) {
+    return buildDirectResponse({
+      intent: 'clarification_meta_question',
+      assistantReply: buildClarificationMetaReply(state),
+      nextState: {
+        ...state,
+        currentMealItems: [...state.currentMealItems],
+        currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
+        confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+        pendingClarification: state.pendingClarification,
+        lastAssistantQuestion: state.lastAssistantQuestion ?? state.pendingClarification,
+        saved: false,
+      },
+      message: input.message,
+      activeQuestion: state.pendingClarification,
+    });
+  }
 
   if (saveRegex.test(normalized)) {
     if (state.currentMealItems.length) {
@@ -6487,6 +6540,24 @@ export async function runMealAssistant(
   const state = { ...workingInput.state };
   const shouldUseModelIntentFirst = Boolean(process.env.OPENAI_API_KEY) && !dependencies.classify;
 
+  if (state.pendingClarification && isClarificationMetaQuestion(workingInput.message)) {
+    return finalizeResponse(buildDirectResponse({
+      intent: 'clarification_meta_question',
+      assistantReply: buildClarificationMetaReply(state),
+      nextState: {
+        ...state,
+        currentMealItems: [...state.currentMealItems],
+        currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
+        confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+        pendingClarification: state.pendingClarification,
+        lastAssistantQuestion: state.lastAssistantQuestion ?? state.pendingClarification,
+        saved: false,
+      },
+      message: workingInput.message,
+      activeQuestion: state.pendingClarification,
+    }), workingInput, context);
+  }
+
   if (!shouldUseModelIntentFirst && !dependencies.classify) {
     const pizzaClarificationItems = resolvePizzaClarificationEstimate(workingInput.message, state);
     if (pizzaClarificationItems.length) {
@@ -6717,6 +6788,14 @@ export async function runMealAssistant(
   });
   decision = normalizeAssistantDecision(decision, workingInput);
   decision = guardAssistantDecision(decision, workingInput);
+  if (state.pendingClarification && decision.intent === 'new_food_item' && decision.should_lookup_nutrition) {
+    decision = {
+      ...decision,
+      intent: 'clarification_answer',
+      action: decision.action ?? 'add_food',
+      should_mutate_pending_meal: true,
+    };
+  }
   const normalizedOperations = normalizeDecisionOperations(decision);
   const hasCompoundOperations = Boolean(decision.operations?.length)
     || normalizedOperations.length > 1

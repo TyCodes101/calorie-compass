@@ -572,6 +572,98 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).not.toMatch(/i can log what detail|need a little more detail/i);
   });
 
+  it.each([
+    'like what',
+    'what detail do you need',
+    'examples?',
+    'what do you mean',
+    'what info',
+    'what kind of details',
+    'such as?',
+    'huh',
+  ])('answers pending clarification meta-question without lookup: %s', async (message) => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const [response] = await runConversation([message], {
+      resolveItemNutrition,
+      initialState: buildState({
+        pendingClarification: 'For the omelette, how many eggs and roughly how much hashbrowns?',
+        lastAssistantQuestion: 'For the omelette, how many eggs and roughly how much hashbrowns?',
+        currentMealText: 'omelette with some hashbrowns',
+      }),
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('clarification_meta_question');
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.next_state.pendingClarification).toMatch(/omelette|hashbrowns/i);
+    expect(response.assistant_reply).toMatch(/omelette|eggs?|cheese|meat|veggies|hashbrowns|example/i);
+    expect(response.assistant_reply).not.toMatch(/what a melon|lollipop|bubble gum|usda|i can log/i);
+  });
+
+  it.each([
+    {
+      foodText: 'omelette with some hashbrowns',
+      question: 'For the omelette, how many eggs and roughly how much hashbrowns?',
+      expected: /omelette|eggs?|hashbrowns/i,
+    },
+    {
+      foodText: 'some cottage cheese',
+      question: 'About how much cottage cheese should I log?',
+      expected: /cottage cheese|cup|grams?|brand/i,
+    },
+    {
+      foodText: 'a sandwich',
+      question: 'What kind of sandwich and about how big was it?',
+      expected: /sandwich|bread|meat|cheese|size/i,
+    },
+    {
+      foodText: 'a salad',
+      question: 'What was in the salad and roughly how much dressing?',
+      expected: /salad|protein|dressing|toppings|bowl/i,
+    },
+    {
+      foodText: 'a smoothie',
+      question: 'What went into the smoothie and roughly what size?',
+      expected: /smoothie|size|protein|fruit|milk|yogurt/i,
+    },
+  ])('keeps clarification meta replies grounded in pending food context: $foodText', async ({ foodText, question, expected }) => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const [response] = await runConversation(['like what'], {
+      resolveItemNutrition,
+      initialState: buildState({
+        pendingClarification: question,
+        lastAssistantQuestion: question,
+        currentMealText: foodText,
+      }),
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('clarification_meta_question');
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.next_state.currentMealText).toBe(foodText);
+    expect(response.next_state.pendingClarification).toBe(question);
+    expect(response.assistant_reply).toMatch(expected);
+    expect(response.assistant_reply).not.toMatch(/what a melon|lollipop|bubble gum|usda|matched/i);
+  });
+
+  it('still accepts a real clarification answer after a pending omelette question', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const [response] = await runConversation(['2 eggs and 1 cup hashbrowns'], {
+      resolveItemNutrition,
+      initialState: buildState({
+        pendingClarification: 'For the omelette, how many eggs and roughly how much hashbrowns?',
+        lastAssistantQuestion: 'For the omelette, how many eggs and roughly how much hashbrowns?',
+        currentMealText: 'omelette with some hashbrowns',
+      }),
+    });
+
+    expect(response.intent).toBe('clarification_answer');
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.next_state.pendingClarification).toBeNull();
+    expect(response.meal.items.length).toBeGreaterThan(0);
+    expect(response.assistant_reply).not.toMatch(/what a melon|lollipop|bubble gum/i);
+  });
+
   it('keeps dinner idea requests as recommendations even when phrased like a rejection', async () => {
     const resolveItemNutrition = vi.fn(resolveConversationNutrition);
     const responses = await runConversation([

@@ -11,6 +11,7 @@ export const mealAssistantIntentSchema = z.enum([
   'quantity_change',
   'remove_item',
   'clarification_answer',
+  'clarification_meta_question',
   'save_meal',
   'meal_feedback',
   'complaint_repair',
