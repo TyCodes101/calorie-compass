@@ -37,6 +37,31 @@ function normalizeItem(item: Record<string, unknown>) {
           : null,
     catalog_food_id:
       item.catalog_food_id ? String(item.catalog_food_id) : item.catalogFoodId ? String(item.catalogFoodId) : null,
+    userQuantity:
+      typeof item.userQuantity === 'number'
+        ? sanitizeNumber(item.userQuantity)
+        : typeof item.user_quantity === 'number'
+          ? sanitizeNumber(item.user_quantity)
+          : null,
+    userUnit: item.userUnit ? String(item.userUnit) : item.user_unit ? String(item.user_unit) : null,
+    userTextSpan: item.userTextSpan ? String(item.userTextSpan) : item.user_text_span ? String(item.user_text_span) : null,
+    normalizedGrams:
+      typeof item.normalizedGrams === 'number'
+        ? sanitizeNumber(item.normalizedGrams)
+        : typeof item.normalized_grams === 'number'
+          ? sanitizeNumber(item.normalized_grams)
+          : null,
+    normalizedOunces:
+      typeof item.normalizedOunces === 'number'
+        ? sanitizeNumber(item.normalizedOunces)
+        : typeof item.normalized_ounces === 'number'
+          ? sanitizeNumber(item.normalized_ounces)
+          : null,
+    sourceId: item.sourceId ? String(item.sourceId) : item.source_id ? String(item.source_id) : null,
+    confidence:
+      typeof item.confidence === 'number'
+        ? Math.max(0, Math.min(1, sanitizeNumber(item.confidence)))
+        : null,
   };
 }
 

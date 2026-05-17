@@ -13,6 +13,7 @@ export const mealAssistantIntentSchema = z.enum([
   'clarification_answer',
   'save_meal',
   'meal_feedback',
+  'complaint_repair',
   'nutrition_question',
   'start_new_meal',
   'repeat_meal',
@@ -36,6 +37,7 @@ export const mealAssistantActionSchema = z.enum([
   'answer_question',
   'recommend_food',
   'casual_reply',
+  'complaint_repair',
   'save_meal',
   'unclear',
 ]);

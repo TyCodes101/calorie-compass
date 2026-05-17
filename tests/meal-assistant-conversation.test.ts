@@ -461,6 +461,14 @@ describe('meal assistant conversational coverage', () => {
     expect(first?.meal.items[0]?.food_name).toMatch(/chicken/i);
     expect(first?.meal.items[0]?.quantity).toBe(3);
     expect(first?.meal.items[0]?.unit).toBe('cup');
+    expect(first?.meal.items[0]?.userQuantity).toBe(3);
+    expect(first?.meal.items[0]?.userUnit).toBe('cup');
+    expect(first?.meal.items[0]?.userTextSpan).toMatch(/3.*cup.*chicken/i);
+    expect(first?.meal.items[0]?.normalizedGrams).toBeGreaterThan(350);
+    expect(first?.meal.items[0]?.normalizedGrams).toBeLessThan(500);
+    expect(first?.meal.items[0]?.normalizedOunces).toBeGreaterThan(12);
+    expect(first?.meal.items[0]?.sourceId).toBeTruthy();
+    expect(first?.meal.items[0]?.confidence).toBeGreaterThan(0.8);
     expect(first?.assistant_reply).toMatch(/3 cups?.*chicken|chicken.*3 cups?/i);
     expect(first?.assistant_reply).not.toMatch(/113\.4|oz/i);
 
@@ -468,6 +476,10 @@ describe('meal assistant conversational coverage', () => {
     expect(fourCups?.meal.items).toHaveLength(1);
     expect(fourCups?.meal.items[0]?.quantity).toBe(4);
     expect(fourCups?.meal.items[0]?.unit).toBe('cup');
+    expect(fourCups?.meal.items[0]?.userQuantity).toBe(4);
+    expect(fourCups?.meal.items[0]?.userUnit).toBe('cup');
+    expect(fourCups?.meal.items[0]?.normalizedGrams).toBeGreaterThan(500);
+    expect(fourCups?.meal.items[0]?.normalizedGrams).toBeLessThan(620);
     expect(fourCups?.assistant_reply).toMatch(/4 cups?.*chicken|chicken.*4 cups?/i);
     expect(fourCups?.assistant_reply).not.toMatch(/\b4 oz\b|113\.4 oz/i);
 
@@ -475,14 +487,21 @@ describe('meal assistant conversational coverage', () => {
     expect(backToThree?.meal.items).toHaveLength(1);
     expect(backToThree?.meal.items[0]?.quantity).toBe(3);
     expect(backToThree?.meal.items[0]?.unit).toBe('cup');
+    expect(backToThree?.meal.items[0]?.userQuantity).toBe(3);
+    expect(backToThree?.meal.items[0]?.userUnit).toBe('cup');
+    expect(backToThree?.meal.items[0]?.normalizedGrams).toBeGreaterThan(350);
+    expect(backToThree?.meal.items[0]?.normalizedGrams).toBeLessThan(500);
     expect(backToThree?.assistant_reply).toMatch(/3 cups?.*chicken|chicken.*3 cups?/i);
     expect(backToThree?.assistant_reply).not.toMatch(/\b4 oz\b|113\.4 oz/i);
 
     for (const response of [bareNo, complaint]) {
+      expect(response?.intent).toBe('complaint_repair');
       expect(response?.meal.items).toHaveLength(1);
       expect(response?.meal.items[0]?.food_name).toMatch(/chicken/i);
       expect(response?.meal.items[0]?.quantity).toBe(3);
       expect(response?.meal.items[0]?.unit).toBe('cup');
+      expect(response?.meal.items[0]?.userQuantity).toBe(3);
+      expect(response?.meal.items[0]?.userUnit).toBe('cup');
       expect(response?.assistant_reply).toMatch(/chicken|meal|change|fix|right|current/i);
       expect(response?.assistant_reply).not.toMatch(/i can log|need a little more detail|no,? around|that's not right/i);
     }
@@ -499,6 +518,10 @@ describe('meal assistant conversational coverage', () => {
     expect(peanutButter.meal.items[0]?.food_name).toMatch(/peanut butter/i);
     expect(peanutButter.meal.items[0]?.quantity).toBe(2);
     expect(peanutButter.meal.items[0]?.unit).toBe('tbsp');
+    expect(peanutButter.meal.items[0]?.userQuantity).toBe(2);
+    expect(peanutButter.meal.items[0]?.userUnit).toBe('tbsp');
+    expect(peanutButter.meal.items[0]?.normalizedGrams).toBeGreaterThan(25);
+    expect(peanutButter.meal.items[0]?.normalizedGrams).toBeLessThan(40);
 
     const cottageResponses = await runConversation([
       '1 whole cup cottage cheese',

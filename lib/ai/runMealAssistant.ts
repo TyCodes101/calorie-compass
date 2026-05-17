@@ -539,6 +539,8 @@ function inferActionFromIntent(intent: MealAssistantModelOutput['intent']): Meal
     case 'greeting':
     case 'casual_message':
       return 'casual_reply';
+    case 'complaint_repair':
+      return 'complaint_repair';
     case 'nutrition_question':
     case 'nutrition_guidance':
     case 'macro_question':
@@ -1212,6 +1214,21 @@ function normalizeAssistantDecision(decision: MealAssistantModelOutput, input: M
     };
   }
 
+  if (nextDecision.action === 'complaint_repair') {
+    return {
+      ...nextDecision,
+      intent: 'complaint_repair',
+      items: [],
+      operations: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
   if (nextDecision.action === 'casual_reply') {
     return {
       ...nextDecision,
@@ -1264,6 +1281,7 @@ function isNonMutatingIntent(intent: MealAssistantModelOutput['intent']) {
     intent === 'goal_question' ||
     intent === 'comparison_question' ||
     intent === 'meal_feedback' ||
+    intent === 'complaint_repair' ||
     intent === 'meal_review' ||
     intent === 'casual_message' ||
     intent === 'greeting' ||
@@ -1479,7 +1497,11 @@ type GenericEstimateSpec = {
 };
 
 function formatDisplayQuantity(quantity: number) {
-  return Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(1);
+  if (Number.isInteger(quantity)) {
+    return quantity.toString();
+  }
+
+  return Number(quantity.toFixed(2)).toString();
 }
 
 function formatUnitForQuantity(unit: string, quantity: number) {
@@ -1534,6 +1556,170 @@ function formatParsedItemLabel(item: ParsedFoodItem) {
   }
 
   return `${quantity} ${normalizedUnit} ${item.food_name}`;
+}
+
+function estimateGramsPerUnit(item: ParsedFoodItem, normalizedUnit: string | null) {
+  const name = normalizeText(item.food_name);
+
+  if (!normalizedUnit) {
+    return null;
+  }
+
+  if (normalizedUnit === 'g') {
+    return 1;
+  }
+
+  if (normalizedUnit === 'oz') {
+    return 28.3495;
+  }
+
+  if (normalizedUnit === 'tbsp') {
+    if (/\bpeanut butter\b/.test(name) || /\bnut butter\b/.test(name)) {
+      return 16;
+    }
+
+    if (/\bbutter\b/.test(name) || /\boil\b/.test(name)) {
+      return 14;
+    }
+
+    return 15;
+  }
+
+  if (normalizedUnit === 'tsp') {
+    return 5;
+  }
+
+  if (normalizedUnit === 'cup') {
+    if (/\bchicken\b/.test(name)) {
+      return 140;
+    }
+
+    if (/\bcottage cheese\b/.test(name)) {
+      return 226;
+    }
+
+    if (/\b(?:rice|beans)\b/.test(name)) {
+      return 160;
+    }
+
+    if (/\b(?:oatmeal|greek yogurt|yogurt)\b/.test(name)) {
+      return 240;
+    }
+
+    if (/\bblueberr/.test(name)) {
+      return 148;
+    }
+
+    return 240;
+  }
+
+  if (normalizedUnit === 'egg') {
+    return 50;
+  }
+
+  if (normalizedUnit === 'slice') {
+    if (/\b(?:toast|bread)\b/.test(name)) {
+      return 28;
+    }
+
+    if (/\bpizza\b/.test(name)) {
+      return 107;
+    }
+  }
+
+  if (normalizedUnit === 'cake' && /\brice cake/.test(name)) {
+    return 9;
+  }
+
+  if (normalizedUnit === 'can') {
+    return 260;
+  }
+
+  if (normalizedUnit === 'bottle') {
+    return 414;
+  }
+
+  return null;
+}
+
+function inferNormalizedGrams(item: ParsedFoodItem) {
+  const normalizedUnit = normalizeQuantityUnit(item.unit);
+  const gramsPerUnit = estimateGramsPerUnit(item, normalizedUnit);
+
+  if (gramsPerUnit !== null) {
+    return Number((item.quantity * gramsPerUnit).toFixed(1));
+  }
+
+  if (typeof item.normalizedGrams === 'number' && item.normalizedGrams > 0) {
+    return Number(item.normalizedGrams.toFixed(1));
+  }
+
+  if (typeof item.normalizedOunces === 'number' && item.normalizedOunces > 0) {
+    return Number((item.normalizedOunces * 28.3495).toFixed(1));
+  }
+
+  return null;
+}
+
+function inferSourceId(item: ParsedFoodItem) {
+  return item.sourceId
+    ?? item.catalog_food_id
+    ?? item.provider_used
+    ?? item.source_name
+    ?? item.matched_query
+    ?? null;
+}
+
+function inferItemConfidence(item: ParsedFoodItem) {
+  if (typeof item.confidence === 'number' && item.confidence >= 0 && item.confidence <= 1) {
+    return item.confidence;
+  }
+
+  if (item.source_type === 'OFFICIAL_RESTAURANT') {
+    return 0.97;
+  }
+
+  if (item.source_type === 'GENERIC_REFERENCE' || item.is_trusted) {
+    return 0.9;
+  }
+
+  if (item.source_type === 'AI_ESTIMATE' || item.used_ai_fallback) {
+    return 0.72;
+  }
+
+  return 0.82;
+}
+
+function buildUserTextSpan(item: ParsedFoodItem) {
+  const normalizedUnit = normalizeQuantityUnit(item.unit) ?? item.unit;
+  const unitLabel = normalizedUnit ? formatUnitForQuantity(normalizedUnit, item.quantity) : item.unit;
+
+  return [formatDisplayQuantity(item.quantity), unitLabel, item.food_name].filter(Boolean).join(' ');
+}
+
+function withServingMetadata(item: ParsedFoodItem): ParsedFoodItem {
+  const normalizedUnit = normalizeQuantityUnit(item.unit) ?? item.unit;
+  const normalizedGrams = inferNormalizedGrams(item);
+  const normalizedOunces = normalizedGrams !== null
+    ? Number((normalizedGrams / 28.3495).toFixed(2))
+    : typeof item.normalizedOunces === 'number'
+      ? Number(item.normalizedOunces.toFixed(2))
+      : null;
+
+  return {
+    ...item,
+    userQuantity: item.quantity,
+    userUnit: normalizedUnit,
+    userTextSpan: buildUserTextSpan(item),
+    normalizedGrams,
+    normalizedOunces,
+    sourceId: inferSourceId(item),
+    confidence: inferItemConfidence(item),
+  };
+}
+
+function withServingMetadataForItems(items: ParsedFoodItem[]) {
+  return items.map((item) => withServingMetadata(item));
 }
 
 function makeGenericEstimate(spec: GenericEstimateSpec, originalText: string): ParsedFoodItem {
@@ -3353,6 +3539,9 @@ function updateConversationState(
   } else if (args.intent === 'recommendation_request') {
     activeTopic = 'recommendation';
     activeMode = 'recommendation_mode';
+  } else if (args.intent === 'complaint_repair') {
+    activeTopic = nextState.currentMealItems.length ? 'meal' : 'review';
+    activeMode = nextState.currentMealItems.length ? 'correction_mode' : 'review_save';
   } else if (args.intent === 'save_meal' || args.intent === 'meal_review' || args.intent === 'meal_feedback') {
     activeTopic = 'review';
     activeMode = 'review_save';
@@ -4683,16 +4872,23 @@ function buildDirectResponse(args: {
   message?: string;
   activeQuestion?: string | null;
 }) {
-  const assistantReply = postProcessAssistantReply(args.assistantReply, args.nextState, args.message);
-  const nextState = args.message
+  const updatedState = args.message
     ? updateConversationState(args.nextState, {
         intent: args.intent,
         message: args.message,
         activeQuestion: args.activeQuestion,
       })
     : args.nextState;
+  const stateMealItems = withServingMetadataForItems(updatedState.currentMealItems);
+  const nextState: MealAssistantState = {
+    ...updatedState,
+    currentMealItems: stateMealItems,
+    currentMealText: stateMealItems.length ? buildMealTextFromItems(stateMealItems) : updatedState.currentMealText,
+    confidenceScore: getConfidenceScore(stateMealItems),
+  };
+  const assistantReply = postProcessAssistantReply(args.assistantReply, nextState, args.message);
   const showMealItems = !(args.intent === 'recommendation_request' && nextState.saved);
-  const mealItems = showMealItems ? nextState.currentMealItems : [];
+  const mealItems = showMealItems ? stateMealItems : [];
   const totals = sumTotals(mealItems);
 
   return {
@@ -4893,8 +5089,11 @@ async function buildDeterministicDialogueResponse(
 
   const casualReply = buildCasualReply(input.message, state);
   if (casualReply) {
+    const isRepairTurn = negativeFeedbackRegex.test(normalized) || confusionComplaintRegex.test(normalized);
     return buildDirectResponse({
-      intent: greetingRegex.test(input.message) && !state.currentMealItems.length ? 'greeting' : 'casual_message',
+      intent: isRepairTurn
+        ? 'complaint_repair'
+        : greetingRegex.test(input.message) && !state.currentMealItems.length ? 'greeting' : 'casual_message',
       assistantReply: casualReply,
       nextState: {
         ...state,
@@ -5523,7 +5722,8 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
 
   if (negativeFeedbackRegex.test(normalized) || confusionComplaintRegex.test(normalized)) {
     return {
-      intent: 'meal_feedback',
+      intent: 'complaint_repair',
+      action: 'complaint_repair',
       assistant_reply: buildFallbackReply(message, state),
       items: [],
       corrections: [],
@@ -5832,6 +6032,7 @@ function buildReplyFromItems(args: {
     intent === 'macro_question' ||
     intent === 'recommendation_request' ||
     intent === 'meal_feedback' ||
+    intent === 'complaint_repair' ||
     intent === 'comparison_question' ||
     intent === 'goal_question' ||
     intent === 'meal_review' ||
@@ -6142,8 +6343,11 @@ export async function runMealAssistant(
 
     const casualReply = buildCasualReply(workingInput.message, state);
     if (casualReply) {
+      const isRepairTurn = negativeFeedbackRegex.test(workingInput.message.trim().toLowerCase()) || confusionComplaintRegex.test(workingInput.message.trim().toLowerCase());
       return finalizeResponse(buildDirectResponse({
-        intent: greetingRegex.test(workingInput.message) && !state.currentMealItems.length ? 'greeting' : 'casual_message',
+        intent: isRepairTurn
+          ? 'complaint_repair'
+          : greetingRegex.test(workingInput.message) && !state.currentMealItems.length ? 'greeting' : 'casual_message',
         assistantReply: casualReply,
         nextState: {
           ...state,
@@ -6455,7 +6659,13 @@ export async function runMealAssistant(
     }
   }
 
-  const mealItems = nextState.currentMealItems;
+  const mealItems = withServingMetadataForItems(nextState.currentMealItems);
+  nextState = {
+    ...nextState,
+    currentMealItems: mealItems,
+    currentMealText: mealItems.length ? buildMealTextFromItems(mealItems) : null,
+    confidenceScore: getConfidenceScore(mealItems),
+  };
   const totals = sumTotals(mealItems);
   const compoundReply = (decision as MealAssistantModelOutput & { compound_reply?: string }).compound_reply ?? null;
   const primaryReply = validateAssistantReply({

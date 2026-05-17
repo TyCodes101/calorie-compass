@@ -21,6 +21,13 @@ export const parsedFoodItemSchema = z.object({
   provider_used: z.string().nullable().optional(),
   used_ai_fallback: z.boolean().nullable().optional(),
   catalog_food_id: z.string().nullable().optional(),
+  userQuantity: z.number().nonnegative().nullable().optional(),
+  userUnit: z.string().nullable().optional(),
+  userTextSpan: z.string().nullable().optional(),
+  normalizedGrams: z.number().nonnegative().nullable().optional(),
+  normalizedOunces: z.number().nonnegative().nullable().optional(),
+  sourceId: z.string().nullable().optional(),
+  confidence: z.number().min(0).max(1).nullable().optional(),
 });
 
 export const parsedMealResponseSchema = z.object({
