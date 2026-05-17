@@ -3309,6 +3309,10 @@ function inferRecommendationMealType(message: string, state: MealAssistantState)
     return 'snack';
   }
 
+  if (/\b(?:sweet|dessert|treat)\b/.test(normalized)) {
+    return 'snack';
+  }
+
   if (/\bbreakfast\b/.test(normalized)) {
     return 'breakfast';
   }
@@ -4136,11 +4140,81 @@ function buildInitialClarificationResponse(input: MealAssistantRunInput, questio
   };
 }
 
+function hasOmeletteClarificationContext(state: MealAssistantState) {
+  return /\bomelette|omelet|hash\s*browns?|hashbrowns?\b/i.test(`${state.currentMealText ?? ''} ${state.pendingClarification ?? ''} ${state.lastAssistantQuestion ?? ''}`);
+}
+
+function buildOmeletteClarificationItems(message: string): ParsedFoodItem[] {
+  const normalized = normalizeFoodText(message);
+  if (!/\beggs?\b/.test(normalized) || !/\bhash\s*browns?|hashbrowns?\b/.test(normalized)) {
+    return [];
+  }
+
+  const eggMatch = normalized.match(/\b(\d+(?:\.\d+)?)\s+eggs?\b/)
+    ?? normalized.match(/\b(one|two|three|four|five|six)\s+eggs?\b/);
+  const eggCount = eggMatch ? parseCount(eggMatch[1] ?? '2') : 2;
+  const hasCheese = /\bcheese\b/.test(normalized);
+  const hasMeat = /\b(?:ham|bacon|sausage|turkey|chorizo)\b/.test(normalized);
+  const hasVeggies = /\b(?:peppers?|onions?|spinach|mushrooms?|tomatoes?|veggies?|vegetables?)\b/.test(normalized);
+  const cupMatch = normalized.match(/\b(\d+(?:\.\d+)?)\s+cups?\s+(?:of\s+)?hash\s*browns?\b/)
+    ?? normalized.match(/\b(a|one|two|three|half|a half)\s+cups?\s+(?:of\s+)?hash\s*browns?\b/);
+  const hashBrownCups = cupMatch ? parseCount(cupMatch[1] ?? '1') : 1;
+  const modifiers = [
+    hasCheese ? 'cheese' : null,
+    hasMeat ? 'meat' : null,
+    hasVeggies ? 'veggies' : null,
+  ].filter(Boolean).join(', ');
+  const omeletteLabel = modifiers ? `${modifiers[0]?.toUpperCase()}${modifiers.slice(1)} omelette` : 'Omelette';
+  const omeletteCalories = eggCount * 70 + (hasCheese ? 110 : 0) + (hasMeat ? 90 : 0) + (hasVeggies ? 20 : 0);
+  const omeletteProtein = eggCount * 6 + (hasCheese ? 6 : 0) + (hasMeat ? 8 : 0) + (hasVeggies ? 1 : 0);
+  const omeletteFat = eggCount * 5 + (hasCheese ? 8 : 0) + (hasMeat ? 6 : 0);
+
+  return [
+    makeGenericEstimate(
+      {
+        key: 'omelette',
+        label: omeletteLabel,
+        quantity: 1,
+        unit: 'omelette',
+        calories: omeletteCalories,
+        protein: omeletteProtein,
+        carbs: hasVeggies ? 3 : 1,
+        fat: omeletteFat,
+        sodium: 220 + (hasCheese ? 190 : 0) + (hasMeat ? 320 : 0),
+        sourceName: 'Omelette common serving estimate',
+        sourceType: 'GENERIC_REFERENCE',
+      },
+      message,
+    ),
+    makeGenericEstimate(
+      {
+        key: 'hash browns',
+        label: 'Hash browns',
+        quantity: hashBrownCups,
+        unit: hashBrownCups === 1 ? 'cup' : 'cups',
+        calories: 180 * hashBrownCups,
+        protein: 2 * hashBrownCups,
+        carbs: 24 * hashBrownCups,
+        fat: 8 * hashBrownCups,
+        fiber: 2 * hashBrownCups,
+        sodium: 320 * hashBrownCups,
+        sourceName: 'Hash browns common serving estimate',
+        sourceType: 'GENERIC_REFERENCE',
+      },
+      message,
+    ),
+  ];
+}
+
 function buildCompanionInsight(args: { response: MealAssistantResponse; input: MealAssistantRunInput; context: MealAssistantContext }) {
   const { response, input, context } = args;
   const normalized = input.message.trim().toLowerCase();
   const remainingProtein = getRemainingProtein(context);
   const remainingCalories = getRemainingCalories(context);
+
+  if (response.intent === 'recommendation_request') {
+    return null;
+  }
 
   if (response.should_ask_clarification || response.next_state.saved || weeklySummaryRegex.test(normalized)) {
     return null;
@@ -6627,6 +6701,20 @@ export async function runMealAssistant(
       message: workingInput.message,
       activeQuestion: state.pendingClarification,
     }), workingInput, context);
+  }
+
+  if (state.pendingClarification && hasOmeletteClarificationContext(state)) {
+    const omeletteItems = buildOmeletteClarificationItems(workingInput.message);
+    if (omeletteItems.length) {
+      return finalizeResponse(buildDirectFoodEstimateResponse({
+        input: workingInput,
+        state,
+        items: omeletteItems,
+        intent: 'clarification_answer',
+        followUpMessage: mixedIntent.followUpMessage,
+        context,
+      }), workingInput, context);
+    }
   }
 
   const initialClarificationQuestion = !state.pendingClarification && !state.currentMealItems.length

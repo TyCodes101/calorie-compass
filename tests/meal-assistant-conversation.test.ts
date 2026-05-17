@@ -661,6 +661,7 @@ describe('meal assistant conversational coverage', () => {
     expect(response.should_ask_clarification).toBe(false);
     expect(response.next_state.pendingClarification).toBeNull();
     expect(response.meal.items.length).toBeGreaterThan(0);
+    expect(response.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ')).toMatch(/eggs?|omelette|hashbrowns|hash browns/i);
     expect(response.assistant_reply).not.toMatch(/what a melon|lollipop|bubble gum/i);
   });
 
@@ -681,6 +682,21 @@ describe('meal assistant conversational coverage', () => {
     expect(resolveItemNutrition).not.toHaveBeenCalledWith(expect.objectContaining({
       item: expect.objectContaining({ name: expect.stringMatching(/like what/i) }),
     }));
+  });
+
+  it('keeps omelette clarification answers from dropping cheese and hashbrowns', async () => {
+    const responses = await runConversation([
+      'I had an omelette with some hashbrowns',
+      '2 eggs with cheese and a cup of hashbrowns',
+    ]);
+    const answer = responses[1];
+    const names = answer?.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ') ?? '';
+
+    expect(answer?.intent).toBe('clarification_answer');
+    expect(names).toMatch(/omelette|eggs?/i);
+    expect(names).toMatch(/cheese/i);
+    expect(names).toMatch(/hashbrowns|hash browns/i);
+    expect(answer?.assistant_reply).not.toMatch(/^2 eggs?, about 140 calories/i);
   });
 
   it.each([
@@ -1599,6 +1615,23 @@ describe('meal assistant conversational coverage', () => {
     expect(responses[1]?.meal.items).toEqual([]);
     expect(responses[1]?.assistant_reply).toMatch(/fairlife|greek yogurt|cottage cheese|protein pudding|shake/i);
     expect(responses[1]?.assistant_reply).not.toMatch(/mcdouble|fries|saved|added/i);
+  });
+
+  it('keeps sweet high-protein recommendation follow-ups sweet instead of jumping to dinner', async () => {
+    const responses = await runConversation(['2 eggs and toast', 'what should I eat tonight?', 'something sweet but high protein'], {
+      context: buildContext({
+        remainingCalories: 720,
+        remainingProtein: 63,
+        nutritionPreferences: 'high protein',
+      }),
+    });
+    const followUp = responses[2];
+
+    expect(followUp?.intent).toBe('recommendation_request');
+    expect(followUp?.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ')).toMatch(/eggs?|toast/i);
+    expect(followUp?.assistant_reply).toMatch(/fairlife|greek yogurt|cottage cheese|protein pudding|shake|berries/i);
+    expect(followUp?.assistant_reply).not.toMatch(/chipotle|chicken rice bowl|burrito/i);
+    expect(followUp?.assistant_reply).not.toMatch(/that keeps this one on the lighter side/i);
   });
 
   it('adds calm meal-pattern guidance without sounding naggy', async () => {
