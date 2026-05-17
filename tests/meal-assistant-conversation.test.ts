@@ -189,6 +189,21 @@ async function resolveConversationNutrition(args: {
     ], args.mealType);
   }
 
+  if (phrase.includes('grilled chicken') && !phrase.includes('sandwich')) {
+    return buildParsedMealResponse([
+      createItem({
+        food_name: 'Chicken breast',
+        quantity: 113.4,
+        unit: 'oz',
+        calories: 690,
+        protein: 129,
+        carbs: 0,
+        fat: 15,
+        source_name: 'USDA FoodData Central',
+      }),
+    ], args.mealType);
+  }
+
   if (phrase.includes('mcdouble')) {
     return buildParsedMealResponse([
       createItem({ food_name: 'McDouble', unit: 'burger', calories: 390, protein: 22, carbs: 33, fat: 19, source_type: 'OFFICIAL_RESTAURANT', source_name: "McDonald's official nutrition" }),
@@ -221,7 +236,7 @@ async function resolveConversationNutrition(args: {
 
   if (phrase.includes('peanut butter')) {
     return buildParsedMealResponse([
-      createItem({ food_name: 'Peanut Butter', unit: 'tbsp', calories: 95, protein: 4, carbs: 3, fat: 8, fiber: 1, sugar: 1 }),
+      createItem({ food_name: 'Peanut Butter', unit: 'tbsp', calories: 95 * quantity, protein: 4 * quantity, carbs: 3 * quantity, fat: 8 * quantity, fiber: 1 * quantity, sugar: 1 * quantity }),
     ], args.mealType);
   }
 
@@ -263,7 +278,7 @@ async function resolveConversationNutrition(args: {
 
   if (phrase.includes('rice')) {
     return buildParsedMealResponse([
-      createItem({ food_name: 'Rice', unit: 'cup', calories: 200, protein: 4, carbs: 45, fat: 0, source_name: 'USDA reference' }),
+      createItem({ food_name: 'Rice', unit: 'cup', calories: 200 * quantity, protein: 4 * quantity, carbs: 45 * quantity, fat: 0, source_name: 'USDA reference' }),
     ], args.mealType);
   }
 
@@ -426,6 +441,96 @@ describe('meal assistant conversational coverage', () => {
       expect(response.assistant_reply).not.toMatch(/need a little more detail|i can log|out now/i);
       expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
     }
+  });
+
+  it('preserves grilled chicken cup servings through corrections and repair turns', async () => {
+    const responses = await runConversation([
+      '3 cups of grilled chicken',
+      'no i had 4 cups i meant',
+      'no lets go back to 3 cups',
+      'no',
+      "that's not right",
+    ]);
+    const first = responses[0];
+    const fourCups = responses[1];
+    const backToThree = responses[2];
+    const bareNo = responses[3];
+    const complaint = responses[4];
+
+    expect(first?.meal.items).toHaveLength(1);
+    expect(first?.meal.items[0]?.food_name).toMatch(/chicken/i);
+    expect(first?.meal.items[0]?.quantity).toBe(3);
+    expect(first?.meal.items[0]?.unit).toBe('cup');
+    expect(first?.assistant_reply).toMatch(/3 cups?.*chicken|chicken.*3 cups?/i);
+    expect(first?.assistant_reply).not.toMatch(/113\.4|oz/i);
+
+    expect(fourCups?.intent).toBe('quantity_change');
+    expect(fourCups?.meal.items).toHaveLength(1);
+    expect(fourCups?.meal.items[0]?.quantity).toBe(4);
+    expect(fourCups?.meal.items[0]?.unit).toBe('cup');
+    expect(fourCups?.assistant_reply).toMatch(/4 cups?.*chicken|chicken.*4 cups?/i);
+    expect(fourCups?.assistant_reply).not.toMatch(/\b4 oz\b|113\.4 oz/i);
+
+    expect(backToThree?.intent).toBe('quantity_change');
+    expect(backToThree?.meal.items).toHaveLength(1);
+    expect(backToThree?.meal.items[0]?.quantity).toBe(3);
+    expect(backToThree?.meal.items[0]?.unit).toBe('cup');
+    expect(backToThree?.assistant_reply).toMatch(/3 cups?.*chicken|chicken.*3 cups?/i);
+    expect(backToThree?.assistant_reply).not.toMatch(/\b4 oz\b|113\.4 oz/i);
+
+    for (const response of [bareNo, complaint]) {
+      expect(response?.meal.items).toHaveLength(1);
+      expect(response?.meal.items[0]?.food_name).toMatch(/chicken/i);
+      expect(response?.meal.items[0]?.quantity).toBe(3);
+      expect(response?.meal.items[0]?.unit).toBe('cup');
+      expect(response?.assistant_reply).toMatch(/chicken|meal|change|fix|right|current/i);
+      expect(response?.assistant_reply).not.toMatch(/i can log|need a little more detail|no,? around|that's not right/i);
+    }
+  });
+
+  it('preserves common serving units and inherits units on quantity-only corrections', async () => {
+    const [rice] = await runConversation(['3 cups rice']);
+    expect(rice.meal.items[0]?.food_name).toMatch(/rice/i);
+    expect(rice.meal.items[0]?.quantity).toBe(3);
+    expect(rice.meal.items[0]?.unit).toBe('cup');
+    expect(rice.assistant_reply).not.toMatch(/\boz\b/i);
+
+    const [peanutButter] = await runConversation(['2 tbsp peanut butter']);
+    expect(peanutButter.meal.items[0]?.food_name).toMatch(/peanut butter/i);
+    expect(peanutButter.meal.items[0]?.quantity).toBe(2);
+    expect(peanutButter.meal.items[0]?.unit).toBe('tbsp');
+
+    const cottageResponses = await runConversation([
+      '1 whole cup cottage cheese',
+      'actually .75',
+      'half a cup',
+      'make it 2',
+    ]);
+    expect(cottageResponses[0]?.meal.items[0]?.quantity).toBe(1);
+    expect(cottageResponses[0]?.meal.items[0]?.unit).toBe('cup');
+    expect(cottageResponses[1]?.meal.items[0]?.quantity).toBe(0.75);
+    expect(cottageResponses[1]?.meal.items[0]?.unit).toBe('cup');
+    expect(cottageResponses[2]?.meal.items[0]?.quantity).toBe(0.5);
+    expect(cottageResponses[2]?.meal.items[0]?.unit).toBe('cup');
+    expect(cottageResponses[3]?.meal.items[0]?.quantity).toBe(2);
+    expect(cottageResponses[3]?.meal.items[0]?.unit).toBe('cup');
+  });
+
+  it('removes the current item for clear pronoun removal without guessing a new food', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const [response] = await runConversation(['remove that'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Toast', quantity: 1, unit: 'slice', calories: 100, protein: 4, carbs: 19, fat: 1 })],
+        currentMealText: '1 slice Toast',
+      }),
+      resolveItemNutrition,
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toMatch(/remove_item|correction/);
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.assistant_reply).toMatch(/removed|took out|out/i);
+    expect(response.assistant_reply).not.toMatch(/i can log|need a little more detail/i);
   });
 
   it('answers clarification-detail questions without turning them into food', async () => {
