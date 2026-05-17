@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { MealAssistantContext } from '@/lib/ai/mealAssistantSchema';
 import {
@@ -457,6 +457,210 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectTotalCaloriesInRange(halfCupTurn, 85, 95);
   });
 
+  it('replays serving corrections and complaint repair without stale state', async () => {
+    const conversation = await runQaScenario({
+      name: 'long serving correction and repair transcript',
+      messages: [
+        '3 cups of grilled chicken',
+        'no i had 4 cups i meant',
+        'no lets go back to 3 cups',
+        "that's not right",
+      ],
+    });
+    const [initialTurn, fourCupTurn, backToThreeTurn, complaintTurn] = conversation.turns;
+
+    for (const turn of conversation.turns) {
+      expectBaselineQuality(turn);
+      expectMealItemCount(turn, 1);
+      expectMealContains(turn, [/chicken/i]);
+      expectStateAndReplyDoNotDisagree(turn);
+      expectNoUnrelatedFood(turn, [/^no$/i, /that'?s not right/i, /frozen dinner/i]);
+    }
+
+    expectServing(initialTurn, /chicken/i, 3, 'cup');
+    expectServing(fourCupTurn, /chicken/i, 4, 'cup');
+    expectReplyMatches(fourCupTurn, /4 cups?.*chicken|chicken.*4 cups?/i, 'Reply should describe the committed 4 cup chicken state.');
+    expectReplyNotMatches(fourCupTurn, /\b4 oz\b|113\.4/i, 'Serving correction should never leak normalized ounces as the user-facing serving.');
+    expectServing(backToThreeTurn, /chicken/i, 3, 'cup');
+    expectReplyMatches(backToThreeTurn, /3 cups?.*chicken|chicken.*3 cups?/i, 'Reply should describe the committed 3 cup chicken state.');
+    expectReplyNotMatches(backToThreeTurn, /\b4 oz\b|4 cups?|113\.4/i, 'Back-to-3 correction should not repeat stale 4 cup/oz state.');
+    expect(complaintTurn.response.intent).toBe('complaint_repair');
+    expectMealUnchanged(complaintTurn);
+    expectReplyMatches(complaintTurn, /chicken|current|change|fix|right/i, 'Complaint repair should ask how to fix the active chicken item.');
+  });
+
+  it('replays cottage cheese corrections without clarification loops', async () => {
+    const conversation = await runQaScenario({
+      name: 'long cottage cheese correction transcript',
+      messages: [
+        'I had some cottage cheese',
+        'no i had 1 whole cup',
+        'nvm i only had .75 of a cup',
+        'actually half a cup',
+      ],
+    });
+    const [, oneCupTurn, threeQuarterTurn, halfCupTurn] = conversation.turns;
+
+    for (const turn of conversation.turns) {
+      expectBaselineQuality(turn);
+      expectNoClarification(turn);
+      expectMealItemCount(turn, 1);
+      expectMealContains(turn, [/cottage cheese/i]);
+      expectStateAndReplyDoNotDisagree(turn);
+      expectReplyNotMatches(turn, /need a little more detail|what food|out now/i, 'Cottage cheese corrections should keep editing the active item.');
+    }
+
+    expectServing(oneCupTurn, /cottage cheese/i, 1, 'cup');
+    expectServing(threeQuarterTurn, /cottage cheese/i, 0.75, 'cup');
+    expectServing(halfCupTurn, /cottage cheese/i, 0.5, 'cup');
+  });
+
+  it('replays additive oatmeal edits without dropping or reviving items', async () => {
+    const conversation = await runQaScenario({
+      name: 'oatmeal blueberries additive edit transcript',
+      messages: [
+        'I had oatmeal with blueberries',
+        'actually add peanut butter too',
+        'make the blueberries double',
+        'remove peanut butter',
+      ],
+    });
+    const [initialTurn, addTurn, doubleTurn, removeTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectNoClarification(initialTurn);
+    expectMealContains(initialTurn, [/oatmeal/i, /blueberries/i]);
+
+    expectBaselineQuality(addTurn);
+    expectCorrectionReply(addTurn);
+    expectMealContains(addTurn, [/oatmeal/i, /blueberries/i, /peanut butter/i]);
+
+    expectBaselineQuality(doubleTurn);
+    expectCorrectionReply(doubleTurn);
+    expectMealContains(doubleTurn, [/oatmeal/i, /blueberries/i, /peanut butter/i]);
+    expectServing(doubleTurn, /blueberries/i, 2, 'cup');
+    expectStateAndReplyDoNotDisagree(doubleTurn);
+
+    expectBaselineQuality(removeTurn);
+    expectCorrectionReply(removeTurn);
+    expectMealContains(removeTurn, [/oatmeal/i, /blueberries/i]);
+    expectMealDoesNotContain(removeTurn, [/peanut butter/i]);
+    expectStateAndReplyDoNotDisagree(removeTurn);
+    expectReplyNotMatches(removeTurn, /peanut butter.*still/i, 'Removed peanut butter should not appear as an active item in the final reply.');
+  });
+
+  it('replays restaurant bowl edits while preserving drink and components', async () => {
+    const conversation = await runQaScenario({
+      name: 'chipotle bowl restaurant edit transcript',
+      messages: [
+        'I had a Chipotle bowl with white rice, black beans, double chicken, corn salsa, cheese, lettuce, and green salsa plus a Coke Zero',
+        'actually no cheese',
+        'make the chicken regular not double',
+        'add guac',
+      ],
+    });
+    const [initialTurn, noCheeseTurn, regularChickenTurn, guacTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectNoClarification(initialTurn);
+    expectMealContains(initialTurn, [/chipotle/i, /rice/i, /beans/i, /double chicken/i, /corn/i, /cheese/i, /lettuce/i, /green salsa/i, /coke zero/i]);
+
+    expectBaselineQuality(noCheeseTurn);
+    expectCorrectionReply(noCheeseTurn);
+    expectMealContains(noCheeseTurn, [/chipotle/i, /rice/i, /beans/i, /chicken/i, /corn/i, /lettuce/i, /green salsa/i, /coke zero/i]);
+    expectMealDoesNotContain(noCheeseTurn, [/\bcheese\b/i]);
+
+    expectBaselineQuality(regularChickenTurn);
+    expectCorrectionReply(regularChickenTurn);
+    expectMealContains(regularChickenTurn, [/chipotle/i, /rice/i, /beans/i, /chicken/i, /coke zero/i]);
+    expectMealDoesNotContain(regularChickenTurn, [/double chicken/i, /\bcheese\b/i]);
+    expectStateAndReplyDoNotDisagree(regularChickenTurn);
+
+    expectBaselineQuality(guacTurn);
+    expectCorrectionReply(guacTurn);
+    expectMealContains(guacTurn, [/chipotle/i, /guac/i, /coke zero/i]);
+    expectMealDoesNotContain(guacTurn, [/\bcheese\b/i, /double chicken/i]);
+  });
+
+  it('repairs complaint chain into caramel rice cakes without fake complaint foods', async () => {
+    const conversation = await runQaScenario({
+      name: 'rice cake complaint repair transcript',
+      messages: [
+        'I had 2 rice cakes',
+        'no',
+        "that's wrong",
+        'it was actually 3 caramel rice cakes',
+      ],
+    });
+    const [initialTurn, noTurn, wrongTurn, repairTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectNoClarification(initialTurn);
+    expectServing(initialTurn, /rice cakes/i, 2, 'cakes');
+
+    for (const turn of [noTurn, wrongTurn]) {
+      expectBaselineQuality(turn);
+      expectMealUnchanged(turn);
+      expectMealDoesNotContain(turn, [/^no$/i, /that'?s wrong/i]);
+      expectReplyMatches(turn, /rice cakes?|change|fix|right|current/i, 'Complaint turns should keep the rice cakes open for repair.');
+    }
+
+    expectBaselineQuality(repairTurn);
+    expectCorrectionReply(repairTurn);
+    expectMealItemCount(repairTurn, 1);
+    expectMealContains(repairTurn, [/caramel rice cakes/i]);
+    expectServing(repairTurn, /caramel rice cakes/i, 3, 'cakes');
+    expectReplyNotMatches(repairTurn, /\bno\b|that'?s wrong|need a little more detail/i, 'Repair should not expose complaint text as food.');
+  });
+
+  it('covers serving unit preservation across common units', async () => {
+    const cases = [
+      { message: '2 tbsp peanut butter', matcher: /peanut butter/i, quantity: 2, unit: 'tbsp' },
+      { message: '1 tsp peanut butter', matcher: /peanut butter/i, quantity: 1, unit: 'tsp' },
+      { message: '4 oz grilled chicken', matcher: /chicken/i, quantity: 4, unit: 'oz' },
+      { message: '100 grams grilled chicken', matcher: /chicken/i, quantity: 100, unit: 'g' },
+      { message: '2 slices of toast', matcher: /toast/i, quantity: 2, unit: 'slices' },
+      { message: '3 pieces of bacon', matcher: /bacon/i, quantity: 3, unit: 'pieces' },
+      { message: '1 can of beans', matcher: /beans/i, quantity: 1, unit: 'can' },
+      { message: '2 scoops protein powder', matcher: /protein powder/i, quantity: 2, unit: 'scoops' },
+      { message: '2 servings greek yogurt', matcher: /greek yogurt/i, quantity: 2, unit: 'servings' },
+    ];
+
+    for (const qaCase of cases) {
+      const conversation = await runQaScenario({
+        name: `serving unit preservation: ${qaCase.message}`,
+        messages: [qaCase.message],
+      });
+      const turn = conversation.turns[0];
+
+      expectBaselineQuality(turn);
+      expectNoClarification(turn);
+      expectServing(turn, qaCase.matcher, qaCase.quantity, qaCase.unit);
+      if (qaCase.unit !== 'oz') {
+        expectReplyNotMatches(turn, /\b\d+(?:\.\d+)? oz\b/i, 'Reply should not convert the user-facing serving to ounces unless the user said ounces.');
+      }
+    }
+  });
+
+  it('applies compound edits atomically and saves final committed state', async () => {
+    const conversation = await runQaScenario({
+      name: 'compound remove peanut butter and save transcript',
+      messages: [
+        'oatmeal with blueberries and peanut butter',
+        'remove peanut butter and save it',
+      ],
+    });
+    const saveTurn = conversation.turns[1];
+
+    expectBaselineQuality(saveTurn);
+    expectCorrectionReply(saveTurn);
+    expectMealContains(saveTurn, [/oatmeal/i, /blueberries/i]);
+    expectMealDoesNotContain(saveTurn, [/peanut butter/i]);
+    expect(saveTurn.response.next_state.saved).toBe(true);
+    expectReplyMatches(saveTurn, /saved|logged/i, 'Compound remove-and-save should confirm the final meal was saved.');
+    expectStateAndReplyDoNotDisagree(saveTurn);
+  });
+
   it('adds peanut butter to oatmeal and blueberries without dropping fruit context', async () => {
     const conversation = await runQaScenario({
       name: 'oatmeal blueberries add peanut butter flow',
@@ -616,6 +820,37 @@ describe('assistant chatbot QA golden scenarios', () => {
     }
   });
 });
+
+function findQaItem(turn: { response: { next_state: { currentMealItems: ReturnType<typeof createQaItem>[] } } }, matcher: RegExp) {
+  return turn.response.next_state.currentMealItems.find((item) => matcher.test(item.food_name));
+}
+
+function expectServing(
+  turn: { response: { next_state: { currentMealItems: ReturnType<typeof createQaItem>[] } }; assistantReply: string },
+  matcher: RegExp,
+  quantity: number,
+  unit: string,
+) {
+  const item = findQaItem(turn, matcher);
+  expect(item?.food_name).toMatch(matcher);
+  expect(item?.quantity).toBe(quantity);
+  expect(item?.unit).toBe(unit);
+  expect(item?.userQuantity).toBe(quantity);
+  expect(item?.userUnit).toBe(unit);
+  expect(item?.userTextSpan).toMatch(new RegExp(`${quantity.toString().replace('.', '\\.')}.*${unit}`, 'i'));
+}
+
+function expectStateAndReplyDoNotDisagree(turn: { response: { next_state: { currentMealItems: ReturnType<typeof createQaItem>[] } }; assistantReply: string }) {
+  for (const item of turn.response.next_state.currentMealItems) {
+    const quantityText = item.quantity.toString().replace('.', '\\.');
+    const unitText = item.unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const itemName = item.food_name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    if (new RegExp(itemName, 'i').test(turn.assistantReply)) {
+      expect(turn.assistantReply).toMatch(new RegExp(`${quantityText}\\s+${unitText}|${unitText}.*${quantityText}|${quantityText}.*${itemName}`, 'i'));
+    }
+  }
+}
 
 function buildMemoryContext(): Partial<MealAssistantContext> {
   const yesterday = new Date(Date.now() - 86400000).toISOString();

@@ -79,7 +79,7 @@ const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
 const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|(?:lets|let's) go back to|go back to|back to|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
-const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|wendy'?s|mcdouble|mc double|mcdonald'?s?|sandwich|fries|fry|fairlife|core power|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|shakes?|grilled chicken|chicken breast|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?)\b/i;
+const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|wendy'?s|mcdouble|mc double|mcdonald'?s?|sandwich|fries|fry|fairlife|core power|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|shakes?|grilled chicken|chicken breast|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -356,6 +356,10 @@ function normalizeQuantityUnit(unit: string | null | undefined) {
     return 'can';
   }
 
+  if (normalized === 'scoop' || normalized === 'scoops') {
+    return 'scoop';
+  }
+
   return normalized;
 }
 
@@ -363,7 +367,7 @@ function parseCorrectedServing(message: string) {
   const normalized = stripCorrectionLeadIn(stripConversationalLeadIn(stripEmotionalPreface(message).toLowerCase()));
   const quantityWords = 'a|an|one|two|three|four|five|six|seven|eight|nine|ten';
   const quantityPattern = `a half|half|three quarters?|a quarter|quarter|\\d+(?:\\.\\d+)?|\\.\\d+|${quantityWords}`;
-  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?';
+  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|scoops?';
   const match = normalized.match(
     new RegExp(`^(?:(?:no|nah|actually|i meant|instead|it was|that was|make that|update that to|change that to|make it|change it to|update it to|lets go back to|let's go back to|go back to|back to|nvm|nevermind|never mind)\\s+)?(?:i\\s+)?(?:(?:only\\s+)?(?:had|ate|drank)\\s+)?(?:about\\s+|around\\s+)?(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(${unitPattern})?\\b`),
   );
@@ -388,7 +392,7 @@ function parseLeadingServingFood(message: string) {
   const normalized = stripCorrectionLeadIn(stripConversationalLeadIn(stripEmotionalPreface(message).toLowerCase()));
   const quantityWords = 'a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten';
   const quantityPattern = `\\d+(?:\\.\\d+)?|\\.\\d+|${quantityWords}`;
-  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?';
+  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|scoops?';
   const match = normalized.match(
     new RegExp(`^(?:i\\s+)?(?:(?:just\\s+|only\\s+)?(?:had|ate|drank|logged)\\s+)?(?:about\\s+|around\\s+)?(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(${unitPattern})\\s+(?:of\\s+)?(.+)$`, 'i'),
   );
@@ -763,7 +767,7 @@ function parseTargetedQuantityChangeClause(clause: string) {
     .replace(/\s+/g, ' ')
     .trim();
   const quantityPattern = '\\d+(?:\\.\\d+)?|\\.\\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten';
-  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|burgers?';
+  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|scoops?|burgers?';
   const patterns = [
     new RegExp(`^(?:make|change|update)\\s+(?:the\\s+)?(.+?)\\s+(?:to\\s+)?(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(${unitPattern})?\\b`, 'i'),
     new RegExp(`^(?:the\\s+)?(.+?)\\s+(?:to|was|is)\\s+(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(${unitPattern})?\\b`, 'i'),
@@ -792,15 +796,48 @@ function parseTargetedQuantityChangeClause(clause: string) {
   return null;
 }
 
+function parseTargetedDoubleClause(clause: string) {
+  const normalized = getNormalizedMutationClause(clause)
+    .replace(/^the\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const match =
+    normalized.match(/^(?:make|change|update)\s+(?:the\s+)?(.+?)\s+(?:double|twice|2x)$/i)
+    ?? normalized.match(/^(?:double)\s+(?:the\s+)?(.+)$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const targetText = cleanMealMutationFoodText(match[1] ?? '');
+  return targetText && !/^(?:it|that|this)$/i.test(targetText) ? targetText : null;
+}
+
+function extractRemoveTargetFromMessage(message: string) {
+  const normalized = stripEmotionalPreface(message).toLowerCase();
+  const normalizedClause = getNormalizedMutationClause(message);
+  if (/\bnot\b/.test(normalizedClause) || /\b(?:go back|back to|lets go|let's go)\b/.test(normalizedClause)) {
+    return null;
+  }
+
+  const removeMatch = normalized.match(removeRegex) ?? normalizedClause.match(removeRegex);
+  const removeTarget = cleanMealMutationFoodText(removeMatch?.[1] ?? removeMatch?.[2] ?? '');
+
+  if (removeTarget && hasStrongFoodSignal(removeTarget)) {
+    return removeTarget;
+  }
+
+  const noTargetMatch = normalizedClause.match(/^no\s+(.+)$/i);
+  const noTarget = cleanMealMutationFoodText(noTargetMatch?.[1] ?? '');
+  return noTarget && hasStrongFoodSignal(noTarget) ? noTarget : null;
+}
+
 function extractHeuristicMutationOperations(message: string, state: MealAssistantState): NormalizedMealAssistantOperation[] {
   if (!state.currentMealItems.length || state.saved) {
     return [];
   }
 
   const clauses = splitCompoundEditClauses(message);
-  if (clauses.length < 2) {
-    return [];
-  }
 
   const operations: NormalizedMealAssistantOperation[] = [];
 
@@ -820,8 +857,7 @@ function extractHeuristicMutationOperations(message: string, state: MealAssistan
       continue;
     }
 
-    const removeMatch = normalizedClause.match(removeRegex);
-    const removeTarget = cleanMealMutationFoodText(removeMatch?.[1] ?? removeMatch?.[2] ?? '');
+    const removeTarget = extractRemoveTargetFromMessage(clause);
     if (removeTarget) {
       operations.push({
         action: 'remove_item',
@@ -833,6 +869,44 @@ function extractHeuristicMutationOperations(message: string, state: MealAssistan
         should_save_meal: false,
       });
       continue;
+    }
+
+    const targetedDouble = parseTargetedDoubleClause(clause);
+    if (targetedDouble) {
+      const targetIndex = findOperationTargetIndexByHint(targetedDouble, state.currentMealItems);
+      const targetItem = state.currentMealItems[targetIndex] ?? state.currentMealItems.at(-1) ?? null;
+      if (targetItem) {
+        if (/\bchicken\b/i.test(targetedDouble) && /chipotle|bowl/i.test(targetItem.food_name)) {
+          operations.push({
+            action: 'update_item_name',
+            target_item: targetItem.food_name,
+            target_item_id: buildActiveItemId(targetItem, targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1),
+            target_item_index: targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1,
+            items: [{ name: targetItem.food_name, brand: 'Chipotle', quantity: targetItem.quantity, unit: targetItem.unit ?? null, modifiers: ['double chicken'], action: 'replace' }],
+            should_lookup_nutrition: false,
+            should_save_meal: false,
+          });
+          continue;
+        }
+
+        operations.push({
+          action: 'update_item_quantity',
+          target_item: targetItem.food_name,
+          target_item_id: buildActiveItemId(targetItem, targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1),
+          target_item_index: targetIndex >= 0 ? targetIndex : state.currentMealItems.length - 1,
+          items: [{
+            name: targetItem.food_name,
+            brand: null,
+            quantity: targetItem.quantity * 2,
+            unit: targetItem.unit ?? null,
+            modifiers: [],
+            action: 'update',
+          }],
+          should_lookup_nutrition: false,
+          should_save_meal: false,
+        });
+        continue;
+      }
     }
 
     const addFoodText = extractAddCommandFoodText(clause);
@@ -917,7 +991,7 @@ function extractHeuristicMutationOperations(message: string, state: MealAssistan
       }
     }
 
-    if (/\bregular chicken\b/.test(normalizedClause) && state.currentMealItems.some((item) => /chipotle|bowl/i.test(item.food_name))) {
+  if (/\b(?:regular chicken|chicken regular)\b/.test(normalizedClause) && state.currentMealItems.some((item) => /chipotle|bowl/i.test(item.food_name))) {
       const targetIndex = state.currentMealItems.findIndex((item) => /chipotle|bowl/i.test(item.food_name));
       const targetItem = state.currentMealItems[targetIndex] ?? state.currentMealItems.at(-1) ?? null;
       if (targetItem) {
@@ -936,7 +1010,7 @@ function extractHeuristicMutationOperations(message: string, state: MealAssistan
     }
   }
 
-  return operations.length > 1 ? operations : [];
+  return operations.length ? operations : [];
 }
 
 function joinSummaryParts(parts: string[]) {
@@ -973,10 +1047,25 @@ function buildCompoundOperationReply(args: {
   summaryParts: string[];
   nextItems: ParsedFoodItem[];
   saved: boolean;
+  repairTone?: boolean;
+  previousReply?: string | null;
 }) {
   const summary = joinSummaryParts(args.summaryParts);
   const calories = Math.round(sumTotals(args.nextItems).calories);
-  const base = summary ? `Done, I ${summary}.` : 'Done.';
+  const previousStartedUpdated = /^updated that\b/i.test(args.previousReply ?? '');
+  const base = summary
+    ? summary.startsWith('changed ')
+      ? args.repairTone
+        ? `${summary.replace(/^changed /, 'No worries, fixed that - updated that to ')}.`
+        : previousStartedUpdated
+          ? `${summary.replace(/^changed /, 'Changed it to ')}.`
+          : `${summary.replace(/^changed /, 'Updated that to ')}.`
+      : summary.startsWith('removed ')
+        ? `${summary.replace(/^removed /, 'Removed ')}.`
+        : summary.startsWith('added ')
+          ? `${summary.replace(/^added /, 'Added ')}.`
+          : `Updated - ${summary}.`
+    : 'Updated.';
   const caloriesText = args.nextItems.length ? ` About ${calories} calories total.` : '';
   const savedText = args.saved ? ' Saved it too.' : '';
   return `${base}${caloriesText}${savedText}`.trim();
@@ -1002,8 +1091,21 @@ async function applyDecisionOperations(args: {
     }
 
     if (operation.action === 'remove_item') {
+      const targetText = [
+        operation.target_item,
+        buildHumanFoodNameFromAssistantItem(operation.items[0] ?? { name: '', brand: null, quantity: 1, unit: null, modifiers: [], action: 'remove' }),
+      ].filter(Boolean).join(' ');
+      const chipotleCheeseIndex = /\bcheese\b/i.test(targetText)
+        ? nextItems.findIndex((item) => /chipotle|bowl/i.test(item.food_name) && /\bcheese\b/i.test(item.food_name))
+        : -1;
+      if (chipotleCheeseIndex >= 0) {
+        nextItems[chipotleCheeseIndex] = removeChipotleCheese(nextItems[chipotleCheeseIndex]);
+        summaryParts.push('removed cheese');
+        mutated = true;
+        continue;
+      }
+
       const targetIndex = resolveOperationTargetIndex(operation, nextItems, args.message);
-      const targetText = operation.target_item ?? buildHumanFoodNameFromAssistantItem(operation.items[0] ?? { name: '', brand: null, quantity: 1, unit: null, modifiers: [], action: 'remove' });
 
       if (targetIndex >= 0) {
         const targetItem = nextItems[targetIndex];
@@ -1054,7 +1156,7 @@ async function applyDecisionOperations(args: {
       const operationLookupMessage = buildOperationLookupMessage(operation, args.message);
       const operationText = `${replacementText} ${operationLookupMessage} ${operation.items.flatMap((item) => item.modifiers).join(' ')} ${args.message}`;
 
-      if (/chipotle|bowl/i.test(targetItem.food_name) && /\bregular chicken\b/i.test(operationText)) {
+      if (/chipotle|bowl/i.test(targetItem.food_name) && /\b(?:regular chicken|chicken regular)\b/i.test(operationText)) {
         replacementItems = [regularizeChipotleChicken(targetItem)];
       } else if (/chipotle|bowl/i.test(targetItem.food_name) && /\b(?:double|extra)\s+chicken\b|\bchicken\s+(?:double|extra)\b/i.test(operationText)) {
         replacementItems = [doubleChipotleChicken(targetItem)];
@@ -1065,7 +1167,7 @@ async function applyDecisionOperations(args: {
       if (replacementItems.length) {
         nextItems.splice(targetIndex, 1, ...replacementItems);
         resolvedItems = replacementItems;
-        summaryParts.push(`switched ${targetItem.food_name} to ${replacementItems.map((item) => item.food_name).join(' and ')}`);
+        summaryParts.push(`switched ${targetItem.food_name} to ${replacementItems.map((item) => formatParsedItemLabel(item)).join(' and ')}`);
         mutated = true;
       }
       continue;
@@ -1699,6 +1801,7 @@ function buildUserTextSpan(item: ParsedFoodItem) {
 
 function withServingMetadata(item: ParsedFoodItem): ParsedFoodItem {
   const normalizedUnit = normalizeQuantityUnit(item.unit) ?? item.unit;
+  const userUnit = item.unit?.trim() || normalizedUnit;
   const normalizedGrams = inferNormalizedGrams(item);
   const normalizedOunces = normalizedGrams !== null
     ? Number((normalizedGrams / 28.3495).toFixed(2))
@@ -1709,7 +1812,7 @@ function withServingMetadata(item: ParsedFoodItem): ParsedFoodItem {
   return {
     ...item,
     userQuantity: item.quantity,
-    userUnit: normalizedUnit,
+    userUnit,
     userTextSpan: buildUserTextSpan(item),
     normalizedGrams,
     normalizedOunces,
@@ -1907,19 +2010,21 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
 
   if (/\bgreek yogurt\b/.test(normalized)) {
     const isPlain = /\bplain\b/.test(normalized);
+    const serving = parseLeadingServingFood(message);
+    const quantity = serving?.unit === 'serving' ? serving.quantity : 1;
     items.push(
       makeGenericEstimate(
         {
           key: 'greek yogurt',
           label: isPlain ? 'Plain Greek yogurt' : 'Greek yogurt',
-          quantity: 1,
-          unit: 'serving',
-          calories: 100,
-          protein: 17,
-          carbs: 6,
-          fat: 0.5,
-          sugar: 6,
-          sodium: 65,
+          quantity,
+          unit: quantity === 1 ? 'serving' : 'servings',
+          calories: 100 * quantity,
+          protein: 17 * quantity,
+          carbs: 6 * quantity,
+          fat: 0.5 * quantity,
+          sugar: 6 * quantity,
+          sodium: 65 * quantity,
         },
         message,
       ),
@@ -2073,14 +2178,20 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   }
 
   if (/\bbacon\b/.test(normalized)) {
-    const quantity = readCountBefore('(?:slices?\\s+of\\s+)?bacon', 2);
+    const serving = parseLeadingServingFood(message);
+    const quantity = serving?.unit && /^(?:slice|piece)$/.test(serving.unit)
+      ? serving.quantity
+      : readCountBefore('(?:slices?|pieces?)\\s+(?:of\\s+)?bacon|bacon', 2);
+    const unit = serving?.unit === 'piece'
+      ? quantity === 1 ? 'piece' : 'pieces'
+      : quantity === 1 ? 'slice' : 'slices';
     items.push(
       makeGenericEstimate(
         {
           key: 'bacon',
           label: 'Bacon',
           quantity,
-          unit: quantity === 1 ? 'slice' : 'slices',
+          unit,
           calories: quantity * 45,
           protein: quantity * 3,
           carbs: 0,
@@ -2262,6 +2373,29 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (!/\bchips?\b/.test(normalized) && /\bguac(?:amole)?\b/.test(normalized)) {
+    const isChipotle = /\bchipotle\b/.test(normalized);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'guacamole',
+          label: isChipotle ? 'Chipotle guacamole' : 'Guacamole',
+          quantity: 1,
+          unit: 'serving',
+          calories: 230,
+          protein: 2,
+          carbs: 8,
+          fat: 22,
+          fiber: 6,
+          sugar: 1,
+          sodium: 370,
+          sourceName: isChipotle ? 'Chipotle guacamole estimate' : 'Guacamole common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
   if (/\bcottage cheese\b/.test(normalized)) {
     const serving = parseLeadingServingFood(message);
     const gramMatch = lower.match(/\b(\d+(?:\.\d+)?)\s*(?:g|grams?)\b/) ?? lower.match(/\b(?:about|around)\s+(\d+(?:\.\d+)?)\b/);
@@ -2369,24 +2503,59 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   }
 
   if (/\bpeanut butter\b/.test(normalized)) {
-    const tbspMatch = normalized.match(/\b(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:tbsp|tablespoons?)\s+(?:of\s+)?peanut butter\b/);
-    const quantity = tbspMatch ? parseCount(tbspMatch[1] ?? '1') : 1;
+    const serving = parseLeadingServingFood(message);
+    const spoonMatch = normalized.match(/\b(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+(tbsp|tablespoons?|tsp|teaspoons?)\s+(?:of\s+)?peanut butter\b/);
+    const quantity = serving?.unit && /^(?:tbsp|tsp)$/.test(serving.unit)
+      ? serving.quantity
+      : spoonMatch ? parseCount(spoonMatch[1] ?? '1') : 1;
+    const unit = serving?.unit && /^(?:tbsp|tsp)$/.test(serving.unit)
+      ? serving.unit
+      : normalizeQuantityUnit(spoonMatch?.[2]) ?? 'tbsp';
+    const tablespoonEquivalent = unit === 'tsp' ? quantity / 3 : quantity;
     items.push(
       makeGenericEstimate(
         {
           key: 'peanut butter',
           label: 'Peanut butter',
           quantity,
-          unit: quantity === 1 ? 'tbsp' : 'tbsp',
-          calories: quantity * 95,
-          protein: quantity * 4,
-          carbs: quantity * 3,
-          fat: quantity * 8,
-          fiber: quantity * 1,
-          sugar: quantity * 1,
-          sodium: quantity * 75,
+          unit,
+          calories: tablespoonEquivalent * 95,
+          protein: tablespoonEquivalent * 4,
+          carbs: tablespoonEquivalent * 3,
+          fat: tablespoonEquivalent * 8,
+          fiber: tablespoonEquivalent * 1,
+          sugar: tablespoonEquivalent * 1,
+          sodium: tablespoonEquivalent * 75,
           sourceName: 'Peanut butter common serving estimate',
           sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bprotein powder\b/.test(normalized)) {
+    const serving = parseLeadingServingFood(message);
+    const scoopMatch = normalized.match(/\b(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+scoops?\s+(?:of\s+)?protein powder\b/);
+    const quantity = serving?.unit === 'scoop'
+      ? serving.quantity
+      : scoopMatch ? parseCount(scoopMatch[1] ?? '1') : 1;
+
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'protein powder',
+          label: 'Protein powder',
+          quantity,
+          unit: quantity === 1 ? 'scoop' : 'scoops',
+          calories: quantity * 120,
+          protein: quantity * 24,
+          carbs: quantity * 3,
+          fat: quantity * 2,
+          fiber: quantity * 1,
+          sugar: quantity * 1,
+          sodium: quantity * 160,
+          sourceName: 'Protein powder common serving estimate',
         },
         message,
       ),
@@ -2397,11 +2566,13 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     const quantity = readCountBefore('rice cakes?', 1);
     const isQuaker = /\bquaker\b/.test(normalized);
     const isWhiteCheddar = /\bwhite cheddar\b/.test(normalized);
+    const isCaramel = /\bcaramel\b/.test(normalized);
+    const flavor = isWhiteCheddar ? 'White cheddar ' : isCaramel ? 'Caramel ' : '';
     items.push(
       makeGenericEstimate(
         {
           key: 'rice cakes',
-          label: `${isQuaker ? 'Quaker ' : ''}${isWhiteCheddar ? 'White cheddar ' : ''}rice cakes`.replace(/^./, (char) => char.toUpperCase()),
+          label: `${isQuaker ? 'Quaker ' : ''}${flavor}rice cakes`.replace(/^./, (char) => char.toUpperCase()),
           quantity,
           unit: quantity === 1 ? 'cake' : 'cakes',
           calories: quantity * (isWhiteCheddar ? 45 : 35),
@@ -4488,6 +4659,41 @@ function parseReplacementCorrection(message: string) {
   return { replacement, rejected };
 }
 
+function parseCorrectionFoodReplacement(message: string) {
+  const normalized = stripEmotionalPreface(message)
+    .toLowerCase()
+    .replace(/,/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!/^(?:it was|that was|actually|i meant|no|nah|nvm|nevermind|never mind)\b/.test(normalized)) {
+    return null;
+  }
+
+  const quantityPattern = '\\d+(?:\\.\\d+)?|\\.\\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten';
+  const match = normalized.match(new RegExp(`^(?:(?:it was|that was|actually|i meant|no|nah|nvm|nevermind|never mind)\\s+)*(?:actually\\s+)?(${quantityPattern})\\s+(.+)$`, 'i'));
+
+  if (!match) {
+    return null;
+  }
+
+  const quantity = parseCount(match[1] ?? '1');
+  const foodText = cleanMealMutationFoodText(match[2] ?? '');
+  if (!foodText || !hasStrongFoodSignal(foodText)) {
+    return null;
+  }
+
+  const unit = /\brice cakes?\b/i.test(foodText)
+    ? quantity === 1 ? 'cake' : 'cakes'
+    : normalizeQuantityUnit(parseLeadingServingFood(`${quantity} ${foodText}`)?.unit) ?? null;
+
+  return {
+    foodText,
+    quantity,
+    unit,
+  };
+}
+
 async function resolveFoodTextForMealMutation(args: {
   foodText: string;
   state: MealAssistantState;
@@ -4498,7 +4704,14 @@ async function resolveFoodTextForMealMutation(args: {
 }) {
   const knownItems = detectKnownFoodEstimates(args.foodText);
   if (knownItems.length) {
-    return knownItems;
+    return knownItems.map((item) => {
+      const nextQuantity = args.quantity && args.quantity > 0 ? args.quantity : item.quantity;
+      const scaled = scaleParsedItems([item], nextQuantity)[0] ?? item;
+      return {
+        ...scaled,
+        unit: args.unit ?? scaled.unit,
+      };
+    });
   }
 
   return resolveAssistantItems(
@@ -4561,20 +4774,25 @@ async function buildAdaptiveMealMutationReply(
       nextState.saved = true;
     }
 
+    const responseIntent = heuristicOperations.every((operation) => operation.action === 'update_item_quantity')
+      ? 'quantity_change'
+      : 'correction';
+
     return buildDirectResponse({
-      intent: 'correction',
+      intent: responseIntent,
       assistantReply: buildCompoundOperationReply({
         summaryParts: applied.summaryParts,
         nextItems: applied.nextItems,
         saved: nextState.saved,
+        repairTone: frustrationRegex.test(input.message),
+        previousReply: input.state.lastAssistantReply,
       }),
       nextState,
       message: input.message,
     });
   }
 
-  const removeMatch = normalized.match(removeRegex);
-  const removeTarget = cleanMealMutationFoodText(removeMatch?.[1] ?? removeMatch?.[2] ?? '');
+  const removeTarget = extractRemoveTargetFromMessage(input.message);
   const chipotleCheeseIndex = currentItems.findIndex((item) => /\bchipotle\b/i.test(item.food_name) && /\bcheese\b/i.test(item.food_name));
   if (removeTarget && /\bcheese\b/i.test(removeTarget) && chipotleCheeseIndex >= 0) {
     const nextItems = currentItems.map((item, index) => (index === chipotleCheeseIndex ? removeChipotleCheese(item) : item));
@@ -4629,6 +4847,44 @@ async function buildAdaptiveMealMutationReply(
       return buildDirectResponse({
         intent: 'correction',
         assistantReply: `Fixed it - switched ${targetItem.food_name} to ${replacementLabel}. This meal is about ${Math.round(sumTotals(nextItems).calories)} calories now.`,
+        nextState,
+        message: input.message,
+      });
+    }
+  }
+
+  const correctionFoodReplacement = parseCorrectionFoodReplacement(input.message);
+  if (correctionFoodReplacement) {
+    const replacementItems = await resolveFoodTextForMealMutation({
+      foodText: correctionFoodReplacement.foodText,
+      state: input.state,
+      resolveItemNutrition,
+      action: 'replace',
+      quantity: correctionFoodReplacement.quantity,
+      unit: correctionFoodReplacement.unit,
+    });
+
+    if (replacementItems.length) {
+      const nextItems = [
+        ...currentItems.slice(0, targetIndex),
+        ...replacementItems,
+        ...currentItems.slice(targetIndex + 1),
+      ];
+      const nextState: MealAssistantState = {
+        ...input.state,
+        currentMealItems: nextItems,
+        userCorrections: [...input.state.userCorrections, input.message],
+        currentMealText: buildMealTextFromItems(nextItems),
+        confidenceScore: getConfidenceScore(nextItems),
+        saved: false,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      };
+      const replacementLabel = replacementItems.map((item) => formatParsedItemLabel(item)).join(' and ');
+
+      return buildDirectResponse({
+        intent: 'correction',
+        assistantReply: `Fixed it - changed that to ${replacementLabel}. About ${Math.round(sumTotals(nextItems).calories)} calories total.`,
         nextState,
         message: input.message,
       });
@@ -4720,7 +4976,7 @@ async function buildAdaptiveMealMutationReply(
   }
 
   const chipotleIndex = currentItems.findIndex((item) => /\bchipotle\b/i.test(item.food_name));
-  const wantsRegularChicken = /\bregular chicken\b/.test(normalized) && /\b(?:double|extra)\b/.test(normalized);
+  const wantsRegularChicken = /\b(?:regular chicken|chicken regular)\b/.test(normalized) && /\b(?:double|extra|not double|not extra)\b/.test(normalized);
   const wantsChipsGuac = /\bchips?\b/.test(normalized) && /\bguac(?:amole)?\b/.test(normalized);
 
   if (chipotleIndex >= 0 && (wantsRegularChicken || wantsChipsGuac) && correctionCueRegex.test(normalized)) {
@@ -6462,7 +6718,16 @@ export async function runMealAssistant(
   decision = normalizeAssistantDecision(decision, workingInput);
   decision = guardAssistantDecision(decision, workingInput);
   const normalizedOperations = normalizeDecisionOperations(decision);
-  const hasCompoundOperations = Boolean(decision.operations?.length) || normalizedOperations.length > 1;
+  const hasCompoundOperations = Boolean(decision.operations?.length)
+    || normalizedOperations.length > 1
+    || (
+      state.currentMealItems.length > 0
+      && normalizedOperations.some((operation) => (
+        operation.action === 'remove_item'
+        || operation.action === 'update_item_quantity'
+        || operation.action === 'update_item_name'
+      ))
+    );
   if (hasCompoundOperations && normalizedOperations.some((operation) => isMutatingOperationAction(operation.action) || operation.should_save_meal)) {
     decision = {
       ...decision,
@@ -6553,7 +6818,9 @@ export async function runMealAssistant(
       nextState.confidenceScore = getConfidenceScore(nextState.currentMealItems);
       resolvedItems = applied.resolvedItems.length ? applied.resolvedItems : nextState.currentMealItems;
       removedTargets = applied.removedTargets;
-      if (decision.intent === 'new_food_item') {
+      if (normalizedOperations.every((operation) => operation.action === 'update_item_quantity')) {
+        decision.intent = 'quantity_change';
+      } else if (decision.intent === 'new_food_item') {
         decision.intent = 'correction';
       }
       if (decision.intent === 'quantity_change' && normalizedOperations.length > 1) {

@@ -187,6 +187,12 @@ export async function resolveQaNutrition(args: { item: MealAssistantItem; mealTy
     ], args.mealType);
   }
 
+  if (phrase.includes('grilled chicken') || phrase.includes('chicken breast')) {
+    return buildQaMealResponse([
+      createQaItem({ food_name: 'Grilled chicken breast', quantity, unit: args.item.unit ?? 'serving', calories: 135 * quantity, protein: 26 * quantity, carbs: 0, fat: 3 * quantity, source_type: 'GENERIC_REFERENCE', source_name: 'Chicken breast reference' }),
+    ], args.mealType);
+  }
+
   if (phrase.includes('blueberries')) {
     return buildQaMealResponse([
       createQaItem({ food_name: 'Blueberries', quantity, unit: args.item.unit ?? 'cup', calories: 85 * quantity, protein: 1 * quantity, carbs: 21 * quantity, fat: 0.5 * quantity, fiber: 3.5 * quantity, source_type: 'GENERIC_REFERENCE', source_name: 'Blueberry reference' }),
@@ -196,6 +202,24 @@ export async function resolveQaNutrition(args: { item: MealAssistantItem; mealTy
   if (phrase.includes('peanut butter')) {
     return buildQaMealResponse([
       createQaItem({ food_name: 'Peanut butter', quantity, unit: args.item.unit ?? 'tbsp', calories: 95 * quantity, protein: 4 * quantity, carbs: 3 * quantity, fat: 8 * quantity, fiber: 1 * quantity, source_type: 'GENERIC_REFERENCE', source_name: 'Peanut butter reference' }),
+    ], args.mealType);
+  }
+
+  if (phrase.includes('guacamole') || phrase.includes('guac')) {
+    return buildQaMealResponse([
+      createQaItem({ food_name: 'Guacamole', quantity, unit: args.item.unit ?? 'serving', calories: 230 * quantity, protein: 2 * quantity, carbs: 8 * quantity, fat: 22 * quantity, fiber: 6 * quantity, source_type: 'GENERIC_REFERENCE', source_name: 'Guacamole reference' }),
+    ], args.mealType);
+  }
+
+  if (phrase.includes('protein powder')) {
+    return buildQaMealResponse([
+      createQaItem({ food_name: 'Protein powder', quantity, unit: args.item.unit ?? (quantity === 1 ? 'scoop' : 'scoops'), calories: 120 * quantity, protein: 24 * quantity, carbs: 3 * quantity, fat: 2 * quantity, source_type: 'GENERIC_REFERENCE', source_name: 'Protein powder reference' }),
+    ], args.mealType);
+  }
+
+  if (phrase.includes('greek yogurt')) {
+    return buildQaMealResponse([
+      createQaItem({ food_name: 'Greek yogurt', quantity, unit: args.item.unit ?? 'serving', calories: 100 * quantity, protein: 17 * quantity, carbs: 6 * quantity, fat: 0.5 * quantity, source_type: 'GENERIC_REFERENCE', source_name: 'Greek yogurt reference' }),
     ], args.mealType);
   }
 
