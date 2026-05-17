@@ -664,6 +664,58 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).not.toMatch(/what a melon|lollipop|bubble gum/i);
   });
 
+  it('keeps live omelette clarification meta flow out of nutrition lookup', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const responses = await runConversation(['I had an omelette with some hashbrowns', 'like what'], {
+      resolveItemNutrition,
+    });
+    const [initial, meta] = responses;
+
+    expect(initial?.should_ask_clarification).toBe(true);
+    expect(initial?.next_state.pendingClarification).toMatch(/omelette|eggs?|hashbrowns/i);
+    expect(meta?.intent).toBe('clarification_meta_question');
+    expect(meta?.meal.items).toHaveLength(0);
+    expect(meta?.next_state.pendingClarification).toMatch(/omelette|hashbrowns/i);
+    expect(meta?.assistant_reply).toMatch(/omelette|eggs?|cheese|meat|veggies|hashbrowns|example/i);
+    expect(meta?.assistant_reply).not.toMatch(/what a melon|lollipop|bubble gum|usda|i can log like what/i);
+    expect(resolveItemNutrition).not.toHaveBeenCalledWith(expect.objectContaining({
+      item: expect.objectContaining({ name: expect.stringMatching(/like what/i) }),
+    }));
+  });
+
+  it.each([
+    {
+      messages: ['I had a sandwich', 'examples?'],
+      expected: /sandwich|bread|meat|cheese|size|condiments/i,
+      forbidden: /crackers|usda|examples/i,
+    },
+    {
+      messages: ['I had a smoothie', 'what do you mean'],
+      expected: /smoothie|ingredients|fruit|milk|yogurt|protein|size/i,
+      forbidden: /what do you mean|usda|i can log/i,
+    },
+  ])('keeps live vague-food clarification flow grounded: $messages.0', async ({ messages, expected, forbidden }) => {
+    const resolveItemNutrition = vi.fn(async (args: Parameters<typeof resolveConversationNutrition>[0]) => {
+      const phrase = phraseFromItem(args.item);
+      if (phrase.includes('sandwich')) {
+        return buildParsedMealResponse([
+          createItem({ food_name: 'Crackers, sandwich', quantity: 100, unit: 'g', calories: 494, protein: 7, carbs: 67, fat: 22, source_type: 'GENERIC_REFERENCE', source_name: 'USDA FoodData Central' }),
+        ], args.mealType);
+      }
+      return resolveConversationNutrition(args);
+    });
+    const responses = await runConversation(messages, { resolveItemNutrition });
+    const [initial, meta] = responses;
+
+    expect(initial?.should_ask_clarification).toBe(true);
+    expect(initial?.meal.items).toHaveLength(0);
+    expect(meta?.intent).toBe('clarification_meta_question');
+    expect(meta?.meal.items).toHaveLength(0);
+    expect(meta?.assistant_reply).toMatch(expected);
+    expect(meta?.assistant_reply).not.toMatch(forbidden);
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+  });
+
   it('keeps dinner idea requests as recommendations even when phrased like a rejection', async () => {
     const resolveItemNutrition = vi.fn(resolveConversationNutrition);
     const responses = await runConversation([

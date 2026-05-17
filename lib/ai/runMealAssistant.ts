@@ -2826,7 +2826,7 @@ function shouldTryOnlineHydration(item: ParsedFoodItem) {
 
   return (
     item.source_type === 'AI_ESTIMATE' &&
-    !/\b(?:pizza|little caesars|chipotle bowl|wendy|coke zero|rice cakes?|blueberries|greek yogurt|peanut butter|hash browns?|turkey sausage|fairlife|core power|chips with guac|chips with guacamole)\b/i.test(`${item.food_name} ${item.source_name ?? ''}`)
+    !/\b(?:pizza|little caesars|chipotle bowl|wendy|coke zero|rice cakes?|blueberries|greek yogurt|peanut butter|hash browns?|turkey sausage|fairlife|core power|guac(?:amole)?|chips with guac|chips with guacamole)\b/i.test(`${item.food_name} ${item.source_name ?? ''}`)
   );
 }
 
@@ -4063,6 +4063,77 @@ function buildClarificationMetaReply(state: MealAssistantState) {
   }
 
   return `I just need enough detail to estimate it fairly: amount, main ingredients, and any calorie-heavy add-ons. ${pending}`;
+}
+
+function buildInitialClarificationQuestion(message: string) {
+  const normalized = normalizeFoodText(stripEmotionalPreface(message));
+  const bareSandwich = /\bsandwich\b/.test(normalized)
+    && !/\b(?:turkey|ham|chicken|tuna|egg|pbj|peanut butter|grilled|fried|spicy|mcdouble|wendy|mcdonald|subway|panera|cheese|breakfast)\b/.test(normalized);
+
+  if (/\bomelettes?\b|\bomelets?\b/.test(normalized) && /\bhash\s*browns?|hashbrowns?\b/.test(normalized) && !/\b\d+\s*(?:eggs?)\b/.test(normalized)) {
+    return 'For the omelette, how many eggs, any cheese/meat/veggies, and roughly how much hashbrowns?';
+  }
+
+  if (bareSandwich) {
+    return 'For the sandwich, what bread, meat or main filling, cheese/condiments, and rough size should I use?';
+  }
+
+  if (/\bsmoothie\b/.test(normalized) && !/\b(?:protein|yogurt|milk|banana|berry|berries|strawberry|blueberry|peanut butter|almond|cup|oz|ounces?|small|medium|large)\b/.test(normalized)) {
+    return 'For the smoothie, what ingredients went in it and roughly what size was it?';
+  }
+
+  if (/\bsalad\b/.test(normalized) && !/\b(?:chicken|turkey|salmon|tuna|egg|beans?|dressing|cheese|nuts?|croutons?|avocado|bowl)\b/.test(normalized)) {
+    return 'For the salad, what protein or toppings were in it, how much dressing, and about how big was it?';
+  }
+
+  return null;
+}
+
+function buildInitialClarificationResponse(input: MealAssistantRunInput, question: string): MealAssistantResponse {
+  const currentMealText = cleanOriginalFoodName(input.message);
+  const nextState = updateConversationState({
+    ...input.state,
+    currentMealItems: [],
+    currentMealText,
+    confidenceScore: input.state.confidenceScore ?? 0.82,
+    pendingClarification: question,
+    lastAssistantQuestion: question,
+    saved: false,
+  }, {
+    intent: 'new_food_item',
+    message: input.message,
+    activeQuestion: question,
+  });
+
+  return {
+    intent: 'new_food_item',
+    action: 'unclear',
+    operations: [],
+    assistant_reply: question,
+    contains_food_to_log: true,
+    contains_quantity_update: false,
+    target_item: null,
+    target_item_id: null,
+    target_item_index: null,
+    should_mutate_pending_meal: false,
+    assistant_reply_goal: 'Ask for the smallest useful food details before nutrition lookup.',
+    items: [],
+    corrections: [],
+    should_lookup_nutrition: false,
+    should_save_meal: false,
+    should_ask_clarification: true,
+    clarification_question: question,
+    confidence: 'medium',
+    meal: {
+      items: [],
+      totals: sumTotals([]),
+      confidence_score: nextState.confidenceScore ?? 0.82,
+    },
+    next_state: {
+      ...nextState,
+      lastAssistantReply: question,
+    },
+  };
 }
 
 function buildCompanionInsight(args: { response: MealAssistantResponse; input: MealAssistantRunInput; context: MealAssistantContext }) {
@@ -6556,6 +6627,13 @@ export async function runMealAssistant(
       message: workingInput.message,
       activeQuestion: state.pendingClarification,
     }), workingInput, context);
+  }
+
+  const initialClarificationQuestion = !state.pendingClarification && !state.currentMealItems.length
+    ? buildInitialClarificationQuestion(workingInput.message)
+    : null;
+  if (initialClarificationQuestion) {
+    return finalizeResponse(buildInitialClarificationResponse(workingInput, initialClarificationQuestion), workingInput, context);
   }
 
   if (!shouldUseModelIntentFirst && !dependencies.classify) {
