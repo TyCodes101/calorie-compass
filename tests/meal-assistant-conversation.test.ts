@@ -2636,4 +2636,38 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).toMatch(/saved|logged|all set/i);
     expectNoBadAssistantPatterns(response.assistant_reply);
   });
+
+  it('handles casual shorthand removals without losing the rest of the meal', async () => {
+    const [response] = await runConversation(['nvm remove fries'], {
+      initialState: buildState({
+        currentMealItems: [
+          createItem({ food_name: 'McDouble', unit: 'burger', calories: 390, protein: 22, carbs: 33, fat: 19, source_type: 'OFFICIAL_RESTAURANT', source_name: "McDonald's official nutrition" }),
+          createItem({ food_name: 'Medium Fry', unit: 'order', calories: 340, protein: 4, carbs: 44, fat: 16, source_type: 'OFFICIAL_RESTAURANT', source_name: "McDonald's official nutrition" }),
+        ],
+        currentMealText: 'McDouble and a medium fry',
+      }),
+    });
+
+    expect(['remove_item', 'correction']).toContain(response.intent);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/mcdouble/i);
+    expect(response.assistant_reply).toMatch(/removed|took out|out/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
+
+  it('answers protein sufficiency like a coach instead of reparsing food', async () => {
+    const [response] = await runConversation(['was that enough protein?'], {
+      context: buildContext({ proteinGoal: 180 }),
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Chipotle Chicken Bowl', unit: 'bowl', calories: 980, protein: 68, carbs: 74, fat: 34, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Chipotle official nutrition' })],
+        currentMealText: 'Chipotle chicken bowl',
+      }),
+    });
+
+    expect(['macro_question', 'nutrition_guidance']).toContain(response.intent);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.assistant_reply).toMatch(/68g|protein|third/i);
+    expect(response.assistant_reply).not.toMatch(/source|verified|lookup/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
 });

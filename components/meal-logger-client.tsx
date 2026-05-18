@@ -2096,11 +2096,14 @@ export function MealLoggerClient({
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{trustSummary.coverageSummary}</span>
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{trustSummary.estimatedSummary}</span>
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{Math.round(confidenceScore * 100)}% confidence</span>
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{confidence.description}</span>
+                  <div className="logger-review-trust-strip" aria-label="Review confidence and source summary">
+                    <div className="logger-review-trust-primary">
+                      <span className="logger-review-trust-dot" aria-hidden="true" />
+                      <span>{Math.round(confidenceScore * 100)}% confidence</span>
+                    </div>
+                    <span>{trustSummary.coverageSummary}</span>
+                    <span>{trustSummary.estimatedSummary}</span>
+                    <span>{confidence.description}</span>
                   </div>
 
                   <div className="space-y-2">
@@ -2122,7 +2125,7 @@ export function MealLoggerClient({
                                 <p className="truncate text-sm font-semibold text-slate-950">{item.food_name}</p>
                                 <TrustBadge trusted={trusted} compact label={trustPresentation.badgeLabel} tone={trustPresentation.badgeTone} />
                               </div>
-                              <p className="mt-1 text-xs text-slate-500">{sourceLabel}</p>
+                              <p className="mt-1 text-xs text-slate-500">{sourceLabel} · tap to edit serving, macros, or source notes</p>
                               <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
                                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">{Math.round(item.calories)} cal</span>
                                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">P {Math.round(item.protein)}g</span>

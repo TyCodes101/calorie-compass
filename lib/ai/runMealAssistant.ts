@@ -22,7 +22,7 @@ import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
 const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
 const continuationRegex = /^(and|also|plus|with)\b/i;
-const removeRegex = /^(?:remove|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
+const removeRegex = /^(?:(?:nvm|nevermind|never mind)\s+)?(?:remove|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
 const startNewRegex = /^(?:start over|new meal|clear this|reset|fresh one|different meal)\b/i;
 const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)|done)\b/i;
 const explicitQuantityUpdateRegex = /^(?:actually\s+)?(?:make|change|update)\s+(?:it|that|this)(?:\s+to)?\s+(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
@@ -56,6 +56,7 @@ const doubleThatRegex = /^(?:double that|double it|make it double|double this)\b
 const comparisonRegex = /\b(?:better than|vs\.?|versus|compare)\b/i;
 const currentMealProteinRegex = /\b(?:how much|how many|what(?:'s| is)).*protein.*(?:this|that|meal|shake|bowl|burger)\b|\bhow much protein is (?:this|that)\b/i;
 const currentMealCaloriesRegex = /\b(?:how many|how much|what(?:'s| is)).*calories?.*(?:this|that|meal|shake|bowl|burger)\b|\bhow many calories is (?:this|that)\b/i;
+const enoughProteinRegex = /\b(?:was|is)\s+(?:that|this|it|the meal)\s+enough\s+protein\b|\benough protein\??$/i;
 const mealTypeHintRegex = /\b(breakfast|lunch|dinner|snack)\b/i;
 const weeklySummaryRegex = /\b(?:how(?:'s| is) (?:this|my) week|weekly summary|week so far|how am i doing this week|this week)\b/i;
 const stopWordRegex = /\b(i|me|my|mine|had|have|ate|drank|log|repeat|again|same|usual|use|using|as|the|a|an|for|to|of|this|that|yesterday|today|tonight|please|my|last|meal|food)\b/g;
@@ -5840,6 +5841,26 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
     return `This looks like about ${Math.round(currentTotals.protein)}g of protein.`;
   }
 
+  if (enoughProteinRegex.test(normalized) && input.state.currentMealItems.length) {
+    const currentProtein = Math.round(currentTotals.protein);
+    const proteinGoal = context.proteinGoal ?? null;
+
+    if (proteinGoal && proteinGoal > 0) {
+      const mealShare = currentProtein / proteinGoal;
+      if (mealShare >= 0.3) {
+        return `Yeah, this is a strong protein hit — about ${currentProtein}g, roughly a third of your day.`;
+      }
+      if (mealShare >= 0.18) {
+        return `It helps. This is about ${currentProtein}g protein, so you’ll probably want another protein-forward meal later.`;
+      }
+      return `Not really by itself — about ${currentProtein}g protein. I’d pair the rest of the day with something protein-forward.`;
+    }
+
+    return currentProtein >= 30
+      ? `Yeah, about ${currentProtein}g protein is a solid meal-level hit.`
+      : `It’s about ${currentProtein}g protein, so I’d add something protein-forward if that’s a priority.`;
+  }
+
   if (currentMealCaloriesRegex.test(normalized) && input.state.currentMealItems.length) {
     return `This looks like about ${Math.round(currentTotals.calories)} calories.`;
   }
@@ -6299,6 +6320,29 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
+  if (/\b(?:from|at)\s+chipotle\b/i.test(normalized) && hasActiveMeal) {
+    const currentItem = state.currentMealItems.at(-1);
+    const currentName = currentItem?.food_name ?? 'meal item';
+    return {
+      intent: 'correction',
+      assistant_reply: 'That helps — I’ll treat it like Chipotle.',
+      items: [{
+        name: currentName,
+        brand: 'Chipotle',
+        quantity: currentItem?.quantity ?? 1,
+        unit: currentItem?.unit ?? null,
+        modifiers: ['restaurant source'],
+        action: 'replace',
+      }],
+      corrections: [{ target: currentName, change: message }],
+      should_lookup_nutrition: true,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'high',
+    };
+  }
+
   if (quantityOnlyRegex.test(normalized) && hasActiveMeal) {
     const items = extractFallbackItems(message, state);
     return {
@@ -6594,8 +6638,8 @@ function buildReplyFromItems(args: {
 
     return choosePhrase(seed, [
       `${quantityLead} to ${mainItemLabel}.`,
-      `${quantityLead} I've got it as ${mainItemLabel} now.`,
-      `${quantityLead} That's now ${mainItemLabel}.`,
+      `${quantityLead}. I’ve got it as ${mainItemLabel} now.`,
+      `${quantityLead}. That’s now ${mainItemLabel}.`,
     ]);
   }
 
@@ -6615,11 +6659,11 @@ function buildReplyFromItems(args: {
     const addedItem = resolvedItems.at(-1) ?? mainItem;
     const addedSeed = `${seed}:${addedItem.food_name}`;
     return choosePhrase(addedSeed, [
-      `Added ${addedItem.food_name}${resolvedItems.length > 1 ? ' to this meal' : ''}. ${getSourceLabel(addedItem)}.`,
-      `Got you, I added ${addedItem.food_name}. ${getSourceLabel(addedItem)}.`,
-      `${addedItem.food_name} is in there too. ${getSourceLabel(addedItem)}.`,
-      `Okay, adding ${addedItem.food_name} too. ${getSourceLabel(addedItem)}.`,
-      `Nice, ${addedItem.food_name} is in there now. ${getSourceLabel(addedItem)}.`,
+      `Added ${addedItem.food_name}${resolvedItems.length > 1 ? ' to this meal' : ''}.`,
+      `Got you, I added ${addedItem.food_name}.`,
+      `${addedItem.food_name} is in there too.`,
+      `Okay, adding ${addedItem.food_name} too.`,
+      `Nice, ${addedItem.food_name} is in there now.`,
     ]);
   }
 
