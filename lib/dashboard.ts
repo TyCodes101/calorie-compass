@@ -6,6 +6,7 @@ import { buildWeeklyTrendFromMeals, sumMealTotals } from '@/lib/dashboard-aggreg
 import { calculateRemainingCalories, toProgressValue } from '@/lib/nutrition';
 import { summarizeStoredItems } from '@/lib/trust';
 import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/current-user';
+import { formatMealTitleForDisplay, isFixtureMealRecord } from '@/lib/meal-display';
 
 type DashboardWriteClient = PrismaClient | Prisma.TransactionClient;
 
@@ -114,7 +115,7 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
     };
   }
 
-  const todayMeals = await prisma.meal.findMany({
+  const todayMeals = (await prisma.meal.findMany({
     where: {
       userId: user.id,
       date: {
@@ -124,11 +125,11 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
     },
     include: { items: true },
     orderBy: { createdAt: 'desc' },
-  });
+  })).filter((meal) => !isFixtureMealRecord({ rawText: meal.rawText, items: meal.items }));
 
   const dailyTotals = sumMealTotals(todayMeals);
 
-  const weeklyMeals = await prisma.meal.findMany({
+  const weeklyMeals = (await prisma.meal.findMany({
     where: {
       userId: user.id,
       date: {
@@ -138,6 +139,7 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
     },
     select: {
       date: true,
+      rawText: true,
       totalCalories: true,
       totalProtein: true,
       totalCarbs: true,
@@ -145,8 +147,13 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       totalFiber: true,
       totalSugar: true,
       totalSodium: true,
+      items: {
+        select: {
+          foodName: true,
+        },
+      },
     },
-  });
+  })).filter((meal) => !isFixtureMealRecord({ rawText: meal.rawText, items: meal.items }));
 
   const weeklyTrend = buildWeeklyTrendFromMeals(weeklyMeals, date, profile.dailyCalorieGoal);
   const carbGoal = Math.round((profile.dailyCalorieGoal * 0.4) / 4);
@@ -220,7 +227,7 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       return {
         id: meal.id,
         mealType: meal.mealType.toLowerCase(),
-        rawText: meal.rawText,
+        rawText: formatMealTitleForDisplay(meal.rawText, meal.items.map((item) => ({ food_name: item.foodName, quantity: item.quantity, unit: item.unit }))),
         totalCalories: Math.round(meal.totalCalories),
         totalProtein: Math.round(meal.totalProtein),
         totalCarbs: Math.round(meal.totalCarbs),
