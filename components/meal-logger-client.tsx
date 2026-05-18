@@ -1899,9 +1899,20 @@ export function MealLoggerClient({
           {showStarterPanel ? (
             <ChatBubble role="assistant" compact>
               <div className="logger-starter-panel">
-                <div>
-                  <p className="text-sm font-semibold text-slate-950">Fast ways to log</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Text a meal, scan a packaged food, or enter label numbers. I’ll show sources and confidence before anything saves.</p>
+                <div className="logger-starter-hero">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950">Log like you’d text a coach</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">Give me a messy meal, a branded food, or a partial serving. I’ll turn it into reviewable nutrition with sources before anything saves.</p>
+                  </div>
+                  <div className="logger-starter-proof" aria-label="AI product capabilities">
+                    <span>Understands corrections</span>
+                    <span>Handles restaurants</span>
+                    <span>Remembers repeats</span>
+                  </div>
+                </div>
+                <div className="logger-demo-card" aria-label="Sample interaction">
+                  <div className="logger-demo-user">half a Chipotle chicken bowl and a Fairlife shake</div>
+                  <div className="logger-demo-assistant">I’ll split the bowl serving, keep the branded shake separate, and show confidence before you save.</div>
                 </div>
                 <div className="logger-starter-actions">
                   <button

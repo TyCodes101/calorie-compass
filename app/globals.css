@@ -1116,6 +1116,59 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   gap: 0.85rem;
 }
 
+.logger-starter-hero {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.logger-starter-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+}
+
+.logger-starter-proof span {
+  border-radius: 999px;
+  border: 1px solid rgba(20, 184, 166, 0.16);
+  background: rgba(240, 253, 250, 0.86);
+  padding: 0.3rem 0.55rem;
+  font-size: 0.67rem;
+  font-weight: 700;
+  color: #0f766e;
+}
+
+.logger-demo-card {
+  display: grid;
+  gap: 0.55rem;
+  border-radius: 22px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  padding: 0.78rem;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+}
+
+.logger-demo-user,
+.logger-demo-assistant {
+  width: fit-content;
+  max-width: 92%;
+  border-radius: 17px;
+  padding: 0.62rem 0.78rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.logger-demo-user {
+  justify-self: end;
+  background: #0f172a;
+  color: white;
+}
+
+.logger-demo-assistant {
+  border: 1px solid rgba(214, 225, 237, 0.95);
+  background: white;
+  color: #475569;
+}
+
 .logger-starter-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

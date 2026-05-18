@@ -160,8 +160,9 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
   const fatGoal = Math.round((profile.dailyCalorieGoal * 0.3) / 9);
   const todayItems = todayMeals.flatMap((meal) => meal.items);
   const trustSummary = summarizeStoredItems(todayItems);
+  const roundedProteinTotal = Math.round(dailyTotals.protein);
   const remainingCalories = calculateRemainingCalories(dailyTotals.calories, profile.dailyCalorieGoal);
-  const proteinRemaining = Math.max(0, Math.round(profile.proteinGoal - dailyTotals.protein));
+  const proteinRemaining = Math.max(0, profile.proteinGoal - roundedProteinTotal);
 
   const dailySummary = todayMeals.length === 0
     ? {

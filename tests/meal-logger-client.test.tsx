@@ -130,7 +130,7 @@ describe('meal logger client', () => {
       />,
     );
 
-    expect(screen.getByText(/chipotle chicken bowl/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/chipotle chicken bowl/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/protein left\?/i)).toBeInTheDocument();
     expect(screen.getByText(/tonight idea/i)).toBeInTheDocument();
     expect(screen.getByText(/talk naturally/i)).toBeInTheDocument();
@@ -156,7 +156,10 @@ describe('meal logger client', () => {
     expect(todaySnapshot).toBeInTheDocument();
     expect(within(todaySnapshot).getByText(/calories left/i)).toBeInTheDocument();
     expect(within(todaySnapshot).getByText(/protein left/i)).toBeInTheDocument();
-    expect(screen.getByText(/fast ways to log/i)).toBeInTheDocument();
+    expect(screen.getByText(/log like you’d text a coach/i)).toBeInTheDocument();
+    expect(screen.getByText(/partial serving/i)).toBeInTheDocument();
+    expect(screen.getByText(/handles restaurants/i)).toBeInTheDocument();
+    expect(screen.getByText(/half a Chipotle chicken bowl and a Fairlife shake/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /try example/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^barcode$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /nutrition label/i })).toBeInTheDocument();
