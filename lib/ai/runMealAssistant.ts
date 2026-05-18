@@ -21,17 +21,17 @@ import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
 const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
-const continuationRegex = /^(and|also|plus|with)\b/i;
+const continuationRegex = /^(and|also|plus|with|anyway|wait(?:\s+also)?)\b/i;
 const removeRegex = /^(?:remove|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
 const startNewRegex = /^(?:start over|new meal|clear this|reset|fresh one|different meal)\b/i;
-const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)|done)\b/i;
+const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)|done)\b|\b(?:save|log)\s+(?:it|that|this)\b/i;
 const explicitQuantityUpdateRegex = /^(?:actually\s+)?(?:make|change|update)\s+(?:it|that|this)(?:\s+to)?\s+(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const editRegex = /^(?:edit(?: it| that| this)?|change(?: it| that| this)?|tweak(?: it| that| this)?|adjust(?: it| that| this)?)\b/i;
 const reviewRegex = /\b(?:review (?:it|this|that)|show me (?:the )?(?:meal|review)|what do i have so far|show me what i have)\b/i;
-const quantityOnlyRegex = /^(?:actually|make that|update that to|it was|that was|no|i meant|instead)\s+(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
+const quantityOnlyRegex = /^(?:actually|make that|update that to|it was|that was|no|i meant|instead)\s+(?:only\s+)?(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const directQuantityRegex = /^(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const casualRegex = /^(?:hi|hello|hey|yo|sup|what(?:'|’)??s up|thanks|thank you|cool|okay|ok|nice|lol|how are you|how(?:'|’)??s your day)\b/i;
-const offTopicRegex = /\b(?:weather|movie|music|homework|code|browser|news|sports|joke)\b/i;
+const offTopicRegex = /\b(?:weather|movie|music|homework|code|browser|news|sports|joke|workout|gym|training|lift|lifting|destroyed me)\b/i;
 const repeatYesterdayRegex = /\b(?:repeat|log|use|same as|what(?: did)? i (?:have|eat|log))\s+yesterday(?:'?s)?\b|\byesterday(?:'?s)?\b/i;
 const usualRegex = /\b(?:same as usual|my usual|the usual|usual)\b/i;
 const repeatCueRegex = /\b(?:same|usual|again|repeat|yesterday|last time|last meal)\b/i;
@@ -80,7 +80,7 @@ const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
 const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|(?:lets|let's) go back to|go back to|back to|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
-const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|wendy'?s|mcdouble|mc double|mcdonald'?s?|sandwich|fries|fry|fairlife|core power|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|shakes?|grilled chicken|chicken breast|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?)\b/i;
+const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|wendy'?s|mcdouble|mc double|mcdonald'?s?|chick-fil-a|chick fil a|nuggets?|sandwich|fries|fry|fairlife|core power|quest|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|shakes?|grilled chicken|chicken breast|chicken|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|milk|coffee|muffins?|steak|potatoes|ranch)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -361,6 +361,22 @@ function normalizeQuantityUnit(unit: string | null | undefined) {
     return 'scoop';
   }
 
+  if (normalized === 'bowl' || normalized === 'bowls') {
+    return 'bowl';
+  }
+
+  if (normalized === 'bar' || normalized === 'bars') {
+    return 'bar';
+  }
+
+  if (normalized === 'muffin' || normalized === 'muffins') {
+    return 'muffin';
+  }
+
+  if (normalized === 'burger' || normalized === 'burgers') {
+    return 'burger';
+  }
+
   return normalized;
 }
 
@@ -368,9 +384,9 @@ function parseCorrectedServing(message: string) {
   const normalized = stripCorrectionLeadIn(stripConversationalLeadIn(stripEmotionalPreface(message).toLowerCase()));
   const quantityWords = 'a|an|one|two|three|four|five|six|seven|eight|nine|ten';
   const quantityPattern = `a half|half|three quarters?|a quarter|quarter|\\d+(?:\\.\\d+)?|\\.\\d+|${quantityWords}`;
-  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|scoops?';
+  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|scoops?|bowls?|bars?|muffins?|burgers?';
   const match = normalized.match(
-    new RegExp(`^(?:(?:no|nah|actually|i meant|instead|it was|that was|make that|update that to|change that to|make it|change it to|update it to|lets go back to|let's go back to|go back to|back to|nvm|nevermind|never mind)\\s+)?(?:i\\s+)?(?:(?:only\\s+)?(?:had|ate|drank)\\s+)?(?:about\\s+|around\\s+)?(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(${unitPattern})?\\b`),
+    new RegExp(`^(?:(?:no|nah|actually|i meant|instead|it was|that was|make that|update that to|change that to|make it|change it to|update it to|lets go back to|let's go back to|go back to|back to|nvm|nevermind|never mind)\\s+)?(?:i\\s+)?(?:(?:only\\s+)?(?:had|ate|drank)\\s+)?(?:about\\s+|around\\s+)?(?:only\\s+)?(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(${unitPattern})?\\b`),
   );
 
   if (!match) {
@@ -393,7 +409,7 @@ function parseLeadingServingFood(message: string) {
   const normalized = stripCorrectionLeadIn(stripConversationalLeadIn(stripEmotionalPreface(message).toLowerCase()));
   const quantityWords = 'a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten';
   const quantityPattern = `\\d+(?:\\.\\d+)?|\\.\\d+|${quantityWords}`;
-  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|scoops?';
+  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|scoops?|bowls?|bars?|muffins?|burgers?';
   const match = normalized.match(
     new RegExp(`^(?:i\\s+)?(?:(?:just\\s+|only\\s+)?(?:had|ate|drank|logged)\\s+)?(?:about\\s+|around\\s+)?(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(${unitPattern})\\s+(?:of\\s+)?(.+)$`, 'i'),
   );
@@ -443,7 +459,7 @@ function hasStrongFoodSignal(text: string) {
 function stripConversationalLeadIn(text: string) {
   return text
     .trim()
-    .replace(/^(?:okay|ok|yep|yeah|alright|cool|nice|sure|so)[\s,!.-]+/i, '')
+    .replace(/^(?:okay|ok|yep|yeah|alright|cool|nice|sure|so|wait|anyway)[\s,!.-]+/i, '')
     .trim();
 }
 
@@ -457,6 +473,10 @@ function isNonFoodDialogueMessage(message: string) {
   const normalized = stripEmotionalPreface(message).toLowerCase();
   if (hasFoodAfterConversationalLeadIn(message)) {
     return false;
+  }
+
+  if (/\b(?:barely ate|barely eaten|didn'?t eat much|haven'?t eaten much)\b/i.test(normalized)) {
+    return true;
   }
 
   return (
@@ -509,12 +529,15 @@ function isRecommendationFollowUpMessage(message: string, state: MealAssistantSt
 }
 
 function shouldAppendToCurrentMeal(message: string, state: MealAssistantState) {
-  if (!state.currentMealItems.length || state.saved) {
+  if (!state.currentMealItems.length) {
     return false;
   }
 
   const normalized = stripCorrectionLeadIn(stripEmotionalPreface(message)).toLowerCase().trim();
+  const savedMealAppend = state.saved && /^(?:wait|actually|oh|oops|also|and|plus|with|anyway)\b.*\b(?:add|also|with|plus|too|as well)\b/i.test(normalized);
   return (
+    savedMealAppend
+    ||
     continuationRegex.test(normalized)
     || /^(?:add|include|throw in|put in)\b/i.test(normalized)
     || /\b(?:too|as well)\b/i.test(normalized)
@@ -631,6 +654,28 @@ function buildItemTargetHints(item: ParsedFoodItem) {
     hints.add('shakes');
     hints.add('bottle');
     hints.add('bottles');
+  }
+
+  if (/cereal|cinnamon toast crunch/i.test(item.food_name)) {
+    hints.add('cereal');
+    hints.add('bowls');
+    hints.add('bowl');
+  }
+
+  if (/muffin/i.test(item.food_name)) {
+    hints.add('muffin');
+    hints.add('muffins');
+  }
+
+  if (/potatoes|potato/i.test(item.food_name)) {
+    hints.add('potato');
+    hints.add('potatoes');
+  }
+
+  if (/pizza/i.test(item.food_name)) {
+    hints.add('pizza');
+    hints.add('slice');
+    hints.add('slices');
   }
 
   if (/guac|guacamole/i.test(item.food_name)) {
@@ -773,7 +818,7 @@ function parseTargetedQuantityChangeClause(clause: string) {
     .replace(/\s+/g, ' ')
     .trim();
   const quantityPattern = '\\d+(?:\\.\\d+)?|\\.\\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten';
-  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|scoops?|burgers?';
+  const unitPattern = 'cups?|grams?|g|oz|ounces?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|cakes?|eggs?|bottles?|cans?|scoops?|bowls?|bars?|muffins?|burgers?';
   const patterns = [
     new RegExp(`^(?:make|change|update)\\s+(?:the\\s+)?(.+?)\\s+(?:to\\s+)?(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(${unitPattern})?\\b`, 'i'),
     new RegExp(`^(?:the\\s+)?(.+?)\\s+(?:to|was|is)\\s+(${quantityPattern})(?:\\s+whole)?\\s*(?:of\\s+)?(?:a\\s+|an\\s+)?(${unitPattern})?\\b`, 'i'),
@@ -1807,7 +1852,7 @@ function buildUserTextSpan(item: ParsedFoodItem) {
 
 function withServingMetadata(item: ParsedFoodItem): ParsedFoodItem {
   const normalizedUnit = normalizeQuantityUnit(item.unit) ?? item.unit;
-  const userUnit = item.unit?.trim() || normalizedUnit;
+  const userUnit = normalizedUnit || item.unit?.trim();
   const normalizedGrams = inferNormalizedGrams(item);
   const normalizedOunces = normalizedGrams !== null
     ? Number((normalizedGrams / 28.3495).toFixed(2))
@@ -1817,6 +1862,7 @@ function withServingMetadata(item: ParsedFoodItem): ParsedFoodItem {
 
   return {
     ...item,
+    unit: normalizedUnit,
     userQuantity: item.quantity,
     userUnit,
     userTextSpan: buildUserTextSpan(item),
@@ -1897,6 +1943,26 @@ function sortKnownEstimateItems(items: ParsedFoodItem[], message: string) {
   return [...items].sort((left, right) => getKnownItemOrderIndex(left, normalizedMessage) - getKnownItemOrderIndex(right, normalizedMessage));
 }
 
+function makeWholeMilkItem(message: string, quantity = 1) {
+  return makeGenericEstimate(
+    {
+      key: 'whole milk',
+      label: 'Whole milk',
+      quantity,
+      unit: quantity === 1 ? 'cup' : 'cups',
+      calories: 150 * quantity,
+      protein: 8 * quantity,
+      carbs: 12 * quantity,
+      fat: 8 * quantity,
+      sugar: 12 * quantity,
+      sodium: 120 * quantity,
+      sourceName: 'Whole milk common serving estimate',
+      sourceType: 'GENERIC_REFERENCE',
+    },
+    message,
+  );
+}
+
 function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   const normalized = normalizeFoodText(message);
   const lower = normalizeKnownFoodTypos(message.toLowerCase());
@@ -1960,6 +2026,60 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
         message,
       ),
     );
+  }
+
+  if (!pizzaQuantity && !/\b(?:whole|entire|little caesars?)\b/.test(normalized) && /\bpizza\b/.test(normalized)) {
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'pizza',
+          label: 'slices of pizza',
+          quantity: 1,
+          unit: 'slice',
+          calories: 285,
+          protein: 12,
+          carbs: 36,
+          fat: 10,
+          fiber: 2,
+          sugar: 4,
+          sodium: 640,
+          sourceName: 'Generic pizza slice fallback estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bcinnamon toast crunch\b|\bcereal\b/.test(normalized)) {
+    const bowlMatch = normalized.match(/\b(\d+(?:\.\d+)?|\.\d+|one|two|three|four|five|half|a half)\s+(?:bowls?|cups?)\b/);
+    const quantity = bowlMatch ? parseCount(bowlMatch[1] ?? '1') : 1;
+    const isCinnamonToastCrunch = /\bcinnamon toast crunch\b/.test(normalized);
+    const hasWholeMilk = /\bwhole milk\b/.test(normalized);
+    const hasMilk = hasWholeMilk || /\bmilk\b/.test(normalized);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'cereal',
+          label: isCinnamonToastCrunch ? 'Cinnamon Toast Crunch cereal' : 'Cereal',
+          quantity,
+          unit: quantity === 1 ? 'bowl' : 'bowls',
+          calories: (isCinnamonToastCrunch ? 170 : 140) * quantity,
+          protein: (isCinnamonToastCrunch ? 2 : 4) * quantity,
+          carbs: (isCinnamonToastCrunch ? 33 : 28) * quantity,
+          fat: (isCinnamonToastCrunch ? 4 : 2) * quantity,
+          fiber: 2 * quantity,
+          sugar: (isCinnamonToastCrunch ? 12 : 6) * quantity,
+          sodium: (isCinnamonToastCrunch ? 230 : 180) * quantity,
+          sourceName: isCinnamonToastCrunch ? 'Cinnamon Toast Crunch common serving estimate' : 'Cereal common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+
+    if (hasMilk) {
+      items.push(makeWholeMilkItem(message, quantity));
+    }
   }
 
   if (/\b(?:oatmeal|oats?)\b/.test(normalized)) {
@@ -2210,6 +2330,27 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (/\bchicken\b/.test(normalized) && !/\b(?:chipotle|wendy|sandwich|nuggets?|fried|grilled)\b/.test(normalized)) {
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'chicken',
+          label: 'Chicken',
+          quantity: 1,
+          unit: 'serving',
+          calories: 220,
+          protein: 36,
+          carbs: 0,
+          fat: 8,
+          sodium: 120,
+          sourceName: 'Chicken common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
   if (/\borange juice\b/.test(normalized)) {
     items.push(
       makeGenericEstimate(
@@ -2225,6 +2366,57 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
           sugar: 21,
           sodium: 10,
           sourceName: 'Orange juice common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bcoffee\b/.test(normalized)) {
+    const hasCream = /\bcream|creamer|latte|milk\b/.test(normalized);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'coffee',
+          label: hasCream ? 'Coffee with cream' : 'Coffee',
+          quantity: 1,
+          unit: 'cup',
+          calories: hasCream ? 60 : 5,
+          protein: hasCream ? 1 : 0,
+          carbs: hasCream ? 4 : 0,
+          fat: hasCream ? 4 : 0,
+          sugar: hasCream ? 3 : 0,
+          sodium: 5,
+          sourceName: 'Coffee common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bwhole milk\b/.test(normalized) && !/\bcereal\b/.test(normalized)) {
+    items.push(makeWholeMilkItem(message, 1));
+  }
+
+  if (/\b(?:broccoli|brocolli)\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:cups?\\s+(?:of\\s+)?)?(?:broccoli|brocolli)', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'broccoli',
+          label: 'Broccoli',
+          quantity,
+          unit: 'cup',
+          calories: 55 * quantity,
+          protein: 4 * quantity,
+          carbs: 11 * quantity,
+          fat: 0.5 * quantity,
+          fiber: 5 * quantity,
+          sugar: 2 * quantity,
+          sodium: 60 * quantity,
+          sourceName: 'Broccoli common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
         },
         message,
       ),
@@ -2595,6 +2787,28 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (/\brice\b/.test(normalized) && !/\brice cakes?\b/.test(normalized) && !/\bchipotle\b/.test(normalized)) {
+    const quantity = readCountBefore('cups?\\s+(?:of\\s+)?rice|rice', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'rice',
+          label: 'Rice',
+          quantity,
+          unit: quantity === 1 ? 'cup' : 'cups',
+          calories: 205 * quantity,
+          protein: 4 * quantity,
+          carbs: 45 * quantity,
+          fat: 0.5 * quantity,
+          sodium: 2 * quantity,
+          sourceName: 'Rice common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
   if (/\b(?:fairlife|core power|protein shake|shake)\b/.test(normalized) && /\b(?:shake|core power|fairlife)\b/.test(normalized)) {
     const isElite = /\belite\b|\b42g\b|\b42\s*(?:gram|grams|g)\b/.test(normalized);
     const isFairlife = /\bfairlife\b|\bcore power\b/.test(normalized);
@@ -2625,7 +2839,7 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (/\bprotein bars?\b/.test(normalized)) {
+  if (/\bprotein bars?\b/.test(normalized) && !/\bquest\b/.test(normalized)) {
     const quantity = readCountBefore('protein bars?', 1);
     items.push(
       makeGenericEstimate(
@@ -2642,6 +2856,147 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
           sugar: quantity * 4,
           sodium: quantity * 180,
           sourceName: 'Protein bar common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bquest\b/.test(normalized) && /\bbar\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:quest\\s+)?protein bars?', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'quest protein bar',
+          label: 'Quest protein bar',
+          quantity,
+          unit: quantity === 1 ? 'bar' : 'bars',
+          calories: 200 * quantity,
+          protein: 20 * quantity,
+          carbs: 22 * quantity,
+          fat: 8 * quantity,
+          fiber: 13 * quantity,
+          sugar: 1 * quantity,
+          sodium: 210 * quantity,
+          sourceName: 'Quest-style protein bar estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bchick[- ]?fil[- ]?a\b/.test(normalized) && /\bnuggets?\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:count\\s+)?nuggets?', /\b8\b/.test(normalized) ? 8 : 1);
+    const count = quantity > 1 ? quantity : 8;
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'chick-fil-a nuggets',
+          label: 'Chick-fil-A Nuggets',
+          quantity: count,
+          unit: 'nuggets',
+          calories: (250 / 8) * count,
+          protein: (27 / 8) * count,
+          carbs: (11 / 8) * count,
+          fat: (11 / 8) * count,
+          sodium: (1210 / 8) * count,
+          sourceName: 'Chick-fil-A official nutrition',
+          sourceType: 'OFFICIAL_RESTAURANT',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bsteak\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:oz\\s+(?:of\\s+)?)?steak', 1);
+    const isOunceServing = /\b\d+(?:\.\d+)?\s*oz\b/.test(normalized);
+    const multiplier = isOunceServing ? quantity / 4 : quantity;
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'steak',
+          label: 'Steak',
+          quantity: isOunceServing ? quantity : 1,
+          unit: isOunceServing ? 'oz' : 'serving',
+          calories: 280 * multiplier,
+          protein: 28 * multiplier,
+          carbs: 0,
+          fat: 18 * multiplier,
+          sodium: 75 * multiplier,
+          sourceName: 'Steak common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bpotatoes\b|\bpotato\b/.test(normalized)) {
+    const cupMatch = normalized.match(/\b(\d+(?:\.\d+)?|\.\d+|one|two|three|four|half|a half)\s+cups?\s+(?:of\s+)?potatoes\b/);
+    const quantity = cupMatch ? parseCount(cupMatch[1] ?? '1') : 1;
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'potatoes',
+          label: 'Potatoes',
+          quantity,
+          unit: quantity === 1 ? 'cup' : 'cups',
+          calories: 160 * quantity,
+          protein: 4 * quantity,
+          carbs: 37 * quantity,
+          fat: 0.2 * quantity,
+          fiber: 4 * quantity,
+          sugar: 2 * quantity,
+          sodium: 20 * quantity,
+          sourceName: 'Potatoes common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\branch\b/.test(normalized)) {
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'ranch',
+          label: 'Ranch',
+          quantity: 1,
+          unit: 'serving',
+          calories: 130,
+          protein: 0,
+          carbs: 2,
+          fat: 14,
+          sodium: 260,
+          sourceName: 'Ranch common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bmuffins?\b/.test(normalized)) {
+    const quantity = readCountBefore('muffins?', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'muffin',
+          label: quantity === 1 ? 'Muffin' : 'Muffins',
+          quantity,
+          unit: quantity === 1 ? 'muffin' : 'muffins',
+          calories: 330 * quantity,
+          protein: 5 * quantity,
+          carbs: 52 * quantity,
+          fat: 12 * quantity,
+          fiber: 2 * quantity,
+          sugar: 28 * quantity,
+          sodium: 340 * quantity,
+          sourceName: 'Muffin common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
         },
         message,
       ),
@@ -2767,7 +3122,7 @@ function detectChipotleBowlEstimate(message: string): ParsedFoodItem | null {
   if (/\bguac(?:amole)?\b/.test(normalized)) add('guacamole', { calories: 230, protein: 2, carbs: 8, fat: 22, fiber: 6, sodium: 370 });
 
   if (components.length < 1) {
-    if (/^\s*(?:a\s+|an\s+)?chipotle\s+bowl\s*$/.test(normalized)) {
+    if (/\bchipotle\b/.test(normalized) && /\bbowl\b/.test(normalized)) {
       return makeGenericEstimate(
         {
           key: 'chipotle bowl',
@@ -4071,6 +4426,10 @@ function buildClarificationMetaReply(state: MealAssistantState) {
     return 'For a smoothie, the useful details are size and what went in it: fruit, milk or yogurt, protein powder, nut butter, or juice. A rough estimate is fine.';
   }
 
+  if (/\bcereal\b/.test(contextText)) {
+    return 'For cereal, the useful details are the cereal type, rough amount, and whether you had milk. Something like "Cinnamon Toast Crunch, about 2 bowls with whole milk" works.';
+  }
+
   return `I just need enough detail to estimate it fairly: amount, main ingredients, and any calorie-heavy add-ons. ${pending}`;
 }
 
@@ -4081,6 +4440,10 @@ function buildInitialClarificationQuestion(message: string) {
 
   if (/\bomelettes?\b|\bomelets?\b/.test(normalized) && /\bhash\s*browns?|hashbrowns?\b/.test(normalized) && !/\b\d+\s*(?:eggs?)\b/.test(normalized)) {
     return 'For the omelette, how many eggs, any cheese/meat/veggies, and roughly how much hashbrowns?';
+  }
+
+  if (/\bcereal\b/.test(normalized) && !/\b(?:cinnamon toast crunch|cheerios|wheaties|frosted flakes|raisin bran|granola|milk|bowls?|cups?)\b/.test(normalized)) {
+    return 'For the cereal, what kind was it and about how much? Milk details help too if you had any.';
   }
 
   if (bareSandwich) {
@@ -4143,10 +4506,6 @@ function buildInitialClarificationResponse(input: MealAssistantRunInput, questio
       lastAssistantReply: question,
     },
   };
-}
-
-function hasOmeletteClarificationContext(state: MealAssistantState) {
-  return /\bomelette|omelet|hash\s*browns?|hashbrowns?\b/i.test(`${state.currentMealText ?? ''} ${state.pendingClarification ?? ''} ${state.lastAssistantQuestion ?? ''}`);
 }
 
 function getClarificationContextText(state: MealAssistantState) {
@@ -4396,12 +4755,59 @@ function buildSandwichClarificationItems(message: string, state: MealAssistantSt
   ];
 }
 
+function buildCerealClarificationItems(message: string, state: MealAssistantState): ParsedFoodItem[] {
+  if (!/\bcereal\b/i.test(getClarificationContextText(state))) {
+    return [];
+  }
+
+  const normalized = normalizeFoodText(message);
+  if (!/\b(?:cereal|cinnamon toast crunch|cheerios|frosted flakes|raisin bran|granola|bowls?|cups?|milk)\b/.test(normalized)) {
+    return [];
+  }
+
+  const quantityMatch = normalized.match(/\b(\d+(?:\.\d+)?|\.\d+|one|two|three|four|five|half|a half)\s+(?:bowls?|cups?)\b/);
+  const quantity = quantityMatch ? parseCount(quantityMatch[1] ?? '1') : 1;
+  const isCinnamonToastCrunch = /\bcinnamon toast crunch\b/.test(normalized) || /\bcinnamon\b/.test(normalized);
+  const hasWholeMilk = /\bwhole milk\b/.test(normalized);
+  const hasMilk = hasWholeMilk || /\bmilk\b/.test(normalized);
+  const cerealCalories = isCinnamonToastCrunch ? 170 : 140;
+  const cerealProtein = isCinnamonToastCrunch ? 2 : 4;
+  const label = isCinnamonToastCrunch ? 'Cinnamon Toast Crunch cereal' : 'Cereal';
+  const items = [
+    makeGenericEstimate(
+      {
+        key: 'cereal',
+        label,
+        quantity,
+        unit: quantity === 1 ? 'bowl' : 'bowls',
+        calories: cerealCalories * quantity,
+        protein: cerealProtein * quantity,
+        carbs: (isCinnamonToastCrunch ? 33 : 28) * quantity,
+        fat: (isCinnamonToastCrunch ? 4 : 2) * quantity,
+        fiber: quantity * 2,
+        sugar: (isCinnamonToastCrunch ? 12 : 6) * quantity,
+        sodium: (isCinnamonToastCrunch ? 230 : 180) * quantity,
+        sourceName: `${label} common serving estimate`,
+        sourceType: 'GENERIC_REFERENCE',
+      },
+      message,
+    ),
+  ];
+
+  if (hasMilk) {
+    items.push(makeWholeMilkItem(message, quantity));
+  }
+
+  return items;
+}
+
 function buildStructuredClarificationAnswerItems(message: string, state: MealAssistantState): ParsedFoodItem[] {
   return [
     ...buildOmeletteClarificationItems(message),
     ...buildSmoothieClarificationItems(message, state),
     ...buildSaladClarificationItems(message, state),
     ...buildSandwichClarificationItems(message, state),
+    ...buildCerealClarificationItems(message, state),
   ];
 }
 
@@ -4632,7 +5038,7 @@ function findMatchingMemoryMeal(input: MealAssistantRunInput, context: MealAssis
 
 function getCurrentMealRepeatItems(message: string, state: MealAssistantState) {
   const normalized = message.trim().toLowerCase();
-  if (!state.saved || !state.currentMealItems.length || !repeatCueRegex.test(normalized)) {
+  if (!state.saved || !state.currentMealItems.length || !repeatCueRegex.test(normalized) || repeatYesterdayRegex.test(normalized)) {
     return null;
   }
 
@@ -4731,6 +5137,12 @@ function buildCasualReply(message: string, state: MealAssistantState) {
       : 'No worries. Send the first meal whenever you are ready.';
   }
 
+  if (/\b(?:barely ate|barely eaten|didn'?t eat much|haven'?t eaten much)\b/i.test(normalized)) {
+    return hasActiveMeal
+      ? 'No worries, I still have this meal here. Send anything else you remember and I will add it.'
+      : 'No worries. Send whatever you did have, even if it was just a small thing.';
+  }
+
   if (alreadySentFoodRegex.test(normalized)) {
     return hasActiveMeal
       ? 'You did - I have the meal here now. Tell me what to change or save it when it looks right.'
@@ -4791,7 +5203,7 @@ function buildCasualReply(message: string, state: MealAssistantState) {
       : choosePhrase(normalized, ['All good. What did you eat?', 'Yep, send the meal whenever you’re ready.']);
   }
 
-  if (offTopicRegex.test(normalized)) {
+  if (offTopicRegex.test(normalized) && !hasStrongFoodSignal(normalized)) {
     return hasActiveMeal
       ? choosePhrase(normalized, ['I’m still holding this meal if you want to keep going.', 'I can keep working on this meal, or you can send the next food.', 'I’ve still got this meal here if you want to keep building it.'])
       : choosePhrase(normalized, ['I’m here for the food side. What did you eat?', 'I can help most on the nutrition side. What’d you have?', 'I’m best at the food part. What are we logging?']);
@@ -4831,6 +5243,10 @@ function findContextualItemIndex(message: string, items: ParsedFoodItem[]) {
     }
 
     if (normalizedMessage.includes(normalizeText(item.food_name))) {
+      return index;
+    }
+
+    if (buildItemTargetHints(item).some((hint) => normalizedMessage.includes(hint))) {
       return index;
     }
   }
@@ -5144,6 +5560,27 @@ async function buildAdaptiveMealMutationReply(
 
   const normalized = stripEmotionalPreface(input.message).toLowerCase();
   const currentItems = cloneParsedItems(input.state.currentMealItems);
+
+  if (/\b(?:remove|clear|delete)\s+(?:everything|all|the whole meal|this meal)\b/i.test(normalized)) {
+    const nextState: MealAssistantState = {
+      ...input.state,
+      currentMealItems: [],
+      userCorrections: [...input.state.userCorrections, input.message],
+      currentMealText: null,
+      confidenceScore: 0.82,
+      saved: false,
+      pendingClarification: null,
+      lastAssistantQuestion: null,
+    };
+
+    return buildDirectResponse({
+      intent: 'remove_item',
+      assistantReply: 'Cleared the meal. We can start fresh whenever you are ready.',
+      nextState,
+      message: input.message,
+    });
+  }
+
   const targetIndex = findContextualItemIndex(input.message, currentItems);
   const targetItem = targetIndex >= 0 ? currentItems[targetIndex] : currentItems.at(-1) ?? null;
 
@@ -5580,7 +6017,9 @@ function buildDirectFoodEstimateResponse(args: {
   context?: MealAssistantContext;
 }) {
   const normalized = stripEmotionalPreface(args.input.message).toLowerCase();
-  const intent = args.intent ?? (args.state.currentMealItems.length && continuationRegex.test(normalized) ? 'add_to_current_meal' : 'new_food_item');
+  const mealTypeHint = extractMealTypeHint(args.input.message);
+  const startsNewMealType = Boolean(mealTypeHint && mealTypeHint !== args.state.mealType && !continuationRegex.test(normalized));
+  const intent = args.intent ?? (!startsNewMealType && shouldAppendToCurrentMeal(args.input.message, args.state) ? 'add_to_current_meal' : 'new_food_item');
   const currentMealItems = intent === 'add_to_current_meal'
     ? [...args.state.currentMealItems, ...args.items]
     : args.items;
@@ -5593,6 +6032,7 @@ function buildDirectFoodEstimateResponse(args: {
     pendingClarification: null,
     lastAssistantQuestion: null,
     saved: false,
+    mealType: mealTypeHint ?? args.state.mealType,
     sourceReusableMealId: intent === 'new_food_item' ? null : args.state.sourceReusableMealId,
     editingMealId: intent === 'new_food_item' ? null : args.state.editingMealId,
   };
@@ -5640,7 +6080,9 @@ async function buildDeterministicDialogueResponse(
     });
   }
 
-  if (saveRegex.test(normalized)) {
+  const hasSaveAndMutation = saveRegex.test(normalized)
+    && /\b(?:add|remove|delete|make|change|update|actually|instead|no\s+\w+|without)\b/i.test(normalized);
+  if (saveRegex.test(normalized) && !hasSaveAndMutation) {
     if (state.currentMealItems.length) {
       await saveMeal({ state, items: state.currentMealItems });
     }
@@ -6382,7 +6824,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if ((casualRegex.test(normalized) && !hasFoodAfterConversationalLeadIn(message)) || offTopicRegex.test(normalized)) {
+  if ((casualRegex.test(normalized) && !hasFoodAfterConversationalLeadIn(message)) || (offTopicRegex.test(normalized) && !hasStrongFoodSignal(normalized))) {
     return {
       intent: 'casual_message',
       assistant_reply: buildFallbackReply(message, state),
@@ -6772,9 +7214,9 @@ function buildReplyFromItems(args: {
     return choosePhrase(addedSeed, [
       `Added ${addedItem.food_name}${resolvedItems.length > 1 ? ' to this meal' : ''}. ${getSourceLabel(addedItem)}.`,
       `Got you, I added ${addedItem.food_name}. ${getSourceLabel(addedItem)}.`,
-      `${addedItem.food_name} is in there too. ${getSourceLabel(addedItem)}.`,
-      `Okay, adding ${addedItem.food_name} too. ${getSourceLabel(addedItem)}.`,
-      `Nice, ${addedItem.food_name} is in there now. ${getSourceLabel(addedItem)}.`,
+      `Added ${addedItem.food_name} in there too. ${getSourceLabel(addedItem)}.`,
+      `Okay, added ${addedItem.food_name} too. ${getSourceLabel(addedItem)}.`,
+      `Nice, added ${addedItem.food_name} in there now. ${getSourceLabel(addedItem)}.`,
     ]);
   }
 
@@ -6983,6 +7425,21 @@ export async function runMealAssistant(
       }), workingInput, context);
     }
 
+    if (!saveRegex.test(workingInput.message) && !correctionCueRegex.test(workingInput.message) && shouldAppendToCurrentMeal(workingInput.message, state)) {
+      const appendItems = detectKnownFoodEstimates(workingInput.message);
+      if (appendItems.length) {
+        const hydratedItems = await hydrateKnownEstimatesWithProviders(appendItems, state.mealType);
+        return finalizeResponse(buildDirectFoodEstimateResponse({
+          input: workingInput,
+          state,
+          items: hydratedItems,
+          intent: 'add_to_current_meal',
+          followUpMessage: mixedIntent.followUpMessage,
+          context,
+        }), workingInput, context);
+      }
+    }
+
     const deterministicDialogueResponse = await buildDeterministicDialogueResponse(workingInput, context, resolveItemNutrition, saveMeal);
     if (deterministicDialogueResponse) {
       return finalizeResponse(deterministicDialogueResponse, workingInput, context);
@@ -6992,7 +7449,12 @@ export async function runMealAssistant(
       !dependencies.classify
       && !process.env.OPENAI_API_KEY
       && !state.pendingClarification
-      && (!state.currentMealItems.length || state.saved || continuationRegex.test(stripEmotionalPreface(workingInput.message).toLowerCase()));
+      && (
+        !state.currentMealItems.length
+        || state.saved
+        || continuationRegex.test(stripEmotionalPreface(workingInput.message).toLowerCase())
+        || Boolean(extractMealTypeHint(workingInput.message))
+      );
     const directKnownItems = canUseDirectKnownFood ? detectKnownFoodEstimates(workingInput.message) : [];
     if (directKnownItems.length) {
       const hydratedItems = await hydrateKnownEstimatesWithProviders(directKnownItems, state.mealType);
