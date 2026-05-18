@@ -4145,6 +4145,10 @@ function buildInitialClarificationResponse(input: MealAssistantRunInput, questio
   };
 }
 
+function hasOmeletteClarificationContext(state: MealAssistantState) {
+  return /\bomelette|omelet|hash\s*browns?|hashbrowns?\b/i.test(`${state.currentMealText ?? ''} ${state.pendingClarification ?? ''} ${state.lastAssistantQuestion ?? ''}`);
+}
+
 function getClarificationContextText(state: MealAssistantState) {
   return `${state.currentMealText ?? ''} ${state.pendingClarification ?? ''} ${state.lastAssistantQuestion ?? ''}`;
 }
@@ -4628,7 +4632,7 @@ function findMatchingMemoryMeal(input: MealAssistantRunInput, context: MealAssis
 
 function getCurrentMealRepeatItems(message: string, state: MealAssistantState) {
   const normalized = message.trim().toLowerCase();
-  if (!state.saved || !state.currentMealItems.length || !repeatCueRegex.test(normalized) || repeatYesterdayRegex.test(normalized)) {
+  if (!state.saved || !state.currentMealItems.length || !repeatCueRegex.test(normalized)) {
     return null;
   }
 
