@@ -45,6 +45,10 @@ export function polishMealText(value: string | null | undefined) {
     polished = polished.replace(pattern, replacement);
   }
 
+  polished = polished
+    .replace(/\b1\s+burger\s+(McDouble)\b/g, '$1')
+    .replace(/\b(\d+(?:\.\d+)?)\s+large\s+egg\b/gi, (_match, amount: string) => `${amount} large ${amount === '1' ? 'egg' : 'eggs'}`);
+
   return polished.replace(/\s+,/g, ',').trim();
 }
 
