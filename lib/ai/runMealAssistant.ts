@@ -4839,6 +4839,32 @@ function parseReplacementCorrection(message: string) {
   return { replacement, rejected };
 }
 
+
+function parseSwapReplacement(message: string) {
+  const normalized = stripEmotionalPreface(message)
+    .toLowerCase()
+    .replace(/,/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const match =
+    normalized.match(/^(?:swap|replace)\s+(?:the\s+)?(.+?)\s+(?:for|with|to)\s+(.+)$/i)
+    ?? normalized.match(/^instead\s+of\s+(.+?)\s+(?:make it|use|do|add|log)?\s*(.+)$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const target = cleanMealMutationFoodText(match[1] ?? '').replace(/\bfries\b/gi, 'fry');
+  const replacement = cleanMealMutationFoodText(match[2] ?? '').replace(/\bguac\b/gi, 'guacamole');
+
+  if (!target || !replacement || !hasStrongFoodSignal(target) || !hasStrongFoodSignal(replacement)) {
+    return null;
+  }
+
+  return { target, replacement };
+}
+
 function parseCorrectionFoodReplacement(message: string) {
   const normalized = stripEmotionalPreface(message)
     .toLowerCase()
@@ -4882,7 +4908,7 @@ async function resolveFoodTextForMealMutation(args: {
   quantity?: number;
   unit?: string | null;
 }) {
-  const knownItems = detectKnownFoodEstimates(args.foodText);
+  const knownItems = /\bapple slices\b/i.test(args.foodText) ? [] : detectKnownFoodEstimates(args.foodText);
   if (knownItems.length) {
     return knownItems.map((item) => {
       const nextQuantity = args.quantity && args.quantity > 0 ? args.quantity : item.quantity;
@@ -4927,6 +4953,48 @@ async function buildAdaptiveMealMutationReply(
 
   if (!targetItem) {
     return null;
+  }
+
+
+  const swapReplacement = parseSwapReplacement(input.message);
+  if (swapReplacement) {
+    const swapTargetIndex = findOperationTargetIndexByHint(swapReplacement.target, currentItems);
+    const swapTargetItem = currentItems[swapTargetIndex] ?? targetItem;
+    const resolvedSwapIndex = swapTargetIndex >= 0 ? swapTargetIndex : targetIndex;
+    const replacementItems = await resolveFoodTextForMealMutation({
+      foodText: swapReplacement.replacement,
+      state: input.state,
+      resolveItemNutrition,
+      action: 'replace',
+      quantity: swapTargetItem.quantity,
+      unit: swapTargetItem.unit,
+    });
+
+    if (replacementItems.length) {
+      const nextItems = [
+        ...currentItems.slice(0, resolvedSwapIndex),
+        ...replacementItems,
+        ...currentItems.slice(resolvedSwapIndex + 1),
+      ];
+      const nextState: MealAssistantState = {
+        ...input.state,
+        currentMealItems: nextItems,
+        userCorrections: [...input.state.userCorrections, input.message],
+        currentMealText: buildMealTextFromItems(nextItems),
+        confidenceScore: getConfidenceScore(nextItems),
+        saved: false,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      };
+      const replacementLabel = replacementItems.map((item) => formatParsedItemLabel(item)).join(' and ');
+
+      return buildDirectResponse({
+        intent: 'correction',
+        assistantReply: `Swapped ${swapTargetItem.food_name} for ${replacementLabel}. About ${Math.round(sumTotals(nextItems).calories)} calories total.`,
+        nextState,
+        message: input.message,
+      });
+    }
   }
 
   const heuristicOperations = extractHeuristicMutationOperations(input.message, input.state);
@@ -4994,7 +5062,6 @@ async function buildAdaptiveMealMutationReply(
       message: input.message,
     });
   }
-
   const replacementCorrection = parseReplacementCorrection(input.message);
   if (replacementCorrection) {
     const replacementItems = await resolveFoodTextForMealMutation({
@@ -6714,6 +6781,13 @@ export async function runMealAssistant(
         followUpMessage: mixedIntent.followUpMessage,
         context,
       }), workingInput, context);
+    }
+  }
+
+  if (state.currentMealItems.length && !state.saved && parseSwapReplacement(workingInput.message)) {
+    const deterministicSwapReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition, saveMeal);
+    if (deterministicSwapReply) {
+      return finalizeResponse(deterministicSwapReply, workingInput, context);
     }
   }
 

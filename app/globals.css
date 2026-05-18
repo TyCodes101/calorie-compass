@@ -474,7 +474,7 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   display: flex;
   flex-direction: column;
   gap: 0.72rem;
-  padding-bottom: 1.35rem;
+  padding-bottom: 1.9rem;
 }
 
 .chat-feed-end {
@@ -654,18 +654,18 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 
 .logger-review-panel {
   border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(249, 251, 253, 0.92));
-  padding: 0.82rem;
-  box-shadow: 0 10px 20px rgba(148, 163, 184, 0.05);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 253, 0.94));
+  padding: 0.95rem;
+  box-shadow: 0 16px 34px rgba(148, 163, 184, 0.08);
   animation: chat-bubble-in 220ms ease-out;
 }
 
 .logger-review-stat {
-  border-radius: 18px;
+  border-radius: 20px;
   border: 1px solid rgba(226, 232, 240, 0.95);
   background: rgba(248, 250, 252, 0.92);
-  padding: 0.75rem 0.85rem;
+  padding: 0.82rem 0.9rem;
 }
 
 .logger-review-stat-label {
@@ -681,10 +681,11 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 }
 
 .logger-food-item {
-  border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  background: rgba(255, 255, 255, 0.94);
-  padding: 0.8rem 0.9rem;
+  border-radius: 22px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.9rem 0.95rem;
+  box-shadow: 0 10px 22px rgba(148, 163, 184, 0.045);
 }
 
 .chat-meal-type-field {
@@ -902,8 +903,8 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 
 .app-chat-composer-card {
   border: 1px solid rgba(226, 232, 240, 0.82);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.985), rgba(247, 250, 253, 0.95));
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 253, 0.96));
   padding: 0.42rem 0.42rem calc(0.5rem + env(safe-area-inset-bottom) * 0.1);
   box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(18px) saturate(140%);
@@ -964,7 +965,7 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   }
 
   .app-chat-composer-card {
-    border-radius: 20px;
+    border-radius: 22px;
     padding: 0.5rem 0.5rem calc(0.62rem + env(safe-area-inset-bottom) * 0.12);
   }
 

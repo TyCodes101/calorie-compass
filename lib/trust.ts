@@ -64,7 +64,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
       badgeTone: 'estimated',
       sourceLabel,
       confidenceLabel: 'Estimated, please review',
-      helperText: 'Nutrition facts can vary by product and serving size.',
+      helperText: 'Estimated from the best available details. Review only if the portion or product was different.',
       trusted: false,
     };
   }
@@ -79,7 +79,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
       badgeTone: 'verified',
       sourceLabel,
       confidenceLabel: explicitConfidence ?? 'Verified match',
-      helperText: 'Nutrition facts can vary slightly by serving size or product version.',
+      helperText: 'Matched to structured nutrition data. Adjust only if your serving or product version differed.',
       trusted: true,
     };
   }
@@ -115,7 +115,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
       badgeTone: 'branded',
       sourceLabel,
       confidenceLabel: explicitConfidence ?? 'High confidence match',
-      helperText: 'This is the closest trusted product match we found. Adjust if your version differs.',
+      helperText: 'Closest structured product match. You can adjust it if your exact version differs.',
       trusted: true,
     };
   }
@@ -125,7 +125,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
     badgeTone: 'generic',
     sourceLabel,
     confidenceLabel: explicitConfidence ?? 'High confidence match',
-    helperText: 'Nutrition facts can vary by recipe and portion size.',
+    helperText: 'Structured reference match. Portion and recipe differences can still change totals.',
     trusted: true,
   };
 }
@@ -147,11 +147,13 @@ export function summarizeTrustCounts(trustedCount: number, estimatedCount: numbe
     coveragePercent,
     coverageSummary:
       totalCount > 0
-        ? `${trustedCount} of ${totalCount} foods matched trusted sources`
+        ? estimatedCount === 0
+          ? 'All foods matched structured sources'
+          : `${trustedCount} of ${totalCount} foods matched structured sources`
         : 'No foods matched yet',
     estimatedSummary:
       estimatedCount === 0
-        ? 'All foods matched trusted sources'
+        ? 'No estimates in this meal'
         : `${estimatedCount} ${estimatedCount === 1 ? 'food' : 'foods'} estimated`,
   };
 }

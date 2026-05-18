@@ -1901,7 +1901,7 @@ export function MealLoggerClient({
               <div className="logger-starter-panel">
                 <div>
                   <p className="text-sm font-semibold text-slate-950">Fast ways to log</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Text a meal, scan a packaged food, or enter label numbers. I’ll keep the estimate reviewable before anything saves.</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">Text a meal, scan a packaged food, or enter label numbers. I’ll show sources and confidence before anything saves.</p>
                 </div>
                 <div className="logger-starter-actions">
                   <button
@@ -2062,7 +2062,7 @@ export function MealLoggerClient({
               <div className="space-y-4">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-slate-900">{assistantEstimateMode === 'correction' ? 'Updated meal' : 'What I have so far'}</p>
-                  <p className="text-sm leading-6 text-slate-700">{memoryCue ? `${memoryCue} ` : ''}You can tweak anything here before saving.</p>
+                  <p className="text-sm leading-6 text-slate-700">{memoryCue ? `${memoryCue} ` : ''}Review the estimate, sources, and portions before saving.</p>
                 </div>
 
                 <div className="logger-review-panel space-y-3">
@@ -2162,9 +2162,11 @@ export function MealLoggerClient({
                                 ))}
                               </div>
 
-                              {item.notes ? (
-                                <p className="text-xs leading-5 text-slate-500">{item.notes}</p>
-                              ) : null}
+                              <div className="rounded-[18px] border border-slate-200 bg-white/80 p-3 text-xs leading-5 text-slate-500">
+                                <p className="font-medium text-slate-700">{trustPresentation.confidenceLabel}</p>
+                                <p className="mt-1">{trustPresentation.helperText}</p>
+                                {item.notes ? <p className="mt-2">{item.notes}</p> : null}
+                              </div>
 
                               <div className="flex justify-end">
                                 <button type="button" onClick={() => removeItem(index)} className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 active:scale-[0.99]">
@@ -2350,7 +2352,7 @@ export function MealLoggerClient({
                   onChange={(event) => setComposerText(event.target.value)}
                   rows={1}
                   className="chat-composer-textarea"
-                  placeholder={clarifyingQuestion ? 'Add the one detail that matters here' : 'Tell me what you ate'}
+                  placeholder={clarifyingQuestion ? 'Add the one detail that matters here' : items.length ? 'Add, remove, or correct anything' : 'Tell me what you ate'}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && !event.shiftKey) {
                       event.preventDefault();
