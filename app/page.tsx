@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, MessageSquareText, ShieldCheck, Sparkles } from 'lucide-react';
 
 import { DefaultStartScreenRedirect } from '@/components/default-start-screen-redirect';
 import { MacroProgress } from '@/components/macro-progress';
@@ -73,7 +73,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                   detail: dashboard.remainingCalories >= 0 ? 'Still available today' : 'Useful data, not a reset',
                 },
                 { label: 'Meals logged', value: `${dashboard.mealCount}`, detail: 'Logged today' },
-                { label: 'Trust', value: dashboard.trustSummary.headline, detail: dashboard.trustSummary.estimatedSummary },
+                { label: 'Trust', value: dashboard.trustSummary.headline, detail: dashboard.trustSummary.totalCount ? dashboard.trustSummary.estimatedSummary : 'Sources appear after your first meal' },
               ].map((stat) => (
                 <div key={stat.label} className="rounded-[22px] border border-slate-200/80 bg-slate-50/78 px-4 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{stat.label}</p>
@@ -83,6 +83,42 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               ))}
             </div>
           </div>
+        </section>
+
+
+        <section className="grid min-w-0 gap-3 md:grid-cols-3" aria-label="Product strengths">
+          {[
+            {
+              title: 'Conversational logging',
+              text: 'Type meals the way you remember them. The assistant turns messy food notes into reviewable items.',
+              icon: MessageSquareText,
+            },
+            {
+              title: 'Review before save',
+              text: 'Every meal gets a totals card first, so corrections and portion edits happen before the dashboard changes.',
+              icon: Sparkles,
+            },
+            {
+              title: 'Source-aware nutrition',
+              text: 'Verified restaurant, USDA, and structured matches are labeled separately from estimates.',
+              icon: ShieldCheck,
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <article key={item.title} className="app-card min-w-0 rounded-[26px] p-4 md:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-2xl bg-teal-50 p-2 text-teal-700">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-slate-950">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{item.text}</p>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </section>
 
         <section className="grid min-w-0 gap-6 xl:grid-cols-[0.92fr_1.08fr]">
@@ -175,7 +211,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               ) : (
                 <div className="app-empty-state rounded-[24px] p-5 text-sm text-slate-600">
                   <p className="font-semibold text-slate-900">Nothing logged yet today</p>
-                  <p className="mt-2 leading-6">Start with one message, then let the assistant handle the rest.</p>
+                  <p className="mt-2 leading-6">Start with one natural message. You’ll see calories, macros, sources, and confidence before anything saves.</p>
                   <Link href="/logger" className="app-button-secondary mt-4 inline-flex items-center gap-2 px-4 py-2.5 font-medium hover:border-teal-300 hover:text-teal-700">
                     Log your first meal
                     <ArrowRight className="h-4 w-4" />

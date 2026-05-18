@@ -209,9 +209,9 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
     },
     trustSummary: {
       ...trustSummary,
-      headline: trustSummary.totalCount ? `${trustSummary.coveragePercent}% of today’s foods verified` : 'No meals logged yet',
+      headline: trustSummary.totalCount ? `${trustSummary.coveragePercent}% source coverage` : 'No meals logged yet',
       detail: trustSummary.totalCount
-        ? `${trustSummary.trustedCount} foods matched trusted nutrition sources`
+        ? `${trustSummary.trustedCount} foods matched structured nutrition data`
         : 'Log a meal to see verified coverage and source transparency.',
     },
     recentMeals: todayMeals.slice(0, 5).map((meal) => {

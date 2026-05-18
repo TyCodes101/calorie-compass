@@ -28,6 +28,20 @@ type ConfirmState =
     }
   | null;
 
+export function formatHistoryCounts(favoriteCount: number, mealCount: number) {
+  const favoriteLabel = favoriteCount === 1 ? 'favorite' : 'favorites';
+  const mealLabel = mealCount === 1 ? 'logged meal' : 'logged meals';
+
+  return `${favoriteCount} ${favoriteLabel}, ${mealCount} ${mealLabel}`;
+}
+
+export function formatMealSourceSummary(trustedCount: number, estimatedCount: number) {
+  const structuredLabel = trustedCount === 1 ? 'structured match' : 'structured matches';
+  const estimatedLabel = estimatedCount === 1 ? 'estimate' : 'estimates';
+
+  return `${trustedCount} ${structuredLabel}, ${estimatedCount} ${estimatedLabel}`;
+}
+
 function flattenMealCount(history: MealHistoryGroup[]) {
   return history.reduce((count, group) => count + group.meals.length, 0);
 }
@@ -185,7 +199,7 @@ export function HistoryClient({
               </p>
             </div>
             <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
-              {favorites.length} favorites, {totalMeals} logged meals
+              {formatHistoryCounts(favorites.length, totalMeals)}
             </div>
           </div>
         </section>
@@ -241,14 +255,17 @@ export function HistoryClient({
         ) : (
           <section className="app-empty-state min-w-0 rounded-[28px] p-6 text-sm text-slate-600">
             <p className="font-semibold text-slate-900">No favorites yet</p>
-            <p className="mt-2 leading-6">Save a meal as a favorite from the review screen and it will show up here for one-tap repeat logging.</p>
+            <p className="mt-2 leading-6">After saving a meal, tap Save favorite to turn it into a one-tap repeat. Great for protein shakes, go-to breakfasts, and regular restaurant orders.</p>
+            <Link href="/logger" className="app-button-secondary mt-4 inline-flex items-center gap-2 px-4 py-2.5 font-medium hover:border-teal-300 hover:text-teal-700">
+              Log something repeatable
+            </Link>
           </section>
         )}
 
         {!hasHistory ? (
           <section className="app-empty-state min-w-0 rounded-[28px] p-6 text-sm text-slate-600">
             <p className="font-semibold text-slate-900">No meals saved yet</p>
-            <p className="mt-2 leading-6">This is where your recent meals, favorites, and quick repeat options will show up once you log a few meals.</p>
+            <p className="mt-2 leading-6">Your timeline will show calories, macros, and source quality for each saved meal. Start with one natural sentence; you can review before it saves.</p>
             <Link href="/logger" className="mt-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-4 py-2 font-medium text-teal-700 transition hover:border-teal-300 hover:text-teal-600">
               Log a meal
             </Link>
@@ -284,7 +301,7 @@ export function HistoryClient({
                   <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4">
                     <div className="flex items-center gap-2 text-xs text-slate-500">
                       <Clock3 className="h-4 w-4" />
-                      {meal.trustedCount} verified, {meal.estimatedCount} estimated
+                      {formatMealSourceSummary(meal.trustedCount, meal.estimatedCount)}
                     </div>
                     <div className="grid gap-2 sm:grid-cols-3">
                       <Link href={`/logger?editMealId=${meal.id}`} className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-teal-200 hover:text-teal-700">

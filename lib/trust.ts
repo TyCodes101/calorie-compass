@@ -153,7 +153,7 @@ export function summarizeTrustCounts(trustedCount: number, estimatedCount: numbe
         : 'No foods matched yet',
     estimatedSummary:
       estimatedCount === 0
-        ? 'No estimates in this meal'
+        ? 'No estimated items'
         : `${estimatedCount} ${estimatedCount === 1 ? 'food' : 'foods'} estimated`,
   };
 }
