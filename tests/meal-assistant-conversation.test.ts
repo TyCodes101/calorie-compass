@@ -1287,7 +1287,7 @@ describe('meal assistant conversational coverage', () => {
 
     expect(response.intent).toBe('new_food_item');
     expect(response.assistant_reply).toMatch(/toast/i);
-    expect(response.assistant_reply).toMatch(/lighter side for protein today/i);
+    expect(response.assistant_reply).toMatch(/light on protein|protein-heavy add-on/i);
     expect(response.assistant_reply).not.toMatch(/bad|cheat|crush it|let'?s go/i);
   });
 

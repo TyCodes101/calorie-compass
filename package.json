@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "qa:assistant": "vitest run tests/assistant-qa.test.ts tests/meal-assistant-conversation.test.ts tests/meal-assistant-runner.test.ts tests/meal-logger-client.test.tsx",
+    "qa:assistant": "vitest run tests/assistant-qa.test.ts tests/assistant-real-user-gauntlet.test.ts tests/meal-assistant-conversation.test.ts tests/meal-assistant-runner.test.ts tests/meal-logger-client.test.tsx --pool=threads --maxWorkers=1 --no-file-parallelism",
     "test:assistant": "vitest run tests/assistant-qa.test.ts",
     "predeploy:check": "vitest run && eslint && next build && npm run qa:assistant",
     "catalog:sync": "node scripts/sync-nutrition-catalog.js",
