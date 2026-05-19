@@ -871,6 +871,24 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectMealContains(correctionTurn, [/eggs?/i, /toast/i]);
     expectTotalCaloriesInRange(correctionTurn, 270, 360);
   });
+
+  it('adds compact-brand restaurant items as confident matches instead of vague clarification', async () => {
+    const conversation = await runQaScenario({
+      name: 'compact restaurant brand addition',
+      messages: ['I had 2 eggs', 'I also had 3 soft potato tacos from tacobell'],
+    });
+    const [initialTurn, tacoBellTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/eggs?/i]);
+
+    expectBaselineQuality(tacoBellTurn);
+    expectNoClarification(tacoBellTurn);
+    expectMealContains(tacoBellTurn, [/eggs?/i, /taco bell spicy potato soft taco/i]);
+    expectItemCaloriesInRange(tacoBellTurn, /spicy potato soft taco/i, 700, 760);
+    expectTrustedSourceFor(tacoBellTurn, /spicy potato soft taco/i);
+    expectReplyNotMatches(tacoBellTurn, /little more detail|reliable estimate|what kind/i, 'Recognized restaurant menu items should proceed to review.');
+  });
 });
 
 function findQaItem(turn: { response: { next_state: { currentMealItems: ReturnType<typeof createQaItem>[] } } }, matcher: RegExp) {

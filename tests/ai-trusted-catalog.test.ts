@@ -136,6 +136,28 @@ describe('trusted nutrition catalog matching', () => {
     expect(response?.totals.calories).toBeGreaterThan(450);
   });
 
+  it('normalizes compact restaurant names and fuzzy-matches common menu phrases', () => {
+    const potatoTacos = getTrustedCatalogEstimate('I had 3 soft potato tacos from tacobell', 'lunch');
+    const mcdonalds = getTrustedCatalogEstimate('mcdonalds chicken sandwich', 'lunch');
+    const subway = getTrustedCatalogEstimate('subway footlong turkey', 'lunch');
+    const canes = getTrustedCatalogEstimate('caniac combo from canes', 'dinner');
+    const dominos = getTrustedCatalogEstimate('dominos pepperoni pizza', 'dinner');
+    const panera = getTrustedCatalogEstimate('panera mac and cheese', 'lunch');
+
+    expect(potatoTacos).not.toBeNull();
+    expect(potatoTacos?.items).toHaveLength(1);
+    expect(potatoTacos?.items[0]?.food_name).toBe('Taco Bell Spicy Potato Soft Taco');
+    expect(potatoTacos?.items[0]?.quantity).toBe(3);
+    expect(potatoTacos?.items[0]?.source_type).toBe('OFFICIAL_RESTAURANT');
+
+    expect(mcdonalds?.items[0]?.food_name).toMatch(/McChicken/i);
+    expect(subway?.items[0]?.food_name).toMatch(/Footlong/i);
+    expect(canes?.items[0]?.food_name).toMatch(/Caniac Combo/i);
+    expect(dominos?.items[0]?.food_name).toMatch(/Pepperoni Pizza/i);
+    expect(panera?.items[0]?.food_name).toMatch(/Mac and Cheese/i);
+    expect([potatoTacos, mcdonalds, subway, canes, dominos, panera].every((response) => response?.items.every((item) => item.is_trusted))).toBe(true);
+  });
+
   it('keeps homemade mixed meals usable with partial trusted matching', () => {
     const response = getTrustedCatalogEstimate('homemade chicken Alfredo', 'dinner');
 

@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { getMockParsedMeal } from '@/lib/ai/mock';
 import { parseMealText } from '@/lib/ai/openai';
 import { mealAssistantSystemPrompt } from '@/lib/ai/mealAssistantSystemPrompt';
+import { getTrustedCatalogEstimate } from '@/lib/ai/trusted';
 import {
   type MealAssistantAction,
   type MealAssistantContext,
@@ -21,7 +22,7 @@ import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
 const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
-const continuationRegex = /^(and|also|plus|with)\b/i;
+const continuationRegex = /^(?:and|also|plus|with|i also had|and i had|also add|throw in|add)\b/i;
 const removeRegex = /^(?:(?:nvm|nevermind|never mind)\s+)?(?:remove|delete|drop|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
 const startNewRegex = /^(?:start over|new meal|clear this|reset|fresh one|different meal)\b/i;
 const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)|looks good|done)\b/i;
@@ -81,7 +82,7 @@ const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
 const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|(?:lets|let's) go back to|go back to|back to|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
-const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|wendy'?s|mcdouble|mc double|mcdonald'?s?|sandwich|fries|fry|fairlife|core power|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|shakes?|grilled chicken|chicken breast|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?)\b/i;
+const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chick\s*fil\s*a|starbucks|subway|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|mcchicken|big mac|nuggets?|tacos?|sandwich|fries|fry|latte|footlong|orange chicken|caniac|mac and cheese|fairlife|core power|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|shakes?|grilled chicken|chicken breast|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -4815,8 +4816,9 @@ function cleanMealMutationFoodText(text: string) {
 function extractAddCommandFoodText(message: string) {
   const normalized = getNormalizedMutationClause(message);
   const match =
-    normalized.match(/^(?:also\s+)?add\s+(.+)$/i)
-    ?? normalized.match(/^(?:and|plus)\s+(.+)$/i);
+    normalized.match(/^(?:i\s+also\s+had|and\s+i\s+had|also\s+add|throw\s+in|also\s+had|also\s+ate|also\s+drank)\s+(.+)$/i)
+    ?? normalized.match(/^(?:also\s+)?add\s+(.+)$/i)
+    ?? normalized.match(/^(?:and|plus|with)\s+(.+)$/i);
   const foodText = match
     ? cleanMealMutationFoodText(match[1] ?? '').replace(/\bguac\b/gi, 'guacamole')
     : null;
@@ -4921,6 +4923,12 @@ async function resolveFoodTextForMealMutation(args: {
   quantity?: number;
   unit?: string | null;
 }) {
+  const hasRestaurantSignal = /\b(?:chipotle|taco\s*bell|tacobell|mcdonald'?s?|mc\s*donalds?|chick\s*fil\s*a|starbucks|subway|wendy'?s|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?)\b/i.test(args.foodText);
+  const trustedEstimate = hasRestaurantSignal ? getTrustedCatalogEstimate(args.foodText, args.state.mealType) : null;
+  if (trustedEstimate?.items.length) {
+    return trustedEstimate.items;
+  }
+
   const knownItems = /\bapple slices\b/i.test(args.foodText) ? [] : detectKnownFoodEstimates(args.foodText);
   if (knownItems.length) {
     return knownItems.map((item) => {
@@ -5004,6 +5012,39 @@ async function buildAdaptiveMealMutationReply(
       return buildDirectResponse({
         intent: 'correction',
         assistantReply: `Swapped ${swapTargetItem.food_name} for ${replacementLabel}. About ${Math.round(sumTotals(nextItems).calories)} calories total.`,
+        nextState,
+        message: input.message,
+      });
+    }
+  }
+
+  const additiveFoodText = /^(?:i\s+also\s+had|and\s+i\s+had|also\s+had|also\s+ate|also\s+drank|throw\s+in|plus)\b/i.test(normalized)
+    ? extractAddCommandFoodText(input.message)
+    : null;
+  if (additiveFoodText) {
+    const addedItems = await resolveFoodTextForMealMutation({
+      foodText: additiveFoodText,
+      state: input.state,
+      resolveItemNutrition,
+      action: 'add',
+    });
+
+    if (addedItems.length) {
+      const nextItems = [...currentItems, ...addedItems];
+      const nextState: MealAssistantState = {
+        ...input.state,
+        currentMealItems: nextItems,
+        userCorrections: [...input.state.userCorrections, input.message],
+        currentMealText: buildMealTextFromItems(nextItems),
+        confidenceScore: getConfidenceScore(nextItems),
+        saved: false,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      };
+
+      return buildDirectResponse({
+        intent: 'add_to_current_meal',
+        assistantReply: `Added ${addedItems.map((item) => formatParsedItemLabel(item)).join(' and ')}. About ${Math.round(sumTotals(nextItems).calories)} calories total.`,
         nextState,
         message: input.message,
       });
@@ -6114,19 +6155,30 @@ function extractFallbackItems(input: string, state: MealAssistantState): MealAss
     ];
   }
 
+  const compact = normalized.replace(/[^a-z0-9]+/g, '');
   const brand = /\bquaker\b/.test(normalized)
     ? 'Quaker'
     : /\bdaisy\b/.test(normalized)
       ? 'Daisy'
-      : /\bmcdouble\b|\bmcdonald/.test(normalized)
+      : /\bmcdouble\b|\bmcdonald|\bmc donald/.test(normalized) || compact.includes('mcdonalds')
         ? "McDonald's"
-        : /\btaco bell\b/.test(normalized)
+        : /\btaco bell\b/.test(normalized) || compact.includes('tacobell')
           ? 'Taco Bell'
-          : /\bchipotle\b/.test(normalized)
-            ? 'Chipotle'
-            : /\bfairlife\b/.test(normalized)
-              ? 'Fairlife'
-              : null;
+          : /\bchick-fil-a\b|\bchick fil a\b/.test(normalized)
+            ? 'Chick-fil-A'
+            : /\bchipotle\b/.test(normalized)
+              ? 'Chipotle'
+              : /\bstarbucks\b/.test(normalized)
+                ? 'Starbucks'
+                : /\bsubway\b/.test(normalized)
+                  ? 'Subway'
+                  : /\bpanda express\b/.test(normalized)
+                    ? 'Panda Express'
+                    : /\bpanera\b/.test(normalized)
+                      ? 'Panera'
+                      : /\bfairlife\b/.test(normalized)
+                        ? 'Fairlife'
+                        : null;
 
   const leadingServing = parseLeadingServingFood(input);
   const quantityMatch = normalized.match(quantityOnlyRegex) ?? normalized.match(directQuantityRegex);
