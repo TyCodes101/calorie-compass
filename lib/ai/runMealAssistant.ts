@@ -25,6 +25,8 @@ const continuationRegex = /^(and|also|plus|with|anyway|wait(?:\s+also)?)\b/i;
 const removeRegex = /^(?:remove|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
 const startNewRegex = /^(?:start over|new meal|clear this|reset|fresh one|different meal)\b/i;
 const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)|done)\b|\b(?:save|log)\s+(?:it|that|this)\b/i;
+const negatedSaveRegex = /\b(?:do not|don't|dont|never|not)\s+(?:save|log)(?:\s+(?:it|that|this))?\b/i;
+const saveQuestionRegex = /^(?:should\s+(?:i|we)|do you think i should|think i should)\s+(?:save|log)(?:\s+(?:it|that|this))?[?.! ]*$/i;
 const explicitQuantityUpdateRegex = /^(?:actually\s+)?(?:make|change|update)\s+(?:it|that|this)(?:\s+to)?\s+(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const editRegex = /^(?:edit(?: it| that| this)?|change(?: it| that| this)?|tweak(?: it| that| this)?|adjust(?: it| that| this)?)\b/i;
 const reviewRegex = /\b(?:review (?:it|this|that)|show me (?:the )?(?:meal|review)|what do i have so far|show me what i have)\b/i;
@@ -513,6 +515,10 @@ function isNonFoodDialogueMessage(message: string) {
   );
 }
 
+function hasAffirmativeSaveCommand(message: string) {
+  return saveRegex.test(message) && !negatedSaveRegex.test(message) && !saveQuestionRegex.test(message.trim());
+}
+
 function isRecommendationRequestMessage(message: string) {
   const normalized = stripEmotionalPreface(message).toLowerCase();
   return (
@@ -532,7 +538,7 @@ function isRecommendationFollowUpMessage(message: string, state: MealAssistantSt
     return false;
   }
 
-  if (hasStrongFoodSignal(normalized) || correctionCueRegex.test(normalized) || saveRegex.test(normalized)) {
+  if (hasStrongFoodSignal(normalized) || correctionCueRegex.test(normalized) || hasAffirmativeSaveCommand(normalized)) {
     return false;
   }
 
@@ -906,7 +912,7 @@ function extractHeuristicMutationOperations(message: string, state: MealAssistan
   for (const clause of clauses) {
     const normalizedClause = getNormalizedMutationClause(clause);
 
-    if (saveRegex.test(normalizedClause)) {
+    if (hasAffirmativeSaveCommand(normalizedClause)) {
       operations.push({
         action: 'save_meal',
         target_item: null,
@@ -5296,6 +5302,22 @@ function buildCasualReply(message: string, state: MealAssistantState) {
       : 'You did. I missed that turn, so send the food one more time and I will log it instead of treating this as a meal.';
   }
 
+  if (negatedSaveRegex.test(normalized)) {
+    if (!hasActiveMeal) {
+      return 'No problem - there is no active meal to finish yet.';
+    }
+
+    return /\blog\b/i.test(normalized)
+      ? 'Got it - I will keep this meal open and wait for your next change.'
+      : 'No problem - I will leave this meal open so you can keep editing it.';
+  }
+
+  if (saveQuestionRegex.test(normalized)) {
+    return hasActiveMeal
+      ? 'If the meal looks right, you can save it. I still have it open for edits.'
+      : 'There is not a meal ready yet. Send what you ate first, then I can save it.';
+  }
+
   if (negativeFeedbackRegex.test(normalized)) {
     return hasActiveMeal
       ? `You're right to flag it. I currently have ${buildMealTextFromItems(state.currentMealItems)}. What should I change?`
@@ -6113,6 +6135,7 @@ function buildDirectResponse(args: {
   nextState: MealAssistantState;
   message?: string;
   activeQuestion?: string | null;
+  shouldSaveMeal?: boolean;
 }) {
   const updatedState = args.message
     ? updateConversationState(args.nextState, {
@@ -6139,7 +6162,7 @@ function buildDirectResponse(args: {
     items: [],
     corrections: [],
     should_lookup_nutrition: false,
-    should_save_meal: false,
+    should_save_meal: Boolean(args.shouldSaveMeal),
     should_ask_clarification: false,
     clarification_question: null,
     confidence: 'high',
@@ -6227,9 +6250,9 @@ async function buildDeterministicDialogueResponse(
     });
   }
 
-  const hasSaveAndMutation = saveRegex.test(normalized)
+  const hasSaveAndMutation = hasAffirmativeSaveCommand(normalized)
     && /\b(?:add|remove|delete|make|change|update|actually|instead|no\s+\w+|without)\b/i.test(normalized);
-  if (saveRegex.test(normalized) && !hasSaveAndMutation) {
+  if (hasAffirmativeSaveCommand(normalized) && !hasSaveAndMutation) {
     if (state.currentMealItems.length) {
       await saveMeal({ state, items: state.currentMealItems });
     }
@@ -6247,6 +6270,7 @@ async function buildDeterministicDialogueResponse(
         lastAssistantQuestion: null,
       },
       message: input.message,
+      shouldSaveMeal: Boolean(state.currentMealItems.length),
     });
   }
 
@@ -6901,7 +6925,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if (saveRegex.test(normalized)) {
+  if (hasAffirmativeSaveCommand(normalized)) {
     return {
       intent: 'save_meal',
       assistant_reply: 'Saved.',
@@ -7572,7 +7596,7 @@ export async function runMealAssistant(
       }), workingInput, context);
     }
 
-    if (!saveRegex.test(workingInput.message) && !correctionCueRegex.test(workingInput.message) && shouldAppendToCurrentMeal(workingInput.message, state)) {
+    if (!hasAffirmativeSaveCommand(workingInput.message) && !correctionCueRegex.test(workingInput.message) && shouldAppendToCurrentMeal(workingInput.message, state)) {
       const appendItems = detectKnownFoodEstimates(workingInput.message);
       if (appendItems.length) {
         const hydratedItems = await hydrateKnownEstimatesWithProviders(appendItems, state.mealType);

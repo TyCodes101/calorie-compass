@@ -265,4 +265,52 @@ describe('assistant real-user gauntlet', () => {
       expectReplyNotMatches(turn, /frozen dinner|what a melon|lollipop|usda/i, 'Frustration turns should not trigger unrelated lookup drift.');
     }
   });
+
+  it('does not save when the user explicitly says not to save or log it', async () => {
+    const conversation = await runQaScenario({
+      name: 'negated save commands preserve active meal',
+      messages: ['I had 2 eggs and toast', "don't save it", "don't log it", 'save it'],
+    });
+
+    const [initialTurn, dontSaveTurn, dontLogTurn, saveTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/eggs?/i, /toast/i]);
+
+    for (const turn of [dontSaveTurn, dontLogTurn]) {
+      expectBaselineQuality(turn);
+      expectMealUnchanged(turn);
+      expect(turn.response.next_state.saved).toBe(false);
+      expect(turn.response.should_save_meal).toBe(false);
+      expectReplyNotMatches(turn, /\b(?:saved|logged|logged in|saved in)\b/i, 'Negated save/log commands should not persist the active meal.');
+    }
+
+    expectBaselineQuality(saveTurn);
+    expect(saveTurn.response.next_state.saved).toBe(true);
+    expect(saveTurn.response.should_save_meal).toBe(true);
+    expectMealContains(saveTurn, [/eggs?/i, /toast/i]);
+  });
+
+  it('does not save when the user asks whether they should save it', async () => {
+    const conversation = await runQaScenario({
+      name: 'save question is not save command',
+      messages: ['I had chicken and rice', 'should I save it?', 'save it'],
+    });
+
+    const [initialTurn, saveQuestionTurn, saveTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/chicken/i, /rice/i]);
+
+    expectBaselineQuality(saveQuestionTurn);
+    expectMealUnchanged(saveQuestionTurn);
+    expect(saveQuestionTurn.response.next_state.saved).toBe(false);
+    expect(saveQuestionTurn.response.should_save_meal).toBe(false);
+    expectReplyNotMatches(saveQuestionTurn, /\b(?:saved|logged|logged in|saved in)\b/i, 'A save question should not persist the meal.');
+
+    expectBaselineQuality(saveTurn);
+    expect(saveTurn.response.next_state.saved).toBe(true);
+    expect(saveTurn.response.should_save_meal).toBe(true);
+    expectMealContains(saveTurn, [/chicken/i, /rice/i]);
+  });
 });
