@@ -223,4 +223,46 @@ describe('assistant real-user gauntlet', () => {
       expectReplyMatches(secondTurn, /how many|amount|size|ingredients|details|example|works|useful/i, 'Clarification meta reply should explain what details help.');
     }
   });
+
+  it('keeps active meal stable across many frustration and pushback phrases', async () => {
+    const frustrationPhrases = [
+      'no',
+      "that's wrong",
+      'that is way off',
+      'nah',
+      'bro what',
+      'try again',
+      'wtf man',
+      'huh',
+      'wym',
+      'wdym',
+      'this makes no sense',
+      'not even close',
+      'you messed that up',
+      'that is not right',
+      'nope',
+      'nvm',
+      'wait what',
+      'wrong item',
+      'that was confusing',
+      'fix that',
+    ];
+
+    const conversation = await runQaScenario({
+      name: 'frustration phrase matrix',
+      messages: ['I had 1 cup cottage cheese', ...frustrationPhrases],
+    });
+
+    const baselineTurn = conversation.turns[0];
+    expectBaselineQuality(baselineTurn);
+    expectMealContains(baselineTurn, [/cottage cheese/i]);
+
+    for (const turn of conversation.turns.slice(1)) {
+      expectBaselineQuality(turn);
+      expectMealUnchanged(turn);
+      expectMealContains(turn, [/cottage cheese/i]);
+      expectReplyNotMatches(turn, /i can log/i, 'Frustration follow-ups should not be treated as new food logs.');
+      expectReplyNotMatches(turn, /frozen dinner|what a melon|lollipop|usda/i, 'Frustration turns should not trigger unrelated lookup drift.');
+    }
+  });
 });
