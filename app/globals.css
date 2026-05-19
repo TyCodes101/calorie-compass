@@ -409,6 +409,10 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   transform: translate(-50%, calc(100% + env(safe-area-inset-bottom)));
 }
 
+body:has(input:focus, textarea:focus, select:focus) .app-shell-immersive .app-chat-composer-shell {
+  bottom: 0;
+}
+
 .app-page-chat {
   padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   scroll-padding-bottom: calc(7rem + env(safe-area-inset-bottom));
@@ -998,6 +1002,23 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 
   .app-card {
     border-radius: 30px;
+  }
+
+  .app-page {
+    padding-bottom: calc(11.5rem + env(safe-area-inset-bottom));
+  }
+
+  .app-page-with-action-bar {
+    padding-bottom: calc(15rem + env(safe-area-inset-bottom));
+  }
+
+  .app-shell-immersive .app-page-chat {
+    padding-bottom: calc(8.25rem + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(14rem + env(safe-area-inset-bottom));
+  }
+
+  .app-shell-immersive .app-chat-composer-shell {
+    bottom: calc(6.35rem + env(safe-area-inset-bottom));
   }
 
   .app-chat-composer-shell {

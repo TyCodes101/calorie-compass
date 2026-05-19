@@ -2087,7 +2087,7 @@ describe('meal assistant conversational coverage', () => {
     expect(question.split(/\s+/).length).toBeLessThanOrEqual(5);
   });
 
-  it.each(['save it', 'log it', 'done'])('confirms save commands briefly without resetting into a greeting: %s', async (prompt) => {
+  it.each(['save it', 'log it', 'looks good', 'done'])('confirms save commands briefly without resetting into a greeting: %s', async (prompt) => {
     const saveMeal = vi.fn().mockResolvedValue(undefined);
     const [response] = await runConversation([prompt], {
       saveMeal,
@@ -2101,6 +2101,43 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).toMatch(/saved|logged|that one is in/i);
     expect(response.assistant_reply).not.toMatch(/hey|what did you eat|what'd you eat/i);
     expect(response.next_state.saved).toBe(true);
+  });
+
+  it('does not duplicate-save an already saved meal', async () => {
+    const saveMeal = vi.fn().mockResolvedValue(undefined);
+    const [response] = await runConversation(['save it'], {
+      saveMeal,
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 140, protein: 12, fat: 10 })],
+        currentMealText: '2 Eggs',
+        saved: true,
+      }),
+    });
+
+    expect(saveMeal).not.toHaveBeenCalled();
+    expect(response.intent).toBe('save_meal');
+    expect(response.next_state.saved).toBe(true);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.assistant_reply).toMatch(/already saved|next meal/i);
+    expect(response.assistant_reply).not.toMatch(/saved\. ready/i);
+  });
+
+  it.each(['nvm', 'undo that', 'never mind'])('handles short cancel/undo messages without losing the active meal: %s', async (prompt) => {
+    const [response] = await runConversation([prompt], {
+      initialState: buildState({
+        currentMealItems: [
+          createItem({ food_name: 'Chicken bowl', quantity: 1, unit: 'bowl', calories: 640, protein: 42, carbs: 58, fat: 22 }),
+        ],
+        currentMealText: '1 Chicken bowl',
+      }),
+    });
+
+    expect(response.intent).toBe('casual_message');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe('Chicken bowl');
+    expect(response.next_state.currentMealText).toContain('Chicken bowl');
+    expect(response.assistant_reply).toMatch(/still have this meal|remove|change|save/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
   });
 
   it('keeps joke requests light and still anchored to the meal flow', async () => {

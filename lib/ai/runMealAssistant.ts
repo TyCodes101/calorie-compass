@@ -22,9 +22,9 @@ import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
 const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
 const continuationRegex = /^(and|also|plus|with)\b/i;
-const removeRegex = /^(?:(?:nvm|nevermind|never mind)\s+)?(?:remove|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
+const removeRegex = /^(?:(?:nvm|nevermind|never mind)\s+)?(?:remove|delete|drop|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
 const startNewRegex = /^(?:start over|new meal|clear this|reset|fresh one|different meal)\b/i;
-const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)|done)\b/i;
+const saveRegex = /^(?:save(?: it| that| this)?|log(?: it| that| this)|looks good|done)\b/i;
 const explicitQuantityUpdateRegex = /^(?:actually\s+)?(?:make|change|update)\s+(?:it|that|this)(?:\s+to)?\s+(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const editRegex = /^(?:edit(?: it| that| this)?|change(?: it| that| this)?|tweak(?: it| that| this)?|adjust(?: it| that| this)?)\b/i;
 const reviewRegex = /\b(?:review (?:it|this|that)|show me (?:the )?(?:meal|review)|what do i have so far|show me what i have)\b/i;
@@ -1010,6 +1010,18 @@ function extractHeuristicMutationOperations(message: string, state: MealAssistan
         continue;
       }
     }
+  }
+
+  if (operations.length && /\b(?:save(?: it| that| this)?|log(?: it| that| this)?|looks good|done)\b/i.test(message) && !operations.some((operation) => operation.action === 'save_meal' || operation.should_save_meal)) {
+    operations.push({
+      action: 'save_meal',
+      target_item: null,
+      target_item_id: null,
+      target_item_index: null,
+      items: [],
+      should_lookup_nutrition: false,
+      should_save_meal: true,
+    });
   }
 
   return operations.length ? operations : [];
@@ -5468,6 +5480,26 @@ async function buildDeterministicDialogueResponse(
   const state = input.state;
   const normalized = stripEmotionalPreface(input.message).toLowerCase();
 
+  if (/^(?:nvm|nevermind|never mind|undo(?: that| it)?|go back)$/i.test(normalized)) {
+    return buildDirectResponse({
+      intent: 'casual_message',
+      assistantReply: state.currentMealItems.length
+        ? (/^(?:undo|go back)/i.test(normalized)
+          ? 'Nothing changed — this meal is still here. Tell me what to remove or change, or save it when it looks right.'
+          : 'No problem — I still have this meal here. Tell me what to remove or change, or save it when it looks right.')
+        : 'No problem. Send the meal whenever you’re ready.',
+      nextState: {
+        ...state,
+        currentMealItems: [...state.currentMealItems],
+        currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
+        confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      },
+      message: input.message,
+    });
+  }
+
   if (state.pendingClarification && isClarificationMetaQuestion(input.message)) {
     return buildDirectResponse({
       intent: 'clarification_meta_question',
@@ -5487,6 +5519,23 @@ async function buildDeterministicDialogueResponse(
   }
 
   if (saveRegex.test(normalized)) {
+    if (state.saved && state.currentMealItems.length) {
+      return buildDirectResponse({
+        intent: 'save_meal',
+        assistantReply: 'Already saved. Send the next meal whenever you’re ready.',
+        nextState: {
+          ...state,
+          currentMealItems: [...state.currentMealItems],
+          currentMealText: state.currentMealText ?? buildMealTextFromItems(state.currentMealItems),
+          confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+          saved: true,
+          pendingClarification: null,
+          lastAssistantQuestion: null,
+        },
+        message: input.message,
+      });
+    }
+
     if (state.currentMealItems.length) {
       await saveMeal({ state, items: state.currentMealItems });
     }

@@ -819,6 +819,58 @@ describe('assistant chatbot QA golden scenarios', () => {
       expectNoUnrelatedFood(turn, [/frozen dinner/i, /nutritional powder/i]);
     }
   });
+
+  it('handles a messy consumer-style restaurant edit and save chain', async () => {
+    const conversation = await runQaScenario({
+      name: 'messy chipotle edit chain',
+      messages: [
+        'chipotle bowl with white rice chicken cheese and lettuce',
+        'delete cheese, add guac, and save it',
+        'save it',
+      ],
+    });
+    const [initialTurn, savedTurn, duplicateSaveTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/chipotle/i, /chicken/i]);
+    expectNoClarification(initialTurn);
+
+    expectBaselineQuality(savedTurn);
+    expectCorrectionReply(savedTurn);
+    expectMealContains(savedTurn, [/chipotle/i, /guac|guacamole/i]);
+    expectMealDoesNotContain(savedTurn, [/\bcheese\b/i]);
+    expectReplyMatches(savedTurn, /saved|logged/i, 'Compound edit with save should confirm the meal was saved.');
+
+    expectBaselineQuality(duplicateSaveTurn);
+    expectMealContains(duplicateSaveTurn, [/chipotle/i, /guac|guacamole/i]);
+    expectMealDoesNotContain(duplicateSaveTurn, [/\bcheese\b/i]);
+    expectReplyMatches(duplicateSaveTurn, /already saved|next meal/i, 'A repeated save command should not create a duplicate save.');
+    expectReplyNotMatches(duplicateSaveTurn, /saved\. ready/i, 'Repeated save should not sound like a fresh save.');
+  });
+
+  it('keeps short cancel and undo messages from wiping active meals', async () => {
+    const conversation = await runQaScenario({
+      name: 'short cancel undo recovery',
+      messages: ['eggs and toast', 'nvm', 'undo that', 'actually make the eggs 3'],
+    });
+    const [initialTurn, nvmTurn, undoTurn, correctionTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/eggs?/i, /toast/i]);
+
+    expectBaselineQuality(nvmTurn);
+    expectMealContains(nvmTurn, [/eggs?/i, /toast/i]);
+    expectReplyMatches(nvmTurn, /still have this meal|remove|change|save/i, 'Short cancel should keep the current meal recoverable.');
+
+    expectBaselineQuality(undoTurn);
+    expectMealContains(undoTurn, [/eggs?/i, /toast/i]);
+    expectReplyMatches(undoTurn, /still have this meal|remove|change|save/i, 'Undo without history should not erase the meal.');
+
+    expectBaselineQuality(correctionTurn);
+    expectCorrectionReply(correctionTurn);
+    expectMealContains(correctionTurn, [/eggs?/i, /toast/i]);
+    expectTotalCaloriesInRange(correctionTurn, 270, 360);
+  });
 });
 
 function findQaItem(turn: { response: { next_state: { currentMealItems: ReturnType<typeof createQaItem>[] } } }, matcher: RegExp) {
