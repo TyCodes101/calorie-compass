@@ -188,7 +188,7 @@ function buildPatternCards(days: WeeklyDay[], profile: ProfileLike, todayRemaini
     },
     {
       title: 'Trust coverage',
-      detail: trustSummary.totalCount ? `${trustSummary.coveragePercent}% of this week’s foods matched trusted sources.` : 'No trust coverage yet.',
+      detail: trustSummary.totalCount ? `${trustSummary.coveragePercent}% of this week’s foods matched structured sources.` : 'No source coverage yet.',
       supporting: trustSummary.totalCount ? trustSummary.estimatedSummary : 'Once meals are logged, this area will explain how much was verified versus estimated.',
       tone: 'live' as PatternCardTone,
     },

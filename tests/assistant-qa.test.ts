@@ -853,8 +853,9 @@ function expectStateAndReplyDoNotDisagree(turn: { response: { next_state: { curr
 }
 
 function buildMemoryContext(): Partial<MealAssistantContext> {
-  const yesterday = new Date(Date.now() - 86400000).toISOString();
-  const recent = new Date(Date.now() - 3600000).toISOString();
+  const now = Date.now();
+  const yesterday = new Date(now - 86400000).toISOString();
+  const recent = new Date(now).toISOString();
   const chipotleItem = createQaItem({ food_name: 'Chipotle chicken bowl', quantity: 1, unit: 'bowl', calories: 820, protein: 55, carbs: 82, fat: 28, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Chipotle official nutrition' });
   const fairlifeItem = createQaItem({ food_name: 'Fairlife Core Power Elite 42g Protein Shake', quantity: 1, unit: 'bottle', calories: 230, protein: 42, carbs: 8, fat: 3.5, source_type: 'GENERIC_REFERENCE', source_name: 'Fairlife nutrition reference' });
   const mcdoubleItem = createQaItem({ food_name: 'McDouble', quantity: 1, unit: 'burger', calories: 390, protein: 22, carbs: 33, fat: 19, source_type: 'OFFICIAL_RESTAURANT', source_name: "McDonald's official nutrition" });

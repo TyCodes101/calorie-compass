@@ -96,6 +96,7 @@ describe('insights view model', () => {
     expect(insights.weeklyTrends.averageProtein).toBe('131g avg protein');
     expect(insights.weeklyTrends.topMealType).toBe('lunch is your most-logged meal');
     expect(insights.patternCards).toHaveLength(4);
-    expect(insights.patternCards[2]?.detail).toMatch(/trusted sources/i);
+    expect(insights.patternCards[2]?.detail).toMatch(/structured sources/i);
+    expect(insights.patternCards[2]?.detail).not.toMatch(/trusted sources/i);
   });
 });

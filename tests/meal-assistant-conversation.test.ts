@@ -2606,6 +2606,23 @@ describe('meal assistant conversational coverage', () => {
     expectNoBadAssistantPatterns(response.assistant_reply);
   });
 
+  it('preserves active meal context through repeated remove and add-back edits', async () => {
+    const responses = await runConversation(['Chipotle bowl with cheese', 'remove cheese', 'actually add cheese back']);
+    const removed = responses[1];
+    const restored = responses[2];
+
+    expect(removed?.intent).toBe('correction');
+    expect(removed?.meal.items.map((item) => item.food_name).join(' ')).not.toMatch(/\bcheese\b/i);
+
+    expect(restored?.intent).toBe('correction');
+    expect(restored?.meal.items.map((item) => item.food_name).join(' ')).toMatch(/chipotle bowl/i);
+    expect(restored?.meal.items.map((item) => item.food_name).join(' ')).toMatch(/\bcheese\b/i);
+    expect(restored?.meal.totals.calories).toBeGreaterThan(removed?.meal.totals.calories ?? 0);
+    expect(restored?.assistant_reply).toMatch(/cheese|added|back/i);
+    expect(restored?.assistant_reply).not.toMatch(/starting fresh|new meal|need a little more detail/i);
+    expectNoBadAssistantPatterns(restored?.assistant_reply ?? '');
+  });
+
   it('handles compound quantity and save turns in one reply', async () => {
     const saveMeal = vi.fn().mockResolvedValue(undefined);
     const [response] = await runConversation(['make it two and save it'], {

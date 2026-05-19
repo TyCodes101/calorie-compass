@@ -1855,7 +1855,7 @@ export function MealLoggerClient({
   }
 
   return (
-    <div className="logger-assistant-screen app-page-chat flex min-w-0 flex-col py-3">
+    <div className="logger-assistant-screen app-page-chat flex min-w-0 flex-col pt-1 pb-2">
       <div className="logger-assistant-topbar app-screen">
         <Link href="/" aria-label="Back to dashboard" className="logger-topbar-button">
           <ArrowLeft className="h-5 w-5" />

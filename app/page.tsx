@@ -211,7 +211,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               ) : (
                 <div className="app-empty-state rounded-[24px] p-5 text-sm text-slate-600">
                   <p className="font-semibold text-slate-900">Nothing logged yet today</p>
-                  <p className="mt-2 leading-6">Start with one natural message — “half a Chipotle bowl,” “Fairlife shake,” or “swap fries for apple slices.” You’ll review calories, macros, sources, and confidence before anything saves.</p>
+                  <p className="mt-2 leading-6">Start with one plain-language message — “half a Chipotle bowl,” “Fairlife shake,” or “swap fries for apple slices.” You’ll review calories, macros, source coverage, and assumptions before anything saves.</p>
                   <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-500">
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Restaurants</span>
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Branded foods</span>

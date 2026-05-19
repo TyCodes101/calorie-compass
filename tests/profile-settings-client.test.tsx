@@ -191,4 +191,46 @@ describe('profile settings client flows', () => {
     expect(screen.getByText(/continue with apple/i)).toBeInTheDocument();
     expect(screen.getByText(/continue with google/i)).toBeInTheDocument();
   });
+
+  it('frames reset as meal-history cleanup instead of demo data', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <AccountSettingsForm
+        initial={{
+          name: 'Tyler',
+          age: 21,
+          heightCm: 180,
+          weightLbs: 180,
+          goal: 'MAINTAIN',
+          activityLevel: 'MODERATE',
+          dailyCalorieGoal: 2200,
+          proteinGoal: 160,
+          nutritionPreferences: 'high protein',
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/reset clears logged meals/i)).toBeInTheDocument();
+    expect(screen.queryByText(/reset demo data/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset meal history' }));
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      'Reset meal history and favorites? Your profile, goals, and nutrition preferences will stay in place.',
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/profile/reset', { method: 'POST' });
+    });
+
+    expect(await screen.findByText(/meal history reset/i)).toBeInTheDocument();
+    expect(refreshMock).toHaveBeenCalled();
+  });
 });
