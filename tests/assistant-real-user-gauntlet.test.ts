@@ -163,4 +163,64 @@ describe('assistant real-user gauntlet', () => {
     expectMealDoesNotContain(finalTurn!, [/coke/i]);
     expectReplyNotMatches(finalTurn!, /what'd you eat today|send the meal whenever/i, 'Long sessions should not feel like a reset.');
   });
+
+  it('handles recommendation follow-ups as advice instead of logging random foods', async () => {
+    const conversation = await runQaScenario({
+      name: 'recommendation follow up no random lookup',
+      messages: [
+        'I had 1 cup cottage cheese',
+        'what should I eat tonight?',
+        'give me a yummy dinner idea',
+        'no a yummy dinner ideas',
+        'no i want a good idea for dinner',
+      ],
+      context: {
+        remainingCalories: 720,
+        remainingProtein: 63,
+      },
+    });
+
+    const recommendationTurns = conversation.turns.slice(1);
+    for (const turn of recommendationTurns) {
+      expectBaselineQuality(turn);
+      expectMealUnchanged(turn);
+      expectReplyMatches(turn, /chicken|turkey|steak|salmon|bowl|potatoes|tacos|dinner/i, 'Recommendation follow-ups should provide food ideas.');
+      expectReplyNotMatches(turn, /frozen dinner|usda|i can log/i, 'Recommendation follow-ups should not trigger food logging.');
+    }
+  });
+
+  it('answers clarification meta-questions without nutrition lookup drift', async () => {
+    const scenarios = [
+      ['I had an omelette with some hashbrowns', 'like what'],
+      ['I had cottage cheese', 'what detail do you need'],
+      ['I had a sandwich', 'examples?'],
+      ['I had a smoothie', 'what do you mean'],
+    ] as const;
+
+    for (const [foodTurn, metaTurn] of scenarios) {
+      const conversation = await runQaScenario({
+        name: `clarification meta follow-up: ${foodTurn}`,
+        messages: [foodTurn, metaTurn],
+      });
+
+      const firstTurn = conversation.turns[0];
+      const secondTurn = conversation.turns[1];
+
+      expectBaselineQuality(firstTurn);
+      if (firstTurn.response.should_ask_clarification) {
+        expectMealItemCount(firstTurn, 0);
+      }
+
+      expectReplyNotMatches(secondTurn, /^(?:got it|okay|ok|yep|yeah|sure|sounds good)[.!]*$/i, 'Clarification meta replies should be specific, not dead-end.');
+      expect(secondTurn.response.should_lookup_nutrition).toBe(false);
+      if (firstTurn.response.should_ask_clarification) {
+        expectMealItemCount(secondTurn, 0);
+        expect(secondTurn.response.next_state.pendingClarification).toBeTruthy();
+      } else {
+        expectMealUnchanged(secondTurn);
+      }
+      expectReplyNotMatches(secondTurn, /what a melon|lollipop|frozen dinner|usda/i, 'Clarification meta replies should not map to random database foods.');
+      expectReplyMatches(secondTurn, /how many|amount|size|ingredients|details|example|works|useful/i, 'Clarification meta reply should explain what details help.');
+    }
+  });
 });
