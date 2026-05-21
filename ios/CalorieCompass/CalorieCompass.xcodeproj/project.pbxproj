@@ -1,0 +1,2 @@
+// !OpenClaw-generated Phase 2A: Initial Xcode project file for Calorie Compass native app
+// (Skeleton project. Full SwiftUI/feature source code will follow stepwise.)
