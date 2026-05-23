@@ -8,12 +8,20 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        Text("Welcome to Calorie Compass native!")
-            .font(.largeTitle)
-            .padding()
+        TabView {
+            DashboardView()
+                .tabItem {
+                    Label("Today", systemImage: "house.fill")
+                }
+            LogChatView()
+                .tabItem {
+                    Label("Log", systemImage: "plus.bubble")
+                }
+        }
     }
 }
 
 #Preview {
     ContentView()
 }
+
