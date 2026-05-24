@@ -67,6 +67,64 @@ struct DashboardResponse: Codable {
 }
 
 extension BackendService {
+    static func fetchProfile(completion: @escaping (Result<ProfileData, Error>) -> Void) {
+        guard let url = URL(string: "/api/profile", relativeTo: baseURL) else {
+            completion(.failure(NSError(domain: "BadURL", code: 0)))
+            return
+        }
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+        let task = URLSession.shared.dataTask(with: urlRequest) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            guard let data = data else {
+                completion(.failure(NSError(domain: "NoData", code: 0)))
+                return
+            }
+            do {
+                let decoded = try JSONDecoder().decode(ProfileData.self, from: data)
+                completion(.success(decoded))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+        task.resume()
+    }
+    static func saveProfile(_ profile: ProfileData, completion: @escaping (Result<ProfileData, Error>) -> Void) {
+        guard let url = URL(string: "/api/profile", relativeTo: baseURL) else {
+            completion(.failure(NSError(domain: "BadURL", code: 0)))
+            return
+        }
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "PATCH"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(profile)
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        let task = URLSession.shared.dataTask(with: urlRequest) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            guard let data = data else {
+                completion(.failure(NSError(domain: "NoData", code: 0)))
+                return
+            }
+            do {
+                let decoded = try JSONDecoder().decode(ProfileData.self, from: data)
+                completion(.success(decoded))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+        task.resume()
+    }
+
     static func fetchDashboard(completion: @escaping (Result<DashboardResponse, Error>) -> Void) {
         guard let url = URL(string: "/api/dashboard", relativeTo: baseURL) else {
             completion(.failure(NSError(domain: "BadURL", code: 0)))

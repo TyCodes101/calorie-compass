@@ -17,6 +17,14 @@ struct ContentView: View {
                 .tabItem {
                     Label("Log", systemImage: "plus.bubble")
                 }
+            HistoryView()
+                .tabItem {
+                    Label("History", systemImage: "clock")
+                }
+            ProfileView()
+                .tabItem {
+                    Label("Profile", systemImage: "person")
+                }
         }
     }
 }
