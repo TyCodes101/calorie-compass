@@ -42,9 +42,9 @@ enum NativeSessionState: Equatable {
     var banner: SessionBannerModel? {
         switch self {
         case .unknown, .loading:
-            return SessionBannerModel(title: "Checking session…", message: "We’re confirming your Calorie Compass session.", systemImage: "hourglass", tint: .blue)
+            return SessionBannerModel(title: "Checking session...", message: "We are confirming your Calorie Compass session.", systemImage: "hourglass", tint: .blue)
         case .guest(let response):
-            return SessionBannerModel(title: response.account?.title ?? "Guest mode", message: response.account?.description ?? "Your meals are tied to this device session. Sign in is not available in this build yet.", systemImage: "person.crop.circle.badge.questionmark", tint: .orange)
+            return SessionBannerModel(title: response.account?.title ?? "Guest mode", message: response.account?.description ?? "Meals may be tied to this device session. Native sign-in is not available in this build yet.", systemImage: "person.crop.circle.badge.questionmark", tint: .orange)
         case .authenticated:
             return nil
         case .unauthenticated(let message):
@@ -58,7 +58,7 @@ enum NativeSessionState: Equatable {
 
     static func fromSessionResponse(_ response: SessionResponse) -> NativeSessionState {
         guard let user = response.user else {
-            return .unauthenticated(message: "Sign in is not available in this build yet. You can still explore safe read-only states when available.")
+            return .unauthenticated(message: "Native sign-in is not available in this build yet. Use the web app for account sign-in, then retry here.")
         }
         if user.mode?.lowercased() == "guest" || response.account?.mode?.lowercased() == "guest" {
             return .guest(response)

@@ -33,6 +33,19 @@ struct LogChatView: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    if messages.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("What did you eat?")
+                                .font(.headline)
+                            Text("Describe a meal or snack in your own words. Calorie Compass will help estimate nutrition before you save it.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(12)
+                    }
                     ForEach(Array(messages.enumerated()), id: \.offset) { index, msg in
                         HStack(alignment: .top) {
                             if msg.role == "user" { Spacer() }
@@ -50,8 +63,9 @@ struct LogChatView: View {
                     .foregroundColor(.red)
                     .padding(4)
             }
+            NutritionDisclaimerView()
             HStack {
-                TextField("Say something...", text: $inputText)
+                TextField("Describe your meal", text: $inputText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .disabled(isLoading)
                 Button(action: sendMessage) {
@@ -60,7 +74,9 @@ struct LogChatView: View {
                     } else {
                         Text("Send")
                     }
-                }.disabled(isLoading || inputText.isEmpty)
+                }
+                .disabled(isLoading || inputText.isEmpty)
+                .accessibilityLabel("Send meal description")
             }.padding()
         }
     }
@@ -87,7 +103,7 @@ struct LogChatView: View {
                 case .success(let resp):
                     messages.append((role: "assistant", text: resp.assistant_message))
                     assistantState = resp.next_state
-                    // --- Extract possible meal items from AI reply for review ---
+                    // Extract possible meal items from the assistant response for review.
                     if let detectedItems = try? tryExtractMealItems(from: resp.assistant_message) {
                         reviewItems = detectedItems
                         if !reviewItems.isEmpty {
@@ -102,10 +118,9 @@ struct LogChatView: View {
         }
     }
 
-    // Attempt to extract meal items from assistant message (stub JSON demo)
+    // Attempt to extract meal items from assistant messages that include JSON item data.
     func tryExtractMealItems(from reply: String) throws -> [MealItem] {
-        // Placeholder: Real implementation will decode meal item candidates from parsed AI reply
-        // For prototype, parse JSON array if present in reply.
+        // The backend contract is still evolving, so this safely ignores replies without JSON.
         guard let start = reply.firstIndex(of: "["), let end = reply.lastIndex(of: "]") else {
             return []
         }
@@ -123,7 +138,7 @@ struct LogChatView: View {
         saveError = nil
         // Map MealItem to PostMealRequest
         let req = PostMealRequest(
-            meal_type: "breakfast", // For now, statically "breakfast"; in real use, picker can be used
+            meal_type: "breakfast", // The current assistant save payload does not expose a selected meal type yet.
             confidence_score: 0.95,
             raw_text: nil,
             notes: nil,
@@ -163,6 +178,17 @@ struct LogChatView: View {
         }
     }
 
+}
+
+struct NutritionDisclaimerView: View {
+    var body: some View {
+        Text("Nutrition estimates are informational and may be approximate. Verify critical details; this is not medical advice.")
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal)
+            .accessibilityLabel("Nutrition estimates are informational and may be approximate. Verify critical details. This is not medical advice.")
+    }
 }
 
 #Preview {
