@@ -96,3 +96,22 @@ final class MealManagementTests: XCTestCase {
         MealRequestItem(food_name: "chicken", quantity: 1, unit: "serving", calories: 250, protein: 35, carbs: 0, fat: 8, fiber: 0, sugar: 0, sodium: 300, notes: nil, source_type: nil, source_name: nil, confidence_label: nil)
     }
 }
+
+final class BackendServiceErrorMappingTests: XCTestCase {
+    func testUnauthorizedAndForbiddenMapToFriendlySessionErrors() {
+        XCTAssertEqual(BackendService.mapHTTPError(statusCode: 401, data: nil), .unauthorized)
+        XCTAssertEqual(BackendService.mapHTTPError(statusCode: 403, data: nil), .forbidden)
+        XCTAssertTrue(BackendError.unauthorized.localizedDescription.contains("session has expired"))
+    }
+
+    func testServerErrorUsesBackendMessageWhenAvailable() {
+        let data = #"{"error":"Please try again later."}"#.data(using: .utf8)
+        XCTAssertEqual(BackendService.mapHTTPError(statusCode: 500, data: data), .server("Please try again later."))
+    }
+
+    func testNetworkOfflineErrorsMapToOfflineMessage() {
+        let error = NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)
+        XCTAssertEqual(BackendService.mapTransportError(error), .offline)
+        XCTAssertTrue(BackendError.offline.localizedDescription.contains("offline"))
+    }
+}

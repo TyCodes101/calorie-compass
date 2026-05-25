@@ -133,6 +133,10 @@ struct DailySummary: Codable {
 enum BackendError: LocalizedError, Equatable {
     case badURL
     case noData
+    case offline
+    case unauthorized
+    case forbidden
+    case malformedResponse
     case server(String)
     case unsupported(String)
 
@@ -140,6 +144,10 @@ enum BackendError: LocalizedError, Equatable {
         switch self {
         case .badURL: return "The Calorie Compass server URL is invalid."
         case .noData: return "The server returned no data."
+        case .offline: return "You appear to be offline. Check your connection and try again."
+        case .unauthorized: return "Your Calorie Compass session has expired. Please sign in again on the web, then retry."
+        case .forbidden: return "You do not have access to this Calorie Compass data. Please check your session and try again."
+        case .malformedResponse: return "Calorie Compass returned an unexpected response. Please try again."
         case .server(let message): return message
         case .unsupported(let message): return message
         }
@@ -152,33 +160,58 @@ class BackendService {
     private static func perform<T: Decodable>(_ urlRequest: URLRequest, completion: @escaping (Result<T, Error>) -> Void) {
         let task = URLSession.shared.dataTask(with: urlRequest) { data, response, error in
             if let error = error {
-                completion(.failure(error))
+                completion(.failure(mapTransportError(error)))
                 return
             }
             guard let httpResponse = response as? HTTPURLResponse else {
-                completion(.failure(BackendError.noData))
+                completion(.failure(BackendError.malformedResponse))
                 return
             }
             guard let data = data, !data.isEmpty else {
                 completion(.failure(BackendError.noData))
                 return
             }
+            if !(200...299).contains(httpResponse.statusCode) {
+                completion(.failure(mapHTTPError(statusCode: httpResponse.statusCode, data: data)))
+                return
+            }
             do {
-                if !(200...299).contains(httpResponse.statusCode) {
-                    if let apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: data), let message = apiError.error {
-                        completion(.failure(BackendError.server(message)))
-                    } else {
-                        completion(.failure(BackendError.server("Request failed with status \(httpResponse.statusCode).")))
-                    }
-                    return
-                }
                 let decoded = try JSONDecoder().decode(T.self, from: data)
                 completion(.success(decoded))
             } catch {
-                completion(.failure(error))
+                completion(.failure(BackendError.malformedResponse))
             }
         }
         task.resume()
+    }
+
+    static func mapHTTPError(statusCode: Int, data: Data?) -> BackendError {
+        if statusCode == 401 { return .unauthorized }
+        if statusCode == 403 { return .forbidden }
+        if let data,
+           let apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: data),
+           let message = apiError.error,
+           !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .server(message)
+        }
+        return .server("Request failed with status \(statusCode).")
+    }
+
+    static func mapTransportError(_ error: Error) -> BackendError {
+        let nsError = error as NSError
+        let offlineCodes = [
+            NSURLErrorNotConnectedToInternet,
+            NSURLErrorNetworkConnectionLost,
+            NSURLErrorCannotFindHost,
+            NSURLErrorCannotConnectToHost,
+            NSURLErrorTimedOut,
+            NSURLErrorInternationalRoamingOff,
+            NSURLErrorDataNotAllowed
+        ]
+        if nsError.domain == NSURLErrorDomain && offlineCodes.contains(nsError.code) {
+            return .offline
+        }
+        return .server(error.localizedDescription)
     }
 
     private static func request(path: String, method: String = "GET", queryItems: [URLQueryItem] = []) -> URLRequest? {
