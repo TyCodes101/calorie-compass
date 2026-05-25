@@ -32,7 +32,7 @@ struct LogChatView: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(Array(messages.enumerated()), id: \ .offset) { index, msg in
+                    ForEach(Array(messages.enumerated()), id: \.offset) { index, msg in
                         HStack(alignment: .top) {
                             if msg.role == "user" { Spacer() }
                             Text("\(msg.role == \"user\" ? \"You\" : \"Assistant\"): \(msg.text)")

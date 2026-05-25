@@ -24,21 +24,21 @@ struct DashboardView: View {
                 } else if let dashboard = dashboard {
                     ScrollView {
                         VStack(spacing: 18) {
-                            macroRow(label: "Calories", used: dashboard.calories ?? 0, goal: dashboard.goalCalories ?? 1)
-                            macroRow(label: "Protein", used: dashboard.protein ?? 0, goal:  dashboard.protein ?? 1)
-                            macroRow(label: "Carbs", used: dashboard.carbs ?? 0, goal: dashboard.carbs ?? 1)
-                            macroRow(label: "Fat", used: dashboard.fat ?? 0, goal: dashboard.fat ?? 1)
+                            macroRow(label: "Calories", used: dashboard.displayedCalories, goal: dashboard.displayedGoalCalories)
+                            macroRow(label: "Protein", used: dashboard.displayedProtein, goal: dashboard.displayedProteinGoal)
+                            macroRow(label: "Carbs", used: dashboard.displayedCarbs, goal: dashboard.displayedCarbsGoal)
+                            macroRow(label: "Fat", used: dashboard.displayedFat, goal: dashboard.displayedFatGoal)
                             Divider()
                             if let meals = dashboard.recentMeals, !meals.isEmpty {
                                 VStack(alignment: .leading, spacing: 10) {
                                     Text("Recent Meals").font(.headline)
-                                    ForEach(Array(meals.enumerated()), id: \ .offset) { idx, meal in
+                                    ForEach(Array(meals.enumerated()), id: \.offset) { idx, meal in
                                         VStack(alignment: .leading, spacing: 4) {
                                             if let raw = meal.rawText {
                                                 Text(raw).font(.subheadline)
                                             }
                                             if let items = meal.items {
-                                                ForEach(Array(items.enumerated()), id: \ .offset) { j, food in
+                                                ForEach(Array(items.enumerated()), id: \.offset) { j, food in
                                                     Text("\(food.food_name.capitalized) — \(Int(food.calories)) cal")
                                                         .font(.caption)
                                                 }
@@ -60,6 +60,9 @@ struct DashboardView: View {
             }
             .navigationTitle("Today")
             .onAppear(perform: loadDashboard)
+            .onReceive(NotificationCenter.default.publisher(for: .calorieCompassMealsDidChange)) { _ in
+                refreshDashboard()
+            }
         }
     }
 
