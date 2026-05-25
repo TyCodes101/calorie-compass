@@ -7,6 +7,7 @@
 import SwiftUI
 
 struct LogChatView: View {
+    @EnvironmentObject private var sessionStore: SessionStore
     @State private var messages: [(role: String, text: String)] = []
     @State private var inputText = ""
     @State private var isLoading = false
@@ -94,6 +95,7 @@ struct LogChatView: View {
                         }
                     }
                 case .failure(let err):
+                    sessionStore.apply(err)
                     error = "Send failed: \(err.localizedDescription)"
                 }
             }
@@ -154,6 +156,7 @@ struct LogChatView: View {
                     reviewItems.removeAll()
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
                 case .failure(let err):
+                    sessionStore.apply(err)
                     saveError = "Save failed: \(err.localizedDescription)"
                 }
             }

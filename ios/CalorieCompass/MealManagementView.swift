@@ -22,6 +22,7 @@ struct MealDraftValidation: Equatable {
 }
 
 struct MealManagementView: View {
+    @EnvironmentObject private var sessionStore: SessionStore
     @State private var meals: [MealResponse] = []
     @State private var loading = false
     @State private var refreshing = false
@@ -115,6 +116,7 @@ struct MealManagementView: View {
             meals = loadedMeals
             error = nil
         case .failure(let err):
+            sessionStore.apply(err)
             error = err.localizedDescription
         }
     }
@@ -134,6 +136,7 @@ struct MealManagementView: View {
                     mutationMessage = "Meal updated. Today and History refreshed."
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
                 case .failure(let err):
+                    sessionStore.apply(err)
                     error = err.localizedDescription
                 }
             }
@@ -153,6 +156,7 @@ struct MealManagementView: View {
                     mutationMessage = "Meal deleted. Today and History refreshed."
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
                 case .failure(let err):
+                    sessionStore.apply(err)
                     error = err.localizedDescription
                 }
             }

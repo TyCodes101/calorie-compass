@@ -56,3 +56,13 @@ Use this checklist on macOS/Xcode with a simulator and at least one real iPhone 
 - Test on Wi-Fi and cellular/hotspot.
 - Confirm production backend URL is reachable.
 - Confirm slow network states remain usable.
+
+## Phase 3E session/auth QA
+- First launch online: session banner should briefly show checking state, then guest/account state or safe unauthenticated messaging.
+- First launch offline: app should show an offline session banner and each tab should remain non-crashy with retry messaging.
+- Session expired: backend 401/403 should map to a session-expired banner, not raw JSON or a crash.
+- Unauthenticated profile/history/meal access: reads and mutations should fail gracefully with clear sign-in/session messaging.
+- Retry after network returns: tap retry on the session banner, then retry the affected tab action.
+- Save/edit/delete meal while session expired: app must not fake success; local lists update only after backend confirmation.
+- Profile edit while session expired: save should remain blocked by backend failure and show a friendly error.
+- Guest fallback: if backend reports guest mode, banner should explain that sign-in is not available in this build yet and data is tied to the device session.

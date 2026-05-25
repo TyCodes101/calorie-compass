@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct DashboardView: View {
+    @EnvironmentObject private var sessionStore: SessionStore
     @State private var dashboard: DashboardResponse? = nil
     @State private var loading = false
     @State private var error: String? = nil
@@ -76,6 +77,7 @@ struct DashboardView: View {
                 case .success(let resp):
                     dashboard = resp
                 case .failure(let err):
+                    sessionStore.apply(err)
                     error = err.localizedDescription
                 }
             }
@@ -90,6 +92,7 @@ struct DashboardView: View {
                 case .success(let resp):
                     dashboard = resp
                 case .failure(let err):
+                    sessionStore.apply(err)
                     error = err.localizedDescription
                 }
             }

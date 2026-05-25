@@ -224,6 +224,11 @@ class BackendService {
         return request
     }
 
+    static func fetchSession(completion: @escaping (Result<SessionResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/session", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
     static func sendMealAssistant(request body: MealAssistantRequest, completion: @escaping (Result<MealAssistantResponse, Error>) -> Void) {
         guard var urlRequest = request(path: "api/meal-assistant", method: "POST") else { completion(.failure(BackendError.badURL)); return }
         do { urlRequest.httpBody = try JSONEncoder().encode(body) } catch { completion(.failure(error)); return }

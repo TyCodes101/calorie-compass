@@ -115,3 +115,41 @@ final class BackendServiceErrorMappingTests: XCTestCase {
         XCTAssertTrue(BackendError.offline.localizedDescription.contains("offline"))
     }
 }
+
+final class NativeSessionStateTests: XCTestCase {
+    func testGuestSessionMapsToGuestStateWithBanner() {
+        let response = SessionResponse(account: AccountSnapshot(mode: "guest", title: "Guest mode is active", description: "Device session", persistenceLabel: nil), user: SessionUser(id: "u1", name: nil, mode: "guest"))
+        let state = NativeSessionState.fromSessionResponse(response)
+
+        if case .guest = state {
+            XCTAssertFalse(state.isActionBlocked)
+            XCTAssertEqual(state.banner?.title, "Guest mode is active")
+        } else {
+            XCTFail("Expected guest session")
+        }
+    }
+
+    func testAccountSessionMapsToAuthenticatedWithoutBanner() {
+        let response = SessionResponse(account: AccountSnapshot(mode: "account", title: "Account session is active", description: nil, persistenceLabel: nil), user: SessionUser(id: "u1", name: "Tyler", mode: "account"))
+        let state = NativeSessionState.fromSessionResponse(response)
+
+        XCTAssertEqual(state, .authenticated(response))
+        XCTAssertNil(state.banner)
+    }
+
+    func testMissingUserMapsToUnauthenticatedSafeMessage() {
+        let state = NativeSessionState.fromSessionResponse(SessionResponse(account: nil, user: nil))
+
+        if case .unauthenticated(let message) = state {
+            XCTAssertTrue(message.contains("Sign in is not available"))
+        } else {
+            XCTFail("Expected unauthenticated state")
+        }
+    }
+
+    func testBackendErrorsMapToSessionStates() {
+        XCTAssertEqual(NativeSessionState.fromError(BackendError.offline), .offline(message: BackendError.offline.localizedDescription))
+        XCTAssertEqual(NativeSessionState.fromError(BackendError.unauthorized), .expired(message: BackendError.unauthorized.localizedDescription))
+        XCTAssertEqual(NativeSessionState.fromError(BackendError.forbidden), .expired(message: BackendError.forbidden.localizedDescription))
+    }
+}

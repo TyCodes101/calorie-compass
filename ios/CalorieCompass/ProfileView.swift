@@ -16,6 +16,7 @@ struct ProfileData: Codable, Equatable {
 }
 
 struct ProfileView: View {
+    @EnvironmentObject private var sessionStore: SessionStore
     @State private var profile: ProfileData? = nil
     @State private var loading = false
     @State private var error: String? = nil
@@ -150,6 +151,7 @@ struct ProfileView: View {
                 case .success(let raw):
                     profile = raw; dirtyProfile = raw
                 case .failure(let err):
+                    sessionStore.apply(err)
                     error = err.localizedDescription
                 }
             }
@@ -166,6 +168,7 @@ struct ProfileView: View {
                     profile = saved; editing = false; showSuccess = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showSuccess = false }
                 case .failure(let err):
+                    sessionStore.apply(err)
                     saveError = err.localizedDescription
                 }
             }
