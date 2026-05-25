@@ -152,6 +152,7 @@ struct LogChatView: View {
                 case .success(_):
                     showReviewCard = false
                     reviewItems.removeAll()
+                    NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
                 case .failure(let err):
                     saveError = "Save failed: \(err.localizedDescription)"
                 }

@@ -1,11 +1,79 @@
 // MealManagementTests.swift
-// Calorie Compass iOS — Phase 3B meal management coverage
+// Calorie Compass iOS — Phase 3C meal management coverage
 import XCTest
 @testable import CalorieCompass
 
 final class MealManagementTests: XCTestCase {
     func testMealDraftBuildsBackendPatchPayload() {
-        let meal = MealResponse(
+        let meal = Self.sampleMeal()
+        let draft = MealDraft(meal: meal)
+
+        XCTAssertEqual(draft.request.meal_type, "lunch")
+        XCTAssertEqual(draft.request.raw_text, "Chicken bowl")
+        XCTAssertEqual(draft.request.items.count, 1)
+        XCTAssertEqual(draft.totalCalories, 250)
+        XCTAssertTrue(draft.validate().isValid)
+    }
+
+    func testMealDraftValidationRejectsBrokenPatchPayloads() {
+        var draft = MealDraft(meal: Self.sampleMeal())
+        draft.mealType = "brunch"
+        draft.items[0].food_name = " "
+        draft.items[0].quantity = 0
+        draft.items[0].calories = -1
+
+        let validation = draft.validate()
+
+        XCTAssertFalse(validation.isValid)
+        XCTAssertTrue(validation.messages.contains { $0.contains("Choose breakfast") })
+        XCTAssertTrue(validation.messages.contains { $0.contains("food name") })
+        XCTAssertTrue(validation.messages.contains { $0.contains("quantity above 0") })
+        XCTAssertTrue(validation.messages.contains { $0.contains("invalid calories") })
+    }
+
+    func testMealTypeAndDateFallbacksAreSafe() {
+        let malformed = MealResponse(id: "meal-2", mealType: "BRUNCH", rawText: " ", date: "not-a-date", createdAt: nil, confidenceScore: nil, totalCalories: nil, totalProtein: nil, totalCarbs: nil, totalFat: nil, itemCount: nil, trustedCount: nil, estimatedCount: nil, coverageSummary: nil, items: [])
+
+        XCTAssertEqual(malformed.displayTitle, "Saved meal")
+        XCTAssertEqual(malformed.displayMealType, "Snack")
+        XCTAssertEqual(malformed.displayDate, "Date unavailable")
+        XCTAssertEqual(MealDraft(meal: malformed).mealType, "snack")
+    }
+
+    func testDateParserAcceptsFractionalAndStandardISO8601() {
+        XCTAssertNotNil(DateParser.parseMealDate("2026-05-25T12:00:00.000Z"))
+        XCTAssertNotNil(DateParser.parseMealDate("2026-05-25T12:00:00Z"))
+        XCTAssertNil(DateParser.parseMealDate("bad-date"))
+    }
+
+    func testEmptyItemsRequireDeleteInsteadOfSaving() {
+        var draft = MealDraft(meal: Self.sampleMeal())
+        draft.items = []
+
+        let validation = draft.validate()
+
+        XCTAssertFalse(validation.isValid)
+        XCTAssertTrue(validation.messages.contains { $0.contains("Delete the meal instead") })
+    }
+
+    func testLocalOnlyMealIDsAreRejectedBeforeMutation() {
+        let expectation = expectation(description: "unsupported edit returns")
+        let request = PostMealRequest(meal_type: "snack", confidence_score: 1, raw_text: nil, notes: nil, date: nil, items: [Self.sampleItem()])
+
+        BackendService.updateMeal(id: "local-123", request: request) { result in
+            if case .failure(let error) = result {
+                XCTAssertTrue(error.localizedDescription.contains("Local-only"))
+            } else {
+                XCTFail("Expected local-only edit to fail safely")
+            }
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 1)
+    }
+
+    private static func sampleMeal() -> MealResponse {
+        MealResponse(
             id: "meal-1",
             mealType: "lunch",
             rawText: "Chicken bowl",
@@ -20,38 +88,11 @@ final class MealManagementTests: XCTestCase {
             trustedCount: nil,
             estimatedCount: nil,
             coverageSummary: nil,
-            items: [MealRequestItem(food_name: "chicken", quantity: 1, unit: "serving", calories: 250, protein: 35, carbs: 0, fat: 8, fiber: 0, sugar: 0, sodium: 300, notes: nil, source_type: nil, source_name: nil, confidence_label: nil)]
+            items: [sampleItem()]
         )
-
-        let draft = MealDraft(meal: meal)
-
-        XCTAssertEqual(draft.request.meal_type, "lunch")
-        XCTAssertEqual(draft.request.raw_text, "Chicken bowl")
-        XCTAssertEqual(draft.request.items.count, 1)
-        XCTAssertEqual(draft.totalCalories, 250)
     }
 
-    func testMealDisplayFallsBackSafelyWithoutTitleOrDate() {
-        let meal = MealResponse(id: "meal-2", mealType: nil, rawText: nil, date: nil, createdAt: nil, confidenceScore: nil, totalCalories: nil, totalProtein: nil, totalCarbs: nil, totalFat: nil, itemCount: nil, trustedCount: nil, estimatedCount: nil, coverageSummary: nil, items: [])
-
-        XCTAssertEqual(meal.displayTitle, "Saved meal")
-        XCTAssertEqual(meal.displayMealType, "Snack")
-        XCTAssertEqual(meal.displayDate, "Date unavailable")
-    }
-
-    func testLocalOnlyMealIDsAreRejectedBeforeMutation() {
-        let expectation = expectation(description: "unsupported edit returns")
-        let request = PostMealRequest(meal_type: "snack", confidence_score: 1, raw_text: nil, notes: nil, date: nil, items: [MealRequestItem(food_name: "apple", quantity: 1, unit: "piece", calories: 95, protein: 0, carbs: 25, fat: 0, fiber: 4, sugar: 19, sodium: 1, notes: nil, source_type: nil, source_name: nil, confidence_label: nil)])
-
-        BackendService.updateMeal(id: "local-123", request: request) { result in
-            if case .failure(let error) = result {
-                XCTAssertTrue(error.localizedDescription.contains("Local-only"))
-            } else {
-                XCTFail("Expected local-only edit to fail safely")
-            }
-            expectation.fulfill()
-        }
-
-        waitForExpectations(timeout: 1)
+    private static func sampleItem() -> MealRequestItem {
+        MealRequestItem(food_name: "chicken", quantity: 1, unit: "serving", calories: 250, protein: 35, carbs: 0, fat: 8, fiber: 0, sugar: 0, sodium: 300, notes: nil, source_type: nil, source_name: nil, confidence_label: nil)
     }
 }
