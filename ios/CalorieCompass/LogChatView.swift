@@ -36,7 +36,7 @@ struct LogChatView: View {
                     ForEach(Array(messages.enumerated()), id: \.offset) { index, msg in
                         HStack(alignment: .top) {
                             if msg.role == "user" { Spacer() }
-                            Text("\(msg.role == \"user\" ? \"You\" : \"Assistant\"): \(msg.text)")
+                            Text("\(msg.role == "user" ? "You" : "Assistant"): \(msg.text)")
                                 .padding(8)
                                 .background(msg.role == "user" ? Color.blue.opacity(0.13) : Color.gray.opacity(0.18))
                                 .cornerRadius(8)
@@ -106,7 +106,7 @@ struct LogChatView: View {
     func tryExtractMealItems(from reply: String) throws -> [MealItem] {
         // Placeholder: Real implementation will decode meal item candidates from parsed AI reply
         // For prototype, parse JSON array if present in reply.
-        guard let start = reply.firstIndex(of: '['), let end = reply.lastIndex(of: ']') else {
+        guard let start = reply.firstIndex(of: "["), let end = reply.lastIndex(of: "]") else {
             return []
         }
         let jsonString = String(reply[start...end])
