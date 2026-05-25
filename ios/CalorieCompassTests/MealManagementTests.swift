@@ -40,6 +40,34 @@ final class MealManagementTests: XCTestCase {
         XCTAssertEqual(MealDraft(meal: malformed).mealType, "snack")
     }
 
+    func testMealResponseDecodesItemWithMissingNutrients() throws {
+        let data = """
+        {
+          "id": "meal-3",
+          "mealType": "snack",
+          "rawText": "Apple",
+          "date": "2026-05-25T12:00:00.000Z",
+          "items": [
+            {
+              "food_name": "apple",
+              "quantity": 1,
+              "unit": "medium",
+              "calories": 95
+            }
+          ]
+        }
+        """.data(using: .utf8)
+
+        let jsonData = try XCTUnwrap(data)
+        let meal = try JSONDecoder().decode(MealResponse.self, from: jsonData)
+
+        XCTAssertEqual(meal.items?.first?.food_name, "apple")
+        XCTAssertEqual(meal.items?.first?.protein, 0)
+        XCTAssertEqual(meal.items?.first?.carbs, 0)
+        XCTAssertEqual(meal.items?.first?.fat, 0)
+        XCTAssertEqual(meal.safeTotalCalories, 95)
+    }
+
     func testDateParserAcceptsFractionalAndStandardISO8601() {
         XCTAssertNotNil(DateParser.parseMealDate("2026-05-25T12:00:00.000Z"))
         XCTAssertNotNil(DateParser.parseMealDate("2026-05-25T12:00:00Z"))

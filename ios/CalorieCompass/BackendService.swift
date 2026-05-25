@@ -33,6 +33,73 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
     var source_type: String?
     var source_name: String?
     var confidence_label: String?
+
+    init(
+        food_name: String,
+        quantity: Double,
+        unit: String,
+        calories: Double,
+        protein: Double,
+        carbs: Double,
+        fat: Double,
+        fiber: Double,
+        sugar: Double,
+        sodium: Double,
+        notes: String?,
+        source_type: String?,
+        source_name: String?,
+        confidence_label: String?
+    ) {
+        self.food_name = food_name
+        self.quantity = quantity
+        self.unit = unit
+        self.calories = calories
+        self.protein = protein
+        self.carbs = carbs
+        self.fat = fat
+        self.fiber = fiber
+        self.sugar = sugar
+        self.sodium = sodium
+        self.notes = notes
+        self.source_type = source_type
+        self.source_name = source_name
+        self.confidence_label = confidence_label
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case food_name
+        case quantity
+        case unit
+        case calories
+        case protein
+        case carbs
+        case fat
+        case fiber
+        case sugar
+        case sodium
+        case notes
+        case source_type
+        case source_name
+        case confidence_label
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        food_name = try container.decodeIfPresent(String.self, forKey: .food_name) ?? "Food item"
+        quantity = try container.decodeIfPresent(Double.self, forKey: .quantity) ?? 1
+        unit = try container.decodeIfPresent(String.self, forKey: .unit) ?? "serving"
+        calories = try container.decodeIfPresent(Double.self, forKey: .calories) ?? 0
+        protein = try container.decodeIfPresent(Double.self, forKey: .protein) ?? 0
+        carbs = try container.decodeIfPresent(Double.self, forKey: .carbs) ?? 0
+        fat = try container.decodeIfPresent(Double.self, forKey: .fat) ?? 0
+        fiber = try container.decodeIfPresent(Double.self, forKey: .fiber) ?? 0
+        sugar = try container.decodeIfPresent(Double.self, forKey: .sugar) ?? 0
+        sodium = try container.decodeIfPresent(Double.self, forKey: .sodium) ?? 0
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        source_type = try container.decodeIfPresent(String.self, forKey: .source_type)
+        source_name = try container.decodeIfPresent(String.self, forKey: .source_name)
+        confidence_label = try container.decodeIfPresent(String.self, forKey: .confidence_label)
+    }
 }
 
 struct PostMealRequest: Codable, Equatable {

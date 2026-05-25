@@ -21,6 +21,11 @@ GitHub Actions now runs iOS CI on `macos-latest` for `main` and `feature/ios-pha
 - `xcodebuild test`: passed.
 - XCTest count after Phase 3F: 15 tests, 0 failures.
 
+## Phase 3G hardening notes
+- Meal item decoding now tolerates missing item nutrient fields by defaulting absent numeric values to `0`, preventing one partial backend item from failing the whole meal response decode.
+- Placeholder profile XCTest assertions were replaced with real `ProfileData` decode/encode coverage.
+- Local web verification was run with `npm test`, `npm run lint`, and `npm run build`; iOS build/test verification still comes from GitHub Actions on macOS.
+
 ## Manual simulator/device QA still required
 This Linux VPS cannot perform interactive simulator or physical-device QA. Before TestFlight, someone with Xcode should run this exact script:
 
