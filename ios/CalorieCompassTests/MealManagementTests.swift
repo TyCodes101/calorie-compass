@@ -57,7 +57,8 @@ final class MealManagementTests: XCTestCase {
     }
 
     func testLocalOnlyMealIDsAreRejectedBeforeMutation() {
-        let expectation = expectation(description: "unsupported edit returns")
+        let editExpectation = expectation(description: "unsupported edit returns")
+        let deleteExpectation = expectation(description: "unsupported delete returns")
         let request = PostMealRequest(meal_type: "snack", confidence_score: 1, raw_text: nil, notes: nil, date: nil, items: [Self.sampleItem()])
 
         BackendService.updateMeal(id: "local-123", request: request) { result in
@@ -66,7 +67,16 @@ final class MealManagementTests: XCTestCase {
             } else {
                 XCTFail("Expected local-only edit to fail safely")
             }
-            expectation.fulfill()
+            editExpectation.fulfill()
+        }
+
+        BackendService.deleteMeal(id: "local-123") { result in
+            if case .failure(let error) = result {
+                XCTAssertTrue(error.localizedDescription.contains("Local-only"))
+            } else {
+                XCTFail("Expected local-only delete to fail safely")
+            }
+            deleteExpectation.fulfill()
         }
 
         waitForExpectations(timeout: 1)
@@ -107,6 +117,11 @@ final class BackendServiceErrorMappingTests: XCTestCase {
     func testServerErrorUsesBackendMessageWhenAvailable() {
         let data = #"{"error":"Please try again later."}"#.data(using: .utf8)
         XCTAssertEqual(BackendService.mapHTTPError(statusCode: 500, data: data), .server("Please try again later."))
+    }
+
+    func testBlankBackendErrorFallsBackToStatusMessage() {
+        let data = #"{"error":"   "}"#.data(using: .utf8)
+        XCTAssertEqual(BackendService.mapHTTPError(statusCode: 502, data: data), .server("Request failed with status 502."))
     }
 
     func testNetworkOfflineErrorsMapToOfflineMessage() {
@@ -151,5 +166,16 @@ final class NativeSessionStateTests: XCTestCase {
         XCTAssertEqual(NativeSessionState.fromError(BackendError.offline), .offline(message: BackendError.offline.localizedDescription))
         XCTAssertEqual(NativeSessionState.fromError(BackendError.unauthorized), .expired(message: BackendError.unauthorized.localizedDescription))
         XCTAssertEqual(NativeSessionState.fromError(BackendError.forbidden), .expired(message: BackendError.forbidden.localizedDescription))
+    }
+
+    func testOnlyExpiredAndOfflineStatesBlockActions() {
+        let response = SessionResponse(account: nil, user: SessionUser(id: "u1", name: nil, mode: "account"))
+
+        XCTAssertFalse(NativeSessionState.unknown.isActionBlocked)
+        XCTAssertFalse(NativeSessionState.loading.isActionBlocked)
+        XCTAssertFalse(NativeSessionState.authenticated(response).isActionBlocked)
+        XCTAssertFalse(NativeSessionState.unauthenticated(message: "Sign in is not available in this build yet.").isActionBlocked)
+        XCTAssertTrue(NativeSessionState.expired(message: "Expired").isActionBlocked)
+        XCTAssertTrue(NativeSessionState.offline(message: "Offline").isActionBlocked)
     }
 }

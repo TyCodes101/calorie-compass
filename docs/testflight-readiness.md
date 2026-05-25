@@ -25,6 +25,12 @@
 - Confirm auth/session plan before external testers; current native app has safe session-expired messaging but not full native sign-in.
 - Add crash/error logging before wider TestFlight, e.g. Sentry, Firebase Crashlytics, or Apple-only diagnostics.
 
+## CI / PR readiness
+- Confirm GitHub Actions `iOS CI` passes on the PR head commit.
+- Review `ios-build.log`, `ios-test.log`, and `ios-test-results.xcresult` artifacts for failed runs.
+- CI verifies Xcode build/test only; interactive simulator/device QA remains required before TestFlight.
+- Use `docs/phase-3g-pr-readiness.md` for the PR summary, manual QA script, and known limitations.
+
 ## Internal TestFlight steps
 - Archive from Xcode on macOS.
 - Upload to App Store Connect.

@@ -7,6 +7,7 @@ Use this checklist on macOS/Xcode with a simulator and at least one real iPhone 
 - Select the shared `CalorieCompass` scheme.
 - Confirm signing team/bundle id are intentionally configured for the testing account.
 - Build on an iPhone simulator, then on a real device.
+- Before manual QA, confirm the latest GitHub Actions `iOS CI` run is green for this branch and download logs/xcresult artifacts if debugging is needed.
 
 ## First launch
 - App launches without crashes.
@@ -56,6 +57,10 @@ Use this checklist on macOS/Xcode with a simulator and at least one real iPhone 
 - Test on Wi-Fi and cellular/hotspot.
 - Confirm production backend URL is reachable.
 - Confirm slow network states remain usable.
+
+## CI artifacts
+- GitHub Actions uploads `ios-build.log`, `ios-test.log`, and `ios-test-results.xcresult` for each iOS CI run.
+- Treat CI as build/test confidence only; it does not replace interactive navigation, layout, keyboard, or real-device QA.
 
 ## Phase 3E session/auth QA
 - First launch online: session banner should briefly show checking state, then guest/account state or safe unauthenticated messaging.

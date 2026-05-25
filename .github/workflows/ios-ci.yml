@@ -13,6 +13,8 @@ on:
 jobs:
   ios-build:
     runs-on: macos-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Check out repository
@@ -52,10 +54,12 @@ jobs:
       - name: Test Calorie Compass
         run: |
           set -o pipefail
+          rm -rf ios-test-results.xcresult
           xcodebuild \
             -project ios/CalorieCompass/CalorieCompass.xcodeproj \
             -scheme CalorieCompass \
             -destination '${{ steps.simulator.outputs.destination }}' \
+            -resultBundlePath ios-test-results.xcresult \
             test | tee ios-test.log
 
       - name: Upload iOS logs
@@ -66,3 +70,4 @@ jobs:
           path: |
             ios-build.log
             ios-test.log
+            ios-test-results.xcresult
