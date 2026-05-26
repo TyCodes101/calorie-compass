@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildAccountFoundationSnapshot, buildGuestUserEmail, getPreferredUserName, isGuestEmail, isGuestUser } from '@/lib/auth-session';
+import { getNativeAuthScaffoldStatus } from '@/lib/auth/native-auth-contract';
 
 describe('auth session helpers', () => {
   it('builds stable guest emails and detects guest users', () => {
@@ -30,5 +31,13 @@ describe('auth session helpers', () => {
     expect(snapshot.providers).toHaveLength(2);
     expect(snapshot.providers[0]?.label).toMatch(/apple/i);
     expect(snapshot.providers[1]?.label).toMatch(/google/i);
+  });
+
+  it('keeps native Apple auth marked as not implemented until backend verification exists', () => {
+    const status = getNativeAuthScaffoldStatus();
+
+    expect(status.apple.status).toBe('not_implemented');
+    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Verify Apple identity token/i);
+    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Migrate guest/i);
   });
 });

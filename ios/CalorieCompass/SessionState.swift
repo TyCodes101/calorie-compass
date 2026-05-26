@@ -59,6 +59,31 @@ enum NativeSessionState: Equatable {
         }
     }
 
+    var authSession: AuthSession {
+        switch self {
+        case .guest(let response):
+            return AuthSession(
+                mode: .guest,
+                userId: response.user?.id,
+                displayName: response.user?.name,
+                provider: nil,
+                canUpgradeGuest: true,
+                signInAvailability: .planned
+            )
+        case .authenticated(let response):
+            return AuthSession(
+                mode: .account,
+                userId: response.user?.id,
+                displayName: response.user?.name,
+                provider: nil,
+                canUpgradeGuest: false,
+                signInAvailability: .planned
+            )
+        case .unknown, .loading, .unauthenticated, .expired, .offline:
+            return .unauthenticated
+        }
+    }
+
     var banner: SessionBannerModel? {
         switch self {
         case .unknown, .loading:

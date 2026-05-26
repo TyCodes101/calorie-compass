@@ -20,6 +20,7 @@
 		10000000000000000000010B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000B /* SceneDelegate.swift */; };
 		10000000000000000000010C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000C /* Assets.xcassets */; };
 		10000000000000000000010D /* SessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000D /* SessionState.swift */; };
+		10000000000000000000010E /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000E /* AuthSession.swift */; };
 		100000000000000000000201 /* MealManagementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* MealManagementTests.swift */; };
 		100000000000000000000202 /* ProfileViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000022 /* ProfileViewTests.swift */; };
 /* End PBXBuildFile section */
@@ -48,6 +49,7 @@
 		10000000000000000000000B /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		10000000000000000000000C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		10000000000000000000000D /* SessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionState.swift; sourceTree = "<group>"; };
+		10000000000000000000000E /* AuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSession.swift; sourceTree = "<group>"; };
 		100000000000000000000021 /* MealManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealManagementTests.swift; sourceTree = "<group>"; };
 		100000000000000000000022 /* ProfileViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewTests.swift; sourceTree = "<group>"; };
 		100000000000000000000601 /* CalorieCompass.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Calorie Compass.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -85,6 +87,7 @@
 				10000000000000000000000B /* SceneDelegate.swift */,
 				10000000000000000000000C /* Assets.xcassets */,
 				10000000000000000000000D /* SessionState.swift */,
+				10000000000000000000000E /* AuthSession.swift */,
 			);
 			path = "";
 			sourceTree = "<group>";
@@ -176,7 +179,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		100000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000101, 100000000000000000000102, 100000000000000000000103, 100000000000000000000104, 100000000000000000000105, 100000000000000000000106, 100000000000000000000107, 100000000000000000000108, 100000000000000000000109, 10000000000000000000010A, 10000000000000000000010B, 10000000000000000000010D, ); runOnlyForDeploymentPostprocessing = 0; };
+		100000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000101, 100000000000000000000102, 100000000000000000000103, 100000000000000000000104, 100000000000000000000105, 100000000000000000000106, 100000000000000000000107, 100000000000000000000108, 100000000000000000000109, 10000000000000000000010A, 10000000000000000000010B, 10000000000000000000010D, 10000000000000000000010E, ); runOnlyForDeploymentPostprocessing = 0; };
 		100000000000000000000902 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000201, 100000000000000000000202, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 

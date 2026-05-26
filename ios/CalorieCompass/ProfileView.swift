@@ -119,6 +119,7 @@ struct ProfileView: View {
                                     dirtyProfile = profile; editing = true
                                 }.padding(.top, 8)
                                 AccountStatusSection(response: sessionStore.state.sessionResponse)
+                                AccountSignInEntryPoint(authSession: sessionStore.state.authSession)
                                 SessionAndPrivacyNote()
                                 if showSuccess {
                                     Text("Profile updated!").foregroundColor(.green)
@@ -240,6 +241,34 @@ struct AccountStatusSection: View {
         .padding(.top, 12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Account status. Native Sign in with Apple is coming soon and is not available in this build.")
+    }
+}
+
+struct AccountSignInEntryPoint: View {
+    let authSession: AuthSession
+    private let authService = AppleAuthService()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(authSession.isGuest ? "Guest mode" : "Account")
+                .font(.headline)
+            Text(authSession.isGuest ? "You can keep logging meals without signing in. Apple account upgrade is being prepared and will stay optional." : "Account-backed sessions will appear here after native auth is fully wired.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+            Button {
+                authService.signInWithApple { _ in
+                    // Phase 4C scaffold only: keep the button non-destructive and avoid
+                    // claiming real auth until backend Apple token verification exists.
+                }
+            } label: {
+                Label("Continue with Apple — coming soon", systemImage: "apple.logo")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(true)
+            .accessibilityHint("Sign in with Apple is planned, but it is not available in this build.")
+        }
+        .padding(.top, 12)
     }
 }
 
