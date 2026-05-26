@@ -6,10 +6,13 @@ on:
       - main
       - feature/ios-phase3-meal-management
       - feature/ios-phase4-app-store-polish
+      - feature/ios-phase4d-stabilization
   pull_request:
     branches:
       - main
+      - feature/ios-phase3-profile
       - feature/ios-phase3-meal-management
+      - feature/ios-phase4b-native-auth
 
 jobs:
   ios-build:
