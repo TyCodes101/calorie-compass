@@ -1,14 +1,21 @@
 # App Store Readiness Checklist
 
-Phase 4E tracks TestFlight readiness preparation and real-device QA planning. This document does not claim the native iOS app is ready to upload.
+Phase 4F tracks App Store/TestFlight asset preparation and manual QA support. This document does not claim the native iOS app is ready to upload.
 
 ## Current status
 - Phase 3 and Phase 4B through Phase 4D are merged into `main`.
+- Phase 4E is merged into `main`.
 - Guest mode remains the primary native path.
 - Native Sign in with Apple is scaffold-only and disabled.
 - Premium/subscriptions are not implemented.
 - Interactive simulator and real-device QA have not been completed in this environment.
 - TestFlight readiness is not claimed.
+
+## Phase 4F handoff docs
+- Use `docs/app-store-connect-metadata.md` for metadata, privacy label, review note, support URL, and account export/delete draft decisions.
+- Use `docs/ios-screenshot-plan.md` for the screenshot shot list and screenshot copy guidance.
+- Use `docs/ios-manual-qa-runbook.md` for the simulator, real-device, offline, keyboard, accessibility, and guest-mode QA script.
+- Use `docs/phase-4e-testflight-readiness.md` for the current project configuration audit.
 
 ## Bundle ID and signing
 - Choose the final production bundle identifier before upload; current placeholder is `com.caloriecompass.ios`.
@@ -30,6 +37,7 @@ Phase 4E tracks TestFlight readiness preparation and real-device QA planning. Th
 - Capture at least one session/offline state if it is relevant to review notes.
 - Capture small-device screenshots to catch truncation before App Store upload.
 - Store final screenshots outside the repo unless intentionally adding review assets.
+- Follow `docs/ios-screenshot-plan.md` for recommended scenes and copy. Do not use private meal/profile data in screenshots without tester approval.
 
 ## Privacy nutrition labels
 Prepare App Store privacy labels for:
@@ -73,5 +81,6 @@ Do not include secrets, API keys, provider tokens, or private user data in the a
 - App icons are placeholders.
 - App Store privacy labels are not complete.
 - Screenshots are not captured.
+- Support and privacy URLs are not confirmed in App Store Connect.
 - Native account sign-in/export/delete flows are incomplete.
 - Interactive simulator and real-device QA are still required.

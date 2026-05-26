@@ -2,6 +2,8 @@
 
 Use this checklist on macOS/Xcode with a simulator and at least one real iPhone before TestFlight submission.
 
+For a fuller manual QA script, including real-device, offline, keyboard, accessibility, and guest-mode regression steps, use `docs/ios-manual-qa-runbook.md`.
+
 ## Setup
 - Open `ios/CalorieCompass/CalorieCompass.xcodeproj` in Xcode.
 - Select the shared `CalorieCompass` scheme.
@@ -69,6 +71,7 @@ Use this checklist on macOS/Xcode with a simulator and at least one real iPhone 
 - Capture Today, Log, meal review, History, meal detail, Profile, and one session/offline state.
 - Confirm screenshots do not include real private meal logs or profile data unless the tester explicitly approves.
 - Store screenshots for PR/App Store review handoff.
+- Use `docs/ios-screenshot-plan.md` for shot order, suggested captions, and capture notes.
 
 ## CI artifacts
 - GitHub Actions uploads `ios-build.log`, `ios-test.log`, and `ios-test-results.xcresult` for each iOS CI run.
@@ -88,6 +91,7 @@ Use this checklist on macOS/Xcode with a simulator and at least one real iPhone 
 - Final bundle id and signing team.
 - Final original app icon.
 - Privacy nutrition labels.
+- App Store Connect metadata, support URL, privacy URL, and review notes.
 - Crash/analytics decision from `docs/telemetry-plan.md`.
 - Native account/export/delete path or reviewed web fallback.
 - Manual simulator and real-device QA results.

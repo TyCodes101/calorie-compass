@@ -4,6 +4,11 @@ Phase 4E prepares the native iOS app for real simulator/device QA and eventual T
 
 See `docs/phase-4e-testflight-readiness.md` for the current Phase 4E audit, simulator checklist, real-device checklist, App Store Connect checklist, and known blockers.
 
+Phase 4F adds manual-readiness handoff docs for App Store metadata, screenshot planning, and QA execution:
+- `docs/app-store-connect-metadata.md`
+- `docs/ios-screenshot-plan.md`
+- `docs/ios-manual-qa-runbook.md`
+
 ## Apple / signing
 - Apple Developer account active.
 - Final Apple Developer Team selected in Xcode Signing & Capabilities for Debug, Release, and Archive.
@@ -52,6 +57,7 @@ See `docs/phase-4e-testflight-readiness.md` for the current Phase 4E audit, simu
 
 ## Current blockers
 - Final bundle id, signing team, app icon, screenshots, privacy labels, telemetry decision, and manual device QA are still pending.
+- Support URL, privacy URL, review notes, and account export/delete decisions still need owner review.
 - Native Sign in with Apple is scaffold-only and is not implemented.
 - Premium/subscriptions are not implemented.
 - TestFlight readiness is not claimed until the blockers above are complete.
