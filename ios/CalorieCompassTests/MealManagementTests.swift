@@ -184,7 +184,7 @@ final class NativeSessionStateTests: XCTestCase {
         let state = NativeSessionState.fromSessionResponse(SessionResponse(account: nil, user: nil))
 
         if case .unauthenticated(let message) = state {
-            XCTAssertTrue(message.contains("Sign in is not available"))
+            XCTAssertTrue(message.contains("Native sign-in is not available"))
         } else {
             XCTFail("Expected unauthenticated state")
         }
@@ -202,7 +202,7 @@ final class NativeSessionStateTests: XCTestCase {
         XCTAssertFalse(NativeSessionState.unknown.isActionBlocked)
         XCTAssertFalse(NativeSessionState.loading.isActionBlocked)
         XCTAssertFalse(NativeSessionState.authenticated(response).isActionBlocked)
-        XCTAssertFalse(NativeSessionState.unauthenticated(message: "Sign in is not available in this build yet.").isActionBlocked)
+        XCTAssertFalse(NativeSessionState.unauthenticated(message: "Native sign-in is not available in this build yet.").isActionBlocked)
         XCTAssertTrue(NativeSessionState.expired(message: "Expired").isActionBlocked)
         XCTAssertTrue(NativeSessionState.offline(message: "Offline").isActionBlocked)
     }

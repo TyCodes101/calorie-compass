@@ -42,6 +42,7 @@ struct ProfileView: View {
                     VStack {
                         Text("No profile data").foregroundColor(.gray)
                         Button("Reload") { loadProfile() }
+                            .accessibilityLabel("Reload profile")
                     }.padding()
                 } else {
                     ScrollView {
@@ -117,6 +118,7 @@ struct ProfileView: View {
                                 Button("Edit Profile") {
                                     dirtyProfile = profile; editing = true
                                 }.padding(.top, 8)
+                                SessionAndPrivacyNote()
                                 if showSuccess {
                                     Text("Profile updated!").foregroundColor(.green)
                                 }
@@ -159,7 +161,11 @@ struct ProfileView: View {
     }
     private func saveProfile() {
         saving = true; saveError = nil
-        guard let candidate = dirtyProfile else { saveError = "Missing profile"; return }
+        guard let candidate = dirtyProfile else {
+            saving = false
+            saveError = "Profile changes are unavailable. Reload and try again."
+            return
+        }
         BackendService.saveProfile(candidate) { result in
             DispatchQueue.main.async {
                 saving = false; showConfirmSave = false
@@ -173,5 +179,15 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+}
+
+struct SessionAndPrivacyNote: View {
+    var body: some View {
+        Text("Native sign-in is not available in this build. Profile and meal data are handled by the Calorie Compass backend; use the web app for account access, export, or deletion until native account tools are added.")
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .padding(.top, 8)
+            .accessibilityLabel("Native sign-in is not available in this build. Use the web app for account access, export, or deletion until native account tools are added.")
     }
 }

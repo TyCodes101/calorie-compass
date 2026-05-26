@@ -16,12 +16,16 @@ struct DashboardView: View {
                 if loading && dashboard == nil {
                     ProgressView("Loading dashboard...")
                 } else if let error = error {
-                    VStack {
-                        Text("Failed to load dashboard.").foregroundColor(.red)
-                        Text(error).font(.caption)
+                    VStack(spacing: 12) {
+                        Text("Today is unavailable").foregroundColor(.red)
+                        Text(error)
+                            .font(.caption)
+                            .multilineTextAlignment(.center)
                         Button("Retry") { loadDashboard() }
                             .padding(.top, 8)
+                            .accessibilityLabel("Retry loading Today")
                     }
+                    .padding()
                 } else if let dashboard = dashboard {
                     ScrollView {
                         VStack(spacing: 18) {
@@ -56,7 +60,13 @@ struct DashboardView: View {
                         .refreshable { refreshDashboard() }
                     }
                 } else {
-                    Text("Dashboard empty or unavailable.")
+                    VStack(spacing: 12) {
+                        Text("Today is empty")
+                            .font(.headline)
+                        Text("Log a meal to start tracking calories and macros.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             .navigationTitle("Today")
@@ -68,6 +78,7 @@ struct DashboardView: View {
     }
 
     func loadDashboard() {
+        guard !loading else { return }
         loading = true
         error = nil
         BackendService.fetchDashboard { result in
@@ -84,6 +95,7 @@ struct DashboardView: View {
         }
     }
     func refreshDashboard() {
+        guard !refreshing else { return }
         refreshing = true
         BackendService.fetchDashboard { result in
             DispatchQueue.main.async {

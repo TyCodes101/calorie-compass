@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/ios-phase3-meal-management
+      - feature/ios-phase4-app-store-polish
   pull_request:
     branches:
       - main

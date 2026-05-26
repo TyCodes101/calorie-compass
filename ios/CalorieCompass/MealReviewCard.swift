@@ -48,12 +48,12 @@ struct MealReviewCard: View {
                             Text("Fat: \(Int(items[idx].fat))g")
                         }.font(.caption)
                         HStack {
-                            Button("Edit") {
-                                // Minimal: could show inline editing UI if safe
-                            }.disabled(true).font(.footnote) // For now, edits are disabled by policy
                             Button("Remove") {
                                 items.remove(at: idx)
-                            }.foregroundColor(.red).font(.footnote)
+                            }
+                            .foregroundColor(.red)
+                            .font(.footnote)
+                            .accessibilityLabel("Remove \(items[idx].name)")
                         }
                     }
                     .padding(8).background(Color(.secondarySystemBackground)).cornerRadius(8)
