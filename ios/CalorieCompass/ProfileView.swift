@@ -26,6 +26,8 @@ struct ProfileView: View {
     @State private var saving = false
     @State private var showConfirmSave = false
     @State private var showSuccess = false
+    @FocusState private var focusedProfileField: Bool
+    private let stabilityReporter = ConsoleStabilityReporter()
 
     var body: some View {
         NavigationView {
@@ -54,42 +56,61 @@ struct ProfileView: View {
                                             get: { dirtyProfile?.name ?? "" },
                                             set: { dirtyProfile?.name = $0 })
                                         )
+                                        .focused($focusedProfileField)
+                                        .accessibilityLabel("Profile name")
                                     }
                                     Section(header: Text("Age")) {
                                         TextField("Age", value: Binding(
                                             get: { dirtyProfile?.age },
                                             set: { dirtyProfile?.age = $0 }
                                         ), formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.numberPad)
+                                        .accessibilityLabel("Age")
                                     }
                                     Section(header: Text("Height (cm)")) {
                                         TextField("Height (cm)", value: Binding(
                                             get: { dirtyProfile?.heightCm },
                                             set: { dirtyProfile?.heightCm = $0 })
                                         , formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.numberPad)
+                                        .accessibilityLabel("Height in centimeters")
                                     }
                                     Section(header: Text("Weight (lbs)")) {
                                         TextField("Weight (lbs)", value: Binding(
                                             get: { dirtyProfile?.weightLbs },
                                             set: { dirtyProfile?.weightLbs = $0 })
                                         , formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.decimalPad)
+                                        .accessibilityLabel("Weight in pounds")
                                     }
                                     Section(header: Text("Daily Calorie Goal")) {
                                         TextField("Daily Calorie Goal", value: Binding(
                                             get: { dirtyProfile?.dailyCalorieGoal },
                                             set: { dirtyProfile?.dailyCalorieGoal = $0 })
                                         , formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.numberPad)
+                                        .accessibilityLabel("Daily calorie goal")
                                     }
                                     Section(header: Text("Protein Goal (g)")) {
                                         TextField("Protein Goal", value: Binding(
                                             get: { dirtyProfile?.proteinGoal },
                                             set: { dirtyProfile?.proteinGoal = $0 })
                                         , formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.numberPad)
+                                        .accessibilityLabel("Protein goal")
                                     }
                                     Section(header: Text("Nutrition Preferences")) {
                                         TextField("Preferences", text: Binding(
                                             get: { dirtyProfile?.nutritionPreferences ?? "" },
                                             set: { dirtyProfile?.nutritionPreferences = $0 })
                                         )
+                                        .focused($focusedProfileField)
+                                        .accessibilityLabel("Nutrition preferences")
                                     }
                                 }
                                 if let saveError = saveError {
@@ -97,10 +118,11 @@ struct ProfileView: View {
                                 }
                                 HStack {
                                     Button("Cancel") {
-                                        editing = false; dirtyProfile = profile
+                                        focusedProfileField = false; editing = false; dirtyProfile = profile
                                     }.foregroundColor(.gray)
                                     Spacer()
                                     Button("Save changes") {
+                                        focusedProfileField = false
                                         showConfirmSave = true
                                     }.disabled(saving)
                                 }.padding()
@@ -131,6 +153,7 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
             .onAppear(perform: loadProfile)
+            .scrollDismissesKeyboard(.interactively)
             .alert(isPresented: $showConfirmSave) {
                 Alert(
                     title: Text("Confirm save?"),
@@ -156,6 +179,7 @@ struct ProfileView: View {
                     profile = raw; dirtyProfile = raw
                 case .failure(let err):
                     sessionStore.apply(err)
+                    stabilityReporter.record(.networkFailure(screen: "Profile", message: err.localizedDescription))
                     error = err.localizedDescription
                 }
             }
@@ -177,7 +201,8 @@ struct ProfileView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showSuccess = false }
                 case .failure(let err):
                     sessionStore.apply(err)
-                    saveError = err.localizedDescription
+                    stabilityReporter.record(.networkFailure(screen: "Profile", message: err.localizedDescription))
+                    saveError = RetryCopy.nonDestructiveFailure(action: "save your profile", error: err)
                 }
             }
         }

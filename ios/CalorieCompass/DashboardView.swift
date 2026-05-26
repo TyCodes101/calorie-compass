@@ -9,6 +9,7 @@ struct DashboardView: View {
     @State private var loading = false
     @State private var error: String? = nil
     @State private var refreshing = false
+    private let stabilityReporter = ConsoleStabilityReporter()
     
     var body: some View {
         NavigationView {
@@ -89,13 +90,17 @@ struct DashboardView: View {
                     dashboard = resp
                 case .failure(let err):
                     sessionStore.apply(err)
+                    stabilityReporter.record(.networkFailure(screen: "Today", message: err.localizedDescription))
                     error = err.localizedDescription
                 }
             }
         }
     }
     func refreshDashboard() {
-        guard !refreshing else { return }
+        guard !refreshing else {
+            stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Today"))
+            return
+        }
         refreshing = true
         BackendService.fetchDashboard { result in
             DispatchQueue.main.async {
@@ -105,7 +110,8 @@ struct DashboardView: View {
                     dashboard = resp
                 case .failure(let err):
                     sessionStore.apply(err)
-                    error = err.localizedDescription
+                    stabilityReporter.record(.networkFailure(screen: "Today", message: err.localizedDescription))
+                    error = RetryCopy.nonDestructiveFailure(action: "refresh Today", error: err)
                 }
             }
         }
@@ -116,6 +122,8 @@ struct DashboardView: View {
             Text("\(label): \(Int(used))/\(Int(goal))")
             ProgressView(value: pct)
                 .tint(label == "Calories" ? .blue : label == "Protein" ? .green : .orange)
+                .accessibilityLabel("\(label) progress")
+                .accessibilityValue("\(Int(used)) of \(Int(goal))")
         }.padding(.vertical, 2)
     }
 }
