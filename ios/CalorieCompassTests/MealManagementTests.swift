@@ -286,6 +286,22 @@ final class AuthSessionScaffoldTests: XCTestCase {
     }
 }
 
+final class StabilitySupportTests: XCTestCase {
+    func testRetryCopyMakesFailuresNonDestructive() {
+        let message = RetryCopy.nonDestructiveFailure(action: "save this meal", error: BackendError.offline)
+
+        XCTAssertTrue(message.contains("Nothing was deleted or overwritten"))
+        XCTAssertTrue(message.contains("offline") || message.contains("network"))
+    }
+
+    func testOfflineRetryCopyKeepsCurrentScreenSafe() {
+        let message = RetryCopy.offlineMessage(action: "refresh Today")
+
+        XCTAssertTrue(message.contains("current screen is safe"))
+        XCTAssertTrue(message.contains("try again"))
+    }
+}
+
 private final class InMemoryAuthStorage: SecureAuthStorage {
     private var token: String?
 

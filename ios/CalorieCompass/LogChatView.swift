@@ -18,6 +18,8 @@ struct LogChatView: View {
     @State private var showReviewCard = false
     @State private var isSavingMeal = false
     @State private var saveError: String? = nil
+    @FocusState private var mealInputFocused: Bool
+    private let stabilityReporter = ConsoleStabilityReporter()
     
     var body: some View {
         VStack {
@@ -68,6 +70,11 @@ struct LogChatView: View {
                 TextField("Describe your meal", text: $inputText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .disabled(isLoading)
+                    .focused($mealInputFocused)
+                    .submitLabel(.send)
+                    .onSubmit(sendMessage)
+                    .accessibilityLabel("Meal description")
+                    .accessibilityHint("Describe the meal or snack you want to log.")
                 Button(action: sendMessage) {
                     if isLoading {
                         ProgressView()
@@ -79,13 +86,20 @@ struct LogChatView: View {
                 .accessibilityLabel("Send meal description")
             }.padding()
         }
+        .scrollDismissesKeyboard(.interactively)
     }
     
     func sendMessage() {
-        guard !inputText.isEmpty, !isLoading else { return }
-        let userMessage = inputText
+        let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedInput.isEmpty else { return }
+        guard !isLoading else {
+            stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Log"))
+            return
+        }
+        let userMessage = trimmedInput
         messages.append((role: "user", text: userMessage))
         inputText = ""
+        mealInputFocused = false
         isLoading = true
         error = nil
 
@@ -112,7 +126,8 @@ struct LogChatView: View {
                     }
                 case .failure(let err):
                     sessionStore.apply(err)
-                    error = "Send failed: \(err.localizedDescription)"
+                    stabilityReporter.record(.networkFailure(screen: "Log", message: err.localizedDescription))
+                    error = RetryCopy.nonDestructiveFailure(action: "send that meal description", error: err)
                 }
             }
         }
@@ -134,6 +149,11 @@ struct LogChatView: View {
     }
 
     func saveMeal(items: [MealItem]) {
+        guard !isSavingMeal else {
+            stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Meal review"))
+            return
+        }
+        guard !items.isEmpty else { return }
         isSavingMeal = true
         saveError = nil
         // Map MealItem to PostMealRequest
@@ -172,7 +192,8 @@ struct LogChatView: View {
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
                 case .failure(let err):
                     sessionStore.apply(err)
-                    saveError = "Save failed: \(err.localizedDescription)"
+                    stabilityReporter.record(.networkFailure(screen: "Meal review", message: err.localizedDescription))
+                    saveError = RetryCopy.nonDestructiveFailure(action: "save this meal", error: err)
                 }
             }
         }
