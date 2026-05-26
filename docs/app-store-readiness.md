@@ -17,20 +17,21 @@ Phase 4F tracks App Store/TestFlight asset preparation and manual QA support. Th
 - Use `docs/ios-manual-qa-runbook.md` for the simulator, real-device, offline, keyboard, accessibility, and guest-mode QA script.
 - Use `docs/phase-4e-testflight-readiness.md` for the current project configuration audit.
 
-## Bundle ID and signing
-- Choose the final production bundle identifier before upload; current placeholder is `com.caloriecompass.ios`.
-- Create or select the matching App Store Connect app record.
-- Select the final Apple Developer Team in Xcode Signing & Capabilities.
-- Confirm automatic or manual signing works for Debug, Release, Archive, and TestFlight upload.
-- Set version and build numbers intentionally before each archive.
-- Confirm the shared `CalorieCompass` scheme archives successfully on macOS.
+## Bundle ID, signing, and Xcode setup
+- The final production bundle identifier must be set in Xcode before any App Store/TestFlight submission. Current committed placeholder: `com.caloriecompass.ios`.
+- Open Xcode, select project root, and verify/change the Bundle Identifier to the intended value for production distribution.
+- Choose/confirm the matching App Store Connect app record before archive/upload.
+- Under Signing & Capabilities (in Xcode target settings), select the correct Apple Developer Team for all configurations (Debug, Release, Archive).
+- Ensure automatic or manual signing is correctly configured and error-free.
+- Set version and build numbers intentionally before EACH archive/upload build.
+- Archive using the shared `CalorieCompass` scheme on macOS only—simulator builds do not validate archive/signing settings.
 
-## App identity and visual assets
-- Replace placeholder AppIcon slots with original Calorie Compass artwork at every required size.
-- Confirm the AccentColor matches the product palette.
-- Confirm the launch screen renders cleanly on small and large iPhones.
-- Confirm app display name is `Calorie Compass`.
-- Confirm no unlicensed or random image assets are included.
+## App identity and visual assets / AppIcon checklist
+- Replace ALL placeholder AppIcon slots with final, original Calorie Compass artwork, including every required App Store and device size (see `ios/CalorieCompass/Assets.xcassets/AppIcon.appiconset/Contents.json`).
+- All icon and accent color assets MUST match the intended production palette; placeholders are not acceptable for public upload.
+- The launch screen must render cleanly for all current/target iPhones (test both large and small simulator/device sizes).
+- App display name must remain `Calorie Compass` consistently across Info.plist and Xcode project settings.
+- No unlicensed, random, or misleading images/assets can be present in the delivered archive/bundle.
 
 ## Screenshots and review assets
 - Capture current iPhone screenshots for Today, Log, History, meal detail, and Profile.

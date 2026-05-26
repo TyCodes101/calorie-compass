@@ -65,8 +65,11 @@ Phase 4F plans screenshot capture for App Store/TestFlight handoff. Screenshots 
 - Use `estimate`, `review`, `track`, and `history` language instead of `diagnose`, `prescribe`, or `guarantee`.
 - Keep all captions consistent with guest mode and scaffold-only native auth.
 
-## Handoff checklist
-- Record device model, simulator/device, iOS version, app build number, backend environment, and date captured.
-- Store final exported screenshots outside the repo unless intentionally adding review assets.
-- Keep rejected/private screenshots out of commits.
-- Pair screenshots with the manual QA result from `docs/ios-manual-qa-runbook.md`.
+## Screenshot Handoff Checklist (for App Store/TestFlight)
+- Before upload/review, complete/check off:
+  - Record: device model, simulator/device used, iOS version, app build number, backend environment, and date/capture context.
+  - Only store final published screenshot exports outside the repo unless clearly adding review assets.
+  - NEVER commit rejected, partial, or private screenshots—repo must not contain user/tester real data or rejected assets.
+  - Pair each kept/staged screenshot with the corresponding completed manual QA template (see runbook).
+  - Confirm that actual (non-placeholder) app icon appears in all intended App Store imagery (never show placeholder/missing asset in submitted screenshots).
+  - Confirm that captions, visible data, and UI state match the real current guest-mode/feature reality—never fake availability of premium, Sign in with Apple, or unimplemented features.

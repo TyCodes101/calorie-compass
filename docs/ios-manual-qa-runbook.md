@@ -87,6 +87,40 @@ Use this runbook on macOS with Xcode before any real TestFlight submission. Manu
 - Download `ios-build.log`, `ios-test.log`, and `ios-test-results.xcresult` if CI failed for the same commit.
 - Do not include private meal logs or profile data in shared QA artifacts without tester approval.
 
+---
+
+## Manual QA Pass/Fail Template
+
+> **This template must be completed for every attempted TestFlight or PR QA pass.**
+
+### Header
+- Tester name:
+- Date/time of run:
+- Branch/commit:
+- Device/simulator, iOS version:
+- Build number:
+- Backend URL:
+- Network (Wi-Fi, cellular, offline):
+
+### Checklist summary
+- Simulator smoke test: PASS / FAIL (comments:)
+- Real-device smoke test: PASS / FAIL (comments:)
+- Guest mode: PASS / FAIL (comments:)
+- Log/meal flow: PASS / FAIL (comments:)
+- History/edit/delete: PASS / FAIL (comments:)
+- Profile: PASS / FAIL (comments:)
+- Offline/network: PASS / FAIL (comments:)
+- Keyboard/input: PASS / FAIL (comments:)
+- Accessibility: PASS / FAIL (comments:)
+- Screenshots/capture (if relevant): PASS / FAIL (comments:)
+- Any unexpected crashes, errors, or UI bugs:
+
+### Outcome
+- READY for TestFlight: YES / NO (must be NO if any critical item above is FAIL)
+- Blockers/notes:
+
+---
+
 ## Exit criteria before TestFlight claim
 - Simulator smoke test completed.
 - Real-device smoke test completed.

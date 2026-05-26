@@ -49,24 +49,28 @@ This build is intended for internal TestFlight review and manual QA preparation.
 - Nutrition values are estimates for informational use and are not medical advice.
 - Account export/deletion is available through the web app today; native account/export/delete UX remains a blocker before public release.
 
-## Support and contact URL checklist
-- Confirm a public support URL before App Store submission.
-- Confirm a public privacy policy URL before App Store submission.
-- Confirm the support page explains how users can request help with meal logs, account access, export, or deletion.
-- Confirm support and privacy URLs are stable, HTTPS, and accessible without a signed-in session.
-- Do not use a private preview URL in App Store Connect.
+## Support and Privacy URL Checklist/Template
+- Support and privacy URLs must be present, HTTPS, and reachable without login before App Store/TestFlight submission.
+- Confirm a public support URL (e.g. https://yourdomain/support) is registered in App Store Connect.
+- Confirm a public privacy policy URL (e.g. https://yourdomain/privacy) is registered and covers all current features/uses.
+- Support page must clearly explain how users can:
+    - Get help with meal logs, app bugs, or feature issues
+    - Request account access/export/deletion (provide direct link/fallback to web if native tools are incomplete)
+- Privacy policy must describe data collected (meal logs, nutrition estimates, profile, diagnostics/analytics if present) and state NO diagnostics/analytics are active until explicitly added and reviewed.
+- Do not use private, non-production, or preview URLs anywhere in App Store Connect.
 
-## Privacy nutrition label checklist
-Review App Store Connect privacy labels for these categories before upload:
+## Privacy Nutrition Label Checklist (App Store Connect)
+- You must review and complete privacy labels for ALL the following BEFORE public upload:
+   - Meal logs and any raw meal/food descriptions.
+   - Nutrition estimates, meal history, and item breakdowns.
+   - Profile fields (name, age, height, weight, calorie/protein/goal data, and nutrition preferences).
+   - Any account/session identifiers linked to backend, analytics, or support systems.
+   - Diagnostics/crash data (only if/when a real crash-reporting implementation lands).
+   - Analytics data (only if/when actual privacy-audited analytics are present; do NOT claim analytics until shipped and reviewed).
 
-- Meal logs and raw food descriptions.
-- Nutrition estimates and saved meal history.
-- Profile fields such as name, age, height, weight, calorie goal, protein goal, and nutrition preferences.
-- Account/session identifiers from backend sessions.
-- Diagnostics or crash data only if a crash-reporting implementation is added later.
-- Analytics data only if product analytics are added later.
-
-Do not label telemetry/crash/analytics collection as active until a real implementation exists and is reviewed. Do not log raw meal text, profile details, auth tokens, cookies, Apple provider responses, API keys, or database/provider credentials.
+- **Explicit rule:** Do NOT claim telemetry, analytics, or crash-reporting unless a real, production implementation is in the binary and fully audited. These may remain "not collected" until reviewed and enabled.
+- Never submit or label any field as using API keys, provider secrets, database credentials, or private tokens—such data is server-side only.
+- Do not log or export real meal/profile/user data for diagnostics or screenshots unless the tester has given explicit approval and all artifacts remain private.
 
 ## Account export and deletion decision checklist
 - Decide whether native iOS must expose account export/delete before internal TestFlight or before external/public release.

@@ -21,12 +21,12 @@ Calorie Compass is not App Store-ready as a native iOS app yet. This checklist d
 
 ## Reliability and QA
 
-- Xcode project creation.
-- Simulator build and launch.
-- Physical-device QA for chat input, keyboard, safe areas, and dynamic type.
-- Duplicate-save protection with backend idempotency keys.
-- Crash/error telemetry.
-- App Store screenshots, metadata, age rating, and review notes.
+- Xcode project must be created locally (not committed for IP or security). See `ios/README.md` for how to set up from source files.
+- Simulator build and launch must be performed in a Mac/Xcode environment after local clone.
+- Physical-device QA for chat input, keyboard, safe areas, and dynamic type is required and must be recorded with the manual QA pass/fail template.
+- Duplicate-save protection with backend idempotency keys is already designed (see docs); verify as part of meal logging regression check.
+- Crash/error telemetry is NOT present; do NOT claim, label, or submit analytics or diagnostics until reviewed and implemented.
+- App Store screenshots must be captured according to the current official shot plan, with NO placeholders, debug details, or real user data. Metadata, age rating, and review notes must be completed in App Store Connect, referencing the doc checklist here.
 
 ## Product standard before release
 
