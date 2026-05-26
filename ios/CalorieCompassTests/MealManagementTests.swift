@@ -161,7 +161,7 @@ final class BackendServiceErrorMappingTests: XCTestCase {
 
 final class NativeSessionStateTests: XCTestCase {
     func testGuestSessionMapsToGuestStateWithBanner() {
-        let response = SessionResponse(account: AccountSnapshot(mode: "guest", title: "Guest mode is active", description: "Device session", persistenceLabel: nil), user: SessionUser(id: "u1", name: nil, mode: "guest"))
+        let response = SessionResponse(account: AccountSnapshot(mode: "guest", title: "Guest mode is active", description: "Device session", persistenceLabel: nil, providers: nil), user: SessionUser(id: "u1", name: nil, mode: "guest"))
         let state = NativeSessionState.fromSessionResponse(response)
 
         if case .guest = state {
@@ -173,7 +173,7 @@ final class NativeSessionStateTests: XCTestCase {
     }
 
     func testAccountSessionMapsToAuthenticatedWithoutBanner() {
-        let response = SessionResponse(account: AccountSnapshot(mode: "account", title: "Account session is active", description: nil, persistenceLabel: nil), user: SessionUser(id: "u1", name: "Tyler", mode: "account"))
+        let response = SessionResponse(account: AccountSnapshot(mode: "account", title: "Account session is active", description: nil, persistenceLabel: nil, providers: nil), user: SessionUser(id: "u1", name: "Tyler", mode: "account"))
         let state = NativeSessionState.fromSessionResponse(response)
 
         XCTAssertEqual(state, .authenticated(response))
@@ -188,6 +188,40 @@ final class NativeSessionStateTests: XCTestCase {
         } else {
             XCTFail("Expected unauthenticated state")
         }
+    }
+
+    func testAccountSnapshotDecodesProviderReadiness() throws {
+        let data = """
+        {
+          "account": {
+            "mode": "guest",
+            "title": "Guest mode is active",
+            "description": "Device session",
+            "persistenceLabel": "Live guest session",
+            "providers": [
+              {
+                "id": "apple",
+                "label": "Continue with Apple",
+                "status": "planned",
+                "detail": "Backend verification is not ready yet."
+              }
+            ]
+          },
+          "user": {
+            "id": "u1",
+            "name": null,
+            "mode": "guest"
+          }
+        }
+        """.data(using: .utf8)
+
+        let jsonData = try XCTUnwrap(data)
+        let response = try JSONDecoder().decode(SessionResponse.self, from: jsonData)
+
+        XCTAssertEqual(response.account?.providers?.first?.id, "apple")
+        XCTAssertEqual(response.account?.providers?.first?.displayLabel, "Continue with Apple")
+        XCTAssertFalse(response.account?.providers?.first?.isAvailable ?? true)
+        XCTAssertEqual(NativeSessionState.fromSessionResponse(response).sessionResponse, response)
     }
 
     func testBackendErrorsMapToSessionStates() {
@@ -206,4 +240,76 @@ final class NativeSessionStateTests: XCTestCase {
         XCTAssertTrue(NativeSessionState.expired(message: "Expired").isActionBlocked)
         XCTAssertTrue(NativeSessionState.offline(message: "Offline").isActionBlocked)
     }
+
+    func testNativeSessionStateExposesAuthSessionWithoutForcingLogin() {
+        let response = SessionResponse(account: nil, user: SessionUser(id: "guest-1", name: nil, mode: "guest"))
+        let session = NativeSessionState.fromSessionResponse(response).authSession
+
+        XCTAssertTrue(session.isGuest)
+        XCTAssertFalse(session.isSignedIn)
+        XCTAssertTrue(session.canUpgradeGuest)
+        XCTAssertEqual(session.signInAvailability, .planned)
+    }
+}
+
+final class AuthSessionScaffoldTests: XCTestCase {
+    func testAppleAuthServiceReportsUnavailableInsteadOfPretendingToSignIn() {
+        let service = AppleAuthService(storage: InMemoryAuthStorage())
+        let expectation = expectation(description: "auth scaffold responds")
+
+        service.signInWithApple { result in
+            switch result {
+            case .success(.unavailable(let message)):
+                XCTAssertTrue(message.contains("coming soon"))
+            default:
+                XCTFail("Phase 4C must not report a real Apple sign-in result")
+            }
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 1)
+    }
+
+    func testSignOutClearsStoredSessionToken() {
+        let storage = InMemoryAuthStorage(token: "server-issued-token-placeholder")
+        let service = AppleAuthService(storage: storage)
+        let expectation = expectation(description: "sign out responds")
+
+        XCTAssertTrue(service.currentSession().isSignedIn)
+        service.signOut { result in
+            XCTAssertEqual(result, .success(.signedOut))
+            XCTAssertNil(storage.readSessionToken())
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 1)
+    }
+}
+
+final class StabilitySupportTests: XCTestCase {
+    func testRetryCopyMakesFailuresNonDestructive() {
+        let message = RetryCopy.nonDestructiveFailure(action: "save this meal", error: BackendError.offline)
+
+        XCTAssertTrue(message.contains("Nothing was deleted or overwritten"))
+        XCTAssertTrue(message.contains("offline") || message.contains("network"))
+    }
+
+    func testOfflineRetryCopyKeepsCurrentScreenSafe() {
+        let message = RetryCopy.offlineMessage(action: "refresh Today")
+
+        XCTAssertTrue(message.contains("current screen is safe"))
+        XCTAssertTrue(message.contains("try again"))
+    }
+}
+
+private final class InMemoryAuthStorage: SecureAuthStorage {
+    private var token: String?
+
+    init(token: String? = nil) {
+        self.token = token
+    }
+
+    func readSessionToken() -> String? { token }
+    func saveSessionToken(_ token: String) throws { self.token = token }
+    func clearSessionToken() { token = nil }
 }

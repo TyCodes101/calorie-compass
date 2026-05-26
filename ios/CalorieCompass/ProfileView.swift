@@ -26,6 +26,8 @@ struct ProfileView: View {
     @State private var saving = false
     @State private var showConfirmSave = false
     @State private var showSuccess = false
+    @FocusState private var focusedProfileField: Bool
+    private let stabilityReporter = ConsoleStabilityReporter()
 
     var body: some View {
         NavigationView {
@@ -54,42 +56,61 @@ struct ProfileView: View {
                                             get: { dirtyProfile?.name ?? "" },
                                             set: { dirtyProfile?.name = $0 })
                                         )
+                                        .focused($focusedProfileField)
+                                        .accessibilityLabel("Profile name")
                                     }
                                     Section(header: Text("Age")) {
                                         TextField("Age", value: Binding(
                                             get: { dirtyProfile?.age },
                                             set: { dirtyProfile?.age = $0 }
                                         ), formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.numberPad)
+                                        .accessibilityLabel("Age")
                                     }
                                     Section(header: Text("Height (cm)")) {
                                         TextField("Height (cm)", value: Binding(
                                             get: { dirtyProfile?.heightCm },
                                             set: { dirtyProfile?.heightCm = $0 })
                                         , formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.numberPad)
+                                        .accessibilityLabel("Height in centimeters")
                                     }
                                     Section(header: Text("Weight (lbs)")) {
                                         TextField("Weight (lbs)", value: Binding(
                                             get: { dirtyProfile?.weightLbs },
                                             set: { dirtyProfile?.weightLbs = $0 })
                                         , formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.decimalPad)
+                                        .accessibilityLabel("Weight in pounds")
                                     }
                                     Section(header: Text("Daily Calorie Goal")) {
                                         TextField("Daily Calorie Goal", value: Binding(
                                             get: { dirtyProfile?.dailyCalorieGoal },
                                             set: { dirtyProfile?.dailyCalorieGoal = $0 })
                                         , formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.numberPad)
+                                        .accessibilityLabel("Daily calorie goal")
                                     }
                                     Section(header: Text("Protein Goal (g)")) {
                                         TextField("Protein Goal", value: Binding(
                                             get: { dirtyProfile?.proteinGoal },
                                             set: { dirtyProfile?.proteinGoal = $0 })
                                         , formatter: NumberFormatter())
+                                        .focused($focusedProfileField)
+                                        .keyboardType(.numberPad)
+                                        .accessibilityLabel("Protein goal")
                                     }
                                     Section(header: Text("Nutrition Preferences")) {
                                         TextField("Preferences", text: Binding(
                                             get: { dirtyProfile?.nutritionPreferences ?? "" },
                                             set: { dirtyProfile?.nutritionPreferences = $0 })
                                         )
+                                        .focused($focusedProfileField)
+                                        .accessibilityLabel("Nutrition preferences")
                                     }
                                 }
                                 if let saveError = saveError {
@@ -97,10 +118,11 @@ struct ProfileView: View {
                                 }
                                 HStack {
                                     Button("Cancel") {
-                                        editing = false; dirtyProfile = profile
+                                        focusedProfileField = false; editing = false; dirtyProfile = profile
                                     }.foregroundColor(.gray)
                                     Spacer()
                                     Button("Save changes") {
+                                        focusedProfileField = false
                                         showConfirmSave = true
                                     }.disabled(saving)
                                 }.padding()
@@ -118,6 +140,8 @@ struct ProfileView: View {
                                 Button("Edit Profile") {
                                     dirtyProfile = profile; editing = true
                                 }.padding(.top, 8)
+                                AccountStatusSection(response: sessionStore.state.sessionResponse)
+                                AccountSignInEntryPoint(authSession: sessionStore.state.authSession)
                                 SessionAndPrivacyNote()
                                 if showSuccess {
                                     Text("Profile updated!").foregroundColor(.green)
@@ -129,6 +153,7 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
             .onAppear(perform: loadProfile)
+            .scrollDismissesKeyboard(.interactively)
             .alert(isPresented: $showConfirmSave) {
                 Alert(
                     title: Text("Confirm save?"),
@@ -154,6 +179,7 @@ struct ProfileView: View {
                     profile = raw; dirtyProfile = raw
                 case .failure(let err):
                     sessionStore.apply(err)
+                    stabilityReporter.record(.networkFailure(screen: "Profile", message: err.localizedDescription))
                     error = err.localizedDescription
                 }
             }
@@ -175,10 +201,99 @@ struct ProfileView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showSuccess = false }
                 case .failure(let err):
                     sessionStore.apply(err)
-                    saveError = err.localizedDescription
+                    stabilityReporter.record(.networkFailure(screen: "Profile", message: err.localizedDescription))
+                    saveError = RetryCopy.nonDestructiveFailure(action: "save your profile", error: err)
                 }
             }
         }
+    }
+}
+
+struct AccountStatusSection: View {
+    let response: SessionResponse?
+
+    private var title: String {
+        response?.account?.title ?? "Account tools are coming soon"
+    }
+
+    private var description: String {
+        response?.account?.description ?? "Native Sign in with Apple is planned, but this build does not include a complete account sign-in flow yet."
+    }
+
+    private var providers: [AuthProviderSnapshot] {
+        response?.account?.providers ?? [
+            AuthProviderSnapshot(
+                id: "apple",
+                label: "Continue with Apple",
+                status: "planned",
+                detail: "Coming soon after backend verification and secure session storage are complete."
+            )
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Account status")
+                .font(.headline)
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            Text(description)
+                .font(.footnote)
+                .foregroundColor(.secondary)
+            ForEach(providers) { provider in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text(provider.displayLabel)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Spacer()
+                        Text(provider.isAvailable ? "Available" : "Coming soon")
+                            .font(.caption)
+                            .foregroundColor(provider.isAvailable ? .green : .secondary)
+                    }
+                    if let detail = provider.detail {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(10)
+                .background(Color.secondary.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+        .padding(.top, 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Account status. Native Sign in with Apple is coming soon and is not available in this build.")
+    }
+}
+
+struct AccountSignInEntryPoint: View {
+    let authSession: AuthSession
+    private let authService = AppleAuthService()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(authSession.isGuest ? "Guest mode" : "Account")
+                .font(.headline)
+            Text(authSession.isGuest ? "You can keep logging meals without signing in. Apple account upgrade is being prepared and will stay optional." : "Account-backed sessions will appear here after native auth is fully wired.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+            Button {
+                authService.signInWithApple { _ in
+                    // Phase 4C scaffold only: keep the button non-destructive and avoid
+                    // claiming real auth until backend Apple token verification exists.
+                }
+            } label: {
+                Label("Continue with Apple — coming soon", systemImage: "apple.logo")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(true)
+            .accessibilityHint("Sign in with Apple is planned, but it is not available in this build.")
+        }
+        .padding(.top, 12)
     }
 }
 

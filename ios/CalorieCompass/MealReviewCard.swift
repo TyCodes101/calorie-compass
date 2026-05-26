@@ -23,6 +23,7 @@ struct MealReviewCard: View {
     @Binding var showCard: Bool
     @State private var isSaving = false
     @State private var error: String?
+    @FocusState private var editingMealItem: Bool
     var onConfirm: ([MealItem]) -> Void
     var onCancel: () -> Void
     
@@ -31,6 +32,7 @@ struct MealReviewCard: View {
             VStack(spacing: 16) {
                 Text("Review your meal before saving")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 ForEach(items.indices, id: \ .self) { idx in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -57,6 +59,7 @@ struct MealReviewCard: View {
                         }
                     }
                     .padding(8).background(Color(.secondarySystemBackground)).cornerRadius(8)
+                    .accessibilityElement(children: .combine)
                 }
                 if let error = error { Text(error).foregroundColor(.red) }
                 HStack {
@@ -68,6 +71,8 @@ struct MealReviewCard: View {
                         if isSaving { ProgressView() } else { Text("Confirm & Save") }
                     }
                     .disabled(isSaving || items.isEmpty)
+                    .accessibilityLabel("Confirm and save reviewed meal")
+                    .accessibilityHint("Saves this meal only after review.")
                 }
             }
             .padding()
@@ -75,6 +80,7 @@ struct MealReviewCard: View {
             .cornerRadius(14)
             .shadow(radius: 10)
             .padding(.horizontal, 20)
+            .accessibilityElement(children: .contain)
         }
     }
 
