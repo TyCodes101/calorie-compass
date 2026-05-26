@@ -377,7 +377,7 @@ export function expectNoGenericMixedMeal(turn: AssistantQaTurn) {
 
 export function expectNoProductCopy(turn: AssistantQaTurn) {
   assertQa(
-    !/\b(?:premium|mobile-first|product|dashboard|retention|startup)\b/i.test(turn.assistantReply),
+    !/\b(?:premium|mobile-first|product|dashboard|retention|startup)\b|that keeps this one on the lighter side/i.test(turn.assistantReply),
     turn,
     'Assistant sounded like product copy instead of a nutrition chat.',
     'Reply should feel like a user-facing food assistant.',

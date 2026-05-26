@@ -699,6 +699,59 @@ describe('meal assistant conversational coverage', () => {
     expect(answer?.assistant_reply).not.toMatch(/^2 eggs?, about 140 calories/i);
   });
 
+  it('keeps smoothie clarification answers from collapsing to only protein powder', async () => {
+    const responses = await runConversation([
+      'I had a smoothie',
+      'banana peanut butter protein powder and milk, about 20 oz',
+    ]);
+    const answer = responses[1];
+    const names = answer?.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ') ?? '';
+
+    expect(answer?.intent).toBe('clarification_answer');
+    expect(names).toMatch(/smoothie/i);
+    expect(names).toMatch(/banana/i);
+    expect(names).toMatch(/peanut butter/i);
+    expect(names).toMatch(/protein powder/i);
+    expect(names).toMatch(/milk/i);
+    expect(answer?.meal.items).toHaveLength(1);
+    expect(answer?.meal.totals.calories).toBeGreaterThan(300);
+    expect(answer?.meal.totals.protein).toBeGreaterThan(20);
+    expect(answer?.assistant_reply).not.toMatch(/nutritional powder mix/i);
+  });
+
+  it('keeps salad clarification answers from collapsing to only croutons', async () => {
+    const responses = await runConversation([
+      'I had a salad',
+      'big chicken caesar salad with croutons',
+    ]);
+    const answer = responses[1];
+    const names = answer?.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ') ?? '';
+
+    expect(answer?.intent).toBe('clarification_answer');
+    expect(names).toMatch(/chicken caesar salad/i);
+    expect(names).toMatch(/croutons/i);
+    expect(answer?.meal.items).toHaveLength(1);
+    expect(answer?.meal.totals.calories).toBeGreaterThan(350);
+    expect(answer?.assistant_reply).not.toMatch(/^croutons|100g croutons/i);
+  });
+
+  it('keeps sandwich clarification answers from dropping cheese and mayo', async () => {
+    const responses = await runConversation([
+      'I had a sandwich',
+      'turkey sandwich on wheat with cheese and mayo',
+    ]);
+    const answer = responses[1];
+    const names = answer?.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ') ?? '';
+
+    expect(answer?.intent).toBe('clarification_answer');
+    expect(names).toMatch(/turkey sandwich/i);
+    expect(names).toMatch(/wheat/i);
+    expect(names).toMatch(/cheese/i);
+    expect(names).toMatch(/mayo/i);
+    expect(answer?.meal.items).toHaveLength(1);
+    expect(answer?.meal.totals.calories).toBeGreaterThan(350);
+  });
+
   it.each([
     {
       messages: ['I had a sandwich', 'examples?'],
@@ -1234,7 +1287,7 @@ describe('meal assistant conversational coverage', () => {
 
     expect(response.intent).toBe('new_food_item');
     expect(response.assistant_reply).toMatch(/toast/i);
-    expect(response.assistant_reply).toMatch(/lighter side for protein today/i);
+    expect(response.assistant_reply).toMatch(/light on protein|protein-heavy add-on/i);
     expect(response.assistant_reply).not.toMatch(/bad|cheat|crush it|let'?s go/i);
   });
 
@@ -1632,6 +1685,21 @@ describe('meal assistant conversational coverage', () => {
     expect(followUp?.assistant_reply).toMatch(/fairlife|greek yogurt|cottage cheese|protein pudding|shake|berries/i);
     expect(followUp?.assistant_reply).not.toMatch(/chipotle|chicken rice bowl|burrito/i);
     expect(followUp?.assistant_reply).not.toMatch(/that keeps this one on the lighter side/i);
+  });
+
+  it('repeats the just-saved shake when the user says same shake without durable memory yet', async () => {
+    const responses = await runConversation(['Fairlife 42g shake', 'make it two and save it', 'same shake'], {
+      saveMeal: vi.fn().mockResolvedValue(undefined),
+    });
+    const repeated = responses[2];
+    const names = repeated?.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ') ?? '';
+
+    expect(repeated?.intent).toBe('repeat_meal');
+    expect(names).toMatch(/fairlife/i);
+    expect(repeated?.meal.items[0]?.quantity).toBe(2);
+    expect(repeated?.meal.items[0]?.unit).toMatch(/bottle|shake|serving/i);
+    expect(repeated?.assistant_reply).toMatch(/same|fairlife|shake|again|loaded|using/i);
+    expect(repeated?.assistant_reply).not.toMatch(/protein shake,? around 150|generic/i);
   });
 
   it('adds calm meal-pattern guidance without sounding naggy', async () => {
@@ -2443,6 +2511,44 @@ describe('meal assistant conversational coverage', () => {
     expect(names).toContain('chips with guacamole');
     expect(response.assistant_reply).toMatch(/regular chicken|chips with guac/i);
     expect(response.assistant_reply).not.toMatch(/usda|match|reference/i);
+  });
+
+  it('handles compound no-guac and regular-chicken corrections without removing the bowl', async () => {
+    const responses = await runConversation([
+      'chipotle bowl with white rice double chicken cheese corn salsa lettuce',
+      'remove cheese and add guac',
+      'actually no guac and make chicken regular',
+    ]);
+    const final = responses[2];
+    const names = final?.meal.items.map((item) => item.food_name.toLowerCase()).join(' | ') ?? '';
+
+    expect(final?.intent).toBe('correction');
+    expect(names).toMatch(/chipotle.*bowl/i);
+    expect(names).not.toMatch(/guac|guacamole/i);
+    expect(names).not.toMatch(/double chicken/i);
+    expect(final?.meal.items.length).toBeGreaterThanOrEqual(1);
+    expect(final?.assistant_reply).toMatch(/guac|regular chicken/i);
+    expect(final?.assistant_reply).not.toMatch(/removed chipotle bowl/i);
+  });
+
+  it('treats no-prefixed negative feedback as repair instead of a quantity mutation', async () => {
+    const responses = await runConversation([
+      '3 cups grilled chicken',
+      'no that is way off',
+      'actually 2 cups',
+    ]);
+    const complaint = responses[1];
+    const repaired = responses[2];
+
+    expect(complaint?.intent).toBe('complaint_repair');
+    expect(complaint?.meal.items).toHaveLength(1);
+    expect(complaint?.meal.items[0]?.food_name).toMatch(/chicken/i);
+    expect(complaint?.meal.items[0]?.quantity).toBe(3);
+    expect(complaint?.meal.items[0]?.unit).toBe('cup');
+    expect(complaint?.assistant_reply).toMatch(/what should i change|what should i fix|currently have/i);
+    expect(complaint?.assistant_reply).not.toMatch(/switched|updated that|i can log|way off/i);
+    expect(repaired?.meal.items[0]?.quantity).toBe(2);
+    expect(repaired?.meal.items[0]?.unit).toBe('cup');
   });
 
   it('keeps Wendy sandwich and fries as separate represented foods', async () => {

@@ -596,7 +596,7 @@ describe('assistant chatbot QA golden scenarios', () => {
 
     expectBaselineQuality(initialTurn);
     expectNoClarification(initialTurn);
-    expectServing(initialTurn, /rice cakes/i, 2, 'cakes');
+    expectServing(initialTurn, /rice cakes/i, 2, 'cake');
 
     for (const turn of [noTurn, wrongTurn]) {
       expectBaselineQuality(turn);
@@ -609,7 +609,7 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectCorrectionReply(repairTurn);
     expectMealItemCount(repairTurn, 1);
     expectMealContains(repairTurn, [/caramel rice cakes/i]);
-    expectServing(repairTurn, /caramel rice cakes/i, 3, 'cakes');
+    expectServing(repairTurn, /caramel rice cakes/i, 3, 'cake');
     expectReplyNotMatches(repairTurn, /\bno\b|that'?s wrong|need a little more detail/i, 'Repair should not expose complaint text as food.');
   });
 
@@ -619,11 +619,11 @@ describe('assistant chatbot QA golden scenarios', () => {
       { message: '1 tsp peanut butter', matcher: /peanut butter/i, quantity: 1, unit: 'tsp' },
       { message: '4 oz grilled chicken', matcher: /chicken/i, quantity: 4, unit: 'oz' },
       { message: '100 grams grilled chicken', matcher: /chicken/i, quantity: 100, unit: 'g' },
-      { message: '2 slices of toast', matcher: /toast/i, quantity: 2, unit: 'slices' },
-      { message: '3 pieces of bacon', matcher: /bacon/i, quantity: 3, unit: 'pieces' },
+      { message: '2 slices of toast', matcher: /toast/i, quantity: 2, unit: 'slice' },
+      { message: '3 pieces of bacon', matcher: /bacon/i, quantity: 3, unit: 'piece' },
       { message: '1 can of beans', matcher: /beans/i, quantity: 1, unit: 'can' },
-      { message: '2 scoops protein powder', matcher: /protein powder/i, quantity: 2, unit: 'scoops' },
-      { message: '2 servings greek yogurt', matcher: /greek yogurt/i, quantity: 2, unit: 'servings' },
+      { message: '2 scoops protein powder', matcher: /protein powder/i, quantity: 2, unit: 'scoop' },
+      { message: '2 servings greek yogurt', matcher: /greek yogurt/i, quantity: 2, unit: 'serving' },
     ];
 
     for (const qaCase of cases) {
@@ -888,6 +888,224 @@ describe('assistant chatbot QA golden scenarios', () => {
     expectItemCaloriesInRange(tacoBellTurn, /spicy potato soft taco/i, 700, 760);
     expectTrustedSourceFor(tacoBellTurn, /spicy potato soft taco/i);
     expectReplyNotMatches(tacoBellTurn, /little more detail|reliable estimate|what kind/i, 'Recognized restaurant menu items should proceed to review.');
+  });
+
+  it('logs basic meal additions and saves without losing the meal', async () => {
+    const conversation = await runQaScenario({
+      name: 'basic logging add juice save',
+      messages: ['I had 2 eggs and toast', 'add orange juice', 'save it'],
+    });
+    const [initialTurn, addTurn, saveTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectNoClarification(initialTurn);
+    expectMealContains(initialTurn, [/eggs?/i, /toast/i]);
+    expectTotalCaloriesInRange(initialTurn, 220, 280);
+
+    expectBaselineQuality(addTurn);
+    expectCorrectionReply(addTurn);
+    expectMealContains(addTurn, [/eggs?/i, /toast/i, /orange juice/i]);
+    expectTotalCaloriesInRange(addTurn, 320, 420);
+
+    expectBaselineQuality(saveTurn);
+    expectMealContains(saveTurn, [/eggs?/i, /toast/i, /orange juice/i]);
+    expect(saveTurn.response.next_state.saved).toBe(true);
+    expectReplyMatches(saveTurn, /saved|logged|in/i, 'Save turn should confirm the final active meal was saved.');
+  });
+
+  it('handles cereal clarification as one active meal instead of restarting each answer', async () => {
+    const conversation = await runQaScenario({
+      name: 'cereal clarification transcript',
+      messages: ['I had cereal', 'Cinnamon Toast Crunch', 'about 2 bowls', 'with whole milk'],
+    });
+    const [initialTurn, brandTurn, bowlTurn, milkTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expect(initialTurn.response.should_ask_clarification || initialTurn.response.next_state.currentMealItems.length > 0).toBe(true);
+
+    expectBaselineQuality(brandTurn);
+    expectMealContains(brandTurn, [/cinnamon toast crunch|cereal/i]);
+    expectMealItemCount(brandTurn, 1);
+
+    expectBaselineQuality(bowlTurn);
+    expectCorrectionReply(bowlTurn);
+    expectMealContains(bowlTurn, [/cinnamon toast crunch|cereal/i]);
+    expectServing(bowlTurn, /cinnamon toast crunch|cereal/i, 2, 'bowl');
+
+    expectBaselineQuality(milkTurn);
+    expectCorrectionReply(milkTurn);
+    expectMealContains(milkTurn, [/cinnamon toast crunch|cereal/i, /whole milk/i]);
+    expectMealDoesNotContain(milkTurn, [/what/i, /examples/i, /frozen dinner/i]);
+  });
+
+  it('keeps casual workout interruptions from resetting the active meal', async () => {
+    const conversation = await runQaScenario({
+      name: 'casual workout interruption meal continuity',
+      messages: ['I had chicken and rice', 'also my workout destroyed me today', 'anyway add broccoli too'],
+    });
+    const [initialTurn, workoutTurn, broccoliTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/chicken/i, /rice/i]);
+
+    expectBaselineQuality(workoutTurn);
+    expectMealUnchanged(workoutTurn);
+    expectReplyNotMatches(workoutTurn, /calories total|logged|added/i, 'Workout aside should be conversational, not a food log.');
+
+    expectBaselineQuality(broccoliTurn);
+    expectCorrectionReply(broccoliTurn);
+    expectMealContains(broccoliTurn, [/chicken/i, /rice/i, /broccoli/i]);
+  });
+
+  it('allows wait-also additions after save by reopening the just-saved meal', async () => {
+    const conversation = await runQaScenario({
+      name: 'save then wait also add banana',
+      messages: ['I had cottage cheese', 'save it', 'wait also add a banana'],
+    });
+    const [initialTurn, saveTurn, bananaTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/cottage cheese/i]);
+    expect(saveTurn.response.next_state.saved).toBe(true);
+
+    expectBaselineQuality(bananaTurn);
+    expectCorrectionReply(bananaTurn);
+    expectMealContains(bananaTurn, [/cottage cheese/i, /banana/i]);
+    expect(bananaTurn.response.next_state.saved).toBe(false);
+    expectReplyNotMatches(bananaTurn, /starting fresh|new meal/i, 'Wait-also should amend the saved meal preview, not feel like a reset.');
+  });
+
+  it('handles multi-meal continuity without overwriting the prior meal turn text', async () => {
+    const conversation = await runQaScenario({
+      name: 'breakfast lunch dinner continuity',
+      messages: ['for breakfast I had oatmeal', "for lunch I had Chick-fil-A nuggets", 'for dinner steak and potatoes'],
+    });
+    const [breakfastTurn, lunchTurn, dinnerTurn] = conversation.turns;
+
+    expectBaselineQuality(breakfastTurn);
+    expectMealContains(breakfastTurn, [/oatmeal/i]);
+    expect(breakfastTurn.response.next_state.mealType).toBe('breakfast');
+
+    expectBaselineQuality(lunchTurn);
+    expectMealContains(lunchTurn, [/chick-fil-a|nuggets/i]);
+    expectMealDoesNotContain(lunchTurn, [/oatmeal/i]);
+    expect(lunchTurn.response.next_state.mealType).toBe('lunch');
+
+    expectBaselineQuality(dinnerTurn);
+    expectMealContains(dinnerTurn, [/steak/i, /potatoes/i]);
+    expectMealDoesNotContain(dinnerTurn, [/nuggets/i, /oatmeal/i]);
+    expect(dinnerTurn.response.next_state.mealType).toBe('dinner');
+  });
+
+  it('handles removal flow including remove everything', async () => {
+    const conversation = await runQaScenario({
+      name: 'remove coke then remove everything',
+      messages: ['I had a Chipotle bowl and a Coke Zero', 'remove the Coke', 'actually remove everything'],
+    });
+    const [, removeCokeTurn, removeEverythingTurn] = conversation.turns;
+
+    expectBaselineQuality(removeCokeTurn);
+    expectCorrectionReply(removeCokeTurn);
+    expectMealContains(removeCokeTurn, [/chipotle/i]);
+    expectMealDoesNotContain(removeCokeTurn, [/coke/i]);
+
+    expectBaselineQuality(removeEverythingTurn);
+    expect(removeEverythingTurn.response.next_state.currentMealItems).toHaveLength(0);
+    expectReplyMatches(removeEverythingTurn, /removed|cleared|starting fresh|empty/i, 'Remove everything should clear the active meal.');
+  });
+
+  it('handles pizza pronoun corrections and additions without duplicating pizza', async () => {
+    const conversation = await runQaScenario({
+      name: 'pizza pronoun correction transcript',
+      messages: ['I had pizza', 'make that 3 slices', 'actually only 2', 'add ranch with it'],
+    });
+    const [, threeTurn, twoTurn, ranchTurn] = conversation.turns;
+
+    expectBaselineQuality(threeTurn);
+    expectCorrectionReply(threeTurn);
+    expectServing(threeTurn, /pizza/i, 3, 'slice');
+
+    expectBaselineQuality(twoTurn);
+    expectCorrectionReply(twoTurn);
+    expectMealItemCount(twoTurn, 1);
+    expectServing(twoTurn, /pizza/i, 2, 'slice');
+
+    expectBaselineQuality(ranchTurn);
+    expectCorrectionReply(ranchTurn);
+    expectMealContains(ranchTurn, [/pizza/i, /ranch/i]);
+    expectMealItemCount(ranchTurn, 2);
+  });
+
+  it('handles barely-ate edge case without logging emotional phrasing', async () => {
+    const conversation = await runQaScenario({
+      name: 'barely ate coffee muffin corrections',
+      messages: ['i barely ate today', 'just coffee', 'wait no i had a muffin too', 'actually two muffins', 'nvm one'],
+    });
+    const [barelyTurn, coffeeTurn, muffinTurn, twoMuffinsTurn, oneMuffinTurn] = conversation.turns;
+
+    expectBaselineQuality(barelyTurn);
+    expectMealItemCount(barelyTurn, 0);
+    expectReplyNotMatches(barelyTurn, /barely ate.*calories|i can log/i, 'Emotional context should not become a fake food.');
+
+    expectBaselineQuality(coffeeTurn);
+    expectMealContains(coffeeTurn, [/coffee/i]);
+
+    expectBaselineQuality(muffinTurn);
+    expectCorrectionReply(muffinTurn);
+    expectMealContains(muffinTurn, [/coffee/i, /muffin/i]);
+
+    expectBaselineQuality(twoMuffinsTurn);
+    expectCorrectionReply(twoMuffinsTurn);
+    expectServing(twoMuffinsTurn, /muffin/i, 2, 'muffin');
+
+    expectBaselineQuality(oneMuffinTurn);
+    expectCorrectionReply(oneMuffinTurn);
+    expectServing(oneMuffinTurn, /muffin/i, 1, 'muffin');
+    expectMealContains(oneMuffinTurn, [/coffee/i]);
+  });
+
+  it('runs a long realistic day without assistant reset or stale state', async () => {
+    const conversation = await runQaScenario({
+      name: 'long realistic mixed user day',
+      messages: [
+        'hey',
+        'for breakfast i had oatmeal with blueberries',
+        'add peanut butter',
+        'actually make the oatmeal half a cup',
+        'lol this is annoying',
+        'save it',
+        'for lunch I had a Chipotle bowl with double chicken and cheese plus a Coke Zero',
+        'actually no cheese and add guac',
+        'make the chicken regular',
+        'how much protein do I have left?',
+        'what should I snack on as a healthy treat?',
+        'wait add a Quest protein bar',
+        'save it',
+        'for dinner steak and potatoes',
+        'make the potatoes 2 cups',
+        'remove steak',
+        'actually add grilled chicken instead',
+        'that looks right save it',
+      ],
+      context: {
+        remainingProtein: 63,
+        remainingCalories: 720,
+        nutritionPreferences: 'high protein',
+      },
+    });
+
+    for (const turn of conversation.turns) {
+      expectBaselineQuality(turn);
+      expectNoUnrelatedFood(turn, [/frozen dinner/i, /nutritional powder/i, /what a melon/i, /estimated mixed meal/i]);
+    }
+
+    const finalTurn = conversation.turns.at(-1);
+    expect(finalTurn).toBeTruthy();
+    expect(finalTurn?.response.next_state.saved).toBe(true);
+    expectMealContains(finalTurn!, [/potatoes/i, /grilled chicken/i]);
+    expectMealDoesNotContain(finalTurn!, [/steak/i]);
+    expectReplyMatches(finalTurn!, /saved|logged|in/i, 'Long session should save the final corrected dinner.');
+    expectReplyNotMatches(finalTurn!, /what did you eat today|send the meal whenever/i, 'Long session should not feel like the assistant reset.');
   });
 });
 
