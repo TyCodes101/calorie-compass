@@ -222,7 +222,7 @@ enum BackendError: LocalizedError, Equatable {
 }
 
 class BackendService {
-    static let baseURL = URL(string: "https://calorie-compass-chi.vercel.app")!
+    static var baseURL: URL { AppConfig.current.backendBaseURL }
 
     private static func perform<T: Decodable>(_ urlRequest: URLRequest, completion: @escaping (Result<T, Error>) -> Void) {
         let task = URLSession.shared.dataTask(with: urlRequest) { data, response, error in

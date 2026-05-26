@@ -7,6 +7,7 @@ on:
       - feature/ios-phase3-meal-management
       - feature/ios-phase4-app-store-polish
       - feature/ios-phase4d-stabilization
+      - feature/ios-phase4e-testflight-readiness
   pull_request:
     branches:
       - main

@@ -159,6 +159,44 @@ final class BackendServiceErrorMappingTests: XCTestCase {
     }
 }
 
+final class AppConfigTests: XCTestCase {
+    func testDefaultBaseURLUsesProductionBackend() {
+        let url = AppConfig.resolvedBaseURL(
+            bundleValue: nil,
+            environmentValue: nil
+        )
+
+        XCTAssertEqual(url.absoluteString, AppConfig.defaultBackendBaseURLString)
+    }
+
+    func testEnvironmentBaseURLOverridesBundleValue() {
+        let url = AppConfig.resolvedBaseURL(
+            bundleValue: "https://bundle.example.com",
+            environmentValue: "https://env.example.com"
+        )
+
+        XCTAssertEqual(url.absoluteString, "https://env.example.com")
+    }
+
+    func testBundleBaseURLIsUsedWhenEnvironmentIsMissing() {
+        let url = AppConfig.resolvedBaseURL(
+            bundleValue: "https://bundle.example.com",
+            environmentValue: nil
+        )
+
+        XCTAssertEqual(url.absoluteString, "https://bundle.example.com")
+    }
+
+    func testInvalidBaseURLFallsBackToProduction() {
+        let url = AppConfig.resolvedBaseURL(
+            bundleValue: "not a url",
+            environmentValue: "file:///tmp/local"
+        )
+
+        XCTAssertEqual(url.absoluteString, AppConfig.defaultBackendBaseURLString)
+    }
+}
+
 final class NativeSessionStateTests: XCTestCase {
     func testGuestSessionMapsToGuestStateWithBanner() {
         let response = SessionResponse(account: AccountSnapshot(mode: "guest", title: "Guest mode is active", description: "Device session", persistenceLabel: nil, providers: nil), user: SessionUser(id: "u1", name: nil, mode: "guest"))

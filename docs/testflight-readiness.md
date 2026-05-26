@@ -1,5 +1,9 @@
 # TestFlight Readiness Checklist
 
+Phase 4E prepares the native iOS app for real simulator/device QA and eventual TestFlight. TestFlight readiness is not yet claimed.
+
+See `docs/phase-4e-testflight-readiness.md` for the current Phase 4E audit, simulator checklist, real-device checklist, App Store Connect checklist, and known blockers.
+
 ## Apple / signing
 - Apple Developer account active.
 - Final Apple Developer Team selected in Xcode Signing & Capabilities for Debug, Release, and Archive.
@@ -24,6 +28,8 @@
 
 ## Backend readiness
 - Confirm production backend URL: `https://calorie-compass-chi.vercel.app`.
+- Confirm generated Info.plist `CALORIE_COMPASS_BASE_URL` is set to the production backend for upload builds.
+- Use scheme environment override only for simulator/local QA; do not commit secrets or private URLs.
 - Confirm native requests remain backend-mediated.
 - Confirm auth/session plan before external testers; current native app has safe session-expired messaging but not full native sign-in.
 - Add crash/error logging before wider TestFlight using `docs/telemetry-plan.md` as the privacy boundary.
@@ -46,5 +52,6 @@
 
 ## Current blockers
 - Final bundle id, signing team, app icon, screenshots, privacy labels, telemetry decision, and manual device QA are still pending.
-- Native Sign in with Apple is not part of Phase 4A and is not implemented.
+- Native Sign in with Apple is scaffold-only and is not implemented.
+- Premium/subscriptions are not implemented.
 - TestFlight readiness is not claimed until the blockers above are complete.

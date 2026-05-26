@@ -1,20 +1,14 @@
 # App Store Readiness Checklist
 
-Phase 4A tracks App Store and TestFlight polish only. This document does not claim the native iOS app is ready to upload.
+Phase 4E tracks TestFlight readiness preparation and real-device QA planning. This document does not claim the native iOS app is ready to upload.
 
 ## Current status
-- Phase 3 native meal management is in PR #1 and is not assumed to be merged into `main`.
-- iOS CI has verified build and tests on GitHub Actions macOS/Xcode 16.4 for the Phase 3 branch.
-- Interactive simulator and real-device QA has not been completed.
-- Full native Sign in with Apple is not implemented.
-
-## Phase 3 PR cleanup suggestion
-If permissions allow, update PR #1 to:
-
-- Title: `Native iOS Phase 3 meal management and TestFlight readiness`
-- Body clearly states CI is verified, manual simulator/device QA is still required, TestFlight readiness is not claimed, native sign-in is not implemented, and signing/icon/privacy work remains pending.
-
-The GitHub integration used for Phase 4A could inspect PR #1 but could not update it because GitHub returned `403 Resource not accessible by integration`.
+- Phase 3 and Phase 4B through Phase 4D are merged into `main`.
+- Guest mode remains the primary native path.
+- Native Sign in with Apple is scaffold-only and disabled.
+- Premium/subscriptions are not implemented.
+- Interactive simulator and real-device QA have not been completed in this environment.
+- TestFlight readiness is not claimed.
 
 ## Bundle ID and signing
 - Choose the final production bundle identifier before upload; current placeholder is `com.caloriecompass.ios`.

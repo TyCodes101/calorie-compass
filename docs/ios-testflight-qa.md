@@ -7,6 +7,7 @@ Use this checklist on macOS/Xcode with a simulator and at least one real iPhone 
 - Select the shared `CalorieCompass` scheme.
 - Confirm signing team/bundle id are intentionally configured for the testing account.
 - Confirm the build number matches the App Store Connect/TestFlight build under review.
+- Confirm `CALORIE_COMPASS_BASE_URL` points at the intended backend. Use production for upload builds and a scheme environment override only for simulator/local QA.
 - Build on an iPhone simulator, then on a real device.
 - Before manual QA, confirm the latest GitHub Actions `iOS CI` run is green for this branch and download logs/xcresult artifacts if debugging is needed.
 
@@ -44,6 +45,7 @@ Use this checklist on macOS/Xcode with a simulator and at least one real iPhone 
 - Edit/cancel/save flows work and show errors safely.
 - Profile changes do not break Today, Log, or History.
 - Confirm the profile note directs users to the web app for account access, export, and deletion while native sign-in is unavailable.
+- Confirm the disabled Apple sign-in entry point remains clearly marked as coming soon and cannot start real auth.
 
 ## Offline/session behavior
 - Airplane mode: Today, History, Log, and Profile show clear retry/offline messaging.
@@ -89,3 +91,4 @@ Use this checklist on macOS/Xcode with a simulator and at least one real iPhone 
 - Crash/analytics decision from `docs/telemetry-plan.md`.
 - Native account/export/delete path or reviewed web fallback.
 - Manual simulator and real-device QA results.
+- TestFlight readiness is not claimed until every blocker above is cleared.
