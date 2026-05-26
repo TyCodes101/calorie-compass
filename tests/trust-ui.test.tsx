@@ -120,7 +120,7 @@ describe('trust ui helpers', () => {
 
     expect(summary.trustedCount).toBe(2);
     expect(summary.estimatedCount).toBe(1);
-    expect(summary.coverageSummary).toBe('2 of 3 foods matched trusted sources');
+    expect(summary.coverageSummary).toBe('2 of 3 foods matched structured sources');
     expect(summary.estimatedSummary).toBe('1 food estimated');
   });
 });

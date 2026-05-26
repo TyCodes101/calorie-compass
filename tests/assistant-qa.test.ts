@@ -820,6 +820,76 @@ describe('assistant chatbot QA golden scenarios', () => {
     }
   });
 
+  it('handles a messy consumer-style restaurant edit and save chain', async () => {
+    const conversation = await runQaScenario({
+      name: 'messy chipotle edit chain',
+      messages: [
+        'chipotle bowl with white rice chicken cheese and lettuce',
+        'delete cheese, add guac, and save it',
+        'save it',
+      ],
+    });
+    const [initialTurn, savedTurn, duplicateSaveTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/chipotle/i, /chicken/i]);
+    expectNoClarification(initialTurn);
+
+    expectBaselineQuality(savedTurn);
+    expectCorrectionReply(savedTurn);
+    expectMealContains(savedTurn, [/chipotle/i, /guac|guacamole/i]);
+    expectMealDoesNotContain(savedTurn, [/\bcheese\b/i]);
+    expectReplyMatches(savedTurn, /saved|logged/i, 'Compound edit with save should confirm the meal was saved.');
+
+    expectBaselineQuality(duplicateSaveTurn);
+    expectMealContains(duplicateSaveTurn, [/chipotle/i, /guac|guacamole/i]);
+    expectMealDoesNotContain(duplicateSaveTurn, [/\bcheese\b/i]);
+    expectReplyMatches(duplicateSaveTurn, /already saved|next meal/i, 'A repeated save command should not create a duplicate save.');
+    expectReplyNotMatches(duplicateSaveTurn, /saved\. ready/i, 'Repeated save should not sound like a fresh save.');
+  });
+
+  it('keeps short cancel and undo messages from wiping active meals', async () => {
+    const conversation = await runQaScenario({
+      name: 'short cancel undo recovery',
+      messages: ['eggs and toast', 'nvm', 'undo that', 'actually make the eggs 3'],
+    });
+    const [initialTurn, nvmTurn, undoTurn, correctionTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/eggs?/i, /toast/i]);
+
+    expectBaselineQuality(nvmTurn);
+    expectMealContains(nvmTurn, [/eggs?/i, /toast/i]);
+    expectReplyMatches(nvmTurn, /still have this meal|remove|change|save/i, 'Short cancel should keep the current meal recoverable.');
+
+    expectBaselineQuality(undoTurn);
+    expectMealContains(undoTurn, [/eggs?/i, /toast/i]);
+    expectReplyMatches(undoTurn, /still have this meal|remove|change|save/i, 'Undo without history should not erase the meal.');
+
+    expectBaselineQuality(correctionTurn);
+    expectCorrectionReply(correctionTurn);
+    expectMealContains(correctionTurn, [/eggs?/i, /toast/i]);
+    expectTotalCaloriesInRange(correctionTurn, 270, 360);
+  });
+
+  it('adds compact-brand restaurant items as confident matches instead of vague clarification', async () => {
+    const conversation = await runQaScenario({
+      name: 'compact restaurant brand addition',
+      messages: ['I had 2 eggs', 'I also had 3 soft potato tacos from tacobell'],
+    });
+    const [initialTurn, tacoBellTurn] = conversation.turns;
+
+    expectBaselineQuality(initialTurn);
+    expectMealContains(initialTurn, [/eggs?/i]);
+
+    expectBaselineQuality(tacoBellTurn);
+    expectNoClarification(tacoBellTurn);
+    expectMealContains(tacoBellTurn, [/eggs?/i, /taco bell spicy potato soft taco/i]);
+    expectItemCaloriesInRange(tacoBellTurn, /spicy potato soft taco/i, 700, 760);
+    expectTrustedSourceFor(tacoBellTurn, /spicy potato soft taco/i);
+    expectReplyNotMatches(tacoBellTurn, /little more detail|reliable estimate|what kind/i, 'Recognized restaurant menu items should proceed to review.');
+  });
+
   it('logs basic meal additions and saves without losing the meal', async () => {
     const conversation = await runQaScenario({
       name: 'basic logging add juice save',
@@ -1071,8 +1141,9 @@ function expectStateAndReplyDoNotDisagree(turn: { response: { next_state: { curr
 }
 
 function buildMemoryContext(): Partial<MealAssistantContext> {
-  const yesterday = new Date(Date.now() - 86400000).toISOString();
-  const recent = new Date(Date.now() - 3600000).toISOString();
+  const now = Date.now();
+  const yesterday = new Date(now - 86400000).toISOString();
+  const recent = new Date(now).toISOString();
   const chipotleItem = createQaItem({ food_name: 'Chipotle chicken bowl', quantity: 1, unit: 'bowl', calories: 820, protein: 55, carbs: 82, fat: 28, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Chipotle official nutrition' });
   const fairlifeItem = createQaItem({ food_name: 'Fairlife Core Power Elite 42g Protein Shake', quantity: 1, unit: 'bottle', calories: 230, protein: 42, carbs: 8, fat: 3.5, source_type: 'GENERIC_REFERENCE', source_name: 'Fairlife nutrition reference' });
   const mcdoubleItem = createQaItem({ food_name: 'McDouble', quantity: 1, unit: 'burger', calories: 390, protein: 22, carbs: 33, fat: 19, source_type: 'OFFICIAL_RESTAURANT', source_name: "McDonald's official nutrition" });

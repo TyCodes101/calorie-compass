@@ -1,4 +1,24 @@
-export type KnownBrand = 'chipotle' | 'starbucks' | 'chick-fil-a' | 'mcdonalds' | 'quaker' | null;
+export type KnownBrand =
+  | 'burgerking'
+  | 'canes'
+  | 'chick-fil-a'
+  | 'chipotle'
+  | 'dominos'
+  | 'dunkin'
+  | 'fiveguys'
+  | 'jerseymikes'
+  | 'kfc'
+  | 'mcdonalds'
+  | 'pandaexpress'
+  | 'panera'
+  | 'pizzahut'
+  | 'popeyes'
+  | 'quaker'
+  | 'starbucks'
+  | 'subway'
+  | 'tacobell'
+  | 'wendys'
+  | null;
 export type MealCategory = 'restaurant' | 'home_cooked' | 'simple' | 'unknown';
 export type SpecificityLevel = 'high' | 'medium' | 'low';
 
@@ -84,10 +104,25 @@ function isCountableSimpleSegment(segment: string) {
 }
 
 function detectBrand(text: string): KnownBrand {
+  const compact = text.replace(/[^a-z0-9]+/g, '');
   if (text.includes('chipotle')) return 'chipotle';
   if (text.includes('starbucks')) return 'starbucks';
   if (text.includes('chick-fil-a') || text.includes('chick fil a')) return 'chick-fil-a';
-  if (text.includes('mcdonald') || text.includes('mcdonalds')) return 'mcdonalds';
+  if (text.includes('mcdonald') || text.includes('mc donald') || compact.includes('mcdonalds')) return 'mcdonalds';
+  if (text.includes('taco bell') || compact.includes('tacobell')) return 'tacobell';
+  if (text.includes('subway')) return 'subway';
+  if (text.includes('wendys') || text.includes("wendy's")) return 'wendys';
+  if (text.includes('burger king') || compact.includes('burgerking')) return 'burgerking';
+  if (text.includes('panda express') || compact.includes('pandaexpress')) return 'pandaexpress';
+  if (text.includes('dominos') || text.includes("domino's")) return 'dominos';
+  if (text.includes('pizza hut') || compact.includes('pizzahut')) return 'pizzahut';
+  if (text.includes('raising canes') || text.includes("raising cane's") || text.includes('canes') || compact.includes('raisingcanes')) return 'canes';
+  if (text.includes('popeyes')) return 'popeyes';
+  if (text.includes('panera')) return 'panera';
+  if (text.includes('dunkin')) return 'dunkin';
+  if (/\bkfc\b/.test(text)) return 'kfc';
+  if (text.includes('five guys') || compact.includes('fiveguys')) return 'fiveguys';
+  if (text.includes('jersey mikes') || text.includes("jersey mike's") || compact.includes('jerseymikes')) return 'jerseymikes';
   if (text.includes('quaker')) return 'quaker';
   return null;
 }

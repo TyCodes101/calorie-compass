@@ -1855,7 +1855,7 @@ export function MealLoggerClient({
   }
 
   return (
-    <div className="logger-assistant-screen app-page-chat flex min-w-0 flex-col py-3">
+    <div className="logger-assistant-screen app-page-chat flex min-w-0 flex-col pt-1 pb-2">
       <div className="logger-assistant-topbar app-screen">
         <Link href="/" aria-label="Back to dashboard" className="logger-topbar-button">
           <ArrowLeft className="h-5 w-5" />
@@ -1899,9 +1899,20 @@ export function MealLoggerClient({
           {showStarterPanel ? (
             <ChatBubble role="assistant" compact>
               <div className="logger-starter-panel">
-                <div>
-                  <p className="text-sm font-semibold text-slate-950">Fast ways to log</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Text a meal, scan a packaged food, or enter label numbers. I’ll keep the estimate reviewable before anything saves.</p>
+                <div className="logger-starter-hero">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950">Log like you’d text a coach</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">Give me a messy meal, a branded food, or a partial serving. I’ll turn it into reviewable nutrition with sources before anything saves.</p>
+                  </div>
+                  <div className="logger-starter-proof" aria-label="AI product capabilities">
+                    <span>Understands corrections</span>
+                    <span>Handles restaurants</span>
+                    <span>Remembers repeats</span>
+                  </div>
+                </div>
+                <div className="logger-demo-card" aria-label="Sample interaction">
+                  <div className="logger-demo-user">half a Chipotle chicken bowl and a Fairlife shake</div>
+                  <div className="logger-demo-assistant">I’ll split the bowl serving, keep the branded shake separate, and show confidence before you save.</div>
                 </div>
                 <div className="logger-starter-actions">
                   <button
@@ -2062,7 +2073,7 @@ export function MealLoggerClient({
               <div className="space-y-4">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-slate-900">{assistantEstimateMode === 'correction' ? 'Updated meal' : 'What I have so far'}</p>
-                  <p className="text-sm leading-6 text-slate-700">{memoryCue ? `${memoryCue} ` : ''}You can tweak anything here before saving.</p>
+                  <p className="text-sm leading-6 text-slate-700">{memoryCue ? `${memoryCue} ` : ''}Review the estimate, sources, and portions before saving.</p>
                 </div>
 
                 <div className="logger-review-panel space-y-3">
@@ -2085,11 +2096,14 @@ export function MealLoggerClient({
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{trustSummary.coverageSummary}</span>
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{trustSummary.estimatedSummary}</span>
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{Math.round(confidenceScore * 100)}% confidence</span>
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{confidence.description}</span>
+                  <div className="logger-review-trust-strip" aria-label="Review confidence and source summary">
+                    <div className="logger-review-trust-primary">
+                      <span className="logger-review-trust-dot" aria-hidden="true" />
+                      <span>{Math.round(confidenceScore * 100)}% confidence</span>
+                    </div>
+                    <span>{trustSummary.coverageSummary}</span>
+                    <span>{trustSummary.estimatedSummary}</span>
+                    <span>{confidence.description}</span>
                   </div>
 
                   <div className="space-y-2">
@@ -2111,7 +2125,7 @@ export function MealLoggerClient({
                                 <p className="truncate text-sm font-semibold text-slate-950">{item.food_name}</p>
                                 <TrustBadge trusted={trusted} compact label={trustPresentation.badgeLabel} tone={trustPresentation.badgeTone} />
                               </div>
-                              <p className="mt-1 text-xs text-slate-500">{sourceLabel}</p>
+                              <p className="mt-1 text-xs text-slate-500">{sourceLabel} · tap to edit serving, macros, or source notes</p>
                               <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
                                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">{Math.round(item.calories)} cal</span>
                                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">P {Math.round(item.protein)}g</span>
@@ -2162,9 +2176,11 @@ export function MealLoggerClient({
                                 ))}
                               </div>
 
-                              {item.notes ? (
-                                <p className="text-xs leading-5 text-slate-500">{item.notes}</p>
-                              ) : null}
+                              <div className="rounded-[18px] border border-slate-200 bg-white/80 p-3 text-xs leading-5 text-slate-500">
+                                <p className="font-medium text-slate-700">{trustPresentation.confidenceLabel}</p>
+                                <p className="mt-1">{trustPresentation.helperText}</p>
+                                {item.notes ? <p className="mt-2">{item.notes}</p> : null}
+                              </div>
 
                               <div className="flex justify-end">
                                 <button type="button" onClick={() => removeItem(index)} className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 active:scale-[0.99]">
@@ -2350,7 +2366,7 @@ export function MealLoggerClient({
                   onChange={(event) => setComposerText(event.target.value)}
                   rows={1}
                   className="chat-composer-textarea"
-                  placeholder={clarifyingQuestion ? 'Add the one detail that matters here' : 'Tell me what you ate'}
+                  placeholder={clarifyingQuestion ? 'Add the one detail that matters here' : items.length ? 'Add, remove, or correct anything' : 'Tell me what you ate'}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && !event.shiftKey) {
                       event.preventDefault();

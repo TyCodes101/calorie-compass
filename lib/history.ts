@@ -3,6 +3,7 @@ import { getCurrentUserId, hasDatabaseConnectionString } from '@/lib/current-use
 import { prisma } from '@/lib/prisma';
 import { isoDay } from '@/lib/date';
 import { summarizeStoredItems } from '@/lib/trust';
+import { formatMealTitleForDisplay, isFixtureMealRecord } from '@/lib/meal-display';
 
 export type MealHistoryEntry = {
   id: string;
@@ -45,19 +46,19 @@ export async function getMealHistory(): Promise<MealHistoryGroup[]> {
     return [];
   }
 
-  const meals = await prisma.meal.findMany({
+  const meals = (await prisma.meal.findMany({
     where: { userId },
     include: { items: true },
     orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-    take: 40,
-  });
+    take: 60,
+  })).filter((meal) => !isFixtureMealRecord({ rawText: meal.rawText, items: meal.items }));
 
   const grouped = new Map<string, MealHistoryEntry[]>();
 
-  for (const meal of meals) {
+  for (const meal of meals.slice(0, 40)) {
     const key = isoDay(meal.date);
     const summary = summarizeStoredItems(meal.items);
-    const title = meal.rawText || `${meal.items.length} item meal`;
+    const title = formatMealTitleForDisplay(meal.rawText, meal.items.map((item) => ({ food_name: item.foodName, quantity: item.quantity, unit: item.unit })));
 
     if (!grouped.has(key)) {
       grouped.set(key, []);
@@ -94,10 +95,10 @@ export async function getRecentMealsForQuickLog(limit = 6): Promise<RecentMealQu
     return [];
   }
 
-  const meals = await prisma.meal.findMany({
+  const meals = (await prisma.meal.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
-    take: limit,
+    take: limit * 2,
     select: {
       id: true,
       mealType: true,
@@ -125,11 +126,11 @@ export async function getRecentMealsForQuickLog(limit = 6): Promise<RecentMealQu
         },
       },
     },
-  });
+  })).filter((meal) => !isFixtureMealRecord({ rawText: meal.rawText, items: meal.items })).slice(0, limit);
 
   return meals.map((meal) => ({
     id: meal.id,
-    title: meal.rawText || `${meal.items.length} item meal`,
+    title: formatMealTitleForDisplay(meal.rawText, meal.items.map((item) => ({ food_name: item.foodName, quantity: item.quantity, unit: item.unit }))),
     mealType: meal.mealType.toLowerCase(),
     totalCalories: Math.round(meal.totalCalories),
     date: meal.date.toISOString(),

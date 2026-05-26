@@ -1023,4 +1023,66 @@ describe('runMealAssistant', () => {
     expect(response.assistant_reply).toMatch(/saved|logged/i);
   });
 
+  it('handles explicit swap corrections without duplicating meal items', async () => {
+    const currentItems = [
+      buildItem({
+        food_name: 'McDouble',
+        unit: 'burger',
+        calories: 390,
+        protein: 22,
+        carbs: 33,
+        fat: 19,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "McDonald's official nutrition",
+      }),
+      buildItem({
+        food_name: 'Medium Fry',
+        unit: 'order',
+        calories: 340,
+        protein: 4,
+        carbs: 44,
+        fat: 16,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "McDonald's official nutrition",
+      }),
+    ];
+    const resolveItemNutrition = vi.fn(async ({ item }) => {
+      if (/apple slices/i.test(item.name)) {
+        return buildParsedMealResponse([
+          buildItem({
+            food_name: 'Apple slices',
+            quantity: 1,
+            unit: 'serving',
+            calories: 35,
+            protein: 0,
+            carbs: 8,
+            fat: 0,
+            source_type: 'GENERIC_REFERENCE',
+            source_name: 'Apple slices nutrition reference',
+          }),
+        ]);
+      }
+      return null;
+    });
+
+    const response = await runMealAssistant(
+      {
+        message: 'swap the fries for apple slices',
+        state: buildState({
+          currentMealItems: currentItems,
+          currentMealText: 'McDouble and medium fry',
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(buildDecision({ intent: 'correction', should_lookup_nutrition: false })),
+        resolveItemNutrition,
+      },
+    );
+
+    expect(response.meal.items).toHaveLength(2);
+    expect(response.meal.items.map((item) => item.food_name)).toEqual(['McDouble', 'Apple slices']);
+    expect(response.assistant_reply).toMatch(/swapped medium fry for 1 order apple slices/i);
+    expect(response.next_state.currentMealText).toContain('Apple slices');
+  });
+
 });

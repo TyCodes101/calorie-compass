@@ -409,6 +409,10 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   transform: translate(-50%, calc(100% + env(safe-area-inset-bottom)));
 }
 
+body:has(input:focus, textarea:focus, select:focus) .app-shell-immersive .app-chat-composer-shell {
+  bottom: 0;
+}
+
 .app-page-chat {
   padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   scroll-padding-bottom: calc(7rem + env(safe-area-inset-bottom));
@@ -416,7 +420,7 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 
 .logger-assistant-screen {
   min-height: 100dvh;
-  gap: 0.2rem;
+  gap: 0;
 }
 
 .logger-assistant-topbar {
@@ -426,9 +430,10 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding-top: calc(0.38rem + env(safe-area-inset-top));
-  padding-bottom: 0.2rem;
-  background: linear-gradient(180deg, rgba(251, 253, 255, 0.94), rgba(251, 253, 255, 0.72) 68%, rgba(251, 253, 255, 0));
+  min-height: calc(2.55rem + env(safe-area-inset-top));
+  padding-top: calc(0.12rem + env(safe-area-inset-top));
+  padding-bottom: 0.14rem;
+  background: linear-gradient(180deg, rgba(251, 253, 255, 0.96), rgba(251, 253, 255, 0.82) 72%, rgba(251, 253, 255, 0));
   backdrop-filter: blur(12px);
 }
 
@@ -441,8 +446,8 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 
 .logger-topbar-button {
   display: inline-flex;
-  height: 2.1rem;
-  width: 2.1rem;
+  height: 1.95rem;
+  width: 1.95rem;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
@@ -467,14 +472,14 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 .logger-assistant-thread-shell {
   flex: 1;
   min-width: 0;
-  padding-bottom: 0.9rem;
+  padding-bottom: 0.65rem;
 }
 
 .chat-thread {
   display: flex;
   flex-direction: column;
-  gap: 0.72rem;
-  padding-bottom: 1.35rem;
+  gap: 0.62rem;
+  padding-bottom: 1.55rem;
 }
 
 .chat-feed-end {
@@ -654,18 +659,54 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 
 .logger-review-panel {
   border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(249, 251, 253, 0.92));
-  padding: 0.82rem;
-  box-shadow: 0 10px 20px rgba(148, 163, 184, 0.05);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 253, 0.94));
+  padding: 0.95rem;
+  box-shadow: 0 16px 34px rgba(148, 163, 184, 0.08);
   animation: chat-bubble-in 220ms ease-out;
 }
 
 .logger-review-stat {
+  border-radius: 20px;
+  border: 1px solid rgba(226, 232, 240, 0.72);
+  background: rgba(255, 255, 255, 0.78);
+  padding: 0.82rem 0.9rem;
+}
+
+.logger-review-trust-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
   border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  background: rgba(248, 250, 252, 0.92);
-  padding: 0.75rem 0.85rem;
+  background: rgba(248, 250, 252, 0.76);
+  padding: 0.45rem;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.logger-review-trust-strip > span,
+.logger-review-trust-primary {
+  display: inline-flex;
+  min-height: 1.8rem;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 0.32rem 0.62rem;
+}
+
+.logger-review-trust-primary {
+  gap: 0.38rem;
+  font-weight: 800;
+  color: #0f766e;
+}
+
+.logger-review-trust-dot {
+  height: 0.42rem;
+  width: 0.42rem;
+  border-radius: 999px;
+  background: #14b8a6;
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
 }
 
 .logger-review-stat-label {
@@ -681,10 +722,18 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 }
 
 .logger-food-item {
-  border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  background: rgba(255, 255, 255, 0.94);
-  padding: 0.8rem 0.9rem;
+  border-radius: 22px;
+  border: 1px solid rgba(226, 232, 240, 0.78);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.9rem 0.95rem;
+  box-shadow: 0 10px 22px rgba(148, 163, 184, 0.035);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.logger-food-item:focus-within,
+.logger-food-item:hover {
+  border-color: rgba(45, 212, 191, 0.28);
+  box-shadow: 0 14px 30px rgba(148, 163, 184, 0.07);
 }
 
 .chat-meal-type-field {
@@ -902,8 +951,8 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 
 .app-chat-composer-card {
   border: 1px solid rgba(226, 232, 240, 0.82);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.985), rgba(247, 250, 253, 0.95));
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 253, 0.96));
   padding: 0.42rem 0.42rem calc(0.5rem + env(safe-area-inset-bottom) * 0.1);
   box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(18px) saturate(140%);
@@ -955,6 +1004,23 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
     border-radius: 30px;
   }
 
+  .app-page {
+    padding-bottom: calc(11.5rem + env(safe-area-inset-bottom));
+  }
+
+  .app-page-with-action-bar {
+    padding-bottom: calc(15rem + env(safe-area-inset-bottom));
+  }
+
+  .app-shell-immersive .app-page-chat {
+    padding-bottom: calc(8.25rem + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(14rem + env(safe-area-inset-bottom));
+  }
+
+  .app-shell-immersive .app-chat-composer-shell {
+    bottom: calc(6.35rem + env(safe-area-inset-bottom));
+  }
+
   .app-chat-composer-shell {
     padding-inline: 0.75rem;
   }
@@ -964,7 +1030,7 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   }
 
   .app-chat-composer-card {
-    border-radius: 20px;
+    border-radius: 22px;
     padding: 0.5rem 0.5rem calc(0.62rem + env(safe-area-inset-bottom) * 0.12);
   }
 
@@ -1068,44 +1134,44 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 .logger-session-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  padding: 0.2rem 0 0.65rem;
+  gap: 0.42rem;
+  padding: 0.05rem 0 0.48rem;
 }
 
 .logger-session-pill {
   min-width: 0;
-  border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.86);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.82));
-  padding: 0.62rem 0.68rem;
-  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.72);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 250, 252, 0.7));
+  padding: 0.5rem 0.58rem 0.46rem;
+  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 .logger-session-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #64748b;
 }
 
 .logger-session-value {
-  margin-top: 0.22rem;
-  font-size: 0.98rem;
+  margin-top: 0.14rem;
+  font-size: 0.92rem;
   font-weight: 750;
   letter-spacing: -0.03em;
   color: #0f172a;
 }
 
 .logger-session-detail {
-  margin-top: 0.08rem;
+  margin-top: 0.04rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   color: #7c8ba1;
 }
 
@@ -1113,6 +1179,59 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
   width: min(100%, 34rem);
   display: grid;
   gap: 0.85rem;
+}
+
+.logger-starter-hero {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.logger-starter-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+}
+
+.logger-starter-proof span {
+  border-radius: 999px;
+  border: 1px solid rgba(20, 184, 166, 0.16);
+  background: rgba(240, 253, 250, 0.86);
+  padding: 0.3rem 0.55rem;
+  font-size: 0.67rem;
+  font-weight: 700;
+  color: #0f766e;
+}
+
+.logger-demo-card {
+  display: grid;
+  gap: 0.55rem;
+  border-radius: 22px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  padding: 0.78rem;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+}
+
+.logger-demo-user,
+.logger-demo-assistant {
+  width: fit-content;
+  max-width: 92%;
+  border-radius: 17px;
+  padding: 0.62rem 0.78rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.logger-demo-user {
+  justify-self: end;
+  background: #0f172a;
+  color: white;
+}
+
+.logger-demo-assistant {
+  border: 1px solid rgba(214, 225, 237, 0.95);
+  background: white;
+  color: #475569;
 }
 
 .logger-starter-actions {
@@ -1145,21 +1264,25 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-nav {
 
 @media (max-width: 420px) {
   .logger-session-strip {
-    gap: 0.38rem;
+    gap: 0.34rem;
+    padding-bottom: 0.42rem;
   }
 
   .logger-session-pill {
-    border-radius: 16px;
-    padding: 0.55rem 0.5rem;
+    border-radius: 14px;
+    padding: 0.44rem 0.46rem 0.4rem;
   }
 
-  .logger-session-label,
-  .logger-session-detail {
-    font-size: 0.58rem;
+  .logger-session-label {
+    font-size: 0.54rem;
   }
 
   .logger-session-value {
-    font-size: 0.9rem;
+    font-size: 0.86rem;
+  }
+
+  .logger-session-detail {
+    display: none;
   }
 
   .logger-starter-actions {

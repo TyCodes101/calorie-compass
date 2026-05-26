@@ -100,10 +100,17 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
             <Sparkles className="h-5 w-5" />
           </div>
           <div className="space-y-3">
-            <h2 className="text-2xl font-semibold text-slate-950">Get started in under a minute</h2>
+            <h2 className="text-2xl font-semibold text-slate-950">Meet the food logger that thinks with you</h2>
             <p className="max-w-xl text-sm leading-6 text-slate-600">
-              We’ll keep this lightweight. Just set your goal, a couple of daily targets, and the basics needed to make the assistant feel helpful from the first message.
+              Set the basics once, then log meals naturally: restaurants, branded foods, partial servings, and corrections all stay reviewable before they affect your day.
             </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {['Review before save', 'Source-aware estimates', 'Fast repeat meals'].map((item) => (
+              <div key={item} className="rounded-2xl border border-white bg-white/85 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
+                {item}
+              </div>
+            ))}
           </div>
           <label className="block space-y-2 text-sm text-slate-600">
             <span>What should we call you?</span>
@@ -216,7 +223,7 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
           <div>
             <h2 className="text-2xl font-semibold text-slate-950">You’re ready to log your first meal</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Next, just talk naturally. Try something like “Chipotle bowl with white rice and chicken” or “protein shake with almond milk.” You’ll always get a review step before anything saves.
+              Next, just talk naturally. Try “half a Chipotle bowl and a Fairlife shake,” then adjust portions or save it as a favorite. You’ll always get a review step before anything saves.
             </p>
           </div>
           <div className="rounded-[24px] border border-white bg-white/90 p-4 text-sm text-slate-600 shadow-sm">
@@ -228,10 +235,10 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
           </div>
           <div className="space-y-3 rounded-[24px] border border-white/80 bg-white/80 p-4 shadow-sm">
             <div className="max-w-[85%] rounded-[20px] bg-slate-950 px-4 py-3 text-sm text-white shadow-sm">
-              3 eggs and toast
+              half a Chipotle bowl and a Fairlife shake
             </div>
             <div className="max-w-[92%] rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 shadow-sm">
-              Got it. That looks like a solid breakfast. You’ll still have room later if you want to keep protein up tonight.
+              Got it. I’ll keep the partial serving and branded shake separate, then show calories, macros, confidence, and sources before saving.
             </div>
             <p className="text-xs uppercase tracking-[0.18em] text-slate-400">calm, conversational, daily-use ready</p>
           </div>

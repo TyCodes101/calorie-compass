@@ -9,6 +9,6 @@ export async function POST() {
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     logWriteFailure('profile.reset.route', error);
-    return NextResponse.json({ error: 'We couldn’t reset your demo data right now. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: 'We couldn’t reset your meal history right now. Please try again.' }, { status: 500 });
   }
 }

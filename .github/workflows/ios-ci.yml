@@ -1,0 +1,73 @@
+name: iOS CI
+
+on:
+  push:
+    branches:
+      - main
+      - feature/ios-phase3-meal-management
+  pull_request:
+    branches:
+      - main
+      - feature/ios-phase3-meal-management
+
+jobs:
+  ios-build:
+    runs-on: macos-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: List available simulators
+        run: xcrun simctl list devices available
+
+      - name: Resolve simulator destination
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in "iPhone 16" "iPhone 15" "iPhone 14"; do
+            if xcrun simctl list devices available | grep -q "$name"; then
+              echo "destination=platform=iOS Simulator,name=$name" >> "$GITHUB_OUTPUT"
+              echo "Using simulator: $name"
+              exit 0
+            fi
+          done
+          echo "No preferred iPhone simulator found. Available devices:" >&2
+          xcrun simctl list devices available >&2
+          exit 1
+
+      - name: Build Calorie Compass
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ios/CalorieCompass/CalorieCompass.xcodeproj \
+            -scheme CalorieCompass \
+            -destination '${{ steps.simulator.outputs.destination }}' \
+            build | tee ios-build.log
+
+      - name: Test Calorie Compass
+        run: |
+          set -o pipefail
+          rm -rf ios-test-results.xcresult
+          xcodebuild \
+            -project ios/CalorieCompass/CalorieCompass.xcodeproj \
+            -scheme CalorieCompass \
+            -destination '${{ steps.simulator.outputs.destination }}' \
+            -resultBundlePath ios-test-results.xcresult \
+            test | tee ios-test.log
+
+      - name: Upload iOS logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ci-logs
+          path: |
+            ios-build.log
+            ios-test.log
+            ios-test-results.xcresult

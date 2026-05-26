@@ -12,12 +12,21 @@ import {
 } from '@/lib/nutrition/catalog';
 
 type KnownRestaurantBrand =
+  | 'Burger King'
+  | "Cane's"
   | 'CAVA'
   | 'Chick-fil-A'
   | 'Chipotle'
+  | "Domino's"
+  | "Dunkin'"
+  | 'Five Guys'
+  | 'Jersey Mike\'s'
+  | 'KFC'
   | "McDonald's"
   | 'Panera'
   | 'Panda Express'
+  | 'Pizza Hut'
+  | 'Popeyes'
   | 'Starbucks'
   | 'Subway'
   | 'Taco Bell'
@@ -37,16 +46,26 @@ type KnownPackagedBrand =
   | null;
 
 function detectRestaurantBrand(text: string): KnownRestaurantBrand {
+  const compact = text.replace(/[^a-z0-9]+/g, '');
   if (text.includes('chipotle')) return 'Chipotle';
   if (text.includes('starbucks')) return 'Starbucks';
   if (text.includes('chick-fil-a') || text.includes('chick fil a')) return 'Chick-fil-A';
-  if (text.includes("mcdonald") || text.includes('mcdonalds')) return "McDonald's";
+  if (text.includes("mcdonald") || text.includes('mc donald') || compact.includes('mcdonalds')) return "McDonald's";
   if (text.includes('panda express')) return 'Panda Express';
   if (text.includes('subway')) return 'Subway';
-  if (text.includes('taco bell')) return 'Taco Bell';
+  if (text.includes('taco bell') || compact.includes('tacobell')) return 'Taco Bell';
   if (text.includes("wendy's") || text.includes('wendys')) return "Wendy's";
   if (text.includes('cava')) return 'CAVA';
   if (text.includes('panera')) return 'Panera';
+  if (text.includes('burger king') || compact.includes('burgerking')) return 'Burger King';
+  if (text.includes('dominos') || text.includes("domino's")) return "Domino's";
+  if (text.includes('pizza hut') || compact.includes('pizzahut')) return 'Pizza Hut';
+  if (text.includes('raising canes') || text.includes("raising cane's") || text.includes('canes') || compact.includes('raisingcanes')) return "Cane's";
+  if (text.includes('popeyes')) return 'Popeyes';
+  if (text.includes('dunkin')) return "Dunkin'";
+  if (/\bkfc\b/.test(text)) return 'KFC';
+  if (text.includes('five guys') || compact.includes('fiveguys')) return 'Five Guys';
+  if (text.includes('jersey mikes') || text.includes("jersey mike's") || compact.includes('jerseymikes')) return 'Jersey Mike\'s';
   return null;
 }
 
@@ -67,7 +86,8 @@ const packagedSnackRegex = /\b(rice cakes?|white cheddar rice cakes?|chips?|prot
 
 function cleanSegment(segment: string) {
   return segment
-    .replace(/^\s*(i had|i ate|had|ate|with|and|a|an)\s+/i, '')
+    .replace(/^\s*(i\s+(?:also\s+)?(?:had|ate|drank)|also\s+add|throw\s+in|plus|add|had|ate|drank|with|and|also|a|an)\s+/i, '')
+    .replace(/\s+(?:from|at)\s+(?:taco\s*bell|tacobell|mc\s*donald'?s?|mcdonalds|chick\s*fil\s*a|chipotle|starbucks|subway|wendy'?s?|wendys|burger\s*king|panda\s+express|domino'?s?|pizza\s+hut|raising\s+cane'?s?|canes|popeyes|panera|dunkin|kfc|five\s+guys|jersey\s+mike'?s?)\b/gi, '')
     .replace(/\bmeal\b/gi, '')
     .replace(/\bcombo\b/gi, '')
     .replace(/\s+/g, ' ')
@@ -93,6 +113,28 @@ function splitGenericSegments(text: string) {
     .split(',')
     .map(cleanSegment)
     .filter(Boolean);
+}
+
+const countWordMap: Record<string, number> = {
+  a: 1,
+  an: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+};
+
+function extractRestaurantItemQuantity(segment: string) {
+  const match = segment.match(/\b(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b\s+(?:soft\s+|spicy\s+|crunchy\s+|chicken\s+|potato\s+|pepperoni\s+|turkey\s+|orange\s+|mac\s+and\s+cheese\s+|big\s+mac\s+|mcchicken\s+|caniac\s+){0,6}(?:tacos?|sandwich(?:es)?|burgers?|nuggets?|lattes?|subs?|footlongs?|bowls?|combos?|slices?|pizzas?|servings?|orders?)\b/i);
+  if (!match) return 1;
+  const raw = (match[1] ?? '1').toLowerCase();
+  return countWordMap[raw] ?? (Number(raw) || 1);
 }
 
 function scaleItems(items: ParsedFoodItem[], factor: number) {
@@ -213,7 +255,8 @@ function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[
 
 function matchRestaurantAlias(segment: string, brand: Exclude<KnownRestaurantBrand, null>, factor: number) {
   const food = findCatalogFoodByBestMatch(segment, brand);
-  return food ? scaleItems([scaleCatalogFood(food, 1, food.servingUnit)], factor) : [];
+  const quantity = extractRestaurantItemQuantity(segment);
+  return food ? scaleItems([scaleCatalogFood(food, quantity, food.servingUnit)], factor) : [];
 }
 
 function matchRestaurantSegment(segment: string, brand: Exclude<KnownRestaurantBrand, null>, factor: number) {

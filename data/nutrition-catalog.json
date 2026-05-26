@@ -159,6 +159,78 @@
       "brand": "Quaker",
       "citation": "Quaker packaged snack nutrition reference",
       "notes": "Used for branded packaged food matching"
+    },
+    {
+      "id": "burgerking_official",
+      "name": "Burger King official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Burger King",
+      "citation": "Burger King standard menu nutrition reference",
+      "notes": "Used for broader restaurant/branded-food matching"
+    },
+    {
+      "id": "dominos_official",
+      "name": "Domino's official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Domino's",
+      "citation": "Domino's standard menu nutrition reference",
+      "notes": "Used for broader restaurant/branded-food matching"
+    },
+    {
+      "id": "pizzahut_official",
+      "name": "Pizza Hut official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Pizza Hut",
+      "citation": "Pizza Hut standard menu nutrition reference",
+      "notes": "Used for broader restaurant/branded-food matching"
+    },
+    {
+      "id": "raisingcanes_official",
+      "name": "Raising Cane's official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Cane's",
+      "citation": "Cane's standard menu nutrition reference",
+      "notes": "Used for broader restaurant/branded-food matching"
+    },
+    {
+      "id": "popeyes_official",
+      "name": "Popeyes official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Popeyes",
+      "citation": "Popeyes standard menu nutrition reference",
+      "notes": "Used for broader restaurant/branded-food matching"
+    },
+    {
+      "id": "dunkin_official",
+      "name": "Dunkin' official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Dunkin'",
+      "citation": "Dunkin' standard menu nutrition reference",
+      "notes": "Used for broader restaurant/branded-food matching"
+    },
+    {
+      "id": "kfc_official",
+      "name": "KFC official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "KFC",
+      "citation": "KFC standard menu nutrition reference",
+      "notes": "Used for broader restaurant/branded-food matching"
+    },
+    {
+      "id": "fiveguys_official",
+      "name": "Five Guys official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Five Guys",
+      "citation": "Five Guys standard menu nutrition reference",
+      "notes": "Used for broader restaurant/branded-food matching"
+    },
+    {
+      "id": "jerseymikes_official",
+      "name": "Jersey Mike's official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Jersey Mike's",
+      "citation": "Jersey Mike's standard menu nutrition reference",
+      "notes": "Used for broader restaurant/branded-food matching"
     }
   ],
   "foods": [
@@ -1230,6 +1302,319 @@
         "fairlife 42 gram protein shake",
         "fairlife protein shake 42 gram",
         "42 gram fairlife shake"
+      ]
+    },
+    {
+      "id": "tacobell_spicy_potato_soft_taco",
+      "canonicalName": "Taco Bell Spicy Potato Soft Taco",
+      "brand": "Taco Bell",
+      "servingQuantity": 1,
+      "servingUnit": "taco",
+      "calories": 240,
+      "protein": 5,
+      "carbs": 29,
+      "fat": 12,
+      "fiber": 2,
+      "sugar": 2,
+      "sodium": 500,
+      "sourceId": "tacobell_official",
+      "active": true,
+      "aliases": [
+        "taco bell spicy potato soft taco",
+        "spicy potato soft taco",
+        "soft potato taco",
+        "soft potato tacos",
+        "potato soft taco",
+        "potato tacos",
+        "tacobell soft potato taco",
+        "taco bell potato taco"
+      ]
+    },
+    {
+      "id": "mcdonalds_mcchicken",
+      "canonicalName": "McDonald's McChicken",
+      "brand": "McDonald's",
+      "servingQuantity": 1,
+      "servingUnit": "sandwich",
+      "calories": 400,
+      "protein": 14,
+      "carbs": 39,
+      "fat": 21,
+      "fiber": 2,
+      "sugar": 5,
+      "sodium": 560,
+      "sourceId": "mcdonalds_official",
+      "active": true,
+      "aliases": [
+        "mcdonald's mcchicken",
+        "mcdonalds mcchicken",
+        "mcchicken",
+        "mc chicken",
+        "mcdonalds chicken sandwich",
+        "mcdonald chicken sandwich",
+        "chicken sandwich"
+      ]
+    },
+    {
+      "id": "mcdonalds_big_mac",
+      "canonicalName": "McDonald's Big Mac",
+      "brand": "McDonald's",
+      "servingQuantity": 1,
+      "servingUnit": "burger",
+      "calories": 590,
+      "protein": 25,
+      "carbs": 46,
+      "fat": 34,
+      "fiber": 3,
+      "sugar": 9,
+      "sodium": 1050,
+      "sourceId": "mcdonalds_official",
+      "active": true,
+      "aliases": [
+        "mcdonald's big mac",
+        "mcdonalds big mac",
+        "big mac",
+        "bigmac"
+      ]
+    },
+    {
+      "id": "mcdonalds_nuggets_10",
+      "canonicalName": "McDonald's Chicken McNuggets 10 Piece",
+      "brand": "McDonald's",
+      "servingQuantity": 1,
+      "servingUnit": "order",
+      "calories": 410,
+      "protein": 23,
+      "carbs": 26,
+      "fat": 24,
+      "fiber": 2,
+      "sugar": 0,
+      "sodium": 850,
+      "sourceId": "mcdonalds_official",
+      "active": true,
+      "aliases": [
+        "mcdonald's chicken nuggets",
+        "mcdonalds chicken nuggets",
+        "chicken nuggets",
+        "mcnuggets",
+        "mc nuggets",
+        "10 piece nuggets"
+      ]
+    },
+    {
+      "id": "subway_turkey_footlong",
+      "canonicalName": "Subway Turkey Footlong",
+      "brand": "Subway",
+      "servingQuantity": 1,
+      "servingUnit": "sub",
+      "calories": 560,
+      "protein": 36,
+      "carbs": 92,
+      "fat": 8,
+      "fiber": 10,
+      "sugar": 14,
+      "sodium": 1520,
+      "sourceId": "subway_official",
+      "active": true,
+      "aliases": [
+        "subway footlong turkey",
+        "footlong turkey",
+        "turkey footlong",
+        "footlong turkey sub",
+        "subway turkey footlong"
+      ]
+    },
+    {
+      "id": "raisingcanes_caniac_combo",
+      "canonicalName": "Raising Cane's Caniac Combo",
+      "brand": "Cane's",
+      "servingQuantity": 1,
+      "servingUnit": "combo",
+      "calories": 1790,
+      "protein": 89,
+      "carbs": 129,
+      "fat": 104,
+      "fiber": 12,
+      "sugar": 17,
+      "sodium": 3120,
+      "sourceId": "raisingcanes_official",
+      "active": true,
+      "aliases": [
+        "caniac combo",
+        "canes caniac combo",
+        "raising canes caniac combo",
+        "raising cane's caniac combo",
+        "caniac"
+      ]
+    },
+    {
+      "id": "dominos_pepperoni_pizza_slice",
+      "canonicalName": "Domino's Pepperoni Pizza Slice",
+      "brand": "Domino's",
+      "servingQuantity": 1,
+      "servingUnit": "slice",
+      "calories": 300,
+      "protein": 12,
+      "carbs": 34,
+      "fat": 13,
+      "fiber": 2,
+      "sugar": 3,
+      "sodium": 700,
+      "sourceId": "dominos_official",
+      "active": true,
+      "aliases": [
+        "dominos pepperoni pizza",
+        "domino pepperoni pizza",
+        "domino's pepperoni pizza",
+        "pepperoni pizza",
+        "dominos pepperoni slice"
+      ]
+    },
+    {
+      "id": "pizzahut_pepperoni_pizza_slice",
+      "canonicalName": "Pizza Hut Pepperoni Pizza Slice",
+      "brand": "Pizza Hut",
+      "servingQuantity": 1,
+      "servingUnit": "slice",
+      "calories": 300,
+      "protein": 13,
+      "carbs": 34,
+      "fat": 13,
+      "fiber": 2,
+      "sugar": 3,
+      "sodium": 710,
+      "sourceId": "pizzahut_official",
+      "active": true,
+      "aliases": [
+        "pizza hut pepperoni pizza",
+        "pizza hut pepperoni slice",
+        "pepperoni pizza"
+      ]
+    },
+    {
+      "id": "burgerking_whopper",
+      "canonicalName": "Burger King Whopper",
+      "brand": "Burger King",
+      "servingQuantity": 1,
+      "servingUnit": "burger",
+      "calories": 670,
+      "protein": 31,
+      "carbs": 54,
+      "fat": 40,
+      "fiber": 3,
+      "sugar": 13,
+      "sodium": 1170,
+      "sourceId": "burgerking_official",
+      "active": true,
+      "aliases": [
+        "burger king whopper",
+        "whopper",
+        "burgerking whopper"
+      ]
+    },
+    {
+      "id": "popeyes_chicken_sandwich",
+      "canonicalName": "Popeyes Chicken Sandwich",
+      "brand": "Popeyes",
+      "servingQuantity": 1,
+      "servingUnit": "sandwich",
+      "calories": 700,
+      "protein": 28,
+      "carbs": 50,
+      "fat": 42,
+      "fiber": 2,
+      "sugar": 8,
+      "sodium": 1440,
+      "sourceId": "popeyes_official",
+      "active": true,
+      "aliases": [
+        "popeyes chicken sandwich",
+        "popeyes sandwich",
+        "chicken sandwich"
+      ]
+    },
+    {
+      "id": "dunkin_latte_medium",
+      "canonicalName": "Dunkin' Medium Latte",
+      "brand": "Dunkin'",
+      "servingQuantity": 1,
+      "servingUnit": "drink",
+      "calories": 170,
+      "protein": 10,
+      "carbs": 18,
+      "fat": 6,
+      "fiber": 0,
+      "sugar": 18,
+      "sodium": 135,
+      "sourceId": "dunkin_official",
+      "active": true,
+      "aliases": [
+        "dunkin latte",
+        "dunkin medium latte",
+        "medium latte"
+      ]
+    },
+    {
+      "id": "kfc_famous_bowl",
+      "canonicalName": "KFC Famous Bowl",
+      "brand": "KFC",
+      "servingQuantity": 1,
+      "servingUnit": "bowl",
+      "calories": 740,
+      "protein": 26,
+      "carbs": 81,
+      "fat": 35,
+      "fiber": 6,
+      "sugar": 4,
+      "sodium": 2350,
+      "sourceId": "kfc_official",
+      "active": true,
+      "aliases": [
+        "kfc famous bowl",
+        "famous bowl"
+      ]
+    },
+    {
+      "id": "fiveguys_cheeseburger",
+      "canonicalName": "Five Guys Cheeseburger",
+      "brand": "Five Guys",
+      "servingQuantity": 1,
+      "servingUnit": "burger",
+      "calories": 980,
+      "protein": 47,
+      "carbs": 40,
+      "fat": 55,
+      "fiber": 2,
+      "sugar": 9,
+      "sodium": 1050,
+      "sourceId": "fiveguys_official",
+      "active": true,
+      "aliases": [
+        "five guys cheeseburger",
+        "fiveguys cheeseburger",
+        "cheeseburger"
+      ]
+    },
+    {
+      "id": "jerseymikes_turkey_sub_regular",
+      "canonicalName": "Jersey Mike's Turkey Sub Regular",
+      "brand": "Jersey Mike's",
+      "servingQuantity": 1,
+      "servingUnit": "sub",
+      "calories": 540,
+      "protein": 35,
+      "carbs": 62,
+      "fat": 18,
+      "fiber": 4,
+      "sugar": 7,
+      "sodium": 1600,
+      "sourceId": "jerseymikes_official",
+      "active": true,
+      "aliases": [
+        "jersey mikes turkey sub",
+        "jersey mike turkey sub",
+        "jersey mike's turkey sub",
+        "turkey sub"
       ]
     }
   ]

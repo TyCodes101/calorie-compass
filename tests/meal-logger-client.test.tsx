@@ -130,11 +130,11 @@ describe('meal logger client', () => {
       />,
     );
 
-    expect(screen.getByText(/chipotle chicken bowl/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/chipotle chicken bowl/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/protein left\?/i)).toBeInTheDocument();
     expect(screen.getByText(/tonight idea/i)).toBeInTheDocument();
     expect(screen.getByText(/talk naturally/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Tell me what you ate')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/)).toBeInTheDocument();
     expect(screen.queryByText(/^log meal$/i)).not.toBeInTheDocument();
     expect(screen.getByText(/assistant/i)).toBeInTheDocument();
   });
@@ -156,7 +156,10 @@ describe('meal logger client', () => {
     expect(todaySnapshot).toBeInTheDocument();
     expect(within(todaySnapshot).getByText(/calories left/i)).toBeInTheDocument();
     expect(within(todaySnapshot).getByText(/protein left/i)).toBeInTheDocument();
-    expect(screen.getByText(/fast ways to log/i)).toBeInTheDocument();
+    expect(screen.getByText(/log like you’d text a coach/i)).toBeInTheDocument();
+    expect(screen.getByText(/partial serving/i)).toBeInTheDocument();
+    expect(screen.getByText(/handles restaurants/i)).toBeInTheDocument();
+    expect(screen.getByText(/half a Chipotle chicken bowl and a Fairlife shake/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /try example/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^barcode$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /nutrition label/i })).toBeInTheDocument();
@@ -205,7 +208,7 @@ describe('meal logger client', () => {
 
     expect(screen.getByText(/fairlife elite 42g shake/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'same as usual' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
@@ -317,7 +320,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'scan a barcode' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
@@ -333,7 +336,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'can I log by voice?' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
@@ -359,7 +362,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} userName="Tyler Cox" />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'I had a Chipotle bowl with white rice, double chicken, corn salsa, cheese, and lettuce.' },
     });
 
@@ -453,7 +456,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} userName="Tyler Cox" />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'hi' },
     });
 
@@ -490,7 +493,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[buildRecentMeal()]} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'repeat my last meal' },
     });
 
@@ -547,7 +550,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} userName="Tyler Cox" />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'Chipotle bowl with chicken' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
@@ -556,7 +559,7 @@ describe('meal logger client', () => {
       expect(screen.getAllByText(/chipotle chicken bowl/i).length).toBeGreaterThan(0);
     });
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'actually it was two' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
@@ -591,7 +594,7 @@ describe('meal logger client', () => {
 
     render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} userName="Tyler Cox" />);
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'chipotle bowl' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));
@@ -600,7 +603,7 @@ describe('meal logger client', () => {
       expect(screen.getByRole('button', { name: /^save it$/i })).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText('Tell me what you ate'), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell me what you ate|Add, remove, or correct anything/), {
       target: { value: 'save it' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send meal' }));

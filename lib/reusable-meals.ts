@@ -3,6 +3,7 @@ import { getPersistableCatalogFoodIds } from '@/lib/catalog-persistence';
 import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/current-user';
 import { logConnectionReady, logWriteFailure, logWriteStart, logWriteSuccess } from '@/lib/persistence';
 import { prisma } from '@/lib/prisma';
+import { formatMealTitleForDisplay, isFixtureMealRecord } from '@/lib/meal-display';
 
 type MealTypeValue = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 type StoredMealType = Uppercase<MealTypeValue>;
@@ -423,9 +424,11 @@ export async function getFavoriteMeals(): Promise<FavoriteMealSummary[]> {
     take: 8,
   });
 
-  return favorites.map((favorite) => ({
+  return favorites
+    .filter((favorite) => !isFixtureMealRecord({ rawText: `${favorite.title} ${favorite.rawText ?? ''}`, items: favorite.items }))
+    .map((favorite) => ({
     id: favorite.id,
-    title: favorite.title,
+    title: formatMealTitleForDisplay(favorite.title || favorite.rawText, favorite.items.map((item) => ({ food_name: item.foodName, quantity: item.quantity, unit: item.unit }))),
     rawText: favorite.rawText,
     mealType: favorite.mealType.toLowerCase() as MealTypeValue,
     lastUsedAt: favorite.lastUsedAt?.toISOString() ?? null,

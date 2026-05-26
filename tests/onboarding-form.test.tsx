@@ -42,6 +42,10 @@ describe('onboarding form', () => {
       />,
     );
 
+    expect(screen.getByText(/food logger that thinks with you/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review before save/i)).toBeInTheDocument();
+    expect(screen.getByText(/Source-aware estimates/i)).toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText('What should we call you?'), {
       target: { value: 'Tyler' },
     });
@@ -55,6 +59,9 @@ describe('onboarding form', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+    expect(screen.getByText(/partial serving and branded shake separate/i)).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /start logging/i }));
 
     await waitFor(() => {

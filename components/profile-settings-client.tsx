@@ -639,8 +639,8 @@ export function AccountSettingsForm({ initial, account }: { initial: ProfileSett
     }
   }
 
-  async function resetDemoData() {
-    if (!window.confirm('Reset meal history, favorites, and demo logs? Your profile and targets will stay in place.')) {
+  async function resetMealHistory() {
+    if (!window.confirm('Reset meal history and favorites? Your profile, goals, and nutrition preferences will stay in place.')) {
       return;
     }
 
@@ -652,13 +652,13 @@ export function AccountSettingsForm({ initial, account }: { initial: ProfileSett
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(payload?.error ?? 'We couldn’t reset your demo data right now. Please try again.');
+        throw new Error(payload?.error ?? 'We couldn’t reset your meal history right now. Please try again.');
       }
 
-      setDataActionNotice('Demo data reset. Your profile stayed intact, and the app is ready for a clean logging pass.');
+      setDataActionNotice('Meal history reset. Your profile stayed intact, and the app is ready for a clean logging pass.');
       router.refresh();
     } catch {
-      setDataActionNotice('We couldn’t reset your demo data right now. Please try again.');
+      setDataActionNotice('We couldn’t reset your meal history right now. Please try again.');
     } finally {
       setResetting(false);
     }
@@ -740,15 +740,15 @@ export function AccountSettingsForm({ initial, account }: { initial: ProfileSett
 
           <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
             <p className="font-semibold text-slate-900">Privacy and data note</p>
-            <p className="mt-2 leading-6">Meal history, favorites, and profile values stay inside your Calorie Compass account data. Export gives you a JSON backup, and reset clears demo logging data while keeping your profile and targets.</p>
+            <p className="mt-2 leading-6">Meal history, favorites, and profile values stay inside your Calorie Compass account data. Export gives you a JSON backup, and reset clears logged meals while keeping your profile, goals, and preferences.</p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <button type="button" onClick={exportData} disabled={exporting || resetting} className="app-button-secondary inline-flex items-center justify-center gap-2 rounded-[20px] px-4 py-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">
               {exporting ? 'Preparing export...' : 'Export meal history'}
             </button>
-            <button type="button" onClick={resetDemoData} disabled={resetting || exporting} className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-4 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60">
-              {resetting ? 'Resetting...' : 'Reset demo data'}
+            <button type="button" onClick={resetMealHistory} disabled={resetting || exporting} className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-4 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60">
+              {resetting ? 'Resetting...' : 'Reset meal history'}
             </button>
           </div>
 

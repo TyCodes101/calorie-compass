@@ -48,7 +48,7 @@ export default async function InsightsPage() {
         : 'No meals yet',
       supporting: insights.dailyOverview.trustCoverage.totalCount
         ? insights.dailyOverview.trustCoverage.estimatedSummary
-        : 'Once meals are logged, this shows how much came from trusted nutrition sources.',
+        : 'Once meals are logged, this shows how much matched structured nutrition sources.',
       icon: ShieldCheck,
     },
     {
