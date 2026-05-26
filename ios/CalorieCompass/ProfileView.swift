@@ -118,6 +118,7 @@ struct ProfileView: View {
                                 Button("Edit Profile") {
                                     dirtyProfile = profile; editing = true
                                 }.padding(.top, 8)
+                                AccountStatusSection(response: sessionStore.state.sessionResponse)
                                 SessionAndPrivacyNote()
                                 if showSuccess {
                                     Text("Profile updated!").foregroundColor(.green)
@@ -179,6 +180,66 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+}
+
+struct AccountStatusSection: View {
+    let response: SessionResponse?
+
+    private var title: String {
+        response?.account?.title ?? "Account tools are coming soon"
+    }
+
+    private var description: String {
+        response?.account?.description ?? "Native Sign in with Apple is planned, but this build does not include a complete account sign-in flow yet."
+    }
+
+    private var providers: [AuthProviderSnapshot] {
+        response?.account?.providers ?? [
+            AuthProviderSnapshot(
+                id: "apple",
+                label: "Continue with Apple",
+                status: "planned",
+                detail: "Coming soon after backend verification and secure session storage are complete."
+            )
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Account status")
+                .font(.headline)
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            Text(description)
+                .font(.footnote)
+                .foregroundColor(.secondary)
+            ForEach(providers) { provider in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text(provider.displayLabel)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Spacer()
+                        Text(provider.isAvailable ? "Available" : "Coming soon")
+                            .font(.caption)
+                            .foregroundColor(provider.isAvailable ? .green : .secondary)
+                    }
+                    if let detail = provider.detail {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(10)
+                .background(Color.secondary.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+        .padding(.top, 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Account status. Native Sign in with Apple is coming soon and is not available in this build.")
     }
 }
 

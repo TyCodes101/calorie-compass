@@ -161,7 +161,7 @@ final class BackendServiceErrorMappingTests: XCTestCase {
 
 final class NativeSessionStateTests: XCTestCase {
     func testGuestSessionMapsToGuestStateWithBanner() {
-        let response = SessionResponse(account: AccountSnapshot(mode: "guest", title: "Guest mode is active", description: "Device session", persistenceLabel: nil), user: SessionUser(id: "u1", name: nil, mode: "guest"))
+        let response = SessionResponse(account: AccountSnapshot(mode: "guest", title: "Guest mode is active", description: "Device session", persistenceLabel: nil, providers: nil), user: SessionUser(id: "u1", name: nil, mode: "guest"))
         let state = NativeSessionState.fromSessionResponse(response)
 
         if case .guest = state {
@@ -173,7 +173,7 @@ final class NativeSessionStateTests: XCTestCase {
     }
 
     func testAccountSessionMapsToAuthenticatedWithoutBanner() {
-        let response = SessionResponse(account: AccountSnapshot(mode: "account", title: "Account session is active", description: nil, persistenceLabel: nil), user: SessionUser(id: "u1", name: "Tyler", mode: "account"))
+        let response = SessionResponse(account: AccountSnapshot(mode: "account", title: "Account session is active", description: nil, persistenceLabel: nil, providers: nil), user: SessionUser(id: "u1", name: "Tyler", mode: "account"))
         let state = NativeSessionState.fromSessionResponse(response)
 
         XCTAssertEqual(state, .authenticated(response))
@@ -188,6 +188,40 @@ final class NativeSessionStateTests: XCTestCase {
         } else {
             XCTFail("Expected unauthenticated state")
         }
+    }
+
+    func testAccountSnapshotDecodesProviderReadiness() throws {
+        let data = """
+        {
+          "account": {
+            "mode": "guest",
+            "title": "Guest mode is active",
+            "description": "Device session",
+            "persistenceLabel": "Live guest session",
+            "providers": [
+              {
+                "id": "apple",
+                "label": "Continue with Apple",
+                "status": "planned",
+                "detail": "Backend verification is not ready yet."
+              }
+            ]
+          },
+          "user": {
+            "id": "u1",
+            "name": null,
+            "mode": "guest"
+          }
+        }
+        """.data(using: .utf8)
+
+        let jsonData = try XCTUnwrap(data)
+        let response = try JSONDecoder().decode(SessionResponse.self, from: jsonData)
+
+        XCTAssertEqual(response.account?.providers?.first?.id, "apple")
+        XCTAssertEqual(response.account?.providers?.first?.displayLabel, "Continue with Apple")
+        XCTAssertFalse(response.account?.providers?.first?.isAvailable ?? true)
+        XCTAssertEqual(NativeSessionState.fromSessionResponse(response).sessionResponse, response)
     }
 
     func testBackendErrorsMapToSessionStates() {

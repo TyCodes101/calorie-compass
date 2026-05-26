@@ -13,6 +13,17 @@ struct AccountSnapshot: Codable, Equatable {
     let title: String?
     let description: String?
     let persistenceLabel: String?
+    let providers: [AuthProviderSnapshot]?
+}
+
+struct AuthProviderSnapshot: Codable, Equatable, Identifiable {
+    let id: String
+    let label: String?
+    let status: String?
+    let detail: String?
+
+    var displayLabel: String { label ?? id.capitalized }
+    var isAvailable: Bool { status?.lowercased() == "available" }
 }
 
 struct SessionUser: Codable, Equatable {
@@ -36,6 +47,15 @@ enum NativeSessionState: Equatable {
             return true
         case .unknown, .loading, .guest, .authenticated, .unauthenticated:
             return false
+        }
+    }
+
+    var sessionResponse: SessionResponse? {
+        switch self {
+        case .guest(let response), .authenticated(let response):
+            return response
+        case .unknown, .loading, .unauthenticated, .expired, .offline:
+            return nil
         }
     }
 
