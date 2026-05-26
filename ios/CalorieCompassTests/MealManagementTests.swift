@@ -240,4 +240,60 @@ final class NativeSessionStateTests: XCTestCase {
         XCTAssertTrue(NativeSessionState.expired(message: "Expired").isActionBlocked)
         XCTAssertTrue(NativeSessionState.offline(message: "Offline").isActionBlocked)
     }
+
+    func testNativeSessionStateExposesAuthSessionWithoutForcingLogin() {
+        let response = SessionResponse(account: nil, user: SessionUser(id: "guest-1", name: nil, mode: "guest"))
+        let session = NativeSessionState.fromSessionResponse(response).authSession
+
+        XCTAssertTrue(session.isGuest)
+        XCTAssertFalse(session.isSignedIn)
+        XCTAssertTrue(session.canUpgradeGuest)
+        XCTAssertEqual(session.signInAvailability, .planned)
+    }
+}
+
+final class AuthSessionScaffoldTests: XCTestCase {
+    func testAppleAuthServiceReportsUnavailableInsteadOfPretendingToSignIn() {
+        let service = AppleAuthService(storage: InMemoryAuthStorage())
+        let expectation = expectation(description: "auth scaffold responds")
+
+        service.signInWithApple { result in
+            switch result {
+            case .success(.unavailable(let message)):
+                XCTAssertTrue(message.contains("coming soon"))
+            default:
+                XCTFail("Phase 4C must not report a real Apple sign-in result")
+            }
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 1)
+    }
+
+    func testSignOutClearsStoredSessionToken() {
+        let storage = InMemoryAuthStorage(token: "server-issued-token-placeholder")
+        let service = AppleAuthService(storage: storage)
+        let expectation = expectation(description: "sign out responds")
+
+        XCTAssertTrue(service.currentSession().isSignedIn)
+        service.signOut { result in
+            XCTAssertEqual(result, .success(.signedOut))
+            XCTAssertNil(storage.readSessionToken())
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 1)
+    }
+}
+
+private final class InMemoryAuthStorage: SecureAuthStorage {
+    private var token: String?
+
+    init(token: String? = nil) {
+        self.token = token
+    }
+
+    func readSessionToken() -> String? { token }
+    func saveSessionToken(_ token: String) throws { self.token = token }
+    func clearSessionToken() { token = nil }
 }
