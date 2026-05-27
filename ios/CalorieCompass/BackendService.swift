@@ -323,7 +323,14 @@ struct NativeAccountDeleteCounts: Codable, Equatable {
     let authProviders: Int?
 
     var totalAccountDataRows: Int {
-        (profile ?? 0) + (meals ?? 0) + (reusableMeals ?? 0) + (dailyLogs ?? 0) + (weightEntries ?? 0) + (authProviders ?? 0)
+        let profileCount = profile ?? 0
+        let mealCount = meals ?? 0
+        let reusableMealCount = reusableMeals ?? 0
+        let dailyLogCount = dailyLogs ?? 0
+        let weightEntryCount = weightEntries ?? 0
+        let authProviderCount = authProviders ?? 0
+
+        return profileCount + mealCount + reusableMealCount + dailyLogCount + weightEntryCount + authProviderCount
     }
 }
 
