@@ -4,6 +4,9 @@ export type NativeAuthRouteStatus = 'planned' | 'not_implemented' | 'available';
 export type NativeAuthErrorCode =
   | 'INVALID_NATIVE_AUTH_REQUEST'
   | 'NATIVE_APPLE_AUTH_NOT_IMPLEMENTED'
+  | 'APPLE_TOKEN_CONFIG_MISSING'
+  | 'APPLE_TOKEN_INVALID'
+  | 'APPLE_IDENTITY_VERIFIED_NO_SESSION'
   | 'NATIVE_LOGOUT_GUEST_MODE'
   | 'ACCOUNT_EXPORT_NATIVE_NOT_IMPLEMENTED'
   | 'ACCOUNT_DELETION_NATIVE_NOT_IMPLEMENTED'
@@ -29,6 +32,23 @@ export type NativeAuthContractResponse = {
   code: NativeAuthErrorCode;
   error: string;
   requiredBeforeEnablement?: string[];
+};
+
+export type VerifiedNativeAppleIdentityResponse = {
+  ok: true;
+  code: 'APPLE_IDENTITY_VERIFIED_NO_SESSION';
+  sessionIssued: false;
+  identity: {
+    provider: 'apple';
+    subject: string;
+    audience: string;
+    issuer: string;
+    expiresAt: number;
+    issuedAt: number;
+    email?: string;
+    emailVerified?: boolean;
+  };
+  remainingBeforeSession: string[];
 };
 
 type NativeAppleAuthValidationResult =
@@ -92,7 +112,7 @@ export function getNativeAuthScaffoldStatus() {
     apple: {
       status: 'not_implemented' satisfies NativeAuthRouteStatus,
       requiredBeforeEnablement: [
-        'Verify Apple identity token issuer, audience, signature, expiry, and nonce on the backend using Apple public keys/JWKS.',
+        'Apple identity token issuer, audience, signature, expiry, subject, and nonce are verified on the backend using Apple public keys/JWKS.',
         'Create or link a User by stable Apple subject identifier without trusting client-supplied email/name alone.',
         'Define and persist backend-issued native session artifacts, refresh, revocation, and logout semantics.',
         'Migrate guest profile, meals, reusable meals, and logs transactionally during upgrade.',

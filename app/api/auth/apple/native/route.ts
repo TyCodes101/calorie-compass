@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 
-import { buildNativeAppleAuthNotImplementedResponse, validateNativeAppleAuthRequest } from '@/lib/auth/native-auth-contract';
+import { verifyAppleIdentityToken } from '@/lib/auth/apple-token-verification';
+import { getNativeAuthScaffoldStatus, validateNativeAppleAuthRequest } from '@/lib/auth/native-auth-contract';
+
+function getExpectedAppleAudience() {
+  return process.env.APPLE_AUTH_AUDIENCE ?? process.env.APPLE_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_BUNDLE_ID;
+}
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -30,8 +35,39 @@ export async function POST(request: Request) {
     );
   }
 
-  // Safety boundary: do not authenticate from client-provided identityToken yet.
-  // TODO(Phase 5B+): verify Apple JWT issuer/audience/signature/expiry/nonce via
-  // Apple public keys, then issue a backend-owned session token.
-  return NextResponse.json(buildNativeAppleAuthNotImplementedResponse(), { status: 501 });
+  const verification = await verifyAppleIdentityToken({
+    identityToken: validation.value.identityToken,
+    expectedAudience: getExpectedAppleAudience(),
+    nonce: validation.value.nonce,
+  });
+
+  if (!verification.ok) {
+    const status = verification.code === 'APPLE_TOKEN_CONFIG_MISSING' ? 503 : 401;
+    return NextResponse.json(
+      {
+        ok: false,
+        error: verification.error,
+        code: verification.code,
+      },
+      { status },
+    );
+  }
+
+  const remainingBeforeSession = getNativeAuthScaffoldStatus().accountLifecycle.requiredBeforeEnablement;
+  return NextResponse.json({
+    ok: true,
+    code: 'APPLE_IDENTITY_VERIFIED_NO_SESSION',
+    sessionIssued: false,
+    identity: {
+      provider: 'apple',
+      subject: verification.identity.subject,
+      audience: verification.identity.audience,
+      issuer: verification.identity.issuer,
+      expiresAt: verification.identity.expiresAt,
+      issuedAt: verification.identity.issuedAt,
+      email: verification.identity.email,
+      emailVerified: verification.identity.emailVerified,
+    },
+    remainingBeforeSession,
+  });
 }
