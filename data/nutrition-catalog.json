@@ -161,6 +161,14 @@
       "notes": "Used for branded packaged food matching"
     },
     {
+      "id": "traderjoes_reference",
+      "name": "Trader Joe's nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Trader Joe's",
+      "citation": "Trader Joe's packaged snack nutrition reference",
+      "notes": "Used for branded packaged food matching"
+    },
+    {
       "id": "burgerking_official",
       "name": "Burger King official nutrition",
       "sourceType": "OFFICIAL_RESTAURANT",
@@ -436,6 +444,27 @@
       "aliases": [
         "starbucks latte venti",
         "venti latte"
+      ]
+    },
+    {
+      "id": "starbucks_caramel_macchiato_grande",
+      "canonicalName": "Starbucks Caramel Macchiato Grande",
+      "brand": "Starbucks",
+      "servingQuantity": 1,
+      "servingUnit": "grande",
+      "calories": 250,
+      "protein": 10,
+      "carbs": 35,
+      "fat": 7,
+      "fiber": 0,
+      "sugar": 33,
+      "sodium": 150,
+      "sourceId": "starbucks_official",
+      "active": true,
+      "aliases": [
+        "starbucks caramel macchiato",
+        "caramel macchiato",
+        "grande caramel macchiato"
       ]
     },
     {
@@ -1274,6 +1303,28 @@
         "quaker rice cakes white cheddar",
         "quaker white cheddar rice cake",
         "quaker oats white cheddar rice cake"
+      ]
+    },
+    {
+      "id": "traderjoes_zero_sugar_sour_gummy_worms",
+      "canonicalName": "Trader Joe's Zero Sugar Sour Gummy Worms",
+      "brand": "Trader Joe's",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 120,
+      "protein": 0,
+      "carbs": 34,
+      "fat": 0,
+      "fiber": 0,
+      "sugar": 0,
+      "sodium": 15,
+      "sourceId": "traderjoes_reference",
+      "active": true,
+      "aliases": [
+        "trader joe's zero sugar sour gummy worms",
+        "trader joes zero sugar sour gummy worms",
+        "zero sugar sour gummy worms",
+        "sour gummy worms"
       ]
     },
     {

@@ -43,6 +43,7 @@ type KnownPackagedBrand =
   | 'Premier Protein'
   | 'Quest'
   | 'Quaker'
+  | "Trader Joe's"
   | null;
 
 function detectRestaurantBrand(text: string): KnownRestaurantBrand {
@@ -75,6 +76,7 @@ function detectPackagedBrand(text: string): KnownPackagedBrand {
   if (text.includes('premier protein')) return 'Premier Protein';
   if (text.includes('quest')) return 'Quest';
   if (text.includes('quaker')) return 'Quaker';
+  if (text.includes("trader joe's") || text.includes('trader joes')) return "Trader Joe's";
   if (text.includes('gatorade')) return 'Gatorade';
   if (text.includes('celsius')) return 'Celsius';
   if (text.includes('coke zero') || text.includes('coca cola') || text.includes('coke')) return 'Coca-Cola';
@@ -82,7 +84,7 @@ function detectPackagedBrand(text: string): KnownPackagedBrand {
   return null;
 }
 
-const packagedSnackRegex = /\b(rice cakes?|white cheddar rice cakes?|chips?|protein bars?|popcorn|crackers?|packaged snacks?)\b/i;
+const packagedSnackRegex = /\b(rice cakes?|white cheddar rice cakes?|chips?|protein bars?|popcorn|crackers?|gummy worms?|packaged snacks?)\b/i;
 
 function cleanSegment(segment: string) {
   return segment
@@ -266,6 +268,10 @@ function matchRestaurantSegment(segment: string, brand: Exclude<KnownRestaurantB
   else if (brand === 'Starbucks') matchedItems = matchStarbucksSegment(segment, factor);
   else if (brand === 'Chick-fil-A') matchedItems = matchChickFilASegment(segment, factor);
   else if (brand === "McDonald's") matchedItems = matchMcDonaldsSegment(segment, factor);
+  else if (brand === 'Taco Bell' && segment.includes('crunchy tacos')) {
+    const food = findCatalogFoodById('tacobell_crunchy_taco');
+    matchedItems = food ? scaleItems([scaleCatalogFood(food, 1, 'taco')], factor).map((item) => ({ ...item, food_name: 'Taco Bell Crunchy Tacos' })) : [];
+  }
 
   if (matchedItems.length) {
     return matchedItems;
