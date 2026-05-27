@@ -84,7 +84,7 @@ const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
 const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|(?:lets|let's) go back to|go back to|back to|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
-const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chick[-\s]*fil[-\s]*a|starbucks|subway|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|mcchicken|big mac|nuggets?|tacos?|sandwich|fries|fry|latte|footlong|orange chicken|caniac|mac and cheese|fairlife|core power|quest|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|shakes?|grilled chicken|chicken breast|chicken|turkey sausage|sausage|coke zero|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|ranch)\b/i;
+const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chick[-\s]*fil[-\s]*a|starbucks|subway|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|trader joe'?s?|mcchicken|big mac|nuggets?|tacos?|sandwich|burgers?|fries|fry|latte|macchiato|footlong|orange chicken|caniac|mac and cheese|fairlife|core power|quest|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|whey|shakes?|grilled chicken|chicken breast|chicken tenders?|chicken|turkey sausage|sausage|coke zero|coke|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|granola|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|sauce|ranch|gummy worms?)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -237,6 +237,8 @@ function normalizeKnownFoodTypos(text: string) {
     .replace(/\bcotaage\b/g, 'cottage')
     .replace(/\bcotage\b/g, 'cottage')
     .replace(/\bcottagee\b/g, 'cottage')
+    .replace(/\bchkn\b/g, 'chicken')
+    .replace(/\bchikn\b/g, 'chicken')
     .replace(/\bceasers\b/g, 'caesars')
     .replace(/\bcaesers\b/g, 'caesars');
 }
@@ -518,7 +520,8 @@ function isNonFoodDialogueMessage(message: string) {
 }
 
 function hasAffirmativeSaveCommand(message: string) {
-  return saveRegex.test(message) && !negatedSaveRegex.test(message) && !saveQuestionRegex.test(message.trim());
+  const trimmed = message.trim();
+  return !/\?$/.test(trimmed) && saveRegex.test(message) && !negatedSaveRegex.test(message) && !saveQuestionRegex.test(trimmed);
 }
 
 function isRecommendationRequestMessage(message: string) {
@@ -1080,7 +1083,7 @@ function extractHeuristicMutationOperations(message: string, state: MealAssistan
     }
   }
 
-  if (operations.length && /\b(?:save(?: it| that| this)?|log(?: it| that| this)?|looks good|done)\b/i.test(message) && !operations.some((operation) => operation.action === 'save_meal' || operation.should_save_meal)) {
+  if (operations.length && hasAffirmativeSaveCommand(message) && !operations.some((operation) => operation.action === 'save_meal' || operation.should_save_meal)) {
     operations.push({
       action: 'save_meal',
       target_item: null,
@@ -2003,6 +2006,23 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     const match = normalized.match(new RegExp(`\\b(\\d+(?:\\.\\d+)?|${countWordPattern})\\s+${pattern}\\b`));
     return match ? parseCount(match[1] ?? '1') : fallback;
   };
+  const readPortionQuantity = (foodPattern: string, fallback = 1) => {
+    const fractionMatch = lower.match(new RegExp(`\\b(\\d+)\\s*/\\s*(\\d+)\\s+(?:of\\s+)?(?:a\\s+|an\\s+)?${foodPattern}\\b`));
+    if (fractionMatch) {
+      const numerator = Number(fractionMatch[1]);
+      const denominator = Number(fractionMatch[2]);
+      if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0) {
+        return numerator / denominator;
+      }
+    }
+
+    const halfMatch = normalized.match(new RegExp(`\\b(?:a\\s+)?half\\s+(?:of\\s+)?(?:a\\s+|an\\s+)?${foodPattern}\\b`));
+    if (halfMatch) {
+      return 0.5;
+    }
+
+    return readCountBefore(foodPattern, fallback);
+  };
 
   const chipotleEstimate = detectChipotleBowlEstimate(message);
   if (chipotleEstimate) {
@@ -2188,6 +2208,30 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (/\bgranola\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:cups?\\s+(?:of\\s+)?)?granola', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'granola',
+          label: 'Granola',
+          quantity,
+          unit: quantity === 1 ? 'serving' : 'servings',
+          calories: 140 * quantity,
+          protein: 3 * quantity,
+          carbs: 24 * quantity,
+          fat: 5 * quantity,
+          fiber: 3 * quantity,
+          sugar: 7 * quantity,
+          sodium: 35 * quantity,
+          sourceName: 'Granola common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
   if (/\beggs?\b/.test(normalized)) {
     const quantity = readCountBefore('(?:(?:scrambled|fried|hard boiled|large|small|medium)\\s+)?eggs?', 1);
     const isScrambled = /\bscrambled eggs?\b/.test(normalized);
@@ -2277,6 +2321,28 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
+  if (/\bcoke\b/.test(normalized) && !/\b(?:coke zero|zero sugar coke|diet coke)\b/.test(normalized)) {
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'coke',
+          label: 'Coke',
+          quantity: 1,
+          unit: 'can',
+          calories: 140,
+          protein: 0,
+          carbs: 39,
+          fat: 0,
+          sugar: 39,
+          sodium: 45,
+          sourceName: 'Coca-Cola common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  }
+
   if (/\bmcdouble\b|\bmc double\b/.test(normalized)) {
     const quantity = readCountBefore('(?:mc\\s*double|mcdouble)s?', 1);
     items.push(
@@ -2295,6 +2361,53 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
           sodium: quantity * 920,
           sourceName: "McDonald's official nutrition",
           sourceType: 'OFFICIAL_RESTAURANT',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bbig mac\b|\bbigmac\b/.test(normalized)) {
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'big mac',
+          label: "McDonald's Big Mac",
+          quantity: 1,
+          unit: 'burger',
+          calories: 590,
+          protein: 25,
+          carbs: 46,
+          fat: 34,
+          fiber: 3,
+          sugar: 9,
+          sodium: 1050,
+          sourceName: "McDonald's official nutrition",
+          sourceType: 'OFFICIAL_RESTAURANT',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bburgers?\b/.test(normalized) && !/\b(?:mcdouble|mc double|big mac|bigmac|cheeseburger)\b/.test(normalized)) {
+    const quantity = readPortionQuantity('burgers?', 1);
+    const withoutBun = /\b(?:no|without|hold the)\s+bun\b|\bno bun\b/.test(normalized);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'burger',
+          label: withoutBun ? 'Burger without bun' : quantity === 1 ? 'Burger' : 'Burgers',
+          quantity,
+          unit: quantity === 1 ? 'burger' : 'burgers',
+          calories: (withoutBun ? 320 : 430) * quantity,
+          protein: 24 * quantity,
+          carbs: (withoutBun ? 4 : 33) * quantity,
+          fat: (withoutBun ? 24 : 23) * quantity,
+          fiber: (withoutBun ? 0 : 2) * quantity,
+          sugar: (withoutBun ? 1 : 6) * quantity,
+          sodium: 640 * quantity,
+          sourceName: withoutBun ? 'Bunless burger common serving estimate' : 'Burger common serving estimate',
         },
         message,
       ),
@@ -2361,7 +2474,80 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (/\bchicken\b/.test(normalized) && !/\b(?:chipotle|wendy|sandwich|nuggets?|fried|grilled)\b/.test(normalized)) {
+  if (/\b(?:chicken\s+)?tacos?\b|\btacos?\s+(?:with\s+)?chicken\b/.test(normalized)) {
+    const quantity = readPortionQuantity('(?:chicken\\s+)?tacos?', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'chicken tacos',
+          label: /chicken/.test(normalized) ? 'Chicken tacos' : quantity === 1 ? 'Taco' : 'Tacos',
+          quantity,
+          unit: quantity === 1 ? 'taco' : 'tacos',
+          calories: 210 * quantity,
+          protein: (/chicken/.test(normalized) ? 14 : 8) * quantity,
+          carbs: 22 * quantity,
+          fat: 8 * quantity,
+          fiber: 3 * quantity,
+          sugar: 2 * quantity,
+          sodium: 420 * quantity,
+          sourceName: 'Taco common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bchicken tenders?\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:air\\s+fried\\s+|homemade\\s+)?chicken tenders?', 3);
+    const isAirFried = /\bair fried\b/.test(normalized);
+    const label = `${isAirFried ? 'Air fried ' : ''}${/\bhomemade\b/.test(normalized) ? 'homemade ' : ''}chicken tenders`
+      .replace(/^./, (char) => char.toUpperCase())
+      .replace(/\s+/g, ' ')
+      .trim();
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'chicken tenders',
+          label,
+          quantity,
+          unit: quantity === 1 ? 'tender' : 'tenders',
+          calories: (isAirFried ? 70 : 95) * quantity,
+          protein: 8 * quantity,
+          carbs: (isAirFried ? 5 : 7) * quantity,
+          fat: (isAirFried ? 3 : 5) * quantity,
+          sodium: 230 * quantity,
+          sourceName: 'Chicken tenders common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\b(?:fried|grilled)?\s*chicken sandwich\b|\bchicken sandwich\b/.test(normalized) && !/\b(?:wendy|mcdonald|chick[-\s]*fil[-\s]*a|popeyes)\b/.test(normalized)) {
+    const isGrilled = /\bgrilled\b/.test(normalized);
+    const isFried = /\bfried\b/.test(normalized) || !isGrilled;
+    items.push(
+      makeGenericEstimate(
+        {
+          key: isGrilled ? 'grilled chicken sandwich' : 'fried chicken sandwich',
+          label: isGrilled ? 'Grilled chicken sandwich' : isFried ? 'Fried chicken sandwich' : 'Chicken sandwich',
+          quantity: 1,
+          unit: 'sandwich',
+          calories: isGrilled ? 390 : 490,
+          protein: isGrilled ? 29 : 26,
+          carbs: isGrilled ? 44 : 46,
+          fat: isGrilled ? 10 : 21,
+          fiber: 2,
+          sugar: 6,
+          sodium: isGrilled ? 900 : 1080,
+          sourceName: 'Chicken sandwich common serving estimate',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bchicken\b/.test(normalized) && !/\b(?:chipotle|wendy|sandwich|nuggets?|fried|grilled|tacos?|tenders?)\b/.test(normalized)) {
     items.push(
       makeGenericEstimate(
         {
@@ -2551,6 +2737,28 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
 
   if (/\bwhole milk\b/.test(normalized) && !/\bcereal\b/.test(normalized)) {
     items.push(makeWholeMilkItem(message, 1));
+  }
+
+  if (/\bmilk\b/.test(normalized) && !/\bwhole milk\b/.test(normalized) && !/\bcereal\b/.test(normalized) && !/\bcoffee\b/.test(normalized)) {
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'milk',
+          label: 'Milk',
+          quantity: 1,
+          unit: 'cup',
+          calories: 120,
+          protein: 8,
+          carbs: 12,
+          fat: 5,
+          sugar: 12,
+          sodium: 115,
+          sourceName: 'Milk common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
   }
 
   if (/\b(?:broccoli|brocolli)\b/.test(normalized)) {
@@ -2809,7 +3017,7 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   }
 
   if (/\bbananas?\b/.test(normalized)) {
-    const quantity = readCountBefore('bananas?', 1);
+    const quantity = readPortionQuantity('bananas?', 1);
     items.push(
       makeGenericEstimate(
         {
@@ -2886,18 +3094,19 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (/\bprotein powder\b/.test(normalized)) {
+  if (/\b(?:whey|protein powder)\b/.test(normalized)) {
     const serving = parseLeadingServingFood(message);
-    const scoopMatch = normalized.match(/\b(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+scoops?\s+(?:of\s+)?protein powder\b/);
+    const scoopMatch = normalized.match(/\b(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+scoops?\s+(?:of\s+)?(?:whey|protein powder)\b/);
     const quantity = serving?.unit === 'scoop'
       ? serving.quantity
       : scoopMatch ? parseCount(scoopMatch[1] ?? '1') : 1;
+    const isWhey = /\bwhey\b/.test(normalized);
 
     items.push(
       makeGenericEstimate(
         {
-          key: 'protein powder',
-          label: 'Protein powder',
+          key: 'whey protein powder',
+          label: isWhey ? 'Whey protein powder' : 'Protein powder',
           quantity,
           unit: quantity === 1 ? 'scoop' : 'scoops',
           calories: quantity * 120,
@@ -2907,7 +3116,7 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
           fiber: quantity * 1,
           sugar: quantity * 1,
           sodium: quantity * 160,
-          sourceName: 'Protein powder common serving estimate',
+          sourceName: isWhey ? 'Whey protein common serving estimate' : 'Protein powder common serving estimate',
         },
         message,
       ),
@@ -3275,6 +3484,7 @@ function detectChipotleBowlEstimate(message: string): ParsedFoodItem | null {
   if (/\bfajita(?: veggies| vegetables)?\b/.test(normalized)) add('fajita veggies', { calories: 20, protein: 1, carbs: 5, fat: 0, fiber: 2, sodium: 170 });
   if (/\bsour cream\b/.test(normalized)) add('sour cream', { calories: 110, protein: 2, carbs: 2, fat: 9, sodium: 30 });
   if (/\bguac(?:amole)?\b/.test(normalized)) add('guacamole', { calories: 230, protein: 2, carbs: 8, fat: 22, fiber: 6, sodium: 370 });
+  if (/\b(?:extra\s+)?sauce\b/.test(normalized)) add('sauce', { calories: 50, protein: 0, carbs: 6, fat: 2, sugar: 2, sodium: 220 });
 
   if (components.length < 1) {
     if (/\bchipotle\b/.test(normalized) && /\bbowl\b/.test(normalized)) {
@@ -4541,6 +4751,14 @@ function buildConversationRecoveryReply(input: MealAssistantRunInput, context: M
     return buildClarificationMetaReply(input.state);
   }
 
+  if (hasActiveMeal && /^(?:does\s+that\s+)?look(?:s)?\s+(?:good|right|ok|okay)\??$/i.test(normalized)) {
+    return 'It looks ready to save if this is right. Say "save it" to log it, or send a correction and I will adjust it.';
+  }
+
+  if (/\bmedical advice\b|\bdoctor\b|\bdietitian\b|\bhealth professional\b/i.test(normalized)) {
+    return 'No, these are nutrition estimates for tracking, not medical advice. For medical or diet decisions, check with a doctor or dietitian.';
+  }
+
   if (/\b(?:what|which)\s+(?:detail|details|info|information)\b|\bwhat do you need\b|\bwhat detail do you need\b/i.test(normalized)) {
     if (input.state.pendingClarification) {
       return `I just need one detail to keep going: ${input.state.pendingClarification}`;
@@ -4614,7 +4832,7 @@ function buildClarificationMetaReply(state: MealAssistantState) {
 function buildInitialClarificationQuestion(message: string) {
   const normalized = normalizeFoodText(stripEmotionalPreface(message));
   const bareSandwich = /\bsandwich\b/.test(normalized)
-    && !/\b(?:turkey|ham|chicken|tuna|egg|pbj|peanut butter|grilled|fried|spicy|mcdouble|wendy|mcdonald|subway|panera|cheese|breakfast)\b/.test(normalized);
+    && !/\b(?:turkey|ham|chicken|tuna|egg|pbj|peanut butter|grilled|fried|spicy|mcdouble|wendy|mcdonald|subway|panera|chick\s*fil\s*a|chickfila|popeyes|kfc|cheese|breakfast)\b/.test(normalized);
 
   if (/\bomelettes?\b|\bomelets?\b/.test(normalized) && /\bhash\s*browns?|hashbrowns?\b/.test(normalized) && !/\b\d+\s*(?:eggs?)\b/.test(normalized)) {
     return 'For the omelette, how many eggs, any cheese/meat/veggies, and roughly how much hashbrowns?';
@@ -5660,6 +5878,7 @@ function parseReplacementCorrection(message: string) {
     .trim();
   const match =
     normalized.match(/^no\s+(.+?)\s+not\s+(.+)$/i)
+    ?? normalized.match(/^i meant\s+(.+?)\s+not\s+(.+)$/i)
     ?? normalized.match(/^not\s+(.+?)\s+(?:it was|i meant|instead)\s+(.+)$/i);
 
   if (!match) {
@@ -5961,8 +6180,12 @@ async function buildAdaptiveMealMutationReply(
   }
   const replacementCorrection = parseReplacementCorrection(input.message);
   if (replacementCorrection) {
+    const replacementFoodText =
+      /\bsandwich\b/i.test(targetItem.food_name) && /\bgrilled chicken\b/i.test(replacementCorrection.replacement) && !/\bsandwich\b/i.test(replacementCorrection.replacement)
+        ? `${replacementCorrection.replacement} sandwich`
+        : replacementCorrection.replacement;
     const replacementItems = await resolveFoodTextForMealMutation({
-      foodText: replacementCorrection.replacement,
+      foodText: replacementFoodText,
       state: input.state,
       resolveItemNutrition,
       action: 'replace',
@@ -6065,6 +6288,42 @@ async function buildAdaptiveMealMutationReply(
         message: input.message,
       });
     }
+  }
+
+  if (/\b(?:no|without|hold the)\s+bun\b|\bno bun\b/.test(normalized) && /\bburger\b/i.test(targetItem.food_name)) {
+    const replacementIndex = targetIndex >= 0 ? targetIndex : currentItems.length - 1;
+    const bunlessItem = {
+      ...targetItem,
+      food_name: /without bun/i.test(targetItem.food_name) ? targetItem.food_name : `${targetItem.food_name} without bun`,
+      calories: Math.max(0, Number((targetItem.calories - 110).toFixed(1))),
+      carbs: Math.max(0, Number((targetItem.carbs - 24).toFixed(1))),
+      protein: targetItem.protein,
+      fat: targetItem.fat,
+      notes: [targetItem.notes, 'Adjusted to remove the bun from the burger estimate.'].filter(Boolean).join(' '),
+      source_type: 'AI_ESTIMATE' as const,
+      source_name: 'Adjusted burger estimate',
+      confidence_label: 'Estimated' as const,
+      is_trusted: false,
+      used_ai_fallback: true,
+    };
+    const nextItems = currentItems.map((item, index) => (index === replacementIndex ? bunlessItem : item));
+    const nextState: MealAssistantState = {
+      ...input.state,
+      currentMealItems: nextItems,
+      userCorrections: [...input.state.userCorrections, input.message],
+      currentMealText: buildMealTextFromItems(nextItems),
+      confidenceScore: getConfidenceScore(nextItems),
+      saved: false,
+      pendingClarification: null,
+      lastAssistantQuestion: null,
+    };
+
+    return buildDirectResponse({
+      intent: 'correction',
+      assistantReply: `Updated the burger to no bun. About ${Math.round(sumTotals(nextItems).calories)} calories total.`,
+      nextState,
+      message: input.message,
+    });
   }
 
   const correctedServing = parseCorrectedServing(input.message);
