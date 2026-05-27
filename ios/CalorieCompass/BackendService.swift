@@ -197,6 +197,54 @@ struct DailySummary: Codable {
     let description: String?
 }
 
+struct NativeAppleAuthRequest: Encodable {
+    let provider = "apple"
+    let identityToken: String
+    let authorizationCode: String?
+
+    init(identityToken: String, authorizationCode: String?) {
+        self.identityToken = identityToken
+        self.authorizationCode = authorizationCode
+    }
+}
+
+struct NativeAppleAuthResponse: Codable, Equatable {
+    let ok: Bool?
+    let code: String?
+    let sessionIssued: Bool
+    let account: NativeAppleAuthAccount?
+    let session: NativeAppleAuthSession?
+    let error: String?
+
+    var hasBackendIssuedSession: Bool {
+        ok == true &&
+        sessionIssued &&
+        account?.mode?.lowercased() == "account" &&
+        session?.token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+}
+
+struct NativeAppleAuthAccount: Codable, Equatable {
+    let mode: String?
+    let userId: String?
+    let provider: String?
+    let canUpgradeGuest: Bool?
+}
+
+struct NativeAppleAuthSession: Codable, Equatable {
+    let token: String
+    let expiresAt: String?
+    let tokenType: String?
+}
+
+struct NativeLogoutResponse: Codable, Equatable {
+    let ok: Bool?
+    let mode: String?
+    let code: String?
+    let revoked: Bool?
+    let message: String?
+}
+
 enum BackendError: LocalizedError, Equatable {
     case badURL
     case noData
@@ -223,6 +271,9 @@ enum BackendError: LocalizedError, Equatable {
 
 class BackendService {
     static var baseURL: URL { AppConfig.current.backendBaseURL }
+    static var nativeSessionTokenProvider: () -> String? = {
+        KeychainAuthStorage().readBackendSessionToken()
+    }
 
     private static func perform<T: Decodable>(_ urlRequest: URLRequest, completion: @escaping (Result<T, Error>) -> Void) {
         let task = URLSession.shared.dataTask(with: urlRequest) { data, response, error in
@@ -281,18 +332,42 @@ class BackendService {
         return .server(error.localizedDescription)
     }
 
-    private static func request(path: String, method: String = "GET", queryItems: [URLQueryItem] = []) -> URLRequest? {
+    static func applyNativeSessionAuthorization(to request: inout URLRequest, token: String?) {
+        guard let token = token?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !token.isEmpty else {
+            return
+        }
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
+
+    private static func request(path: String, method: String = "GET", queryItems: [URLQueryItem] = [], includeNativeSession: Bool = true) -> URLRequest? {
         guard var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else { return nil }
         if !queryItems.isEmpty { components.queryItems = queryItems }
         guard let url = components.url else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if includeNativeSession {
+            applyNativeSessionAuthorization(to: &request, token: nativeSessionTokenProvider())
+        }
         return request
     }
 
     static func fetchSession(completion: @escaping (Result<SessionResponse, Error>) -> Void) {
         guard let urlRequest = request(path: "api/session", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func signInWithApple(identityToken: String, authorizationCode: String?, completion: @escaping (Result<NativeAppleAuthResponse, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/auth/apple/native", method: "POST", includeNativeSession: false) else { completion(.failure(BackendError.badURL)); return }
+        let body = NativeAppleAuthRequest(identityToken: identityToken, authorizationCode: authorizationCode)
+        do { urlRequest.httpBody = try JSONEncoder().encode(body) } catch { completion(.failure(error)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func logoutNativeSession(token: String?, completion: @escaping (Result<NativeLogoutResponse, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/auth/logout", method: "POST", includeNativeSession: false) else { completion(.failure(BackendError.badURL)); return }
+        applyNativeSessionAuthorization(to: &urlRequest, token: token)
         perform(urlRequest, completion: completion)
     }
 

@@ -68,16 +68,16 @@ enum NativeSessionState: Equatable {
                 displayName: response.user?.name,
                 provider: nil,
                 canUpgradeGuest: true,
-                signInAvailability: .planned
+                signInAvailability: .available
             )
         case .authenticated(let response):
             return AuthSession(
                 mode: .account,
                 userId: response.user?.id,
                 displayName: response.user?.name,
-                provider: nil,
+                provider: .apple,
                 canUpgradeGuest: false,
-                signInAvailability: .planned
+                signInAvailability: .available
             )
         case .unknown, .loading, .unauthenticated, .expired, .offline:
             return .unauthenticated

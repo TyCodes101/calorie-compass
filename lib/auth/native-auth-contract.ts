@@ -124,9 +124,9 @@ export function getNativeAuthScaffoldStatus() {
     apple: {
       status: 'planned' satisfies NativeAuthRouteStatus,
       requiredBeforeEnablement: [
-        'Wire the native iOS Sign in with Apple authorization flow.',
-        'Store only the backend-issued native session token in Keychain after a successful server response.',
         'Migrate guest profile, meals, reusable meals, and logs transactionally during upgrade.',
+        'Add verified native account export and deletion endpoints.',
+        'Complete account-management polish for signed-in native users.',
         'Complete simulator and real-device auth QA before treating native Apple sign-in as user-facing ready.',
       ],
     },

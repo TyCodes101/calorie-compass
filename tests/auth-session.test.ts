@@ -37,9 +37,9 @@ describe('auth session helpers', () => {
     const status = getNativeAuthScaffoldStatus();
 
     expect(status.apple.status).toBe('planned');
-    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/native iOS Sign in with Apple/i);
-    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Keychain/i);
     expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Migrate guest/i);
+    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/export and deletion/i);
+    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/auth QA/i);
     expect(status.accountLifecycle.requiredBeforeEnablement.join(' ')).toMatch(/Guest-to-account migration/i);
   });
 

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
 
-import type { PrismaClient } from '@prisma/client';
+import type { ActivityLevel, GoalType } from '@prisma/client';
 
 import type { VerifiedAppleIdentity } from '@/lib/auth/apple-token-verification';
 import { prisma } from '@/lib/prisma';
@@ -9,7 +9,55 @@ const nativeAuthProvider = 'apple';
 const nativeSessionTokenBytes = 32;
 export const nativeSessionTtlMs = 1000 * 60 * 60 * 24 * 30;
 
-type NativeSessionPrisma = Pick<PrismaClient, '$transaction' | 'nativeSession'>;
+type NativeSessionTransaction = {
+  userAuthProvider: {
+    upsert: (args: unknown) => Promise<{
+      userId: string;
+      user: SessionUserPayload;
+    }>;
+  };
+  nativeSession: {
+    create: (args: unknown) => Promise<unknown>;
+  };
+};
+
+type NativeSessionPrisma = {
+  $transaction: <T>(callback: (tx: NativeSessionTransaction) => Promise<T>) => Promise<T>;
+  nativeSession: NativeSessionDelegate;
+};
+
+type NativeSessionUserPayload = SessionUserPayload & {
+  createdAt: Date;
+  updatedAt: Date;
+  profile: {
+    id: string;
+    userId: string;
+    age: number | null;
+    heightCm: number | null;
+    weightLbs: number | null;
+    goal: GoalType;
+    activityLevel: ActivityLevel;
+    dailyCalorieGoal: number;
+    proteinGoal: number;
+    aiPreferenceNotes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  } | null;
+};
+
+type NativeSessionRecord = {
+  id: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  user?: NativeSessionUserPayload;
+};
+
+type NativeSessionDelegate = {
+  findUnique: (args: unknown) => Promise<NativeSessionRecord | null>;
+  update: (args: unknown) => Promise<unknown>;
+};
+
+const nativeSessionPrisma = prisma as unknown as NativeSessionPrisma;
 
 type SessionUserPayload = {
   id: string;
@@ -58,7 +106,7 @@ export async function issueNativeSessionForAppleIdentity({
   identity,
   now = new Date(),
   tokenFactory = generateNativeSessionToken,
-  client = prisma,
+  client = nativeSessionPrisma,
 }: {
   identity: VerifiedAppleIdentity;
   now?: Date;
@@ -126,7 +174,7 @@ export async function issueNativeSessionForAppleIdentity({
 
 export async function getUserForNativeSessionToken(
   token: string | null | undefined,
-  { now = new Date(), client = prisma }: { now?: Date; client?: Pick<PrismaClient, 'nativeSession'> } = {},
+  { now = new Date(), client = nativeSessionPrisma }: { now?: Date; client?: Pick<NativeSessionPrisma, 'nativeSession'> } = {},
 ) {
   const trimmedToken = token?.trim();
   if (!trimmedToken || !hasNativeSessionPersistence()) {
@@ -147,7 +195,7 @@ export async function getUserForNativeSessionToken(
 
 export async function revokeNativeSessionToken(
   token: string | null | undefined,
-  { now = new Date(), client = prisma }: { now?: Date; client?: Pick<PrismaClient, 'nativeSession'> } = {},
+  { now = new Date(), client = nativeSessionPrisma }: { now?: Date; client?: Pick<NativeSessionPrisma, 'nativeSession'> } = {},
 ): Promise<RevokeNativeSessionResult> {
   const trimmedToken = token?.trim();
   if (!trimmedToken) {
