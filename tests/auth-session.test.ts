@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildAccountFoundationSnapshot, buildGuestUserEmail, getPreferredUserName, isGuestEmail, isGuestUser } from '@/lib/auth-session';
-import { getNativeAuthScaffoldStatus } from '@/lib/auth/native-auth-contract';
+import { buildNativeAppleAuthNotImplementedResponse, getNativeAuthScaffoldStatus, validateNativeAppleAuthRequest } from '@/lib/auth/native-auth-contract';
 
 describe('auth session helpers', () => {
   it('builds stable guest emails and detects guest users', () => {
@@ -39,5 +39,30 @@ describe('auth session helpers', () => {
     expect(status.apple.status).toBe('not_implemented');
     expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Verify Apple identity token/i);
     expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Migrate guest/i);
+    expect(status.accountLifecycle.requiredBeforeEnablement.join(' ')).toMatch(/Guest-to-account migration/i);
+  });
+
+  it('rejects unverified native auth payloads rather than creating fake auth success', () => {
+    expect(validateNativeAppleAuthRequest({ provider: 'apple' }).ok).toBe(false);
+    expect(validateNativeAppleAuthRequest({ provider: 'apple', identityToken: '' }).ok).toBe(false);
+    expect(validateNativeAppleAuthRequest({ provider: 'google', identityToken: 'token' }).ok).toBe(false);
+
+    const guarded = buildNativeAppleAuthNotImplementedResponse();
+    expect(guarded.ok).toBe(false);
+    expect(guarded.code).toBe('NATIVE_APPLE_AUTH_NOT_IMPLEMENTED');
+    expect(guarded.error).toMatch(/required before this route can authenticate anyone/i);
+  });
+
+  it('keeps guest mode upgrade messaging available while auth remains optional', () => {
+    const snapshot = buildAccountFoundationSnapshot({
+      id: 'guest-1',
+      name: 'Guest',
+      email: buildGuestUserEmail('device-session'),
+      demo: true,
+    });
+
+    expect(snapshot.mode).toBe('guest');
+    expect(snapshot.description).toMatch(/without making sign-in mandatory/i);
+    expect(snapshot.providers.every((provider) => provider.status === 'planned')).toBe(true);
   });
 });
