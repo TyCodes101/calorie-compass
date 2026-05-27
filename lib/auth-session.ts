@@ -67,7 +67,7 @@ export function buildAccountFoundationSnapshot(user: SessionUserLike): AccountFo
         id: 'apple',
         label: 'Continue with Apple',
         status: 'planned',
-        detail: 'Native Apple sign-in can request a backend-issued session; guest migration and account tools remain before public auth readiness.',
+        detail: 'Native Apple sign-in can request a backend-issued session; account-management polish and real-device auth QA remain before public auth readiness.',
       },
       {
         id: 'google',

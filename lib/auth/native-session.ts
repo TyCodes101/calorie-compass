@@ -47,6 +47,7 @@ type NativeSessionUserPayload = SessionUserPayload & {
 
 type NativeSessionRecord = {
   id: string;
+  userId?: string;
   expiresAt: Date;
   revokedAt: Date | null;
   user?: NativeSessionUserPayload;
@@ -77,6 +78,29 @@ export type IssuedNativeSession = {
 export type RevokeNativeSessionResult =
   | { revoked: true; reason: 'revoked' | 'expired' }
   | { revoked: false; reason: 'missing_token' | 'persistence_unavailable' | 'not_found' | 'already_revoked' };
+
+export type NativeAccountSession =
+  | {
+      ok: true;
+      token: string;
+      session: {
+        id: string;
+        userId: string;
+        expiresAt: Date;
+        revokedAt: null;
+      };
+      user: NativeSessionUserPayload | null;
+    }
+  | {
+      ok: false;
+      status: 401 | 503;
+      code:
+        | 'NATIVE_SESSION_REQUIRED'
+        | 'NATIVE_SESSION_REVOKED'
+        | 'NATIVE_SESSION_EXPIRED'
+        | 'NATIVE_SESSION_PERSISTENCE_UNAVAILABLE';
+      error: string;
+    };
 
 export function hasNativeSessionPersistence(env: NodeJS.ProcessEnv = process.env) {
   return Boolean(env.DATABASE_URL?.trim());
@@ -225,6 +249,84 @@ export async function revokeNativeSessionToken(
   });
 
   return { revoked: true, reason: isNativeSessionExpired(session, now) ? 'expired' : 'revoked' };
+}
+
+export async function getNativeAccountSessionFromRequest(
+  request: Request,
+  { now = new Date(), client = nativeSessionPrisma }: { now?: Date; client?: Pick<NativeSessionPrisma, 'nativeSession'> } = {},
+): Promise<NativeAccountSession> {
+  const token = await readNativeSessionTokenFromRequest(request);
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      code: 'NATIVE_SESSION_REQUIRED',
+      error: 'A signed-in native account session is required for this request.',
+    };
+  }
+
+  if (!hasNativeSessionPersistence()) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'NATIVE_SESSION_PERSISTENCE_UNAVAILABLE',
+      error: 'Durable database persistence is required for native account sessions.',
+    };
+  }
+
+  const session = await client.nativeSession.findUnique({
+    where: { tokenHash: hashNativeSessionToken(token) },
+    include: { user: { include: { profile: true } } },
+  });
+
+  if (!session) {
+    return {
+      ok: false,
+      status: 401,
+      code: 'NATIVE_SESSION_REQUIRED',
+      error: 'A signed-in native account session is required for this request.',
+    };
+  }
+
+  if (session.revokedAt) {
+    return {
+      ok: false,
+      status: 401,
+      code: 'NATIVE_SESSION_REVOKED',
+      error: 'This native account session has been signed out.',
+    };
+  }
+
+  if (isNativeSessionExpired(session, now)) {
+    return {
+      ok: false,
+      status: 401,
+      code: 'NATIVE_SESSION_EXPIRED',
+      error: 'This native account session has expired. Please sign in again.',
+    };
+  }
+
+  const userId = session.userId ?? session.user?.id;
+  if (!userId) {
+    return {
+      ok: false,
+      status: 401,
+      code: 'NATIVE_SESSION_REQUIRED',
+      error: 'A signed-in native account session is required for this request.',
+    };
+  }
+
+  return {
+    ok: true,
+    token,
+    session: {
+      id: session.id,
+      userId,
+      expiresAt: session.expiresAt,
+      revokedAt: null,
+    },
+    user: session.user ?? null,
+  };
 }
 
 function readBearerToken(authorization: string | null) {

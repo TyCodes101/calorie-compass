@@ -183,7 +183,8 @@ describe('native Apple auth route safety', () => {
     expect(payload.session.token).toEqual(expect.any(String));
     expect(payload.session.token).not.toBe(token);
     expect(payload.session.tokenType).toBe('Bearer');
-    expect(payload.remainingBeforeFullNativeAuth.join(' ')).toMatch(/Guest-to-account migration/i);
+    expect(payload.remainingBeforeFullNativeAuth.join(' ')).toMatch(/real-device QA/i);
+    expect(payload.remainingBeforeFullNativeAuth.join(' ')).toMatch(/account deletion verification/i);
     expect(prismaMocks.tx.userAuthProvider.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
