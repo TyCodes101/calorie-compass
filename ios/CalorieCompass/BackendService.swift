@@ -245,6 +245,107 @@ struct NativeLogoutResponse: Codable, Equatable {
     let message: String?
 }
 
+struct NativeLifecycleCounts: Codable, Equatable {
+    let profile: Int?
+    let meals: Int?
+    let reusableMeals: Int?
+    let dailyLogs: Int?
+    let weightEntries: Int?
+
+    var total: Int {
+        (profile ?? 0) + (meals ?? 0) + (reusableMeals ?? 0) + (dailyLogs ?? 0) + (weightEntries ?? 0)
+    }
+}
+
+struct NativeGuestMigrationResult: Codable, Equatable {
+    let status: String?
+    let accountUserId: String?
+    let guestUserId: String?
+    let migrated: NativeLifecycleCounts
+    let skipped: NativeLifecycleCounts
+}
+
+struct NativeGuestMigrationResponse: Codable, Equatable {
+    let ok: Bool?
+    let code: String?
+    let result: NativeGuestMigrationResult?
+    let error: String?
+
+    var successMessage: String {
+        let moved = result?.migrated.total ?? 0
+        let skipped = result?.skipped.total ?? 0
+        if skipped > 0 {
+            return "\(moved) items moved, \(skipped) skipped because matching account data already existed."
+        }
+        if moved == 0 {
+            return "No guest data needed migration."
+        }
+        return "\(moved) items moved into your account."
+    }
+}
+
+struct NativeAccountExportAccount: Codable, Equatable {
+    let userId: String?
+    let name: String?
+    let email: String?
+    let demo: Bool?
+}
+
+struct NativeAccountExportSession: Codable, Equatable {
+    let id: String?
+    let expiresAt: String?
+    let revokedAt: String?
+    let createdAt: String?
+    let updatedAt: String?
+}
+
+struct NativeAccountExportResponse: Codable, Equatable {
+    let ok: Bool?
+    let code: String?
+    let exportedAt: String?
+    let account: NativeAccountExportAccount?
+    let profile: ProfileData?
+    let meals: [MealResponse]?
+    let nativeSessions: [NativeAccountExportSession]?
+    let error: String?
+
+    var successMessage: String {
+        "Export ready. \(meals?.count ?? 0) meals included."
+    }
+}
+
+struct NativeAccountDeleteCounts: Codable, Equatable {
+    let profile: Int?
+    let meals: Int?
+    let reusableMeals: Int?
+    let dailyLogs: Int?
+    let weightEntries: Int?
+    let authProviders: Int?
+
+    var totalAccountDataRows: Int {
+        let profileCount = profile ?? 0
+        let mealCount = meals ?? 0
+        let reusableMealCount = reusableMeals ?? 0
+        let dailyLogCount = dailyLogs ?? 0
+        let weightEntryCount = weightEntries ?? 0
+        let authProviderCount = authProviders ?? 0
+
+        return profileCount + mealCount + reusableMealCount + dailyLogCount + weightEntryCount + authProviderCount
+    }
+}
+
+struct NativeAccountDeleteResponse: Codable, Equatable {
+    let ok: Bool?
+    let code: String?
+    let deleted: NativeAccountDeleteCounts?
+    let revokedSessions: Int?
+    let error: String?
+
+    var successMessage: String {
+        "Account data deleted. \(revokedSessions ?? 0) sessions revoked."
+    }
+}
+
 enum BackendError: LocalizedError, Equatable {
     case badURL
     case noData
@@ -260,7 +361,7 @@ enum BackendError: LocalizedError, Equatable {
         case .badURL: return "The Calorie Compass server URL is invalid."
         case .noData: return "The server returned no data."
         case .offline: return "You appear to be offline. Check your connection and try again."
-        case .unauthorized: return "Your Calorie Compass session has expired. Please sign in again on the web, then retry."
+        case .unauthorized: return "Your Calorie Compass session has expired. Please sign in again, then retry."
         case .forbidden: return "You do not have access to this Calorie Compass data. Please check your session and try again."
         case .malformedResponse: return "Calorie Compass returned an unexpected response. Please try again."
         case .server(let message): return message
@@ -353,6 +454,16 @@ class BackendService {
         return request
     }
 
+    static func makeNativeAccountLifecycleRequest(path: String, method: String, token: String?) -> URLRequest? {
+        guard let token = token?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !token.isEmpty,
+              var urlRequest = request(path: path, method: method, includeNativeSession: false) else {
+            return nil
+        }
+        applyNativeSessionAuthorization(to: &urlRequest, token: token)
+        return urlRequest
+    }
+
     static func fetchSession(completion: @escaping (Result<SessionResponse, Error>) -> Void) {
         guard let urlRequest = request(path: "api/session", method: "GET") else { completion(.failure(BackendError.badURL)); return }
         perform(urlRequest, completion: completion)
@@ -368,6 +479,30 @@ class BackendService {
     static func logoutNativeSession(token: String?, completion: @escaping (Result<NativeLogoutResponse, Error>) -> Void) {
         guard var urlRequest = request(path: "api/auth/logout", method: "POST", includeNativeSession: false) else { completion(.failure(BackendError.badURL)); return }
         applyNativeSessionAuthorization(to: &urlRequest, token: token)
+        perform(urlRequest, completion: completion)
+    }
+
+    static func migrateGuestData(completion: @escaping (Result<NativeGuestMigrationResponse, Error>) -> Void) {
+        guard let urlRequest = makeNativeAccountLifecycleRequest(path: "api/auth/guest/migrate", method: "POST", token: nativeSessionTokenProvider()) else {
+            completion(.failure(BackendError.unauthorized))
+            return
+        }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func exportNativeAccountData(completion: @escaping (Result<NativeAccountExportResponse, Error>) -> Void) {
+        guard let urlRequest = makeNativeAccountLifecycleRequest(path: "api/account/native/export", method: "GET", token: nativeSessionTokenProvider()) else {
+            completion(.failure(BackendError.unauthorized))
+            return
+        }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func deleteNativeAccount(completion: @escaping (Result<NativeAccountDeleteResponse, Error>) -> Void) {
+        guard let urlRequest = makeNativeAccountLifecycleRequest(path: "api/account/native/delete", method: "DELETE", token: nativeSessionTokenProvider()) else {
+            completion(.failure(BackendError.unauthorized))
+            return
+        }
         perform(urlRequest, completion: completion)
     }
 

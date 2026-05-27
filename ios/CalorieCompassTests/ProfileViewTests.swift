@@ -65,4 +65,129 @@ final class ProfileViewTests: XCTestCase {
 
         XCTAssertEqual(decoded, profile)
     }
+
+    func testAccountManagementVisibilityRequiresBackendAccountSession() {
+        let guestContent = AccountManagementContent.visibility(for: .guest)
+        XCTAssertFalse(guestContent.canUseAccountActions)
+        XCTAssertTrue(guestContent.message.contains("Sign in with Apple"))
+
+        let accountSession = AuthSession(
+            mode: .account,
+            userId: "user-1",
+            displayName: nil,
+            provider: .apple,
+            canUpgradeGuest: false,
+            signInAvailability: .available
+        )
+        let accountContent = AccountManagementContent.visibility(for: accountSession)
+
+        XCTAssertTrue(accountContent.canUseAccountActions)
+        XCTAssertTrue(accountContent.message.contains("backend-issued"))
+    }
+
+    func testDeleteConfirmationCopyIsExplicitAndScoped() {
+        XCTAssertTrue(AccountManagementContent.deleteConfirmationTitle.contains("Delete account"))
+        XCTAssertTrue(AccountManagementContent.deleteConfirmationMessage.contains("signed-in account"))
+        XCTAssertTrue(AccountManagementContent.deleteConfirmationMessage.contains("not a claim of App Store compliance"))
+    }
+
+    func testMigrationResultSummarizesMovedAndSkippedCounts() throws {
+        let data = """
+        {
+          "ok": true,
+          "code": "GUEST_DATA_MIGRATION_COMPLETED",
+          "result": {
+            "status": "migrated",
+            "accountUserId": "account-1",
+            "guestUserId": "guest-1",
+            "migrated": {
+              "profile": 1,
+              "meals": 2,
+              "reusableMeals": 1,
+              "dailyLogs": 1,
+              "weightEntries": 1
+            },
+            "skipped": {
+              "profile": 0,
+              "meals": 0,
+              "reusableMeals": 1,
+              "dailyLogs": 0,
+              "weightEntries": 0
+            }
+          }
+        }
+        """.data(using: .utf8)
+
+        let jsonData = try XCTUnwrap(data)
+        let response = try JSONDecoder().decode(NativeGuestMigrationResponse.self, from: jsonData)
+
+        XCTAssertEqual(response.result?.migrated.total, 6)
+        XCTAssertEqual(response.result?.skipped.total, 1)
+        XCTAssertTrue(response.successMessage.contains("6 items moved"))
+        XCTAssertTrue(response.successMessage.contains("1 skipped"))
+    }
+
+    func testNativeAccountExportDecodesWithoutTokenHashes() throws {
+        let data = """
+        {
+          "ok": true,
+          "code": "NATIVE_ACCOUNT_EXPORT_READY",
+          "exportedAt": "2026-05-27T12:00:00.000Z",
+          "account": {
+            "userId": "user-1",
+            "name": "Apple User",
+            "email": null,
+            "demo": false
+          },
+          "meals": [
+            {
+              "id": "meal-1",
+              "mealType": "LUNCH",
+              "rawText": "Chicken bowl",
+              "items": []
+            }
+          ],
+          "nativeSessions": [
+            {
+              "id": "session-1",
+              "expiresAt": "2026-06-27T12:00:00.000Z",
+              "revokedAt": null
+            }
+          ]
+        }
+        """.data(using: .utf8)
+
+        let jsonData = try XCTUnwrap(data)
+        let response = try JSONDecoder().decode(NativeAccountExportResponse.self, from: jsonData)
+
+        XCTAssertEqual(response.account?.userId, "user-1")
+        XCTAssertEqual(response.meals?.count, 1)
+        XCTAssertEqual(response.nativeSessions?.first?.id, "session-1")
+        XCTAssertTrue(response.successMessage.contains("1 meals"))
+    }
+
+    func testNativeAccountDeleteDecodesRevokedSessionCount() throws {
+        let data = """
+        {
+          "ok": true,
+          "code": "NATIVE_ACCOUNT_DELETED",
+          "deleted": {
+            "profile": 1,
+            "meals": 2,
+            "reusableMeals": 1,
+            "dailyLogs": 3,
+            "weightEntries": 1,
+            "authProviders": 1
+          },
+          "revokedSessions": 2
+        }
+        """.data(using: .utf8)
+
+        let jsonData = try XCTUnwrap(data)
+        let response = try JSONDecoder().decode(NativeAccountDeleteResponse.self, from: jsonData)
+
+        XCTAssertEqual(response.deleted?.totalAccountDataRows, 9)
+        XCTAssertEqual(response.revokedSessions, 2)
+        XCTAssertTrue(response.successMessage.contains("Account data deleted"))
+    }
 }

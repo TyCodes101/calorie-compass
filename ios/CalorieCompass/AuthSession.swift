@@ -184,8 +184,12 @@ final class AppleAuthService: AuthService {
         }
     }
 
+    func clearLocalSessionAfterAccountDeletion() {
+        storage.clearSessionToken()
+    }
+
     func prepareGuestUpgrade(completion: @escaping (Result<AuthActionResult, AuthServiceError>) -> Void) {
-        completion(.success(.unavailable(message: "Guest-to-account upgrade will be enabled after the backend migration contract is ready.")))
+        completion(.success(.unavailable(message: "Use the signed-in account tools to migrate guest data after Apple sign-in completes.")))
     }
 
     private func mapAppleAuthorizationError(_ error: Error) -> AuthServiceError {

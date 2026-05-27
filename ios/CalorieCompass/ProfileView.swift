@@ -222,7 +222,7 @@ struct AccountStatusSection: View {
     }
 
     private var description: String {
-        response?.account?.description ?? "Native Sign in with Apple uses backend verification and remains optional while account migration tools are completed."
+        response?.account?.description ?? "Native Sign in with Apple uses backend verification and remains optional while account tools are polished."
     }
 
     private var providers: [AuthProviderSnapshot] {
@@ -231,7 +231,7 @@ struct AccountStatusSection: View {
                 id: "apple",
                 label: "Continue with Apple",
                 status: "planned",
-                detail: "Apple sign-in can request a backend-issued session; guest migration and account tools are still pending."
+                detail: "Apple sign-in can request a backend-issued session; account-management polish and TestFlight auth QA are still pending."
             )
         ]
     }
@@ -279,16 +279,51 @@ struct AccountSignInEntryPoint: View {
     let onSessionChanged: () -> Void
     private let authService = AppleAuthService()
     @State private var interactionState: AuthInteractionState = .idle
+    @State private var showDeleteAccountConfirmation = false
+
+    private var accountContent: AccountManagementVisibility {
+        AccountManagementContent.visibility(for: authSession)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(authSession.isGuest ? "Guest mode" : "Account")
                 .font(.headline)
-            Text(authSession.isGuest ? "You can keep logging meals without signing in. Apple sign-in is optional and only completes after the backend verifies Apple and returns a Calorie Compass session." : "Signed in with a backend-issued Calorie Compass session. Guest-to-account meal migration is still planned.")
+            Text(accountContent.message)
                 .font(.footnote)
                 .foregroundColor(.secondary)
 
             if authSession.isSignedIn {
+                Button {
+                    migrateGuestData()
+                } label: {
+                    Label("Migrate guest data", systemImage: "arrow.triangle.2.circlepath")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(interactionState.isWorking)
+                .accessibilityHint("Moves eligible guest meals, goals, and history into this signed-in account.")
+
+                Button {
+                    exportAccountData()
+                } label: {
+                    Label("Export account data", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(interactionState.isWorking)
+                .accessibilityHint("Requests a server export for only this signed-in account.")
+
+                Button(role: .destructive) {
+                    showDeleteAccountConfirmation = true
+                } label: {
+                    Label("Delete account data", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(interactionState.isWorking)
+                .accessibilityHint("Requires confirmation and deletes only the signed-in account data handled by the backend endpoint.")
+
                 Button(role: .destructive) {
                     signOut()
                 } label: {
@@ -320,6 +355,15 @@ struct AccountSignInEntryPoint: View {
             case .signingOut:
                 ProgressView("Signing out...")
                     .font(.caption)
+            case .migratingGuest:
+                ProgressView("Migrating guest data...")
+                    .font(.caption)
+            case .exportingAccount:
+                ProgressView("Exporting account data...")
+                    .font(.caption)
+            case .deletingAccount:
+                ProgressView("Deleting account data...")
+                    .font(.caption)
             case .success(let message):
                 Text(message)
                     .font(.caption)
@@ -331,6 +375,16 @@ struct AccountSignInEntryPoint: View {
             }
         }
         .padding(.top, 12)
+        .alert(isPresented: $showDeleteAccountConfirmation) {
+            Alert(
+                title: Text(AccountManagementContent.deleteConfirmationTitle),
+                message: Text(AccountManagementContent.deleteConfirmationMessage),
+                primaryButton: .destructive(Text("Delete account data")) {
+                    deleteAccount()
+                },
+                secondaryButton: .cancel()
+            )
+        }
     }
 
     private func handleAppleAuthorization(_ result: Result<ASAuthorization, Error>) {
@@ -367,15 +421,60 @@ struct AccountSignInEntryPoint: View {
             }
         }
     }
+
+    private func migrateGuestData() {
+        interactionState = .migratingGuest
+        BackendService.migrateGuestData { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    interactionState = .success(response.successMessage)
+                    onSessionChanged()
+                case .failure(let error):
+                    interactionState = .error(AccountManagementContent.failureMessage(action: "migrate guest data", error: error))
+                }
+            }
+        }
+    }
+
+    private func exportAccountData() {
+        interactionState = .exportingAccount
+        BackendService.exportNativeAccountData { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    interactionState = .success("\(response.successMessage) Download/share polish remains before App Store account tooling is final.")
+                case .failure(let error):
+                    interactionState = .error(AccountManagementContent.failureMessage(action: "export account data", error: error))
+                }
+            }
+        }
+    }
+
+    private func deleteAccount() {
+        interactionState = .deletingAccount
+        BackendService.deleteNativeAccount { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    authService.clearLocalSessionAfterAccountDeletion()
+                    interactionState = .success("\(response.successMessage) Guest mode is available.")
+                    onSessionChanged()
+                case .failure(let error):
+                    interactionState = .error(AccountManagementContent.failureMessage(action: "delete account data", error: error))
+                }
+            }
+        }
+    }
 }
 
 struct SessionAndPrivacyNote: View {
     var body: some View {
-        Text("Apple sign-in now uses backend token verification and server-issued sessions. Guest-to-account meal migration, export, deletion, and TestFlight auth QA are still pending.")
+        Text("Apple sign-in uses backend token verification and server-issued sessions. Account migration, export, and deletion endpoints are wired here for QA, but TestFlight readiness and App Store compliance are not claimed.")
             .font(.footnote)
             .foregroundColor(.secondary)
             .padding(.top, 8)
-            .accessibilityLabel("Apple sign-in uses backend verification and server-issued sessions. Guest migration, export, deletion, and TestFlight auth QA are still pending.")
+            .accessibilityLabel("Apple sign-in uses backend verification and server-issued sessions. Account tools are wired for QA, but TestFlight readiness and App Store compliance are not claimed.")
     }
 }
 
@@ -383,15 +482,46 @@ private enum AuthInteractionState: Equatable {
     case idle
     case signingIn
     case signingOut
+    case migratingGuest
+    case exportingAccount
+    case deletingAccount
     case success(String)
     case error(String)
 
     var isWorking: Bool {
         switch self {
-        case .signingIn, .signingOut:
+        case .signingIn, .signingOut, .migratingGuest, .exportingAccount, .deletingAccount:
             return true
         case .idle, .success, .error:
             return false
         }
+    }
+}
+
+struct AccountManagementVisibility: Equatable {
+    let canUseAccountActions: Bool
+    let message: String
+}
+
+enum AccountManagementContent {
+    static let deleteConfirmationTitle = "Delete account data?"
+    static let deleteConfirmationMessage = "This deletes only the signed-in account data handled by the backend endpoint and revokes active native sessions. Guest data that was not migrated is not deleted. This is not a claim of App Store compliance until real-device QA and final support/privacy flows are complete."
+
+    static func visibility(for session: AuthSession) -> AccountManagementVisibility {
+        if session.isSignedIn {
+            return AccountManagementVisibility(
+                canUseAccountActions: true,
+                message: "Signed in with a backend-issued Calorie Compass session. You can migrate guest data, request an account export, delete account data, or sign out."
+            )
+        }
+
+        return AccountManagementVisibility(
+            canUseAccountActions: false,
+            message: "You can keep logging meals as a guest. Sign in with Apple to use migration, export, and delete account actions; sign-in remains optional."
+        )
+    }
+
+    static func failureMessage(action: String, error: Error) -> String {
+        "Could not \(action). \(error.localizedDescription) Nothing else was changed."
     }
 }

@@ -384,6 +384,25 @@ final class AuthSessionScaffoldTests: XCTestCase {
 
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer server-issued-token")
     }
+
+    func testAccountLifecycleRequestRequiresBackendSessionToken() {
+        XCTAssertNil(BackendService.makeNativeAccountLifecycleRequest(path: "api/auth/guest/migrate", method: "POST", token: nil))
+        XCTAssertNil(BackendService.makeNativeAccountLifecycleRequest(path: "api/auth/guest/migrate", method: "POST", token: "   "))
+    }
+
+    func testAccountLifecycleRequestsAttachBearerTokenAndMethods() throws {
+        let migrate = try XCTUnwrap(BackendService.makeNativeAccountLifecycleRequest(path: "api/auth/guest/migrate", method: "POST", token: "server-issued-token"))
+        let export = try XCTUnwrap(BackendService.makeNativeAccountLifecycleRequest(path: "api/account/native/export", method: "GET", token: "server-issued-token"))
+        let delete = try XCTUnwrap(BackendService.makeNativeAccountLifecycleRequest(path: "api/account/native/delete", method: "DELETE", token: "server-issued-token"))
+
+        XCTAssertEqual(migrate.httpMethod, "POST")
+        XCTAssertEqual(export.httpMethod, "GET")
+        XCTAssertEqual(delete.httpMethod, "DELETE")
+        XCTAssertEqual(migrate.url?.path, "/api/auth/guest/migrate")
+        XCTAssertEqual(export.url?.path, "/api/account/native/export")
+        XCTAssertEqual(delete.url?.path, "/api/account/native/delete")
+        XCTAssertEqual(delete.value(forHTTPHeaderField: "Authorization"), "Bearer server-issued-token")
+    }
 }
 
 final class StabilitySupportTests: XCTestCase {
