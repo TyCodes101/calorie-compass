@@ -33,11 +33,11 @@ describe('auth session helpers', () => {
     expect(snapshot.providers[1]?.label).toMatch(/google/i);
   });
 
-  it('keeps native Apple auth marked as not implemented until backend verification exists', () => {
+  it('keeps native Apple auth marked as not fully implemented until sessions and migration exist', () => {
     const status = getNativeAuthScaffoldStatus();
 
     expect(status.apple.status).toBe('not_implemented');
-    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Verify Apple identity token/i);
+    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/verified on the backend/i);
     expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Migrate guest/i);
     expect(status.accountLifecycle.requiredBeforeEnablement.join(' ')).toMatch(/Guest-to-account migration/i);
   });
