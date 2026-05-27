@@ -313,7 +313,9 @@ final class AuthSessionScaffoldTests: XCTestCase {
         let service = AppleAuthService(storage: storage)
         let expectation = expectation(description: "sign out responds")
 
-        XCTAssertTrue(service.currentSession().isSignedIn)
+        XCTAssertNotNil(storage.readSessionToken())
+        XCTAssertTrue(service.currentSession().isGuest)
+        XCTAssertFalse(service.currentSession().isSignedIn)
         service.signOut { result in
             XCTAssertEqual(result, .success(.signedOut))
             XCTAssertNil(storage.readSessionToken())

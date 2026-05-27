@@ -89,19 +89,11 @@ final class AppleAuthService: AuthService {
     }
 
     func currentSession() -> AuthSession {
-        // Real account sessions require a backend-issued session artifact. Until
-        // that contract exists, native iOS remains in guest-capable planned auth.
-        guard storage.readSessionToken() != nil else {
-            return .guest
-        }
-        return AuthSession(
-            mode: .account,
-            userId: nil,
-            displayName: nil,
-            provider: .apple,
-            canUpgradeGuest: false,
-            signInAvailability: .planned
-        )
+        // Real account sessions require a backend-issued session artifact. Phase 5A
+        // intentionally does not treat any locally stored placeholder/token as an
+        // authenticated account, because Apple token verification and backend
+        // session issuance are not complete yet.
+        .guest
     }
 
     func signInWithApple(completion: @escaping (Result<AuthActionResult, AuthServiceError>) -> Void) {
