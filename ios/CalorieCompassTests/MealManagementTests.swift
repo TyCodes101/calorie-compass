@@ -286,21 +286,21 @@ final class NativeSessionStateTests: XCTestCase {
         XCTAssertTrue(session.isGuest)
         XCTAssertFalse(session.isSignedIn)
         XCTAssertTrue(session.canUpgradeGuest)
-        XCTAssertEqual(session.signInAvailability, .planned)
+        XCTAssertEqual(session.signInAvailability, .available)
     }
 }
 
 final class AuthSessionScaffoldTests: XCTestCase {
-    func testAppleAuthServiceReportsUnavailableInsteadOfPretendingToSignIn() {
+    func testProgrammaticAppleAuthEntryPointDoesNotPretendToSignIn() {
         let service = AppleAuthService(storage: InMemoryAuthStorage())
         let expectation = expectation(description: "auth scaffold responds")
 
         service.signInWithApple { result in
             switch result {
             case .success(.unavailable(let message)):
-                XCTAssertTrue(message.contains("coming soon"))
+                XCTAssertTrue(message.contains("secure sign-in sheet"))
             default:
-                XCTFail("Phase 4C must not report a real Apple sign-in result")
+                XCTFail("Programmatic auth entry point must not report a fake Apple sign-in result")
             }
             expectation.fulfill()
         }
@@ -323,6 +323,66 @@ final class AuthSessionScaffoldTests: XCTestCase {
         }
 
         waitForExpectations(timeout: 1)
+    }
+
+    func testBackendIssuedTokenIsStoredWithSessionEnvelope() throws {
+        let storage = InMemoryAuthStorage()
+        let service = AppleAuthService(storage: storage)
+
+        try storage.saveBackendSessionToken("server-issued-token")
+
+        XCTAssertEqual(storage.readSessionToken(), "backend-session-v1:server-issued-token")
+        XCTAssertEqual(storage.readBackendSessionToken(), "server-issued-token")
+        XCTAssertTrue(service.currentSession().isSignedIn)
+        XCTAssertFalse(service.currentSession().isGuest)
+    }
+
+    func testPlaceholderTokenStillDoesNotCreateSignedInSession() {
+        let storage = InMemoryAuthStorage(token: "server-issued-token-placeholder")
+        let service = AppleAuthService(storage: storage)
+
+        XCTAssertNil(storage.readBackendSessionToken())
+        XCTAssertTrue(service.currentSession().isGuest)
+        XCTAssertFalse(service.currentSession().isSignedIn)
+    }
+
+    func testNativeAppleAuthResponseRequiresBackendIssuedSession() throws {
+        let data = """
+        {
+          "ok": true,
+          "code": "NATIVE_APPLE_SESSION_ISSUED",
+          "sessionIssued": true,
+          "account": {
+            "mode": "account",
+            "userId": "user-1",
+            "provider": "apple",
+            "canUpgradeGuest": false
+          },
+          "session": {
+            "token": "server-issued-token",
+            "expiresAt": "2026-06-26T12:00:00.000Z",
+            "tokenType": "Bearer"
+          }
+        }
+        """.data(using: .utf8)
+
+        let jsonData = try XCTUnwrap(data)
+        let response = try JSONDecoder().decode(NativeAppleAuthResponse.self, from: jsonData)
+
+        XCTAssertTrue(response.sessionIssued)
+        XCTAssertEqual(response.account?.mode, "account")
+        XCTAssertEqual(response.account?.provider, "apple")
+        XCTAssertEqual(response.session?.token, "server-issued-token")
+        XCTAssertTrue(response.hasBackendIssuedSession)
+    }
+
+    func testAuthorizationHeaderUsesBackendIssuedSessionTokenOnly() throws {
+        let url = try XCTUnwrap(URL(string: "https://example.com/api/session"))
+        var request = URLRequest(url: url)
+
+        BackendService.applyNativeSessionAuthorization(to: &request, token: "server-issued-token")
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer server-issued-token")
     }
 }
 

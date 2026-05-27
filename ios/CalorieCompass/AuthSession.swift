@@ -4,6 +4,7 @@
 // This file defines native auth/session architecture only. It does not implement
 // the real Sign in with Apple authorization UI yet.
 
+import AuthenticationServices
 import Foundation
 import Security
 
@@ -37,7 +38,7 @@ struct AuthSession: Codable, Equatable {
         displayName: nil,
         provider: nil,
         canUpgradeGuest: true,
-        signInAvailability: .planned
+        signInAvailability: .available
     )
 
     static let unauthenticated = AuthSession(
@@ -64,12 +65,18 @@ enum AuthServiceError: LocalizedError, Equatable {
     case notImplemented(String)
     case storageUnavailable
     case verificationRequired
+    case appleSignInCancelled
+    case appleCredentialUnavailable
+    case backend(String)
 
     var errorDescription: String? {
         switch self {
         case .notImplemented(let message): return message
         case .storageUnavailable: return "Secure account storage is unavailable on this device."
         case .verificationRequired: return "Backend token verification is required before native sign-in can continue."
+        case .appleSignInCancelled: return "Sign in with Apple was cancelled. Guest mode is still available."
+        case .appleCredentialUnavailable: return "Apple did not return the credential needed to continue sign-in."
+        case .backend(let message): return message
         }
     }
 }
@@ -89,24 +96,114 @@ final class AppleAuthService: AuthService {
     }
 
     func currentSession() -> AuthSession {
-        // Real account sessions require a backend-issued session artifact that has
-        // been returned by the native auth route and validated with the backend.
-        // Until the iOS Apple authorization flow is wired, stored placeholders must
-        // never make the UI appear signed in.
-        .guest
+        guard storage.readBackendSessionToken() != nil else { return .guest }
+        return AuthSession(
+            mode: .account,
+            userId: nil,
+            displayName: nil,
+            provider: .apple,
+            canUpgradeGuest: false,
+            signInAvailability: .available
+        )
     }
 
     func signInWithApple(completion: @escaping (Result<AuthActionResult, AuthServiceError>) -> Void) {
-        completion(.success(.unavailable(message: "Sign in with Apple is coming soon after the native authorization flow is wired.")))
+        completion(.success(.unavailable(message: "Use the Continue with Apple button to start Apple's secure sign-in sheet.")))
+    }
+
+    func configureAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        request.requestedScopes = [.email]
+    }
+
+    func handleAppleAuthorizationResult(
+        _ result: Result<ASAuthorization, Error>,
+        completion: @escaping (Result<AuthActionResult, AuthServiceError>) -> Void
+    ) {
+        switch result {
+        case .failure(let error):
+            completion(.failure(mapAppleAuthorizationError(error)))
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let identityToken = Self.utf8String(from: credential.identityToken) else {
+                completion(.failure(.appleCredentialUnavailable))
+                return
+            }
+
+            completeBackendSignIn(
+                identityToken: identityToken,
+                authorizationCode: Self.utf8String(from: credential.authorizationCode),
+                completion: completion
+            )
+        }
+    }
+
+    func completeBackendSignIn(
+        identityToken: String,
+        authorizationCode: String? = nil,
+        completion: @escaping (Result<AuthActionResult, AuthServiceError>) -> Void
+    ) {
+        BackendService.signInWithApple(identityToken: identityToken, authorizationCode: authorizationCode) { [storage] result in
+            switch result {
+            case .success(let response):
+                guard response.hasBackendIssuedSession,
+                      let token = response.session?.token else {
+                    completion(.failure(.verificationRequired))
+                    return
+                }
+
+                do {
+                    try storage.saveBackendSessionToken(token)
+                    let session = AuthSession(
+                        mode: .account,
+                        userId: response.account?.userId,
+                        displayName: nil,
+                        provider: .apple,
+                        canUpgradeGuest: response.account?.canUpgradeGuest ?? false,
+                        signInAvailability: .available
+                    )
+                    completion(.success(.signedIn(session)))
+                } catch {
+                    completion(.failure(.storageUnavailable))
+                }
+            case .failure(let error):
+                completion(.failure(.backend(error.localizedDescription)))
+            }
+        }
     }
 
     func signOut(completion: @escaping (Result<AuthActionResult, AuthServiceError>) -> Void) {
-        storage.clearSessionToken()
-        completion(.success(.signedOut))
+        guard let token = storage.readBackendSessionToken() else {
+            storage.clearSessionToken()
+            completion(.success(.signedOut))
+            return
+        }
+
+        BackendService.logoutNativeSession(token: token) { [storage] _ in
+            storage.clearSessionToken()
+            completion(.success(.signedOut))
+        }
     }
 
     func prepareGuestUpgrade(completion: @escaping (Result<AuthActionResult, AuthServiceError>) -> Void) {
         completion(.success(.unavailable(message: "Guest-to-account upgrade will be enabled after the backend migration contract is ready.")))
+    }
+
+    private func mapAppleAuthorizationError(_ error: Error) -> AuthServiceError {
+        let nsError = error as NSError
+        if nsError.domain == ASAuthorizationError.errorDomain,
+           ASAuthorizationError.Code(rawValue: nsError.code) == .canceled {
+            return .appleSignInCancelled
+        }
+        return .backend(error.localizedDescription)
+    }
+
+    private static func utf8String(from data: Data?) -> String? {
+        guard let data,
+              let value = String(data: data, encoding: .utf8),
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return value
     }
 }
 
@@ -114,6 +211,29 @@ protocol SecureAuthStorage {
     func readSessionToken() -> String?
     func saveSessionToken(_ token: String) throws
     func clearSessionToken()
+}
+
+private let backendSessionTokenPrefix = "backend-session-v1:"
+
+extension SecureAuthStorage {
+    func readBackendSessionToken() -> String? {
+        guard let stored = readSessionToken(),
+              stored.hasPrefix(backendSessionTokenPrefix) else {
+            return nil
+        }
+
+        let token = String(stored.dropFirst(backendSessionTokenPrefix.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return token.isEmpty ? nil : token
+    }
+
+    func saveBackendSessionToken(_ token: String) throws {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw AuthServiceError.storageUnavailable
+        }
+        try saveSessionToken("\(backendSessionTokenPrefix)\(trimmed)")
+    }
 }
 
 final class KeychainAuthStorage: SecureAuthStorage {
