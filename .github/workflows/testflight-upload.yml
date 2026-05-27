@@ -1,0 +1,135 @@
+name: Manual TestFlight Upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_upload:
+        description: "Type UPLOAD to confirm this manual TestFlight upload run"
+        required: true
+        type: string
+      build_number:
+        description: "Optional CFBundleVersion override. Defaults to GitHub run number."
+        required: false
+        type: string
+      changelog:
+        description: "Optional internal TestFlight changelog"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  testflight-upload:
+    name: Archive and upload to TestFlight
+    runs-on: macos-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      APP_IDENTIFIER: ${{ secrets.APP_IDENTIFIER }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_TEAM_ID: ${{ secrets.APP_STORE_CONNECT_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      MATCH_PROVISIONING_PROFILE_NAME: ${{ secrets.MATCH_PROVISIONING_PROFILE_NAME }}
+      ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+      BUILD_NUMBER: ${{ inputs.build_number }}
+      TESTFLIGHT_CHANGELOG: ${{ inputs.changelog }}
+      SKIP_WAITING_FOR_BUILD_PROCESSING: "false"
+
+    steps:
+      - name: Require explicit upload confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.confirm_upload }}" != "UPLOAD" ]]; then
+            echo "This workflow is manual-only. Re-run with confirm_upload=UPLOAD to archive and upload."
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify required secrets are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            APP_IDENTIFIER
+            APPLE_TEAM_ID
+            ASC_KEY_ID
+            ASC_ISSUER_ID
+            ASC_KEY_P8_BASE64
+            APPLE_CERTIFICATE_BASE64
+            APPLE_CERTIFICATE_PASSWORD
+            APPLE_PROVISIONING_PROFILE_BASE64
+            MATCH_PROVISIONING_PROFILE_NAME
+          )
+          missing=()
+          for key in "${required[@]}"; do
+            if [[ -z "${!key:-}" ]]; then
+              missing+=("$key")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required GitHub secrets/env: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Set up Ruby dependencies
+        run: bundle install --jobs 4 --retry 3
+
+      - name: Install signing certificate and provisioning profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/signing" "$HOME/Library/MobileDevice/Provisioning Profiles"
+
+          CERT_PATH="$RUNNER_TEMP/signing/distribution.p12"
+          PROFILE_PATH="$RUNNER_TEMP/signing/profile.mobileprovision"
+          ASC_KEY_PATH="$RUNNER_TEMP/signing/AuthKey_${ASC_KEY_ID}.p8"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | base64 -D > "$CERT_PATH"
+          printf '%s' "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 -D > "$PROFILE_PATH"
+          printf '%s' "$ASC_KEY_P8_BASE64" | base64 -D > "$ASC_KEY_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          UUID=$(security cms -D -i "$PROFILE_PATH" | /usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin)
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+
+          echo "ASC_KEY_FILEPATH=$ASC_KEY_PATH" >> "$GITHUB_ENV"
+
+      - name: Run web checks before archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm run build
+          env -u OPENAI_API_KEY npm test
+
+      - name: Archive and upload to TestFlight
+        run: bundle exec fastlane ios testflight_upload
+
+      - name: Upload archive artifacts and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-upload-artifacts
+          path: |
+            artifacts/testflight
+            *.log
+            ios/*.log
