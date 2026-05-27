@@ -1,0 +1,6 @@
+app_identifier(ENV.fetch("APP_IDENTIFIER", "com.caloriecompass.ios"))
+
+# Apple account/team values are intentionally read from environment variables.
+# Do not commit Apple IDs, team IDs, API keys, certificates, profiles, or passwords.
+team_id(ENV["APPLE_TEAM_ID"]) if ENV["APPLE_TEAM_ID"]
+itc_team_id(ENV["APP_STORE_CONNECT_TEAM_ID"]) if ENV["APP_STORE_CONNECT_TEAM_ID"]
