@@ -33,14 +33,14 @@ describe('auth session helpers', () => {
     expect(snapshot.providers[1]?.label).toMatch(/google/i);
   });
 
-  it('keeps native Apple auth user-facing status planned until iOS wiring and migration exist', () => {
+  it('reports remaining native auth readiness work after iOS wiring and lifecycle endpoints', () => {
     const status = getNativeAuthScaffoldStatus();
 
-    expect(status.apple.status).toBe('planned');
-    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Migrate guest/i);
-    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/export and deletion/i);
+    expect(status.apple.status).toBe('available');
     expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/auth QA/i);
-    expect(status.accountLifecycle.requiredBeforeEnablement.join(' ')).toMatch(/Guest-to-account migration/i);
+    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/account-management polish/i);
+    expect(status.accountLifecycle.status).toBe('available');
+    expect(status.accountLifecycle.requiredBeforeEnablement.join(' ')).toMatch(/account deletion verification/i);
   });
 
   it('rejects unverified native auth payloads rather than creating fake auth success', () => {
@@ -51,7 +51,8 @@ describe('auth session helpers', () => {
     const guarded = buildNativeAppleAuthNotImplementedResponse();
     expect(guarded.ok).toBe(false);
     expect(guarded.code).toBe('NATIVE_APPLE_AUTH_NOT_IMPLEMENTED');
-    expect(guarded.error).toMatch(/not available in the iOS app yet/i);
+    expect(guarded.error).toMatch(/wired through verified backend sessions/i);
+    expect(guarded.error).toMatch(/public-ready auth/i);
   });
 
   it('keeps guest mode upgrade messaging available while auth remains optional', () => {

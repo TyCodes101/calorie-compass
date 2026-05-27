@@ -122,21 +122,19 @@ export function validateNativeAppleAuthRequest(input: unknown): NativeAppleAuthV
 export function getNativeAuthScaffoldStatus() {
   return {
     apple: {
-      status: 'planned' satisfies NativeAuthRouteStatus,
+      status: 'available' satisfies NativeAuthRouteStatus,
       requiredBeforeEnablement: [
-        'Migrate guest profile, meals, reusable meals, and logs transactionally during upgrade.',
-        'Add verified native account export and deletion endpoints.',
         'Complete account-management polish for signed-in native users.',
-        'Complete simulator and real-device auth QA before treating native Apple sign-in as user-facing ready.',
+        'Complete simulator and real-device auth QA before treating native Apple sign-in as public-ready.',
+        'Finalize production Apple audience, bundle id, signing, support, and privacy configuration.',
       ],
     },
     accountLifecycle: {
-      status: 'planned' satisfies NativeAuthRouteStatus,
+      status: 'available' satisfies NativeAuthRouteStatus,
       requiredBeforeEnablement: [
-        'Authenticated account export endpoint that requires a verified account session.',
-        'Authenticated account deletion endpoint with confirmation, audit-safe transaction boundaries, and no guest-data surprise deletion.',
-        'Native logout should revoke backend-issued native sessions and clear the local Keychain artifact.',
-        'Guest-to-account migration endpoint that links existing guest data only after Apple verification succeeds.',
+        'Native confirmation UX for account export, account deletion, and guest migration status.',
+        'App Store account deletion verification with final support and privacy URLs.',
+        'Simulator and real-device QA for migration, export, delete, logout, and failed auth states.',
       ],
     },
   };
@@ -146,7 +144,7 @@ export function buildNativeAppleAuthNotImplementedResponse(): NativeAuthContract
   return {
     ok: false,
     code: 'NATIVE_APPLE_AUTH_NOT_IMPLEMENTED',
-    error: 'Native Sign in with Apple is not available in the iOS app yet. Backend token verification and native session issuance are in place, but iOS authorization wiring and guest migration remain before this can be treated as complete user-facing auth.',
+    error: 'Native Sign in with Apple is wired through verified backend sessions, but this guarded response remains for clients using an older disabled entry point. TestFlight auth QA and account-management polish remain before public-ready auth is claimed.',
     requiredBeforeEnablement: getNativeAuthScaffoldStatus().apple.requiredBeforeEnablement,
   };
 }

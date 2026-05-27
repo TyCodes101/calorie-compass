@@ -1,6 +1,6 @@
-# Phase 5D Auth and Account Lifecycle Contract
+# Phase 5E Auth and Account Lifecycle Contract
 
-This document defines the safe foundation for real native authentication and the first native iOS Sign in with Apple UX wiring. It does **not** claim full production auth, guest-to-account migration, native export/delete, or TestFlight readiness are complete.
+This document defines the safe foundation for real native authentication, native iOS Sign in with Apple UX wiring, guest-to-account migration, and verified native account lifecycle endpoints. It does **not** claim full production auth polish, App Store account deletion compliance, or TestFlight readiness are complete.
 
 ## Current guarantees
 - Guest mode remains the default working path.
@@ -11,6 +11,10 @@ This document defines the safe foundation for real native authentication and the
 - Native session tokens are server-generated random values; the database stores only a SHA-256 hash plus expiration/revocation metadata.
 - iOS stores only the backend-issued Calorie Compass session token after the backend returns `NATIVE_APPLE_SESSION_ISSUED`.
 - iOS does not mark a user signed in from local placeholder tokens or client-side Apple profile data.
+- Guest-to-account migration requires a valid backend-issued native bearer session plus the existing guest session cookie.
+- Native account export and delete endpoints require a valid backend-issued native bearer session and never use the first-user fallback.
+- Native account export omits native session token hashes and returns only the authenticated account's scoped data.
+- Native account delete revokes active native sessions and deletes only the authenticated account's owned profile, meals, reusable meals, daily logs, weight entries, provider links, and account row.
 - No Apple secrets, private keys, client secrets, API keys, telemetry SDKs, premium code, or subscription behavior are stored/introduced in the repo.
 - TestFlight readiness is not claimed.
 
@@ -69,27 +73,66 @@ This document defines the safe foundation for real native authentication and the
 
 ## Logout contract
 - Route: `POST /api/auth/logout`
-- Phase 5C behavior:
+- Current behavior:
   - With no token, returns `200 NATIVE_LOGOUT_GUEST_MODE` as an idempotent guest-safe no-op.
   - With an active backend-issued native token, revokes the matching hashed `NativeSession` and returns `200 NATIVE_SESSION_REVOKED`.
   - With a missing/already-revoked token, returns a guest-safe `200 NATIVE_SESSION_NOT_FOUND`.
   - Logout does not delete meals, profile data, provider links, or guest data.
 
-## Account export/delete/migration
-- Existing web profile export/reset paths remain the current fallback.
-- Native account export/delete endpoints should require a verified account session before exposing account data or destructive deletion.
-- Guest-to-account migration must be transactional and must not rely on client-supplied identity.
-- Destructive delete must require confirmation and must define scope: profile, meals, reusable meals, daily logs, nutrition preferences, auth provider links, and native session artifacts.
+## Guest-to-account migration
+- Route: `POST /api/auth/guest/migrate`
+- Required authentication:
+  - A valid backend-issued native session in `Authorization: Bearer <token>` or `X-Calorie-Compass-Native-Session`.
+  - Durable database persistence via `DATABASE_URL`.
+- Guest source:
+  - The route reads the existing `cc_guest_session` cookie and derives the guest email server-side.
+  - Client-provided user IDs are ignored.
+- Migrated data:
+  - Profile, meals, reusable meals, daily logs, and weight entries.
+  - Food items and reusable meal items move through their parent meal/reusable meal rows.
+- Duplicate/conflict behavior:
+  - Profile migration is skipped if the account already has a profile.
+  - Reusable meals are skipped when moving them would collide with the account's existing `(userId, sourceMealId)` uniqueness.
+  - Daily logs are skipped when the account already has a log for the same date.
+  - Meals and weight entries are moved by ownership because they do not have account-level unique constraints.
+- Response:
+  - Returns migrated and skipped counts.
+  - Returns a safe skipped/no-op result when no guest session or guest user is available.
+  - Guest mode remains available if migration cannot run.
 
-## Remaining Phase 5E work
-- Guest-to-account meal/profile/reusable meal/daily log migration after Apple verification succeeds.
-- Verified native export/delete endpoints and iOS affordances.
+## Native account export
+- Route: `GET /api/account/native/export`
+- Required authentication:
+  - A valid backend-issued native session.
+- Behavior:
+  - Exports only the authenticated user's account, profile, meals, reusable meals, daily logs, weight entries, provider links, and native session metadata.
+  - Does not expose guest/global data.
+  - Does not expose raw native session tokens or token hashes.
+  - Existing web profile export remains unchanged for current web flows.
+
+## Native account delete
+- Route: `DELETE /api/account/native/delete`
+- Required authentication:
+  - A valid backend-issued native session.
+- Behavior:
+  - Deletes only the authenticated user's scoped account data.
+  - Revokes active native sessions for the authenticated account before deleting the account row.
+  - Removes provider links through account deletion.
+  - Does not delete unrelated guest/global data.
+  - Repeat attempts after deletion are safe because the original native session no longer resolves.
+- Product limitation:
+  - This endpoint is implemented and tested as a backend contract, but App Store account deletion compliance is not claimed until native UX, confirmation flows, support/privacy URLs, and real-device QA are complete.
+
+## Remaining Phase 5F work
 - TestFlight auth QA on simulator and real device.
+- Account management UX polish for migration/export/delete.
+- App Store account deletion verification, confirmation copy, and support/privacy URL finalization.
+- Guest-to-account profile conflict resolution polish if product wants merging instead of conflict skipping.
+- Verified native export/delete manual QA.
 - Session refresh/rotation and revoked Apple credential handling if needed.
-- Account management polish for signed-in native users.
+- Premium/subscription planning later, outside this auth foundation.
 
-## Non-goals for Phase 5D
-- No guest-to-account migration yet.
+## Non-goals for Phase 5E
 - No claim that native auth is production-complete before manual simulator/device QA.
 - No forced login.
 - No premium/subscription work.
