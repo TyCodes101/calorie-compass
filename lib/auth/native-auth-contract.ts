@@ -7,7 +7,12 @@ export type NativeAuthErrorCode =
   | 'APPLE_TOKEN_CONFIG_MISSING'
   | 'APPLE_TOKEN_INVALID'
   | 'APPLE_IDENTITY_VERIFIED_NO_SESSION'
+  | 'NATIVE_APPLE_SESSION_ISSUED'
+  | 'NATIVE_SESSION_PERSISTENCE_UNAVAILABLE'
+  | 'NATIVE_SESSION_PERSISTENCE_FAILED'
   | 'NATIVE_LOGOUT_GUEST_MODE'
+  | 'NATIVE_SESSION_REVOKED'
+  | 'NATIVE_SESSION_NOT_FOUND'
   | 'ACCOUNT_EXPORT_NATIVE_NOT_IMPLEMENTED'
   | 'ACCOUNT_DELETION_NATIVE_NOT_IMPLEMENTED'
   | 'GUEST_MIGRATION_NOT_IMPLEMENTED';
@@ -36,8 +41,8 @@ export type NativeAuthContractResponse = {
 
 export type VerifiedNativeAppleIdentityResponse = {
   ok: true;
-  code: 'APPLE_IDENTITY_VERIFIED_NO_SESSION';
-  sessionIssued: false;
+  code: 'APPLE_IDENTITY_VERIFIED_NO_SESSION' | 'NATIVE_APPLE_SESSION_ISSUED';
+  sessionIssued: boolean;
   identity: {
     provider: 'apple';
     subject: string;
@@ -48,7 +53,14 @@ export type VerifiedNativeAppleIdentityResponse = {
     email?: string;
     emailVerified?: boolean;
   };
-  remainingBeforeSession: string[];
+  account?: NativeAuthSessionPayload;
+  session?: {
+    token: string;
+    expiresAt: string;
+    tokenType: 'Bearer';
+  };
+  remainingBeforeSession?: string[];
+  remainingBeforeFullNativeAuth?: string[];
 };
 
 type NativeAppleAuthValidationResult =
@@ -110,12 +122,12 @@ export function validateNativeAppleAuthRequest(input: unknown): NativeAppleAuthV
 export function getNativeAuthScaffoldStatus() {
   return {
     apple: {
-      status: 'not_implemented' satisfies NativeAuthRouteStatus,
+      status: 'planned' satisfies NativeAuthRouteStatus,
       requiredBeforeEnablement: [
-        'Apple identity token issuer, audience, signature, expiry, subject, and nonce are verified on the backend using Apple public keys/JWKS.',
-        'Create or link a User by stable Apple subject identifier without trusting client-supplied email/name alone.',
-        'Define and persist backend-issued native session artifacts, refresh, revocation, and logout semantics.',
+        'Wire the native iOS Sign in with Apple authorization flow.',
+        'Store only the backend-issued native session token in Keychain after a successful server response.',
         'Migrate guest profile, meals, reusable meals, and logs transactionally during upgrade.',
+        'Complete simulator and real-device auth QA before treating native Apple sign-in as user-facing ready.',
       ],
     },
     accountLifecycle: {
@@ -123,7 +135,7 @@ export function getNativeAuthScaffoldStatus() {
       requiredBeforeEnablement: [
         'Authenticated account export endpoint that requires a verified account session.',
         'Authenticated account deletion endpoint with confirmation, audit-safe transaction boundaries, and no guest-data surprise deletion.',
-        'Logout endpoint that revokes a backend-issued native session token once such tokens exist.',
+        'Native logout should revoke backend-issued native sessions and clear the local Keychain artifact.',
         'Guest-to-account migration endpoint that links existing guest data only after Apple verification succeeds.',
       ],
     },
@@ -134,7 +146,7 @@ export function buildNativeAppleAuthNotImplementedResponse(): NativeAuthContract
   return {
     ok: false,
     code: 'NATIVE_APPLE_AUTH_NOT_IMPLEMENTED',
-    error: 'Native Sign in with Apple is not available yet. Backend Apple token verification and native session issuance are required before this route can authenticate anyone.',
+    error: 'Native Sign in with Apple is not available in the iOS app yet. Backend token verification and native session issuance are in place, but iOS authorization wiring and guest migration remain before this can be treated as complete user-facing auth.',
     requiredBeforeEnablement: getNativeAuthScaffoldStatus().apple.requiredBeforeEnablement,
   };
 }

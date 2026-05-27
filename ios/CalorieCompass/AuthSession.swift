@@ -1,8 +1,8 @@
 // AuthSession.swift
-// Calorie Compass iOS — Phase 4C authentication scaffold
+// Calorie Compass iOS - Phase 5 native authentication scaffold
 //
 // This file defines native auth/session architecture only. It does not implement
-// Sign in with Apple, token verification, or production account sessions.
+// the real Sign in with Apple authorization UI yet.
 
 import Foundation
 import Security
@@ -89,15 +89,15 @@ final class AppleAuthService: AuthService {
     }
 
     func currentSession() -> AuthSession {
-        // Real account sessions require a backend-issued session artifact. Phase 5A
-        // intentionally does not treat any locally stored placeholder/token as an
-        // authenticated account, because Apple token verification and backend
-        // session issuance are not complete yet.
+        // Real account sessions require a backend-issued session artifact that has
+        // been returned by the native auth route and validated with the backend.
+        // Until the iOS Apple authorization flow is wired, stored placeholders must
+        // never make the UI appear signed in.
         .guest
     }
 
     func signInWithApple(completion: @escaping (Result<AuthActionResult, AuthServiceError>) -> Void) {
-        completion(.success(.unavailable(message: "Sign in with Apple is coming soon after backend token verification is wired.")))
+        completion(.success(.unavailable(message: "Sign in with Apple is coming soon after the native authorization flow is wired.")))
     }
 
     func signOut(completion: @escaping (Result<AuthActionResult, AuthServiceError>) -> Void) {
