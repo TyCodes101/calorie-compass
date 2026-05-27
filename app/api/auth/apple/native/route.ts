@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { verifyAppleIdentityToken } from '@/lib/auth/apple-token-verification';
 import { getNativeAuthScaffoldStatus, validateNativeAppleAuthRequest } from '@/lib/auth/native-auth-contract';
+import { hasNativeSessionPersistence, issueNativeSessionForAppleIdentity } from '@/lib/auth/native-session';
 
 function getExpectedAppleAudience() {
   return process.env.APPLE_AUTH_AUDIENCE ?? process.env.APPLE_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_BUNDLE_ID;
@@ -53,21 +54,57 @@ export async function POST(request: Request) {
     );
   }
 
-  const remainingBeforeSession = getNativeAuthScaffoldStatus().accountLifecycle.requiredBeforeEnablement;
-  return NextResponse.json({
-    ok: true,
-    code: 'APPLE_IDENTITY_VERIFIED_NO_SESSION',
-    sessionIssued: false,
-    identity: {
-      provider: 'apple',
-      subject: verification.identity.subject,
-      audience: verification.identity.audience,
-      issuer: verification.identity.issuer,
-      expiresAt: verification.identity.expiresAt,
-      issuedAt: verification.identity.issuedAt,
-      email: verification.identity.email,
-      emailVerified: verification.identity.emailVerified,
-    },
-    remainingBeforeSession,
-  });
+  const verifiedIdentity = {
+    provider: 'apple' as const,
+    subject: verification.identity.subject,
+    audience: verification.identity.audience,
+    issuer: verification.identity.issuer,
+    expiresAt: verification.identity.expiresAt,
+    issuedAt: verification.identity.issuedAt,
+    email: verification.identity.email,
+    emailVerified: verification.identity.emailVerified,
+  };
+
+  if (!hasNativeSessionPersistence()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: 'NATIVE_SESSION_PERSISTENCE_UNAVAILABLE',
+        error: 'Durable database persistence is required before a native account session can be issued.',
+        identity: verifiedIdentity,
+      },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const issued = await issueNativeSessionForAppleIdentity({ identity: verification.identity });
+    return NextResponse.json({
+      ok: true,
+      code: 'NATIVE_APPLE_SESSION_ISSUED',
+      sessionIssued: true,
+      identity: verifiedIdentity,
+      account: {
+        mode: 'account',
+        userId: issued.user.id,
+        provider: issued.provider,
+        canUpgradeGuest: false,
+      },
+      session: {
+        token: issued.token,
+        expiresAt: issued.expiresAt.toISOString(),
+        tokenType: 'Bearer',
+      },
+      remainingBeforeFullNativeAuth: getNativeAuthScaffoldStatus().accountLifecycle.requiredBeforeEnablement,
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: 'NATIVE_SESSION_PERSISTENCE_FAILED',
+        error: 'Apple identity was verified, but the native session could not be persisted.',
+      },
+      { status: 500 },
+    );
+  }
 }

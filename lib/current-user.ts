@@ -1,6 +1,7 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 
 import { buildGuestUserEmail, getGuestPlaceholderName, guestSessionCookieName } from '@/lib/auth-session';
+import { getUserForNativeSessionToken } from '@/lib/auth/native-session';
 import { prisma } from '@/lib/prisma';
 
 export function hasDatabaseConnectionString() {
@@ -37,6 +38,17 @@ async function readGuestSessionId() {
   try {
     const cookieStore = await cookies();
     return cookieStore.get(guestSessionCookieName)?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function readNativeSessionToken() {
+  try {
+    const headerStore = await headers();
+    const authorization = headerStore.get('authorization');
+    const bearerMatch = authorization?.match(/^Bearer\s+(.+)$/i);
+    return bearerMatch?.[1]?.trim() || headerStore.get('x-calorie-compass-native-session')?.trim() || null;
   } catch {
     return null;
   }
@@ -100,6 +112,11 @@ export async function getCurrentUserWithProfile() {
     return buildLocalMockUserWithProfile();
   }
 
+  const nativeSessionUser = await getUserForNativeSessionToken(await readNativeSessionToken());
+  if (nativeSessionUser) {
+    return nativeSessionUser;
+  }
+
   const guestUser = await getOrCreateGuestUserWithProfile();
   if (guestUser) {
     return guestUser;
@@ -114,6 +131,11 @@ export async function getCurrentUserWithProfile() {
 export async function getCurrentUserId() {
   if (!hasDatabaseConnectionString()) {
     return 'local-demo-user';
+  }
+
+  const nativeSessionUser = await getUserForNativeSessionToken(await readNativeSessionToken());
+  if (nativeSessionUser) {
+    return nativeSessionUser.id;
   }
 
   const guestUser = await getOrCreateGuestUserId();

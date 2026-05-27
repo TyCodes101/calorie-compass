@@ -33,11 +33,12 @@ describe('auth session helpers', () => {
     expect(snapshot.providers[1]?.label).toMatch(/google/i);
   });
 
-  it('keeps native Apple auth marked as not fully implemented until sessions and migration exist', () => {
+  it('keeps native Apple auth user-facing status planned until iOS wiring and migration exist', () => {
     const status = getNativeAuthScaffoldStatus();
 
-    expect(status.apple.status).toBe('not_implemented');
-    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/verified on the backend/i);
+    expect(status.apple.status).toBe('planned');
+    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/native iOS Sign in with Apple/i);
+    expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Keychain/i);
     expect(status.apple.requiredBeforeEnablement.join(' ')).toMatch(/Migrate guest/i);
     expect(status.accountLifecycle.requiredBeforeEnablement.join(' ')).toMatch(/Guest-to-account migration/i);
   });
@@ -50,7 +51,7 @@ describe('auth session helpers', () => {
     const guarded = buildNativeAppleAuthNotImplementedResponse();
     expect(guarded.ok).toBe(false);
     expect(guarded.code).toBe('NATIVE_APPLE_AUTH_NOT_IMPLEMENTED');
-    expect(guarded.error).toMatch(/required before this route can authenticate anyone/i);
+    expect(guarded.error).toMatch(/not available in the iOS app yet/i);
   });
 
   it('keeps guest mode upgrade messaging available while auth remains optional', () => {
