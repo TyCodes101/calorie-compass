@@ -9,6 +9,7 @@
 #    - APP_STORE_CONNECT_ISSUER_ID
 #    - APP_STORE_CONNECT_KEY_IDENTIFIER
 #    - APP_STORE_CONNECT_PRIVATE_KEY
+#    - APP_STORE_APP_ID (numeric Apple app ID from App Store Connect)
 # 2. Add these non-secret/release variables in Codemagic UI if you need overrides:
 #    - BUNDLE_ID=com.tycodes.macromesh
 #    - XCODE_PROJECT=ios/CalorieCompass/CalorieCompass.xcodeproj
@@ -41,9 +42,8 @@ workflows:
         XCODE_PROJECT: ios/CalorieCompass/CalorieCompass.xcodeproj
         XCODE_SCHEME: CalorieCompass
         BUNDLE_ID: com.tycodes.macromesh
-        # If a future Codemagic step needs the numeric App Store Connect Apple ID,
-        # add APP_STORE_APP_ID in the Codemagic UI at that time. Do not keep an
-        # empty placeholder in this YAML because Codemagic rejects empty vars.
+        # APP_STORE_APP_ID is imported from the app_store_connect environment group.
+        # Do not keep an empty placeholder in this YAML because Codemagic rejects empty vars.
 
       # Automatic code signing. Codemagic uses the App Store Connect API key
       # configured below plus Apple Developer/App Store Connect assets to fetch
@@ -57,7 +57,7 @@ workflows:
         script: |
           set -euo pipefail
           missing=""
-          for key in APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_PRIVATE_KEY; do
+          for key in APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_PRIVATE_KEY APP_STORE_APP_ID; do
             if [ -z "${!key:-}" ]; then
               missing="$missing $key"
             fi
@@ -119,6 +119,7 @@ workflows:
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        apple_id: $APP_STORE_APP_ID
         submit_to_testflight: true
         submit_to_app_store: false
 
