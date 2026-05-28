@@ -14,8 +14,49 @@ struct MealItem: Identifiable, Codable, Equatable {
     var protein: Double
     var carbs: Double
     var fat: Double
+    var fiber: Double = 0
+    var sugar: Double = 0
+    var sodium: Double = 0
     var confidence: String?
     var source: String?
+    var notes: String?
+    var sourceType: String?
+
+    init(from item: MealRequestItem) {
+        name = item.food_name
+        quantity = item.quantity
+        unit = item.unit
+        calories = item.calories
+        protein = item.protein
+        carbs = item.carbs
+        fat = item.fat
+        fiber = item.fiber
+        sugar = item.sugar
+        sodium = item.sodium
+        confidence = item.confidence_label
+        source = item.source_name
+        notes = item.notes
+        sourceType = item.source_type
+    }
+
+    func asMealRequestItem() -> MealRequestItem {
+        MealRequestItem(
+            food_name: name,
+            quantity: quantity,
+            unit: unit,
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: fiber,
+            sugar: sugar,
+            sodium: sodium,
+            notes: notes,
+            source_type: sourceType,
+            source_name: source,
+            confidence_label: confidence
+        )
+    }
 }
 
 struct MealReviewCard: View {

@@ -8,11 +8,12 @@ import SwiftUI
 
 struct LogChatView: View {
     @EnvironmentObject private var sessionStore: SessionStore
-    @State private var messages: [(role: String, text: String)] = []
+    @State private var messages: [MealAssistantTranscriptMessage] = []
     @State private var inputText = ""
     @State private var isLoading = false
     @State private var error: String?
-    @State private var assistantState: String? = nil
+    @State private var retryMessage: String?
+    @State private var assistantState = MealAssistantState()
 
     @State private var reviewItems: [MealItem] = []
     @State private var showReviewCard = false
@@ -44,7 +45,7 @@ struct LogChatView: View {
                                 }
                             }
                             if let error {
-                                InlineRecoveryCard(message: error, retry: sendMessage)
+                                InlineRecoveryCard(message: error, retry: retryFailedMessage)
                             }
                         }
                         .padding(.horizontal, 18)
@@ -92,9 +93,9 @@ struct LogChatView: View {
                     .disabled(isLoading || sessionStore.state.isActionBlocked)
                     .focused($mealInputFocused)
                     .submitLabel(.send)
-                    .onSubmit(sendMessage)
+                    .onSubmit { sendMessage() }
                     .accessibilityLabel("Meal description")
-                Button(action: sendMessage) {
+                Button { sendMessage() } label: {
                     if isLoading {
                         ProgressView().tint(.white)
                     } else {
@@ -116,8 +117,9 @@ struct LogChatView: View {
         .background(.ultraThinMaterial)
     }
 
-    func sendMessage() {
-        let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+    func sendMessage(retryText: String? = nil) {
+        let isRetry = retryText != nil
+        let trimmedInput = (retryText ?? inputText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty else { return }
         guard !isLoading else {
             stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Log"))
@@ -128,47 +130,64 @@ struct LogChatView: View {
             return
         }
         let userMessage = trimmedInput
-        messages.append((role: "user", text: userMessage))
+        if !isRetry {
+            messages.append(MealAssistantTranscriptMessage(role: "user", text: userMessage))
+        }
         inputText = ""
         mealInputFocused = false
         isLoading = true
         error = nil
+        retryMessage = nil
 
-        let conversationHistory = messages.map { $0.text }
+        let conversationHistory = messages
+        let requestState = buildAssistantRequestState(for: userMessage)
         let req = MealAssistantRequest(
-            user_message: userMessage,
-            current_state: assistantState,
-            conversation_history: conversationHistory,
-            macro_context: nil
+            message: userMessage,
+            state: requestState,
+            context: nil,
+            conversationHistory: conversationHistory
         )
         BackendService.sendMealAssistant(request: req) { result in
             DispatchQueue.main.async {
                 isLoading = false
                 switch result {
                 case .success(let resp):
-                    messages.append((role: "assistant", text: resp.assistant_message))
+                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: resp.assistant_reply))
                     assistantState = resp.next_state
-                    if let detectedItems = try? tryExtractMealItems(from: resp.assistant_message) {
-                        reviewItems = detectedItems
-                        if !reviewItems.isEmpty { showReviewCard = true }
+                    reviewItems = resp.meal.items.map(MealItem.init(from:))
+                    showReviewCard = !reviewItems.isEmpty && resp.next_state.saved == false
+                    if resp.next_state.saved {
+                        reviewItems.removeAll()
+                        NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
                     }
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Log", message: err.localizedDescription))
+                    retryMessage = userMessage
                     error = RetryCopy.nonDestructiveFailure(action: "send that meal description", error: err)
                 }
             }
         }
     }
 
-    func tryExtractMealItems(from reply: String) throws -> [MealItem] {
-        guard let start = reply.firstIndex(of: "["), let end = reply.lastIndex(of: "]") else { return [] }
-        let jsonString = String(reply[start...end])
-        let decoder = JSONDecoder()
-        if let data = jsonString.data(using: .utf8) {
-            return try decoder.decode([MealItem].self, from: data)
+    private func retryFailedMessage() {
+        guard let retryMessage else { return }
+        sendMessage(retryText: retryMessage)
+    }
+
+    private func buildAssistantRequestState(for userMessage: String) -> MealAssistantState {
+        var state = assistantState
+        state.previousUserMessage = userMessage
+        if state.currentMealText == nil || state.saved {
+            state.currentMealText = userMessage
         }
-        return []
+        if state.saved {
+            state.currentMealItems = []
+            state.saved = false
+            state.activeMode = "logging_mode"
+            state.activeTopic = "meal"
+        }
+        return state
     }
 
     func saveMeal(items: [MealItem]) {
@@ -180,29 +199,13 @@ struct LogChatView: View {
         isSavingMeal = true
         saveError = nil
         let req = PostMealRequest(
-            meal_type: "breakfast",
-            confidence_score: 0.95,
-            raw_text: nil,
+            meal_type: assistantState.mealType,
+            confidence_score: assistantState.confidenceScore,
+            raw_text: assistantState.currentMealText,
+            source_reusable_meal_id: assistantState.sourceReusableMealId,
             notes: nil,
             date: nil,
-            items: items.map {
-                MealRequestItem(
-                    food_name: $0.name,
-                    quantity: $0.quantity,
-                    unit: $0.unit,
-                    calories: $0.calories,
-                    protein: $0.protein,
-                    carbs: $0.carbs,
-                    fat: $0.fat,
-                    fiber: 0,
-                    sugar: 0,
-                    sodium: 0,
-                    notes: nil,
-                    source_type: nil,
-                    source_name: $0.source,
-                    confidence_label: $0.confidence
-                )
-            }
+            items: items.map { $0.asMealRequestItem() }
         )
         BackendService.saveConfirmedMeal(request: req) { result in
             DispatchQueue.main.async {
@@ -211,6 +214,8 @@ struct LogChatView: View {
                 case .success:
                     showReviewCard = false
                     reviewItems.removeAll()
+                    assistantState.saved = true
+                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Saved. Ready for the next one?"))
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
                 case .failure(let err):
                     sessionStore.apply(err)

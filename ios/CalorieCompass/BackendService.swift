@@ -5,16 +5,87 @@
 //
 import Foundation
 
+struct MealAssistantTranscriptMessage: Codable, Equatable {
+    let role: String
+    let text: String
+}
+
+struct MealAssistantState: Codable, Equatable {
+    var currentMealItems: [MealRequestItem] = []
+    var pendingClarification: String? = nil
+    var lastAssistantQuestion: String? = nil
+    var userCorrections: [String] = []
+    var saved: Bool = false
+    var mealType: String = "snack"
+    var userName: String? = nil
+    var currentMealText: String? = nil
+    var confidenceScore: Double = 0.82
+    var sourceReusableMealId: String? = nil
+    var editingMealId: String? = nil
+    var lastAssistantReply: String? = nil
+    var activeTopic: String? = nil
+    var activeMode: String? = nil
+    var activeQuestion: String? = nil
+    var previousIntent: String? = nil
+    var previousUserMessage: String? = nil
+}
+
+struct MealAssistantContext: Codable, Equatable {
+    var favoriteMeals: [MealAssistantMemoryMeal] = []
+    var recentMeals: [MealAssistantMemoryMeal] = []
+    var nutritionPreferences: String? = nil
+    var proteinGoal: Double? = nil
+    var dailyCalorieGoal: Double? = nil
+    var todayProtein: Double? = nil
+    var todayCarbs: Double? = nil
+    var todayFat: Double? = nil
+    var todayCalories: Double? = nil
+    var remainingProtein: Double? = nil
+    var remainingCarbs: Double? = nil
+    var remainingFat: Double? = nil
+    var remainingCalories: Double? = nil
+    var todayMealCount: Double? = nil
+}
+
+struct MealAssistantMemoryMeal: Codable, Equatable {
+    var id: String
+    var title: String
+    var rawText: String?
+    var mealType: String
+    var totalCalories: Double
+    var confidenceScore: Double
+    var items: [MealRequestItem]
+}
+
 struct MealAssistantRequest: Codable {
-    let user_message: String
-    let current_state: String?
-    let conversation_history: [String]?
-    let macro_context: [String: Double]?
+    let message: String
+    let state: MealAssistantState
+    let context: MealAssistantContext?
+    let conversationHistory: [MealAssistantTranscriptMessage]
+}
+
+struct MealAssistantTotals: Codable, Equatable {
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let fiber: Double
+    let sugar: Double
+    let sodium: Double
+}
+
+struct MealAssistantMeal: Codable, Equatable {
+    let items: [MealRequestItem]
+    let totals: MealAssistantTotals
+    let confidence_score: Double
 }
 
 struct MealAssistantResponse: Codable {
-    let assistant_message: String
-    let next_state: String?
+    let assistant_reply: String
+    let meal: MealAssistantMeal
+    let next_state: MealAssistantState
+    let intent: String?
+    let should_save_meal: Bool?
 }
 
 struct MealRequestItem: Codable, Equatable, Identifiable {
@@ -106,6 +177,7 @@ struct PostMealRequest: Codable, Equatable {
     var meal_type: String
     var confidence_score: Double
     var raw_text: String?
+    var source_reusable_meal_id: String? = nil
     var notes: String?
     var date: String?
     var items: [MealRequestItem]
