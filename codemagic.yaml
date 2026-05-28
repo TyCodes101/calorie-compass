@@ -1,0 +1,125 @@
+# Codemagic CI/CD for the native MacroMesh iOS app.
+#
+# This workflow is intentionally scoped to the native SwiftUI iOS project only.
+# It does not deploy the web app, does not run on GitHub Actions, and does not
+# contain Apple secrets, certificates, provisioning profiles, or API keys.
+#
+# Required Codemagic UI setup before running:
+# 1. Add the App Store Connect API key as secure environment variables:
+#    - APP_STORE_CONNECT_ISSUER_ID
+#    - APP_STORE_CONNECT_KEY_IDENTIFIER
+#    - APP_STORE_CONNECT_PRIVATE_KEY
+# 2. Add these non-secret/release variables in Codemagic UI if you need overrides:
+#    - APP_STORE_APP_ID (numeric App Store Connect Apple ID; optional until upload)
+#    - BUNDLE_ID=com.tycodes.macromesh
+#    - XCODE_PROJECT=ios/CalorieCompass/CalorieCompass.xcodeproj
+#    - XCODE_SCHEME=CalorieCompass
+# 3. In Apple Developer/App Store Connect, create the app record, Bundle ID,
+#    Sign in with Apple capability, Apple Distribution certificate, and App Store
+#    provisioning profile for com.tycodes.macromesh.
+#
+# Safety notes:
+# - Keep automatic triggers disabled in the Codemagic UI until signing is verified.
+# - Use manual builds first.
+# - TestFlight readiness is not claimed until upload, install, and real QA pass.
+
+workflows:
+  ios-testflight:
+    name: MacroMesh iOS TestFlight Upload
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    environment:
+      # Use Codemagic's latest stable Xcode image by default. Pin this later if a
+      # future Xcode update introduces build instability.
+      xcode: latest
+      cocoapods: default
+
+      vars:
+        XCODE_PROJECT: ios/CalorieCompass/CalorieCompass.xcodeproj
+        XCODE_SCHEME: CalorieCompass
+        BUNDLE_ID: com.tycodes.macromesh
+        # Optional but recommended for TestFlight build-number lookup/upload.
+        # Set the numeric Apple ID from App Store Connect in Codemagic UI.
+        APP_STORE_APP_ID: ""
+
+      # Automatic code signing. Codemagic uses the App Store Connect API key
+      # configured below plus Apple Developer/App Store Connect assets to fetch
+      # matching App Store signing files for this Bundle ID.
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.tycodes.macromesh
+
+    scripts:
+      - name: Verify required App Store Connect environment
+        script: |
+          set -euo pipefail
+          missing=""
+          for key in APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_PRIVATE_KEY; do
+            if [ -z "${!key:-}" ]; then
+              missing="$missing $key"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "Missing required Codemagic environment variable(s):$missing" >&2
+            echo "Add them in Codemagic UI as secure environment variables before running upload builds." >&2
+            exit 1
+          fi
+
+      - name: Show Xcode version
+        script: xcodebuild -version
+
+      - name: Verify native iOS project identity
+        script: |
+          set -euo pipefail
+          grep -q "PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID;" "$XCODE_PROJECT/project.pbxproj"
+          grep -q "INFOPLIST_KEY_CFBundleDisplayName = MacroMesh;" "$XCODE_PROJECT/project.pbxproj"
+          echo "Verified MacroMesh bundle identity: $BUNDLE_ID"
+
+      - name: Install web dependencies for pre-archive checks
+        script: npm ci
+
+      - name: Run web/test safety checks before archive
+        script: |
+          set -euo pipefail
+          npm run lint
+          npm run build
+          env -u OPENAI_API_KEY npm test
+
+      - name: Set up Xcode signing from Codemagic profiles
+        script: |
+          set -euo pipefail
+          xcode-project use-profiles \
+            --project "$XCODE_PROJECT"
+
+      - name: Set build number from Codemagic build number
+        script: |
+          set -euo pipefail
+          cd "$(dirname "$XCODE_PROJECT")"
+          agvtool new-version -all "$BUILD_NUMBER"
+
+      - name: Build signed IPA for App Store Connect
+        script: |
+          set -euo pipefail
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    publishing:
+      app_store_connect:
+        # These values must be configured as secure Codemagic environment variables.
+        # Never commit the private key or paste it into logs/chat.
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        submit_to_testflight: true
+        submit_to_app_store: false
+
+        # Internal TestFlight only by default. Configure beta groups manually in
+        # App Store Connect after the first successful upload and QA pass.
+        beta_groups: []
