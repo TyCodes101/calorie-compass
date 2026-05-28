@@ -16,13 +16,15 @@ struct DashboardView: View {
             Group {
                 if loading && dashboard == nil {
                     ProgressView("Loading dashboard...")
-                } else if let error = error {
+                } else if let error = error, dashboard == nil {
                     VStack(spacing: 12) {
-                        Text("Today is unavailable").foregroundColor(.red)
+                        Text("Today is getting ready")
+                            .font(.headline)
                         Text(error)
                             .font(.caption)
+                            .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
-                        Button("Retry") { loadDashboard() }
+                        Button("Try again") { loadDashboard() }
                             .padding(.top, 8)
                             .accessibilityLabel("Retry loading Today")
                     }
@@ -35,6 +37,12 @@ struct DashboardView: View {
                             macroRow(label: "Carbs", used: dashboard.displayedCarbs, goal: dashboard.displayedCarbsGoal)
                             macroRow(label: "Fat", used: dashboard.displayedFat, goal: dashboard.displayedFatGoal)
                             Divider()
+                            if let error = error {
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
                             if let meals = dashboard.recentMeals, !meals.isEmpty {
                                 VStack(alignment: .leading, spacing: 10) {
                                     Text("Recent Meals").font(.headline)
@@ -91,7 +99,8 @@ struct DashboardView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Today", message: err.localizedDescription))
-                    error = err.localizedDescription
+                    dashboard = dashboard ?? .empty
+                    error = RetryCopy.recoveryMessage(action: "load Today", error: err)
                 }
             }
         }
@@ -111,7 +120,8 @@ struct DashboardView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Today", message: err.localizedDescription))
-                    error = RetryCopy.nonDestructiveFailure(action: "refresh Today", error: err)
+                    dashboard = dashboard ?? .empty
+                    error = RetryCopy.recoveryMessage(action: "refresh Today", error: err)
                 }
             }
         }

@@ -4,6 +4,7 @@ import type { VerifiedAppleIdentity } from '@/lib/auth/apple-token-verification'
 import {
   getNativeSessionExpiresAt,
   hashNativeSessionToken,
+  issueNativeGuestSession,
   isNativeSessionExpired,
   issueNativeSessionForAppleIdentity,
   nativeSessionTtlMs,
@@ -123,6 +124,56 @@ describe('native session helpers', () => {
         update: { email: null, emailVerified: false },
       }),
     );
+  });
+
+  it('issues a guest native session with a default profile instead of requiring sign-in', async () => {
+    const tx = {
+      user: {
+        create: vi.fn().mockResolvedValue({
+          id: 'guest-user-1',
+          name: 'Guest',
+          email: null,
+          demo: true,
+        }),
+      },
+      userAuthProvider: { upsert: vi.fn() },
+      nativeSession: { create: vi.fn().mockResolvedValue({ id: 'session-1' }) },
+    };
+    const client = {
+      $transaction: vi.fn(async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+
+    const issued = await issueNativeGuestSession({
+      now: new Date('2026-05-28T03:48:00.000Z'),
+      tokenFactory: () => 'guest-token',
+      client,
+    });
+
+    expect(issued).toMatchObject({
+      token: 'guest-token',
+      user: { id: 'guest-user-1', demo: true },
+    });
+    expect(tx.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        name: 'Guest',
+        demo: true,
+        profile: {
+          create: expect.objectContaining({
+            goal: 'MAINTAIN',
+            activityLevel: 'MODERATE',
+            dailyCalorieGoal: 2200,
+            proteinGoal: 160,
+          }),
+        },
+      }),
+    });
+    expect(tx.nativeSession.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'guest-user-1',
+        tokenHash: hashNativeSessionToken('guest-token'),
+        expiresAt: new Date('2026-06-27T03:48:00.000Z'),
+      },
+    });
   });
 
   it('revokes active sessions and treats missing logout as guest-safe', async () => {

@@ -23,6 +23,15 @@ const patchSchema = requestSchema
   .partial()
   .refine((payload) => Object.keys(payload).length > 0, { message: 'At least one setting is required.' });
 
+export async function GET() {
+  try {
+    return NextResponse.json(buildProfileSettingsSnapshot(await getCurrentUserWithProfile()));
+  } catch (error) {
+    logWriteFailure('profile.route.get', error);
+    return NextResponse.json({ error: 'We couldn’t load your profile right now. Please try again.' }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();

@@ -14,6 +14,18 @@ struct ProfileData: Codable, Equatable {
     var dailyCalorieGoal: Int?
     var proteinGoal: Int?
     var nutritionPreferences: String?
+
+    static let guestDefault = ProfileData(
+        name: "Guest",
+        age: nil,
+        heightCm: nil,
+        weightLbs: nil,
+        goal: "MAINTAIN",
+        activityLevel: "MODERATE",
+        dailyCalorieGoal: 2200,
+        proteinGoal: 160,
+        nutritionPreferences: nil
+    )
 }
 
 struct ProfileView: View {
@@ -35,16 +47,25 @@ struct ProfileView: View {
             Group {
                 if loading && profile == nil {
                     ProgressView("Loading profile...")
-                } else if let error = error {
+                } else if let error = error, profile == nil {
                     VStack(spacing: 16) {
-                        Text("Profile unavailable").foregroundColor(.red)
-                        Text(error).font(.caption)
-                        Button("Retry") { loadProfile() }
+                        Text("Profile is getting ready")
+                            .font(.headline)
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("Try again") { loadProfile() }
                     }.padding()
                 } else if profile == nil {
-                    VStack {
-                        Text("No profile data").foregroundColor(.gray)
-                        Button("Reload") { loadProfile() }
+                    VStack(spacing: 12) {
+                        Text("Guest profile ready")
+                            .font(.headline)
+                        Text("You can add goals whenever you want. We’ll use starter targets until then.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("Load profile") { loadProfile() }
                             .accessibilityLabel("Reload profile")
                     }.padding()
                 } else {
@@ -150,6 +171,11 @@ struct ProfileView: View {
                                 if showSuccess {
                                     Text("Profile updated!").foregroundColor(.green)
                                 }
+                                if let error = error {
+                                    Text(error)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }.padding(.horizontal, 20).padding(.top, 16)
                     }
@@ -184,7 +210,9 @@ struct ProfileView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Profile", message: err.localizedDescription))
-                    error = err.localizedDescription
+                    let fallback = profile ?? .guestDefault
+                    profile = fallback; dirtyProfile = fallback
+                    error = RetryCopy.recoveryMessage(action: "load your profile", error: err)
                 }
             }
         }

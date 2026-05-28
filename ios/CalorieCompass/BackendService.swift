@@ -176,6 +176,20 @@ struct DashboardResponse: Codable {
     var displayedCarbsGoal: Double { macroGoals?.carbs ?? max(carbs ?? 0, 1) }
     var displayedFat: Double { totals?.fat ?? fat ?? 0 }
     var displayedFatGoal: Double { macroGoals?.fat ?? max(fat ?? 0, 1) }
+
+    static let empty = DashboardResponse(
+        calories: 0,
+        goalCalories: 2200,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        recentMeals: [],
+        totals: DashboardTotals(calories: 0, protein: 0, carbs: 0, fat: 0),
+        macroGoals: MacroGoals(calories: 2200, protein: 160, carbs: 220, fat: 73),
+        mealCount: 0,
+        remainingCalories: 2200,
+        dailySummary: DailySummary(title: "Ready when you are", description: "Guest mode is setting up. You can log your first meal whenever you are ready.")
+    )
 }
 
 struct DashboardTotals: Codable {
@@ -235,6 +249,16 @@ struct NativeAppleAuthSession: Codable, Equatable {
     let token: String
     let expiresAt: String?
     let tokenType: String?
+}
+
+struct NativeGuestBootstrapResponse: Codable, Equatable {
+    let account: AccountSnapshot?
+    let user: SessionUser?
+    let session: NativeAppleAuthSession
+
+    var sessionResponse: SessionResponse {
+        SessionResponse(account: account, user: user)
+    }
 }
 
 struct NativeLogoutResponse: Codable, Equatable {
@@ -448,6 +472,7 @@ class BackendService {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("ios", forHTTPHeaderField: "X-Calorie-Compass-Client")
         if includeNativeSession {
             applyNativeSessionAuthorization(to: &request, token: nativeSessionTokenProvider())
         }
@@ -466,6 +491,11 @@ class BackendService {
 
     static func fetchSession(completion: @escaping (Result<SessionResponse, Error>) -> Void) {
         guard let urlRequest = request(path: "api/session", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func createGuestSession(completion: @escaping (Result<NativeGuestBootstrapResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/session/guest", method: "POST", includeNativeSession: false) else { completion(.failure(BackendError.badURL)); return }
         perform(urlRequest, completion: completion)
     }
 

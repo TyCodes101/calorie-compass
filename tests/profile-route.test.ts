@@ -13,7 +13,7 @@ vi.mock('@/lib/current-user', () => ({
   getCurrentUserWithProfile,
 }));
 
-import { PATCH } from '@/app/api/profile/route';
+import { GET, PATCH } from '@/app/api/profile/route';
 
 describe('profile PATCH route', () => {
   beforeEach(() => {
@@ -55,6 +55,28 @@ describe('profile PATCH route', () => {
       dailyCalorieGoal: 2400,
       proteinGoal: 160,
       nutritionPreferences: 'high protein',
+    });
+  });
+
+  it('returns default profile settings when a first-launch guest profile is still being created', async () => {
+    getCurrentUserWithProfile.mockResolvedValue({
+      id: 'guest-user-1',
+      name: 'Tyler',
+      email: null,
+      demo: true,
+      profile: null,
+    });
+
+    const response = await GET();
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      name: 'Tyler',
+      goal: 'MAINTAIN',
+      activityLevel: 'MODERATE',
+      dailyCalorieGoal: 2200,
+      proteinGoal: 160,
     });
   });
 
