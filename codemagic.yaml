@@ -22,6 +22,8 @@
 # - Keep automatic triggers disabled in the Codemagic UI until signing is verified.
 # - Use manual builds first.
 # - TestFlight readiness is not claimed until upload, install, and real QA pass.
+# - Uploads are intentionally internal-TestFlight only. Do not auto-submit builds
+#   to external beta review or App Store review from this workflow.
 
 workflows:
   ios-testflight:
@@ -92,7 +94,8 @@ workflows:
         script: |
           set -euo pipefail
           xcode-project use-profiles \
-            --project "$XCODE_PROJECT"
+            --project "$XCODE_PROJECT" \
+            --custom-export-options='{"testFlightInternalTestingOnly": true}'
 
       - name: Set build number from Codemagic build number
         script: |
