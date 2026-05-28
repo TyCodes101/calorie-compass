@@ -11,92 +11,106 @@ struct DashboardView: View {
     @State private var refreshing = false
     private let stabilityReporter = ConsoleStabilityReporter()
 
+    private var dashboardForDisplay: DashboardResponse? {
+        dashboard
+    }
+
     var body: some View {
         NavigationView {
-            Group {
-                if loading && dashboard == nil {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Setting up your day…")
-                            .font(.headline)
-                        Text("MacroMesh is preparing your guest dashboard.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                } else if let error = error {
-                    FirstLaunchStateView(
-                        systemImage: "fork.knife.circle",
-                        title: "Welcome to MacroMesh",
-                        message: recoverableDashboardMessage(error),
-                        primaryTitle: "Log your first meal",
-                        secondaryTitle: "Try again",
-                        primaryAction: openLog,
-                        secondaryAction: loadDashboard
-                    )
-                } else if let dashboard = dashboard {
-                    ScrollView {
-                        VStack(spacing: 18) {
-                            if dashboard.recentMeals?.isEmpty ?? true, dashboard.displayedCalories == 0 {
-                                FirstLaunchStateView(
-                                    systemImage: "sparkles",
-                                    title: "Welcome to MacroMesh",
-                                    message: "Log your first meal to start tracking calories and macros today.",
-                                    primaryTitle: "Log a meal",
-                                    secondaryTitle: nil,
-                                    primaryAction: openLog,
-                                    secondaryAction: nil
-                                )
-                            }
-                            macroRow(label: "Calories", used: dashboard.displayedCalories, goal: dashboard.displayedGoalCalories)
-                            macroRow(label: "Protein", used: dashboard.displayedProtein, goal: dashboard.displayedProteinGoal)
-                            macroRow(label: "Carbs", used: dashboard.displayedCarbs, goal: dashboard.displayedCarbsGoal)
-                            macroRow(label: "Fat", used: dashboard.displayedFat, goal: dashboard.displayedFatGoal)
-                            Divider()
-                            if let meals = dashboard.recentMeals, !meals.isEmpty {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("Recent Meals").font(.headline)
-                                    ForEach(Array(meals.enumerated()), id: \.offset) { _, meal in
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            if let raw = meal.rawText {
-                                                Text(raw).font(.subheadline)
-                                            }
-                                            if let items = meal.items {
-                                                ForEach(Array(items.enumerated()), id: \.offset) { _, food in
-                                                    Text("\(food.food_name.capitalized) — \(Int(food.calories)) cal")
-                                                        .font(.caption)
-                                                }
-                                            }
-                                        }
-                                        Divider()
-                                    }
-                                }
-                            } else {
-                                Text("Your saved meals will appear here after you log one.")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+
+                    if loading && dashboard == nil {
+                        DashboardSkeletonView()
+                    } else {
+                        if let error = error {
+                            InlineRecoveryCard(message: recoverableDashboardMessage(error), retry: loadDashboard)
                         }
-                        .padding()
-                        .padding(.bottom, 32)
-                        .refreshable { refreshDashboard() }
+
+                        MacroGridView(dashboard: dashboardForDisplay)
+
+                        Button(action: openLog) {
+                            Label(hasLoggedMeal ? "Log another meal" : "Log first meal", systemImage: "plus.circle.fill")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+
+                        recentMealsSection
                     }
-                } else {
-                    FirstLaunchStateView(
-                        systemImage: "fork.knife.circle",
-                        title: "Welcome to MacroMesh",
-                        message: "Log your first meal to start tracking calories and macros today.",
-                        primaryTitle: "Log a meal",
-                        secondaryTitle: nil,
-                        primaryAction: openLog,
-                        secondaryAction: nil
-                    )
                 }
+                .padding(.horizontal, 18)
+                .padding(.top, 8)
+                .padding(.bottom, 88)
+                .refreshable { refreshDashboard() }
             }
             .navigationTitle("Today")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: refreshDashboard) {
+                        if refreshing { ProgressView() } else { Image(systemName: "arrow.clockwise") }
+                    }
+                    .disabled(loading || refreshing)
+                    .accessibilityLabel("Refresh Today")
+                }
+            }
             .onAppear(perform: loadDashboard)
             .onReceive(NotificationCenter.default.publisher(for: .calorieCompassMealsDidChange)) { _ in
                 refreshDashboard()
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Welcome to MacroMesh")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+            Text(hasLoggedMeal ? "Here’s how today is tracking." : "Log your first meal to start tracking calories and macros today.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var hasLoggedMeal: Bool {
+        !(dashboard?.recentMeals?.isEmpty ?? true) || (dashboard?.displayedCalories ?? 0) > 0
+    }
+
+    private var recentMealsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Recent Meals")
+                .font(.headline)
+            if let meals = dashboard?.recentMeals, !meals.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(Array(meals.enumerated()), id: \.offset) { _, meal in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(meal.rawText?.nilIfBlank ?? "Saved meal")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            if let items = meal.items, !items.isEmpty {
+                                Text(items.prefix(2).map { "\($0.food_name.capitalized) · \(Int($0.calories)) cal" }.joined(separator: "  "))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                }
+            } else {
+                Text("Meals you save from Log will appear here.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
     }
@@ -107,9 +121,9 @@ struct DashboardView: View {
 
     private func recoverableDashboardMessage(_ error: String) -> String {
         if error.localizedCaseInsensitiveContains("profile") || error.localizedCaseInsensitiveContains("no data") {
-            return "Your guest dashboard is still getting ready. You can log a meal now, or retry in a moment."
+            return "Today is ready to use. Profile details can finish syncing in the background."
         }
-        return "We couldn’t refresh Today yet. Nothing was changed — try again or start by logging a meal."
+        return "We couldn’t refresh today yet. Nothing was changed."
     }
 
     func loadDashboard() {
@@ -143,6 +157,7 @@ struct DashboardView: View {
                 switch result {
                 case .success(let resp):
                     dashboard = resp
+                    error = nil
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Today", message: err.localizedDescription))
@@ -151,51 +166,80 @@ struct DashboardView: View {
             }
         }
     }
+}
 
-    func macroRow(label: String, used: Double, goal: Double) -> some View {
-        let pct: Double = goal > 0 ? used / goal : 0
-        return VStack(alignment: .leading, spacing: 4) {
-            Text("\(label): \(Int(used))/\(Int(goal))")
-            ProgressView(value: pct)
-                .tint(label == "Calories" ? .blue : label == "Protein" ? .green : .orange)
-                .accessibilityLabel("\(label) progress")
-                .accessibilityValue("\(Int(used)) of \(Int(goal))")
-        }.padding(.vertical, 2)
+struct MacroGridView: View {
+    let dashboard: DashboardResponse?
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            MacroMetricCard(title: "Calories", value: dashboard?.displayedCalories ?? 0, goal: dashboard?.displayedGoalCalories ?? 2_000, unit: "cal", tint: .blue)
+            MacroMetricCard(title: "Protein", value: dashboard?.displayedProtein ?? 0, goal: dashboard?.displayedProteinGoal ?? 120, unit: "g", tint: .green)
+            MacroMetricCard(title: "Carbs", value: dashboard?.displayedCarbs ?? 0, goal: dashboard?.displayedCarbsGoal ?? 220, unit: "g", tint: .orange)
+            MacroMetricCard(title: "Fat", value: dashboard?.displayedFat ?? 0, goal: dashboard?.displayedFatGoal ?? 70, unit: "g", tint: .purple)
+        }
     }
 }
 
-struct FirstLaunchStateView: View {
-    let systemImage: String
+struct MacroMetricCard: View {
     let title: String
-    let message: String
-    let primaryTitle: String
-    let secondaryTitle: String?
-    let primaryAction: () -> Void
-    let secondaryAction: (() -> Void)?
+    let value: Double
+    let goal: Double
+    let unit: String
+    let tint: Color
+
+    private var progress: Double { goal > 0 ? min(max(value / goal, 0), 1) : 0 }
 
     var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.largeTitle)
-                .foregroundColor(.accentColor)
+        VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.title3)
-                .fontWeight(.semibold)
-            Text(message)
-                .font(.subheadline)
+                .font(.caption)
                 .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            Button(primaryTitle, action: primaryAction)
-                .buttonStyle(.borderedProminent)
-            if let secondaryTitle, let secondaryAction {
-                Button(secondaryTitle, action: secondaryAction)
-                    .font(.caption)
-            }
+            Text("\(Int(value))")
+                .font(.title2)
+                .fontWeight(.bold)
+            Text("of \(Int(goal)) \(unit)")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            ProgressView(value: progress)
+                .tint(tint)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .padding()
+    }
+}
+
+struct DashboardSkeletonView: View {
+    var body: some View {
+        VStack(spacing: 14) {
+            MacroGridView(dashboard: nil)
+                .redacted(reason: .placeholder)
+            Text("Preparing your dashboard…")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
+struct InlineRecoveryCard: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                .foregroundColor(.orange)
+            Text(message)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Spacer()
+            Button("Retry", action: retry)
+                .font(.caption)
+        }
+        .padding(12)
+        .background(Color.orange.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }

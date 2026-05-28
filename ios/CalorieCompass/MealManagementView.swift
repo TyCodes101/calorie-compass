@@ -34,11 +34,14 @@ struct MealManagementView: View {
         NavigationView {
             Group {
                 if loading && meals.isEmpty {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Loading saved meals…")
-                            .foregroundColor(.secondary)
-                    }
+                    MealStateView(
+                        systemImage: "clock.arrow.circlepath",
+                        title: "Loading meals",
+                        message: "Your saved meals will appear here in a moment.",
+                        buttonTitle: "Refresh",
+                        action: loadMeals
+                    )
+                    .redacted(reason: .placeholder)
                 } else if let error = error, meals.isEmpty {
                     MealStateView(
                         systemImage: "wifi.exclamationmark",
@@ -64,7 +67,7 @@ struct MealManagementView: View {
                     .refreshable { refreshMeals() }
                 }
             }
-            .navigationTitle("Meals")
+            .navigationTitle("History")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: loadMeals) {
@@ -179,16 +182,24 @@ struct MealStateView: View {
         VStack(spacing: 14) {
             Image(systemName: systemImage)
                 .font(.largeTitle)
-                .foregroundColor(.orange)
-            Text(title).font(.headline)
+                .foregroundColor(.accentColor)
+            Text(title)
+                .font(.title3)
+                .fontWeight(.semibold)
             Text(message)
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
             Button(buttonTitle, action: action)
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
         }
-        .padding()
+        .padding(22)
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.horizontal, 18)
+        .padding(.top, 24)
     }
 }
 

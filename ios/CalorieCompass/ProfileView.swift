@@ -51,82 +51,20 @@ struct ProfileView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             if editing {
-                                Form {
-                                    Section(header: Text("Name")) {
-                                        TextField("Name", text: Binding(
-                                            get: { dirtyProfile?.name ?? "" },
-                                            set: { dirtyProfile?.name = $0 })
-                                        )
-                                        .focused($focusedProfileField)
-                                        .accessibilityLabel("Profile name")
-                                    }
-                                    Section(header: Text("Age")) {
-                                        TextField("Age", value: Binding(
-                                            get: { dirtyProfile?.age },
-                                            set: { dirtyProfile?.age = $0 }
-                                        ), formatter: NumberFormatter())
-                                        .focused($focusedProfileField)
-                                        .keyboardType(.numberPad)
-                                        .accessibilityLabel("Age")
-                                    }
-                                    Section(header: Text("Height (cm)")) {
-                                        TextField("Height (cm)", value: Binding(
-                                            get: { dirtyProfile?.heightCm },
-                                            set: { dirtyProfile?.heightCm = $0 })
-                                        , formatter: NumberFormatter())
-                                        .focused($focusedProfileField)
-                                        .keyboardType(.numberPad)
-                                        .accessibilityLabel("Height in centimeters")
-                                    }
-                                    Section(header: Text("Weight (lbs)")) {
-                                        TextField("Weight (lbs)", value: Binding(
-                                            get: { dirtyProfile?.weightLbs },
-                                            set: { dirtyProfile?.weightLbs = $0 })
-                                        , formatter: NumberFormatter())
-                                        .focused($focusedProfileField)
-                                        .keyboardType(.decimalPad)
-                                        .accessibilityLabel("Weight in pounds")
-                                    }
-                                    Section(header: Text("Daily Calorie Goal")) {
-                                        TextField("Daily Calorie Goal", value: Binding(
-                                            get: { dirtyProfile?.dailyCalorieGoal },
-                                            set: { dirtyProfile?.dailyCalorieGoal = $0 })
-                                        , formatter: NumberFormatter())
-                                        .focused($focusedProfileField)
-                                        .keyboardType(.numberPad)
-                                        .accessibilityLabel("Daily calorie goal")
-                                    }
-                                    Section(header: Text("Protein Goal (g)")) {
-                                        TextField("Protein Goal", value: Binding(
-                                            get: { dirtyProfile?.proteinGoal },
-                                            set: { dirtyProfile?.proteinGoal = $0 })
-                                        , formatter: NumberFormatter())
-                                        .focused($focusedProfileField)
-                                        .keyboardType(.numberPad)
-                                        .accessibilityLabel("Protein goal")
-                                    }
-                                    Section(header: Text("Nutrition Preferences")) {
-                                        TextField("Preferences", text: Binding(
-                                            get: { dirtyProfile?.nutritionPreferences ?? "" },
-                                            set: { dirtyProfile?.nutritionPreferences = $0 })
-                                        )
-                                        .focused($focusedProfileField)
-                                        .accessibilityLabel("Nutrition preferences")
-                                    }
-                                }
-                                if let saveError = saveError {
-                                    Text(saveError).foregroundColor(.red)
-                                }
-                                HStack {
-                                    Button("Cancel") {
-                                        focusedProfileField = false; editing = false; dirtyProfile = profile
-                                    }.foregroundColor(.gray)
-                                    Spacer()
-                                    Button("Save changes") {
+                                ProfileEditorCard(
+                                    profile: $dirtyProfile,
+                                    saveError: saveError,
+                                    saving: saving,
+                                    onCancel: {
+                                        focusedProfileField = false
+                                        editing = false
+                                        dirtyProfile = profile
+                                    },
+                                    onSave: {
                                         focusedProfileField = false
                                         showConfirmSave = true
-                                    }.disabled(saving)
-                                }.padding()
+                                    }
+                                )
                             } else {
                                 ProfileSummaryCard(profile: profile, isGuest: sessionStore.state.authSession.isGuest)
                                 Button("Edit Profile") {
@@ -308,6 +246,142 @@ struct ProfileFallbackView: View {
     }
 }
 
+struct ProfileEditorCard: View {
+    @Binding var profile: ProfileData?
+    let saveError: String?
+    let saving: Bool
+    let onCancel: () -> Void
+    let onSave: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Edit profile")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                Text("Update the defaults MacroMesh uses for goals and nutrition context.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            ProfileTextField(title: "Name", placeholder: "Guest", text: textBinding(\.name))
+            ProfileNumberField(title: "Age", placeholder: "Add age", value: intBinding(\.age), keyboard: .numberPad)
+            ProfileNumberField(title: "Height", placeholder: "cm", value: intBinding(\.heightCm), keyboard: .numberPad)
+            ProfileDecimalField(title: "Weight", placeholder: "lbs", value: doubleBinding(\.weightLbs))
+            ProfileNumberField(title: "Daily calories", placeholder: "2000", value: intBinding(\.dailyCalorieGoal), keyboard: .numberPad)
+            ProfileNumberField(title: "Protein goal", placeholder: "120g", value: intBinding(\.proteinGoal), keyboard: .numberPad)
+            ProfileTextField(title: "Preferences", placeholder: "High protein, vegetarian, etc.", text: textBinding(\.nutritionPreferences))
+
+            if let saveError {
+                Text(saveError)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
+            HStack(spacing: 12) {
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
+                Button(saving ? "Saving…" : "Save changes", action: onSave)
+                    .buttonStyle(.borderedProminent)
+                    .frame(maxWidth: .infinity)
+                    .disabled(saving)
+            }
+        }
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func ensureProfile() -> ProfileData {
+        if let profile { return profile }
+        let fallback = ProfileData(name: "Guest", age: nil, heightCm: nil, weightLbs: nil, goal: nil, activityLevel: nil, dailyCalorieGoal: nil, proteinGoal: nil, nutritionPreferences: nil)
+        profile = fallback
+        return fallback
+    }
+
+    private func textBinding(_ keyPath: WritableKeyPath<ProfileData, String?>) -> Binding<String> {
+        Binding(
+            get: { profile?[keyPath: keyPath] ?? "" },
+            set: { newValue in
+                var updated = ensureProfile()
+                updated[keyPath: keyPath] = newValue.nilIfBlank
+                profile = updated
+            }
+        )
+    }
+
+    private func textBinding(_ keyPath: WritableKeyPath<ProfileData, String>) -> Binding<String> {
+        Binding(
+            get: { profile?[keyPath: keyPath] ?? "" },
+            set: { newValue in
+                var updated = ensureProfile()
+                updated[keyPath: keyPath] = newValue
+                profile = updated
+            }
+        )
+    }
+
+    private func intBinding(_ keyPath: WritableKeyPath<ProfileData, Int?>) -> Binding<String> {
+        Binding(
+            get: { profile?[keyPath: keyPath].map(String.init) ?? "" },
+            set: { newValue in
+                var updated = ensureProfile()
+                updated[keyPath: keyPath] = Int(newValue.trimmingCharacters(in: .whitespacesAndNewlines))
+                profile = updated
+            }
+        )
+    }
+
+    private func doubleBinding(_ keyPath: WritableKeyPath<ProfileData, Double?>) -> Binding<String> {
+        Binding(
+            get: { profile?[keyPath: keyPath].map { String(Int($0)) } ?? "" },
+            set: { newValue in
+                var updated = ensureProfile()
+                updated[keyPath: keyPath] = Double(newValue.trimmingCharacters(in: .whitespacesAndNewlines))
+                profile = updated
+            }
+        )
+    }
+}
+
+struct ProfileTextField: View {
+    let title: String
+    let placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption).foregroundColor(.secondary)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+}
+
+struct ProfileNumberField: View {
+    let title: String
+    let placeholder: String
+    @Binding var value: String
+    let keyboard: UIKeyboardType
+
+    var body: some View {
+        ProfileTextField(title: title, placeholder: placeholder, text: $value)
+            .keyboardType(keyboard)
+    }
+}
+
+struct ProfileDecimalField: View {
+    let title: String
+    let placeholder: String
+    @Binding var value: String
+
+    var body: some View {
+        ProfileTextField(title: title, placeholder: placeholder, text: $value)
+            .keyboardType(.decimalPad)
+    }
+}
+
 struct ProfileSummaryCard: View {
     let profile: ProfileData?
     let isGuest: Bool
@@ -333,11 +407,11 @@ struct ProfileSummaryCard: View {
                     .clipShape(Capsule())
             }
             Divider()
-            ProfileInfoRow(label: "Daily calories", value: profile?.dailyCalorieGoal.map { "\($0) cal" } ?? "Not set yet")
-            ProfileInfoRow(label: "Protein", value: profile?.proteinGoal.map { "\($0)g" } ?? "Not set yet")
-            ProfileInfoRow(label: "Height", value: profile?.heightCm.map { "\($0) cm" } ?? "Not set yet")
-            ProfileInfoRow(label: "Weight", value: profile?.weightLbs.map { "\(Int($0)) lbs" } ?? "Not set yet")
-            ProfileInfoRow(label: "Preferences", value: profile?.nutritionPreferences?.nilIfBlank ?? "None yet")
+            ProfileInfoRow(label: "Daily calories", value: profile?.dailyCalorieGoal.map { "\($0) cal" } ?? "Add goal")
+            ProfileInfoRow(label: "Protein", value: profile?.proteinGoal.map { "\($0)g" } ?? "Add protein")
+            ProfileInfoRow(label: "Height", value: profile?.heightCm.map { "\($0) cm" } ?? "Add height")
+            ProfileInfoRow(label: "Weight", value: profile?.weightLbs.map { "\(Int($0)) lbs" } ?? "Add weight")
+            ProfileInfoRow(label: "Preferences", value: profile?.nutritionPreferences?.nilIfBlank ?? "Add preferences")
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

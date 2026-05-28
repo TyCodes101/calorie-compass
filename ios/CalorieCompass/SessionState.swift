@@ -182,6 +182,13 @@ final class SessionStore: ObservableObject {
 struct SessionBannerView: View {
     let model: SessionBannerModel
     let onRetry: (() -> Void)?
+    let onDismiss: (() -> Void)?
+
+    init(model: SessionBannerModel, onRetry: (() -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
+        self.model = model
+        self.onRetry = onRetry
+        self.onDismiss = onDismiss
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -191,6 +198,7 @@ struct SessionBannerView: View {
             Text(model.title)
                 .font(.caption)
                 .fontWeight(.semibold)
+                .lineLimit(1)
             Text(model.message)
                 .font(.caption2)
                 .foregroundColor(.secondary)
@@ -199,14 +207,23 @@ struct SessionBannerView: View {
             if let onRetry {
                 Button("Retry", action: onRetry)
                     .font(.caption2)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
+            }
+            if let onDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss session status")
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(model.tint.opacity(0.12))
+        .padding(.vertical, 6)
+        .background(.thinMaterial)
         .clipShape(Capsule())
-        .padding(.horizontal)
-        .padding(.top, 6)
+        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+        .padding(.horizontal, 14)
     }
 }
