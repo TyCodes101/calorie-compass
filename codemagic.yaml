@@ -34,6 +34,9 @@ workflows:
       xcode: latest
       cocoapods: default
 
+      groups:
+        - app_store_connect
+
       vars:
         XCODE_PROJECT: ios/CalorieCompass/CalorieCompass.xcodeproj
         XCODE_SCHEME: CalorieCompass
