@@ -107,22 +107,18 @@ workflows:
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
 
+      - name: Publish IPA to TestFlight with explicit Apple app ID
+        script: |
+          set -euo pipefail
+          app-store-connect publish \
+            --path build/ios/ipa/MacroMesh.ipa \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --private-key @env:APP_STORE_CONNECT_PRIVATE_KEY \
+            --apple-id "$APP_STORE_APP_ID" \
+            --testflight
+
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-
-    publishing:
-      app_store_connect:
-        # These values must be configured as secure Codemagic environment variables.
-        # Never commit the private key or paste it into logs/chat.
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        apple_id: $APP_STORE_APP_ID
-        submit_to_testflight: true
-        submit_to_app_store: false
-
-        # Internal TestFlight only by default. Configure beta groups manually in
-        # App Store Connect after the first successful upload and QA pass.
-        beta_groups: []
