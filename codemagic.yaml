@@ -10,7 +10,6 @@
 #    - APP_STORE_CONNECT_KEY_IDENTIFIER
 #    - APP_STORE_CONNECT_PRIVATE_KEY
 # 2. Add these non-secret/release variables in Codemagic UI if you need overrides:
-#    - APP_STORE_APP_ID (numeric App Store Connect Apple ID; optional until upload)
 #    - BUNDLE_ID=com.tycodes.macromesh
 #    - XCODE_PROJECT=ios/CalorieCompass/CalorieCompass.xcodeproj
 #    - XCODE_SCHEME=CalorieCompass
@@ -39,9 +38,9 @@ workflows:
         XCODE_PROJECT: ios/CalorieCompass/CalorieCompass.xcodeproj
         XCODE_SCHEME: CalorieCompass
         BUNDLE_ID: com.tycodes.macromesh
-        # Optional but recommended for TestFlight build-number lookup/upload.
-        # Set the numeric Apple ID from App Store Connect in Codemagic UI.
-        APP_STORE_APP_ID: ""
+        # If a future Codemagic step needs the numeric App Store Connect Apple ID,
+        # add APP_STORE_APP_ID in the Codemagic UI at that time. Do not keep an
+        # empty placeholder in this YAML because Codemagic rejects empty vars.
 
       # Automatic code signing. Codemagic uses the App Store Connect API key
       # configured below plus Apple Developer/App Store Connect assets to fetch
