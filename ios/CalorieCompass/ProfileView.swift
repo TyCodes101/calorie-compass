@@ -337,7 +337,7 @@ struct ProfileSummaryCard: View {
             ProfileInfoRow(label: "Protein", value: profile?.proteinGoal.map { "\($0)g" } ?? "Not set yet")
             ProfileInfoRow(label: "Height", value: profile?.heightCm.map { "\($0) cm" } ?? "Not set yet")
             ProfileInfoRow(label: "Weight", value: profile?.weightLbs.map { "\(Int($0)) lbs" } ?? "Not set yet")
-            ProfileInfoRow(label: "Preferences", value: profile?.nutritionPreferences.nilIfBlank ?? "None yet")
+            ProfileInfoRow(label: "Preferences", value: profile?.nutritionPreferences?.nilIfBlank ?? "None yet")
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

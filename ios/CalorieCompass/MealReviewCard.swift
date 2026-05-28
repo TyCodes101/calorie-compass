@@ -6,7 +6,7 @@
 import SwiftUI
 
 struct MealItem: Identifiable, Codable, Equatable {
-    let id = UUID()
+    var id = UUID()
     var name: String
     var quantity: Double
     var unit: String
