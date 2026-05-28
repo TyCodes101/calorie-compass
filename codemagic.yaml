@@ -9,14 +9,14 @@
 #    - APP_STORE_CONNECT_ISSUER_ID
 #    - APP_STORE_CONNECT_KEY_IDENTIFIER
 #    - APP_STORE_CONNECT_PRIVATE_KEY
-#    - APP_STORE_APP_ID (numeric Apple app ID from App Store Connect)
+#    - APP_STORE_APP_ID=6773972058 (numeric Apple app ID from App Store Connect)
 # 2. Add these non-secret/release variables in Codemagic UI if you need overrides:
-#    - BUNDLE_ID=com.tycodes.macromesh
+#    - BUNDLE_ID=com.tycodes.macromate
 #    - XCODE_PROJECT=ios/CalorieCompass/CalorieCompass.xcodeproj
 #    - XCODE_SCHEME=CalorieCompass
 # 3. In Apple Developer/App Store Connect, create the app record, Bundle ID,
 #    Sign in with Apple capability, Apple Distribution certificate, and App Store
-#    provisioning profile for com.tycodes.macromesh.
+#    provisioning profile for com.tycodes.macromate.
 #
 # Safety notes:
 # - Keep automatic triggers disabled in the Codemagic UI until signing is verified.
@@ -41,7 +41,7 @@ workflows:
       vars:
         XCODE_PROJECT: ios/CalorieCompass/CalorieCompass.xcodeproj
         XCODE_SCHEME: CalorieCompass
-        BUNDLE_ID: com.tycodes.macromesh
+        BUNDLE_ID: com.tycodes.macromate
         # APP_STORE_APP_ID is imported from the app_store_connect environment group.
         # Do not keep an empty placeholder in this YAML because Codemagic rejects empty vars.
 
@@ -50,7 +50,7 @@ workflows:
       # matching App Store signing files for this Bundle ID.
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.tycodes.macromesh
+        bundle_identifier: com.tycodes.macromate
 
     scripts:
       - name: Verify required App Store Connect environment
