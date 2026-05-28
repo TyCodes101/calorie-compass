@@ -34,19 +34,19 @@ struct ProfileView: View {
         NavigationView {
             Group {
                 if loading && profile == nil {
-                    ProgressView("Loading profile...")
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Preparing your profile…")
+                            .font(.headline)
+                        Text("MacroMesh is loading your guest defaults.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
                 } else if let error = error {
-                    VStack(spacing: 16) {
-                        Text("Profile unavailable").foregroundColor(.red)
-                        Text(error).font(.caption)
-                        Button("Retry") { loadProfile() }
-                    }.padding()
+                    ProfileFallbackView(message: profileFallbackMessage(error), retry: loadProfile)
                 } else if profile == nil {
-                    VStack {
-                        Text("No profile data").foregroundColor(.gray)
-                        Button("Reload") { loadProfile() }
-                            .accessibilityLabel("Reload profile")
-                    }.padding()
+                    ProfileFallbackView(message: "Your guest profile will appear here once MacroMesh finishes setup.", retry: loadProfile)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
@@ -128,30 +128,30 @@ struct ProfileView: View {
                                     }.disabled(saving)
                                 }.padding()
                             } else {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(profile?.name ?? "Not set").font(.headline)
-                                    Group {
-                                        Text("Calorie goal: \(profile?.dailyCalorieGoal?.description ?? "Not set")")
-                                        Text("Protein goal: \(profile?.proteinGoal?.description ?? "Not set")")
-                                        Text("Height: \(profile?.heightCm?.description ?? "Not set") cm")
-                                        Text("Weight: \(profile?.weightLbs?.description ?? "Not set") lbs")
-                                        Text("Preferences: \(profile?.nutritionPreferences ?? "Not set")")
-                                    }.font(.subheadline).foregroundColor(.secondary)
-                                }
+                                ProfileSummaryCard(profile: profile, isGuest: sessionStore.state.authSession.isGuest)
                                 Button("Edit Profile") {
                                     dirtyProfile = profile; editing = true
-                                }.padding(.top, 8)
-                                AccountStatusSection(response: sessionStore.state.sessionResponse)
-                                AccountSignInEntryPoint(
-                                    authSession: sessionStore.state.authSession,
-                                    onSessionChanged: sessionStore.refresh
-                                )
-                                SessionAndPrivacyNote()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .padding(.top, 4)
+                                if sessionStore.state.authSession.isSignedIn {
+                                    AccountStatusSection(response: sessionStore.state.sessionResponse)
+                                    AccountSignInEntryPoint(
+                                        authSession: sessionStore.state.authSession,
+                                        onSessionChanged: sessionStore.refresh
+                                    )
+                                    SessionAndPrivacyNote()
+                                } else {
+                                    GuestProfileNote()
+                                }
                                 if showSuccess {
-                                    Text("Profile updated!").foregroundColor(.green)
+                                    Text("Profile updated! Save confirmed.").foregroundColor(.green)
                                 }
                             }
-                        }.padding(.horizontal, 20).padding(.top, 16)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        .padding(.bottom, 96)
                     }
                 }
             }
@@ -188,6 +188,13 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+
+    private func profileFallbackMessage(_ error: String) -> String {
+        if error.localizedCaseInsensitiveContains("profile") || error.localizedCaseInsensitiveContains("no data") {
+            return "Your guest profile is still getting ready. Nothing was changed — reload in a moment."
+        }
+        return "We couldn’t refresh Profile yet. Nothing was changed — check your connection and try again."
     }
 
     private func saveProfile() {
@@ -272,6 +279,107 @@ struct AccountStatusSection: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Account status. Apple sign-in remains optional and guest mode remains available.")
     }
+}
+
+struct ProfileFallbackView: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "person.crop.circle")
+                .font(.largeTitle)
+                .foregroundColor(.accentColor)
+            Text("Guest profile")
+                .font(.title3)
+                .fontWeight(.semibold)
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Reload profile", action: retry)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding()
+    }
+}
+
+struct ProfileSummaryCard: View {
+    let profile: ProfileData?
+    let isGuest: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(profile?.name.nilIfBlank ?? (isGuest ? "Guest profile" : "Profile"))
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    Text(isGuest ? "Guest session" : "Account profile")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Text(isGuest ? "Guest" : "Synced")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.orange.opacity(isGuest ? 0.16 : 0.0))
+                    .clipShape(Capsule())
+            }
+            Divider()
+            ProfileInfoRow(label: "Daily calories", value: profile?.dailyCalorieGoal.map { "\($0) cal" } ?? "Not set yet")
+            ProfileInfoRow(label: "Protein", value: profile?.proteinGoal.map { "\($0)g" } ?? "Not set yet")
+            ProfileInfoRow(label: "Height", value: profile?.heightCm.map { "\($0) cm" } ?? "Not set yet")
+            ProfileInfoRow(label: "Weight", value: profile?.weightLbs.map { "\(Int($0)) lbs" } ?? "Not set yet")
+            ProfileInfoRow(label: "Preferences", value: profile?.nutritionPreferences.nilIfBlank ?? "None yet")
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+struct ProfileInfoRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(value)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+struct GuestProfileNote: View {
+    var body: some View {
+        Text("You can keep using MacroMesh as a guest. Edit Profile lets you tune local defaults without changing sign-in or account settings.")
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .padding(.top, 4)
+    }
+}
+
+extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var nilIfBlankForTesting: String? { nilIfBlank }
 }
 
 struct AccountSignInEntryPoint: View {
@@ -511,7 +619,7 @@ enum AccountManagementContent {
         if session.isSignedIn {
             return AccountManagementVisibility(
                 canUseAccountActions: true,
-                message: "Signed in with a backend-issued Calorie Compass session. You can migrate guest data, request an account export, delete account data, or sign out."
+                message: "Signed in with a backend-issued MacroMesh session. You can migrate guest data, request an account export, delete account data, or sign out."
             )
         }
 

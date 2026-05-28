@@ -52,8 +52,8 @@ struct MealManagementView: View {
                         systemImage: "fork.knife.circle",
                         title: "No saved meals yet",
                         message: "Meals you save from Log will appear here for review and management.",
-                        buttonTitle: "Refresh",
-                        action: loadMeals
+                        buttonTitle: "Log a meal",
+                        action: openLog
                     )
                 } else {
                     List(meals) { meal in
@@ -85,6 +85,10 @@ struct MealManagementView: View {
             }
             .onAppear(perform: loadMeals)
         }
+    }
+
+    private func openLog() {
+        NotificationCenter.default.post(name: .macroMeshOpenLogTab, object: nil)
     }
 
     private func loadMeals() {

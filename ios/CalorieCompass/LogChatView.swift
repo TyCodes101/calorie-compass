@@ -39,7 +39,7 @@ struct LogChatView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("What did you eat?")
                                 .font(.headline)
-                            Text("Describe a meal or snack in your own words. Calorie Compass will help estimate nutrition before you save it.")
+                            Text(sessionStore.state.isPreparingSession ? "We’re setting up your guest session. You’ll be able to send this in a moment." : "Describe a meal or snack in your own words. MacroMesh will help estimate nutrition before you save it.")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -67,9 +67,9 @@ struct LogChatView: View {
             }
             NutritionDisclaimerView()
             HStack {
-                TextField("Describe your meal", text: $inputText)
+                TextField(sessionStore.state.isPreparingSession ? "Setting up guest session…" : "Describe your meal", text: $inputText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .disabled(isLoading)
+                    .disabled(isLoading || sessionStore.state.isActionBlocked)
                     .focused($mealInputFocused)
                     .submitLabel(.send)
                     .onSubmit(sendMessage)
@@ -82,7 +82,7 @@ struct LogChatView: View {
                         Text("Send")
                     }
                 }
-                .disabled(isLoading || inputText.isEmpty)
+                .disabled(isLoading || sessionStore.state.isActionBlocked || inputText.isEmpty)
                 .accessibilityLabel("Send meal description")
             }.padding()
         }
@@ -94,6 +94,10 @@ struct LogChatView: View {
         guard !trimmedInput.isEmpty else { return }
         guard !isLoading else {
             stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Log"))
+            return
+        }
+        guard !sessionStore.state.isActionBlocked else {
+            error = sessionStore.state.isPreparingSession ? "MacroMesh is still setting up your guest session. Please try again in a moment." : "Your session needs attention before logging. Use the Today retry button, then send again."
             return
         }
         let userMessage = trimmedInput

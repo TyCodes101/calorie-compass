@@ -268,11 +268,13 @@ final class NativeSessionStateTests: XCTestCase {
         XCTAssertEqual(NativeSessionState.fromError(BackendError.forbidden), .expired(message: BackendError.forbidden.localizedDescription))
     }
 
-    func testOnlyExpiredAndOfflineStatesBlockActions() {
+    func testSetupExpiredAndOfflineStatesBlockActions() {
         let response = SessionResponse(account: nil, user: SessionUser(id: "u1", name: nil, mode: "account"))
 
-        XCTAssertFalse(NativeSessionState.unknown.isActionBlocked)
-        XCTAssertFalse(NativeSessionState.loading.isActionBlocked)
+        XCTAssertTrue(NativeSessionState.unknown.isActionBlocked)
+        XCTAssertTrue(NativeSessionState.loading.isActionBlocked)
+        XCTAssertTrue(NativeSessionState.unknown.isPreparingSession)
+        XCTAssertTrue(NativeSessionState.loading.isPreparingSession)
         XCTAssertFalse(NativeSessionState.authenticated(response).isActionBlocked)
         XCTAssertFalse(NativeSessionState.unauthenticated(message: "Native sign-in is not available in this build yet.").isActionBlocked)
         XCTAssertTrue(NativeSessionState.expired(message: "Expired").isActionBlocked)
