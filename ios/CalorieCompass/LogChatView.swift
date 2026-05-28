@@ -20,75 +20,102 @@ struct LogChatView: View {
     @State private var saveError: String? = nil
     @FocusState private var mealInputFocused: Bool
     private let stabilityReporter = ConsoleStabilityReporter()
-    
+
     var body: some View {
-        VStack {
-            if showReviewCard {
-                MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: { items in
-                    saveMeal(items: items)
-                }, onCancel: {
-                    showReviewCard = false
-                })
-                if let saveError = saveError {
-                    Text(saveError).foregroundColor(.red)
+        NavigationView {
+            MacroMeshScreen {
+                VStack(spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            introCard
+                            ForEach(Array(messages.enumerated()), id: \.offset) { _, msg in
+                                ChatBubble(role: msg.role, text: msg.text)
+                            }
+                            if isLoading {
+                                ChatBubble(role: "assistant", text: "Estimating nutrition…")
+                                    .redacted(reason: .placeholder)
+                            }
+                            if showReviewCard {
+                                MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: { showReviewCard = false })
+                                if let saveError {
+                                    Text(saveError)
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                            }
+                            if let error {
+                                InlineRecoveryCard(message: error, retry: sendMessage)
+                            }
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
+                    }
+                    composer
                 }
             }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if messages.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("What did you eat?")
-                                .font(.headline)
-                            Text(sessionStore.state.isPreparingSession ? "We’re setting up your guest session. You’ll be able to send this in a moment." : "Describe a meal or snack in your own words. MacroMesh will help estimate nutrition before you save it.")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
-                    }
-                    ForEach(Array(messages.enumerated()), id: \.offset) { index, msg in
-                        HStack(alignment: .top) {
-                            if msg.role == "user" { Spacer() }
-                            Text("\(msg.role == "user" ? "You" : "Assistant"): \(msg.text)")
-                                .padding(8)
-                                .background(msg.role == "user" ? Color.blue.opacity(0.13) : Color.gray.opacity(0.18))
-                                .cornerRadius(8)
-                            if msg.role != "user" { Spacer() }
-                        }
-                    }
-                }.padding()
+            .navigationTitle("Log")
+            .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.interactively)
+        }
+    }
+
+    private var introCard: some View {
+        AppCard(padding: 18) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Conversational logging")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .textCase(.uppercase)
+                    .tracking(1.1)
+                Text("What did you eat?")
+                    .font(.title.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.text)
+                Text(sessionStore.state.isPreparingSession ? "Setting up your guest session. You can type now and send in a moment." : "Describe a meal naturally. MacroMesh estimates nutrition, then asks you to review before anything is saved.")
+                    .font(.subheadline)
+                    .foregroundColor(MacroMeshTheme.muted)
+                VStack(alignment: .leading, spacing: 8) {
+                    PromptChip(text: "Greek yogurt with granola and berries")
+                    PromptChip(text: "Chicken burrito bowl for lunch")
+                    PromptChip(text: "Two eggs, toast, and coffee")
+                }
             }
-            if let error = error {
-                Text(error)
-                    .foregroundColor(.red)
-                    .padding(4)
-            }
+        }
+    }
+
+    private var composer: some View {
+        VStack(spacing: 8) {
             NutritionDisclaimerView()
-            HStack {
+            HStack(spacing: 10) {
                 TextField(sessionStore.state.isPreparingSession ? "Setting up guest session…" : "Describe your meal", text: $inputText)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .textFieldStyle(MacroMeshTextFieldStyle())
                     .disabled(isLoading || sessionStore.state.isActionBlocked)
                     .focused($mealInputFocused)
                     .submitLabel(.send)
                     .onSubmit(sendMessage)
                     .accessibilityLabel("Meal description")
-                    .accessibilityHint("Describe the meal or snack you want to log.")
                 Button(action: sendMessage) {
                     if isLoading {
-                        ProgressView()
+                        ProgressView().tint(.white)
                     } else {
-                        Text("Send")
+                        Image(systemName: "arrow.up")
+                            .font(.headline.weight(.bold))
                     }
                 }
-                .disabled(isLoading || sessionStore.state.isActionBlocked || inputText.isEmpty)
+                .frame(width: 46, height: 46)
+                .background((isLoading || sessionStore.state.isActionBlocked || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? MacroMeshTheme.primary.opacity(0.35) : MacroMeshTheme.primary)
+                .foregroundColor(.white)
+                .clipShape(Circle())
+                .disabled(isLoading || sessionStore.state.isActionBlocked || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityLabel("Send meal description")
-            }.padding()
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .background(.ultraThinMaterial)
     }
-    
+
     func sendMessage() {
         let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty else { return }
@@ -121,12 +148,9 @@ struct LogChatView: View {
                 case .success(let resp):
                     messages.append((role: "assistant", text: resp.assistant_message))
                     assistantState = resp.next_state
-                    // Extract possible meal items from the assistant response for review.
                     if let detectedItems = try? tryExtractMealItems(from: resp.assistant_message) {
                         reviewItems = detectedItems
-                        if !reviewItems.isEmpty {
-                            showReviewCard = true
-                        }
+                        if !reviewItems.isEmpty { showReviewCard = true }
                     }
                 case .failure(let err):
                     sessionStore.apply(err)
@@ -137,17 +161,12 @@ struct LogChatView: View {
         }
     }
 
-    // Attempt to extract meal items from assistant messages that include JSON item data.
     func tryExtractMealItems(from reply: String) throws -> [MealItem] {
-        // The backend contract is still evolving, so this safely ignores replies without JSON.
-        guard let start = reply.firstIndex(of: "["), let end = reply.lastIndex(of: "]") else {
-            return []
-        }
+        guard let start = reply.firstIndex(of: "["), let end = reply.lastIndex(of: "]") else { return [] }
         let jsonString = String(reply[start...end])
         let decoder = JSONDecoder()
         if let data = jsonString.data(using: .utf8) {
-            let raw = try decoder.decode([MealItem].self, from: data)
-            return raw
+            return try decoder.decode([MealItem].self, from: data)
         }
         return []
     }
@@ -160,9 +179,8 @@ struct LogChatView: View {
         guard !items.isEmpty else { return }
         isSavingMeal = true
         saveError = nil
-        // Map MealItem to PostMealRequest
         let req = PostMealRequest(
-            meal_type: "breakfast", // The current assistant save payload does not expose a selected meal type yet.
+            meal_type: "breakfast",
             confidence_score: 0.95,
             raw_text: nil,
             notes: nil,
@@ -176,7 +194,7 @@ struct LogChatView: View {
                     protein: $0.protein,
                     carbs: $0.carbs,
                     fat: $0.fat,
-                    fiber: 0,   // Not available in prototype
+                    fiber: 0,
                     sugar: 0,
                     sodium: 0,
                     notes: nil,
@@ -190,7 +208,7 @@ struct LogChatView: View {
             DispatchQueue.main.async {
                 isSavingMeal = false
                 switch result {
-                case .success(_):
+                case .success:
                     showReviewCard = false
                     reviewItems.removeAll()
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
@@ -202,17 +220,50 @@ struct LogChatView: View {
             }
         }
     }
+}
 
+struct PromptChip: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.medium))
+            .foregroundColor(MacroMeshTheme.primaryDark)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(MacroMeshTheme.cardSubtle)
+            .clipShape(Capsule())
+    }
+}
+
+struct ChatBubble: View {
+    let role: String
+    let text: String
+
+    var isUser: Bool { role == "user" }
+
+    var body: some View {
+        HStack(alignment: .bottom) {
+            if isUser { Spacer(minLength: 50) }
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(isUser ? .white : MacroMeshTheme.text)
+                .padding(12)
+                .background(isUser ? MacroMeshTheme.primary : Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: MacroMeshTheme.shadow, radius: 10, x: 0, y: 6)
+            if !isUser { Spacer(minLength: 50) }
+        }
+    }
 }
 
 struct NutritionDisclaimerView: View {
     var body: some View {
-        Text("Nutrition estimates are informational and may be approximate. Verify critical details; this is not medical advice.")
-            .font(.footnote)
-            .foregroundColor(.secondary)
-            .multilineTextAlignment(.leading)
-            .padding(.horizontal)
-            .accessibilityLabel("Nutrition estimates are informational and may be approximate. Verify critical details. This is not medical advice.")
+        Text("Nutrition estimates are approximate and not medical advice. Review before saving.")
+            .font(.caption2)
+            .foregroundColor(MacroMeshTheme.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel("Nutrition estimates are approximate and not medical advice. Review before saving.")
     }
 }
 

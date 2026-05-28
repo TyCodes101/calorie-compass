@@ -24,36 +24,50 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            TabView(selection: $selectedTab) {
-                DashboardView()
-                    .tabItem { Label("Today", systemImage: "house") }
-                    .tag(MainTab.today)
-                LogChatView()
-                    .tabItem { Label("Log", systemImage: "plus.bubble") }
-                    .tag(MainTab.log)
-                HistoryView()
-                    .tabItem { Label("History", systemImage: "clock") }
-                    .tag(MainTab.history)
-                ProfileView()
-                    .tabItem { Label("Profile", systemImage: "person") }
-                    .tag(MainTab.profile)
+            MacroMeshScreen {
+                TabView(selection: $selectedTab) {
+                    DashboardView()
+                        .tabItem { Label("Today", systemImage: "house") }
+                        .tag(MainTab.today)
+                    LogChatView()
+                        .tabItem { Label("Log", systemImage: "plus.bubble") }
+                        .tag(MainTab.log)
+                    HistoryView()
+                        .tabItem { Label("History", systemImage: "clock") }
+                        .tag(MainTab.history)
+                    ProfileView()
+                        .tabItem { Label("Profile", systemImage: "person") }
+                        .tag(MainTab.profile)
+                }
+                .tint(MacroMeshTheme.primary)
             }
-            .tint(.blue)
 
             if selectedTab == .today, showSessionPill, let banner = sessionStore.state.banner {
                 SessionBannerView(model: banner, onRetry: sessionStore.refresh, onDismiss: { showSessionPill = false })
-                    .padding(.top, 4)
+                    .padding(.top, 6)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .environmentObject(sessionStore)
-        .onAppear(perform: sessionStore.refresh)
+        .onAppear {
+            configureTabBarAppearance()
+            sessionStore.refresh()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .macroMeshOpenLogTab)) { _ in
             selectedTab = .log
         }
         .onChange(of: sessionStore.state) { _ in
             showSessionPill = true
         }
+    }
+
+    private func configureTabBarAppearance() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor.white.withAlphaComponent(0.96)
+        appearance.shadowColor = UIColor.black.withAlphaComponent(0.08)
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
     }
 }
 

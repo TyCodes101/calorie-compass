@@ -201,7 +201,7 @@ struct SessionBannerView: View {
                 .lineLimit(1)
             Text(model.message)
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(MacroMeshTheme.muted)
                 .lineLimit(1)
             Spacer(minLength: 6)
             if let onRetry {
@@ -213,7 +213,7 @@ struct SessionBannerView: View {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MacroMeshTheme.muted)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Dismiss session status")

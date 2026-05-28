@@ -32,47 +32,51 @@ struct MealManagementView: View {
 
     var body: some View {
         NavigationView {
-            Group {
-                if loading && meals.isEmpty {
-                    MealStateView(
-                        systemImage: "clock.arrow.circlepath",
-                        title: "Loading meals",
-                        message: "Your saved meals will appear here in a moment.",
-                        buttonTitle: "Refresh",
-                        action: loadMeals
-                    )
-                    .redacted(reason: .placeholder)
-                } else if let error = error, meals.isEmpty {
-                    MealStateView(
-                        systemImage: "wifi.exclamationmark",
-                        title: "Meals unavailable",
-                        message: error,
-                        buttonTitle: "Retry",
-                        action: loadMeals
-                    )
-                } else if meals.isEmpty {
-                    MealStateView(
-                        systemImage: "fork.knife.circle",
-                        title: "No saved meals yet",
-                        message: "Meals you save from Log will appear here for review and management.",
-                        buttonTitle: "Log a meal",
-                        action: openLog
-                    )
-                } else {
-                    List(meals) { meal in
-                        NavigationLink(destination: MealDetailView(meal: meal, isMutating: inFlightMealID == meal.stableID, onSave: updateMeal, onDelete: deleteMeal)) {
-                            MealRow(meal: meal)
+            MacroMeshScreen {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        AppCard(padding: 20) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Meal history")
+                                    .font(.largeTitle.weight(.bold))
+                                    .foregroundColor(MacroMeshTheme.text)
+                                Text("Review and manage meals saved from Log.")
+                                    .font(.subheadline)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                            }
+                        }
+
+                        if loading && meals.isEmpty {
+                            EmptyStateCard(icon: "clock.arrow.circlepath", title: "Loading meals", message: "Your saved meals will appear here in a moment.", buttonTitle: nil, action: nil)
+                                .redacted(reason: .placeholder)
+                        } else if let error = error, meals.isEmpty {
+                            EmptyStateCard(icon: "wifi.exclamationmark", title: "Meals unavailable", message: error, buttonTitle: "Retry", action: loadMeals)
+                        } else if meals.isEmpty {
+                            EmptyStateCard(icon: "fork.knife.circle.fill", title: "No saved meals yet", message: "Meals you save from Log will appear here as a clean history of your day.", buttonTitle: "Log a meal", action: openLog)
+                        } else {
+                            VStack(spacing: 12) {
+                                ForEach(meals) { meal in
+                                    NavigationLink(destination: MealDetailView(meal: meal, isMutating: inFlightMealID == meal.stableID, onSave: updateMeal, onDelete: deleteMeal)) {
+                                        MealHistoryCard(meal: meal)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
                         }
                     }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 12)
+                    .padding(.bottom, 88)
                     .refreshable { refreshMeals() }
                 }
             }
-            .navigationTitle("History")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: loadMeals) {
                         if refreshing { ProgressView() } else { Image(systemName: "arrow.clockwise") }
                     }
+                    .foregroundColor(MacroMeshTheme.primary)
                     .disabled(loading || refreshing || inFlightMealID != nil)
                     .accessibilityLabel("Refresh meals")
                 }
@@ -80,10 +84,11 @@ struct MealManagementView: View {
             .safeAreaInset(edge: .bottom) {
                 if let mutationMessage = mutationMessage {
                     Text(mutationMessage)
-                        .font(.caption)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.primaryDark)
                         .padding(10)
                         .frame(maxWidth: .infinity)
-                        .background(Color.green.opacity(0.12))
+                        .background(MacroMeshTheme.cardSubtle)
                 }
             }
             .onAppear(perform: loadMeals)
@@ -200,6 +205,42 @@ struct MealStateView: View {
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .padding(.horizontal, 18)
         .padding(.top, 24)
+    }
+}
+
+struct MealHistoryCard: View {
+    let meal: MealResponse
+
+    var body: some View {
+        AppCard(padding: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "fork.knife.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(MacroMeshTheme.primary)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(meal.displayTitle)
+                            .font(.headline)
+                            .foregroundColor(MacroMeshTheme.text)
+                            .lineLimit(1)
+                        Spacer()
+                        Text("\(Int(meal.safeTotalCalories)) cal")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(MacroMeshTheme.primary)
+                    }
+                    Text("\(meal.displayMealType) · \(meal.displayDate)")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                    HStack(spacing: 8) {
+                        Text("P \(Int(meal.safeTotalProtein))g")
+                        Text("C \(Int(meal.safeTotalCarbs))g")
+                        Text("F \(Int(meal.safeTotalFat))g")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.primaryDark)
+                }
+            }
+        }
     }
 }
 

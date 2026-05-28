@@ -32,15 +32,16 @@ struct ProfileView: View {
 
     var body: some View {
         NavigationView {
-            Group {
+            MacroMeshScreen {
                 if loading && profile == nil {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("Preparing your profile…")
                             .font(.headline)
+                            .foregroundColor(MacroMeshTheme.text)
                         Text("MacroMesh is loading your guest defaults.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(MacroMeshTheme.muted)
                     }
                     .padding()
                 } else if let error = error {
@@ -70,7 +71,7 @@ struct ProfileView: View {
                                 Button("Edit Profile") {
                                     dirtyProfile = profile; editing = true
                                 }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(PrimaryCTAButtonStyle())
                                 .padding(.top, 4)
                                 if sessionStore.state.authSession.isSignedIn {
                                     AccountStatusSection(response: sessionStore.state.sessionResponse)
@@ -190,7 +191,7 @@ struct AccountStatusSection: View {
                 .fontWeight(.semibold)
             Text(description)
                 .font(.footnote)
-                .foregroundColor(.secondary)
+                .foregroundColor(MacroMeshTheme.muted)
             ForEach(providers) { provider in
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
@@ -205,7 +206,7 @@ struct AccountStatusSection: View {
                     if let detail = provider.detail {
                         Text(detail)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(MacroMeshTheme.muted)
                     }
                 }
                 .padding(10)
@@ -233,14 +234,14 @@ struct ProfileFallbackView: View {
                 .fontWeight(.semibold)
             Text(message)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(MacroMeshTheme.muted)
                 .multilineTextAlignment(.center)
             Button("Reload profile", action: retry)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryCTAButtonStyle())
         }
         .padding(20)
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemBackground))
+        .background(MacroMeshTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .padding()
     }
@@ -261,7 +262,7 @@ struct ProfileEditorCard: View {
                     .fontWeight(.semibold)
                 Text("Update the defaults MacroMesh uses for goals and nutrition context.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(MacroMeshTheme.muted)
             }
 
             ProfileTextField(title: "Name", placeholder: "Guest", text: textBinding(\.name))
@@ -280,16 +281,16 @@ struct ProfileEditorCard: View {
 
             HStack(spacing: 12) {
                 Button("Cancel", action: onCancel)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(SecondaryCTAButtonStyle())
                     .frame(maxWidth: .infinity)
                 Button(saving ? "Saving…" : "Save changes", action: onSave)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PrimaryCTAButtonStyle())
                     .frame(maxWidth: .infinity)
                     .disabled(saving)
             }
         }
         .padding(16)
-        .background(Color(.secondarySystemBackground))
+        .background(MacroMeshTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
@@ -352,7 +353,7 @@ struct ProfileTextField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption).foregroundColor(.secondary)
+            Text(title).font(.caption).foregroundColor(MacroMeshTheme.muted)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.roundedBorder)
         }
@@ -395,7 +396,7 @@ struct ProfileSummaryCard: View {
                         .fontWeight(.semibold)
                     Text(isGuest ? "Guest session" : "Account profile")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MacroMeshTheme.muted)
                 }
                 Spacer()
                 Text(isGuest ? "Guest" : "Synced")
@@ -415,7 +416,7 @@ struct ProfileSummaryCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
+        .background(MacroMeshTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
@@ -428,7 +429,7 @@ struct ProfileInfoRow: View {
         HStack(alignment: .firstTextBaseline) {
             Text(label)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(MacroMeshTheme.muted)
             Spacer()
             Text(value)
                 .font(.subheadline)
@@ -442,7 +443,7 @@ struct GuestProfileNote: View {
     var body: some View {
         Text("You can keep using MacroMesh as a guest. Edit Profile lets you tune local defaults without changing sign-in or account settings.")
             .font(.footnote)
-            .foregroundColor(.secondary)
+            .foregroundColor(MacroMeshTheme.muted)
             .padding(.top, 4)
     }
 }
@@ -473,7 +474,7 @@ struct AccountSignInEntryPoint: View {
                 .font(.headline)
             Text(accountContent.message)
                 .font(.footnote)
-                .foregroundColor(.secondary)
+                .foregroundColor(MacroMeshTheme.muted)
 
             if authSession.isSignedIn {
                 Button {
@@ -482,7 +483,7 @@ struct AccountSignInEntryPoint: View {
                     Label("Migrate guest data", systemImage: "arrow.triangle.2.circlepath")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SecondaryCTAButtonStyle())
                 .disabled(interactionState.isWorking)
                 .accessibilityHint("Moves eligible guest meals, goals, and history into this signed-in account.")
 
@@ -492,7 +493,7 @@ struct AccountSignInEntryPoint: View {
                     Label("Export account data", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SecondaryCTAButtonStyle())
                 .disabled(interactionState.isWorking)
                 .accessibilityHint("Requests a server export for only this signed-in account.")
 
@@ -502,7 +503,7 @@ struct AccountSignInEntryPoint: View {
                     Label("Delete account data", systemImage: "trash")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SecondaryCTAButtonStyle())
                 .disabled(interactionState.isWorking)
                 .accessibilityHint("Requires confirmation and deletes only the signed-in account data handled by the backend endpoint.")
 
@@ -512,7 +513,7 @@ struct AccountSignInEntryPoint: View {
                     Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SecondaryCTAButtonStyle())
                 .disabled(interactionState.isWorking)
                 .accessibilityHint("Revokes the backend-issued native session when possible and clears local secure storage.")
             } else {
@@ -654,7 +655,7 @@ struct SessionAndPrivacyNote: View {
     var body: some View {
         Text("Apple sign-in uses backend token verification and server-issued sessions. Account migration, export, and deletion endpoints are wired here for QA, but TestFlight readiness and App Store compliance are not claimed.")
             .font(.footnote)
-            .foregroundColor(.secondary)
+            .foregroundColor(MacroMeshTheme.muted)
             .padding(.top, 8)
             .accessibilityLabel("Apple sign-in uses backend verification and server-issued sessions. Account tools are wired for QA, but TestFlight readiness and App Store compliance are not claimed.")
     }

@@ -23,64 +23,82 @@ struct MealReviewCard: View {
     @Binding var showCard: Bool
     @State private var isSaving = false
     @State private var error: String?
-    @FocusState private var editingMealItem: Bool
     var onConfirm: ([MealItem]) -> Void
     var onCancel: () -> Void
-    
+
+    private var totalCalories: Double { items.reduce(0) { $0 + $1.calories } }
+    private var totalProtein: Double { items.reduce(0) { $0 + $1.protein } }
+    private var totalCarbs: Double { items.reduce(0) { $0 + $1.carbs } }
+    private var totalFat: Double { items.reduce(0) { $0 + $1.fat } }
+
     var body: some View {
-        if !showCard { EmptyView() } else {
-            VStack(spacing: 16) {
-                Text("Review your meal before saving")
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-                ForEach(items.indices, id: \ .self) { idx in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(items[idx].name)
-                                .font(.subheadline).bold()
-                            Spacer()
-                            if let c = items[idx].confidence { Text(c).font(.footnote).foregroundColor(.gray) }
-                            if let s = items[idx].source { Text(s).font(.footnote).foregroundColor(.gray) }
+        if !showCard {
+            EmptyView()
+        } else {
+            AppCard(padding: 18) {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Review before saving")
+                                .font(.title3.weight(.bold))
+                                .foregroundColor(MacroMeshTheme.text)
+                            Text("Nothing is saved until you confirm.")
+                                .font(.caption)
+                                .foregroundColor(MacroMeshTheme.muted)
                         }
-                        HStack(spacing: 12) {
-                            Text("Qty: \(items[idx].quantity, specifier: "%.0f") \(items[idx].unit)")
-                            Text("Cal: \(Int(items[idx].calories))")
-                            Text("Prot: \(Int(items[idx].protein))g")
-                            Text("Carb: \(Int(items[idx].carbs))g")
-                            Text("Fat: \(Int(items[idx].fat))g")
-                        }.font(.caption)
-                        HStack {
-                            Button("Remove") {
-                                items.remove(at: idx)
+                        Spacer()
+                        Text("\(Int(totalCalories)) cal")
+                            .font(.headline)
+                            .foregroundColor(MacroMeshTheme.primary)
+                    }
+
+                    HStack(spacing: 8) {
+                        ReviewMacroPill(label: "Protein", value: totalProtein)
+                        ReviewMacroPill(label: "Carbs", value: totalCarbs)
+                        ReviewMacroPill(label: "Fat", value: totalFat)
+                    }
+
+                    VStack(spacing: 10) {
+                        ForEach(items.indices, id: \.self) { idx in
+                            HStack(alignment: .top, spacing: 10) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(items[idx].name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundColor(MacroMeshTheme.text)
+                                    Text("\(items[idx].quantity, specifier: "%.0f") \(items[idx].unit) · \(Int(items[idx].calories)) cal")
+                                        .font(.caption)
+                                        .foregroundColor(MacroMeshTheme.muted)
+                                }
+                                Spacer()
+                                Button(role: .destructive) {
+                                    items.remove(at: idx)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                }
+                                .accessibilityLabel("Remove \(items[idx].name)")
                             }
-                            .foregroundColor(.red)
-                            .font(.footnote)
-                            .accessibilityLabel("Remove \(items[idx].name)")
+                            .padding(12)
+                            .background(MacroMeshTheme.cardSubtle.opacity(0.7))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
                     }
-                    .padding(8).background(Color(.secondarySystemBackground)).cornerRadius(8)
-                    .accessibilityElement(children: .combine)
-                }
-                if let error = error { Text(error).foregroundColor(.red) }
-                HStack {
-                    Button("Cancel") {
-                        onCancel()
-                    }.foregroundColor(.gray)
-                    Spacer()
-                    Button(action: saveMeal) {
-                        if isSaving { ProgressView() } else { Text("Confirm & Save") }
+
+                    if let error {
+                        Text(error).font(.caption).foregroundColor(.red)
                     }
-                    .disabled(isSaving || items.isEmpty)
-                    .accessibilityLabel("Confirm and save reviewed meal")
-                    .accessibilityHint("Saves this meal only after review.")
+
+                    HStack(spacing: 12) {
+                        Button("Cancel", action: onCancel)
+                            .buttonStyle(SecondaryCTAButtonStyle())
+                        Button(action: saveMeal) {
+                            if isSaving { ProgressView().tint(.white) } else { Text("Save meal") }
+                        }
+                        .buttonStyle(PrimaryCTAButtonStyle())
+                        .disabled(isSaving || items.isEmpty)
+                    }
                 }
+                .accessibilityElement(children: .contain)
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(14)
-            .shadow(radius: 10)
-            .padding(.horizontal, 20)
-            .accessibilityElement(children: .contain)
         }
     }
 
@@ -88,8 +106,26 @@ struct MealReviewCard: View {
         guard !isSaving, !items.isEmpty else { return }
         isSaving = true
         error = nil
-        // For owner context: actual BackendService integration in parent view
         onConfirm(items)
         isSaving = false
+    }
+}
+
+struct ReviewMacroPill: View {
+    let label: String
+    let value: Double
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text("\(Int(value))g")
+                .font(.caption.weight(.bold))
+            Text(label)
+                .font(.caption2)
+        }
+        .foregroundColor(MacroMeshTheme.primaryDark)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(MacroMeshTheme.cardSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
