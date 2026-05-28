@@ -10,6 +10,7 @@ describe('auth session helpers', () => {
     expect(email).toBe('session-123@guest.caloriecompass.local');
     expect(isGuestEmail(email)).toBe(true);
     expect(isGuestUser({ name: 'Guest', email, demo: true })).toBe(true);
+    expect(isGuestUser({ name: 'Guest', email: null, demo: true })).toBe(true);
   });
 
   it('suppresses placeholder guest names but keeps real names', () => {

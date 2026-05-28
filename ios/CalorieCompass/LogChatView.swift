@@ -61,9 +61,15 @@ struct LogChatView: View {
                 }.padding()
             }
             if let error = error {
-                Text(error)
-                    .foregroundColor(.red)
-                    .padding(4)
+                VStack(spacing: 6) {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Retry setup") { sessionStore.refresh() }
+                        .font(.caption)
+                }
+                .padding(8)
             }
             NutritionDisclaimerView()
             HStack {
@@ -92,6 +98,11 @@ struct LogChatView: View {
     func sendMessage() {
         let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty else { return }
+        guard sessionStore.state != .unknown && sessionStore.state != .loading else {
+            sessionStore.refresh()
+            error = "Guest mode is still setting up. Try again in a moment — your message was not sent yet."
+            return
+        }
         guard !isLoading else {
             stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Log"))
             return
@@ -127,7 +138,7 @@ struct LogChatView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Log", message: err.localizedDescription))
-                    error = RetryCopy.nonDestructiveFailure(action: "send that meal description", error: err)
+                    error = RetryCopy.recoveryMessage(action: "send that meal description", error: err)
                 }
             }
         }
@@ -193,7 +204,7 @@ struct LogChatView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Meal review", message: err.localizedDescription))
-                    saveError = RetryCopy.nonDestructiveFailure(action: "save this meal", error: err)
+                    saveError = RetryCopy.recoveryMessage(action: "save this meal", error: err)
                 }
             }
         }

@@ -32,7 +32,7 @@ export function isGuestEmail(email: string | null | undefined) {
 }
 
 export function isGuestUser(user: SessionUserLike) {
-  return Boolean(user && isGuestEmail(user.email) && user.demo !== false);
+  return Boolean(user && user.demo !== false && (isGuestEmail(user.email) || !user.email));
 }
 
 export function getPreferredUserName(user: SessionUserLike) {
