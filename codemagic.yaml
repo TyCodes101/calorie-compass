@@ -110,16 +110,20 @@ workflows:
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
 
-      - name: Publish IPA to TestFlight with explicit Apple app ID
+      - name: Upload IPA to App Store Connect for internal TestFlight
         script: |
           set -euo pipefail
+          # Internal-only builds must stop after upload/processing. Do not request
+          # TestFlight beta review here: that Magic Action creates a betaAppReviewSubmission,
+          # which Apple rejects for INTERNAL_ONLY builds with audienceType
+          # INTERNAL_ONLY / externalBuildState NOT_APPLICABLE.
           app-store-connect publish \
             --path build/ios/ipa/MacroMesh.ipa \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --private-key @env:APP_STORE_CONNECT_PRIVATE_KEY \
-            --apple-id "$APP_STORE_APP_ID" \
-            --testflight
+            --apple-id "$APP_STORE_APP_ID"
+          echo "Uploaded MacroMesh IPA to App Store Connect. Internal TestFlight processing is the intended terminal state for this workflow."
 
     artifacts:
       - build/ios/ipa/*.ipa
