@@ -197,9 +197,13 @@ final class MealAssistantParityTests: XCTestCase {
 
     func testDiscardAndSaveCommandsAreHandledLocallyBeforeFoodLookup() {
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Delete this meal", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Clear everything", hasActiveMeal: true), .discard)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("start over", hasActiveMeal: true), .discard)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("save it", hasActiveMeal: true), .save)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Save", hasActiveMeal: true), .save)
         XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: false))
+        XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Save", hasActiveMeal: false))
     }
 
     func testRemoveFriesUpdatesActiveMealItemsLocally() {
@@ -209,6 +213,108 @@ final class MealAssistantParityTests: XCTestCase {
         let nextItems = MealAssistantClientLogic.removingItems(matching: "fries", from: [burger, fries])
 
         XCTAssertEqual(nextItems.map(\.food_name), ["turkey sandwich with mayo"])
+    }
+
+    func testRemoveVariantsOnlyRemoveTargetItem() {
+        let items = [Self.item("sandwich"), Self.item("chips"), Self.item("Coke Zero")]
+
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Remove the chips", hasActiveMeal: true), .removeItem("the chips"))
+        XCTAssertEqual(MealAssistantClientLogic.removingItems(matching: "the chips", from: items).map(\.food_name), ["sandwich", "Coke Zero"])
+        XCTAssertEqual(MealAssistantClientLogic.removingItems(matching: "Coke Zero", from: items).map(\.food_name), ["sandwich", "chips"])
+        XCTAssertEqual(MealAssistantClientLogic.removingItems(matching: "sandwich", from: items).map(\.food_name), ["chips", "Coke Zero"])
+    }
+
+    func testWrongTargetCorrectionResolvesNamedItemOnly() {
+        let items = [Self.item("salmon"), Self.item("broccoli"), Self.item("mashed potatoes")]
+
+        let resolution = MealAssistantClientLogic.quantityResolution(for: "Make the salmon 8 ounces", items: items)
+
+        XCTAssertEqual(resolution, .target(foodName: "salmon"))
+    }
+
+    func testPronounQuantityCorrectionUsesLastItemOrClarifies() {
+        let items = [Self.item("salmon"), Self.item("broccoli")]
+
+        let resolution = MealAssistantClientLogic.quantityResolution(for: "Make it 8 ounces", items: items)
+
+        XCTAssertEqual(resolution, .target(foodName: "broccoli"))
+        XCTAssertNotEqual(resolution, .target(foodName: "salmon"))
+    }
+
+    func testQuantityUpdateVariantsResolveTargetsOrClarify() {
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Actually make that 2", items: [Self.item("Fairlife shake")]), .target(foodName: "Fairlife shake"))
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Double the chicken", items: [Self.item("chicken"), Self.item("rice")]), .target(foodName: "chicken"))
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Half the rice", items: [Self.item("chicken"), Self.item("rice")]), .target(foodName: "rice"))
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Make the fries large", items: [Self.item("burger"), Self.item("fries")]), .target(foodName: "fries"))
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Make it large", items: [Self.item("burger"), Self.item("fries")]), .target(foodName: "fries"))
+    }
+
+    func testBrandCorrectionUpdatesPreviousBrandItem() {
+        let fairlife = Self.item("Fairlife shake")
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: MealAssistantState(),
+            currentMealItems: [fairlife],
+            incomingUserMessage: "Actually make that 2"
+        )
+
+        XCTAssertEqual(requestState.currentMealItems.map(\.food_name), ["Fairlife shake"])
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Actually make that 2", items: requestState.currentMealItems), .target(foodName: "Fairlife shake"))
+    }
+
+    func testBadFoodMatchWarningsCatchBananaPowderAndMissingSandwich() {
+        XCTAssertNotNil(MealAssistantClientLogic.foodMatchWarning(for: "One banana", items: [Self.item("banana powder")]))
+        XCTAssertNotNil(MealAssistantClientLogic.foodMatchWarning(for: "One banana", items: [Self.item("dehydrated banana")]))
+        XCTAssertNil(MealAssistantClientLogic.foodMatchWarning(for: "One banana", items: [Self.item("banana")]))
+
+        XCTAssertNotNil(MealAssistantClientLogic.foodMatchWarning(for: "Turkey sandwich with mayo and chips", items: [Self.item("Sun Chips")]))
+        XCTAssertNil(MealAssistantClientLogic.foodMatchWarning(for: "Turkey sandwich with mayo and chips", items: [Self.item("turkey sandwich with mayo"), Self.item("chips")]))
+    }
+
+    func testStateResetAfterSaveStartsFreshMeal() {
+        var state = MealAssistantState()
+        state.currentMealItems = [Self.item("salmon")]
+        state.currentMealText = "salmon and broccoli"
+        state.saved = true
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: state,
+            currentMealItems: state.currentMealItems,
+            incomingUserMessage: "one banana"
+        )
+
+        XCTAssertTrue(requestState.currentMealItems.isEmpty)
+        XCTAssertEqual(requestState.currentMealText, "one banana")
+    }
+
+    func testEditRemoveSavePreservesAllSourceMetadata() throws {
+        let trusted = MealRequestItem(
+            food_name: "salmon",
+            quantity: 8,
+            unit: "oz",
+            calories: 360,
+            protein: 46,
+            carbs: 0,
+            fat: 18,
+            fiber: 0,
+            sugar: 0,
+            sodium: 120,
+            notes: "wild caught",
+            source_type: "USDA_FOUNDATION",
+            source_name: "USDA FoodData Central",
+            confidence_label: "High",
+            is_trusted: true,
+            catalog_food_id: "fdc-salmon"
+        )
+
+        let roundTripped = MealItem(from: trusted).asMealRequestItem()
+
+        XCTAssertEqual(roundTripped.food_name, "salmon")
+        XCTAssertEqual(roundTripped.is_trusted, true)
+        XCTAssertEqual(roundTripped.catalog_food_id, "fdc-salmon")
+        XCTAssertEqual(roundTripped.source_name, "USDA FoodData Central")
+        XCTAssertEqual(roundTripped.source_type, "USDA_FOUNDATION")
+        XCTAssertEqual(roundTripped.confidence_label, "High")
     }
 
     func testMealAssistantPayloadPreservesWebFoodSourceFields() throws {

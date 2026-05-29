@@ -160,6 +160,12 @@ struct LogChatView: View {
                 isLoading = false
                 switch result {
                 case .success(let resp):
+                    if let warning = MealAssistantClientLogic.foodMatchWarning(for: userMessage, items: resp.meal.items) {
+                        error = warning
+                        retryMessage = userMessage
+                        messages.append(MealAssistantTranscriptMessage(role: "assistant", text: warning))
+                        return
+                    }
                     messages.append(MealAssistantTranscriptMessage(role: "assistant", text: resp.assistant_reply))
                     assistantState = resp.next_state
                     reviewItems = resp.meal.items.map(MealItem.init(from:))

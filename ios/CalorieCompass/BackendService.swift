@@ -209,6 +209,11 @@ enum MealAssistantLocalCommand: Equatable {
     case removeItem(String)
 }
 
+enum MealAssistantQuantityResolution: Equatable {
+    case target(foodName: String)
+    case clarify
+}
+
 struct MealAssistantClientLogic {
     static func buildRequestState(
         assistantState: MealAssistantState,
@@ -244,7 +249,7 @@ struct MealAssistantClientLogic {
         let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
 
-        if hasActiveMeal && ["discard", "discard that", "cancel", "clear", "clear meal", "reset", "reset meal", "start over", "start over please", "nevermind", "never mind"].contains(normalized) {
+        if hasActiveMeal && ["discard", "discard that", "cancel", "clear", "clear meal", "clear everything", "reset", "reset meal", "start over", "start over please", "delete this meal", "delete meal", "nevermind", "never mind"].contains(normalized) {
             return .discard
         }
 
@@ -260,6 +265,41 @@ struct MealAssistantClientLogic {
                     return .removeItem(target)
                 }
             }
+        }
+
+        return nil
+    }
+
+    static func quantityResolution(for message: String, items: [MealRequestItem]) -> MealAssistantQuantityResolution? {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        let looksLikeQuantityEdit = normalized.contains("make") || normalized.contains("double") || normalized.contains("half") || normalized.contains("large") || normalized.contains("ounces") || normalized.contains("oz")
+        guard looksLikeQuantityEdit else { return nil }
+
+        let messageTokens = significantTokens(in: normalized)
+        let namedMatches = items.filter { !messageTokens.isDisjoint(with: significantTokens(in: $0.food_name)) }
+        if let match = namedMatches.first {
+            return .target(foodName: match.food_name)
+        }
+
+        let pronounOnly = normalized.contains("that") || normalized.contains(" it ") || normalized.hasPrefix("it ") || normalized.hasSuffix(" it")
+        if pronounOnly, let lastItem = items.last {
+            return .target(foodName: lastItem.food_name)
+        }
+
+        return items.count == 1 ? items.first.map { .target(foodName: $0.food_name) } : .clarify
+    }
+
+    static func foodMatchWarning(for message: String, items: [MealRequestItem]) -> String? {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let itemNames = items.map { $0.food_name.lowercased() }
+
+        if normalized.contains("banana"), itemNames.contains(where: { $0.contains("powder") || $0.contains("dehydrated") }) {
+            return "That banana match looks off. Try choosing a plain banana result instead of powder or dehydrated banana."
+        }
+
+        if normalized.contains("sandwich"), normalized.contains("chips"), !itemNames.contains(where: { $0.contains("sandwich") }) {
+            return "I only found the side item. Please retry so I can include the sandwich too."
         }
 
         return nil
