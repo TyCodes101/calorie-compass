@@ -21,6 +21,8 @@ struct MealItem: Identifiable, Codable, Equatable {
     var source: String?
     var notes: String?
     var sourceType: String?
+    var isTrusted: Bool?
+    var catalogFoodID: String?
 
     init(from item: MealRequestItem) {
         name = item.food_name
@@ -37,6 +39,8 @@ struct MealItem: Identifiable, Codable, Equatable {
         source = item.source_name
         notes = item.notes
         sourceType = item.source_type
+        isTrusted = item.is_trusted
+        catalogFoodID = item.catalog_food_id
     }
 
     func asMealRequestItem() -> MealRequestItem {
@@ -54,7 +58,9 @@ struct MealItem: Identifiable, Codable, Equatable {
             notes: notes,
             source_type: sourceType,
             source_name: source,
-            confidence_label: confidence
+            confidence_label: confidence,
+            is_trusted: isTrusted,
+            catalog_food_id: catalogFoodID
         )
     }
 }

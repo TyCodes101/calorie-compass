@@ -86,6 +86,26 @@ struct MealAssistantResponse: Codable {
     let next_state: MealAssistantState
     let intent: String?
     let should_save_meal: Bool?
+    let clarification_question: String?
+
+    enum CodingKeys: String, CodingKey {
+        case assistant_reply
+        case meal
+        case next_state
+        case intent
+        case should_save_meal
+        case clarification_question
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        assistant_reply = try container.decode(String.self, forKey: .assistant_reply)
+        meal = try container.decode(MealAssistantMeal.self, forKey: .meal)
+        next_state = try container.decode(MealAssistantState.self, forKey: .next_state)
+        intent = try container.decodeIfPresent(String.self, forKey: .intent)
+        should_save_meal = try container.decodeIfPresent(Bool.self, forKey: .should_save_meal)
+        clarification_question = try container.decodeIfPresent(String.self, forKey: .clarification_question)
+    }
 }
 
 struct MealRequestItem: Codable, Equatable, Identifiable {
@@ -104,6 +124,8 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
     var source_type: String?
     var source_name: String?
     var confidence_label: String?
+    var is_trusted: Bool?
+    var catalog_food_id: String?
 
     init(
         food_name: String,
@@ -119,7 +141,9 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         notes: String?,
         source_type: String?,
         source_name: String?,
-        confidence_label: String?
+        confidence_label: String?,
+        is_trusted: Bool? = nil,
+        catalog_food_id: String? = nil
     ) {
         self.food_name = food_name
         self.quantity = quantity
@@ -135,6 +159,8 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         self.source_type = source_type
         self.source_name = source_name
         self.confidence_label = confidence_label
+        self.is_trusted = is_trusted
+        self.catalog_food_id = catalog_food_id
     }
 
     enum CodingKeys: String, CodingKey {
@@ -152,6 +178,8 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         case source_type
         case source_name
         case confidence_label
+        case is_trusted
+        case catalog_food_id
     }
 
     init(from decoder: Decoder) throws {
@@ -170,6 +198,90 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         source_type = try container.decodeIfPresent(String.self, forKey: .source_type)
         source_name = try container.decodeIfPresent(String.self, forKey: .source_name)
         confidence_label = try container.decodeIfPresent(String.self, forKey: .confidence_label)
+        is_trusted = try container.decodeIfPresent(Bool.self, forKey: .is_trusted)
+        catalog_food_id = try container.decodeIfPresent(String.self, forKey: .catalog_food_id)
+    }
+}
+
+enum MealAssistantLocalCommand: Equatable {
+    case discard
+    case save
+    case removeItem(String)
+}
+
+struct MealAssistantClientLogic {
+    static func buildRequestState(
+        assistantState: MealAssistantState,
+        currentMealItems: [MealRequestItem],
+        incomingUserMessage: String,
+        fallbackMealType: String = "snack"
+    ) -> MealAssistantState {
+        var state = assistantState
+
+        if state.saved {
+            state.currentMealItems = []
+            state.saved = false
+            state.currentMealText = nil
+        } else {
+            state.currentMealItems = currentMealItems
+        }
+
+        if state.currentMealText == nil || state.currentMealText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            state.currentMealText = incomingUserMessage
+        }
+
+        if state.mealType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            state.mealType = fallbackMealType
+        }
+
+        state.previousUserMessage = incomingUserMessage
+        state.activeMode = state.activeMode ?? "logging_mode"
+        state.activeTopic = state.activeTopic ?? "meal"
+        return state
+    }
+
+    static func detectLocalCommand(_ message: String, hasActiveMeal: Bool) -> MealAssistantLocalCommand? {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+
+        if hasActiveMeal && ["discard", "discard that", "cancel", "clear", "clear meal", "reset", "reset meal", "start over", "start over please", "nevermind", "never mind"].contains(normalized) {
+            return .discard
+        }
+
+        if hasActiveMeal && ["save", "save it", "save meal", "log it", "log this", "log meal"].contains(normalized) {
+            return .save
+        }
+
+        if hasActiveMeal {
+            let patterns = ["remove ", "delete ", "take out ", "drop "]
+            for pattern in patterns where normalized.hasPrefix(pattern) {
+                let target = String(normalized.dropFirst(pattern.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !target.isEmpty && target != "that" && target != "it" {
+                    return .removeItem(target)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    static func removingItems(matching target: String, from items: [MealRequestItem]) -> [MealRequestItem] {
+        let targetTokens = significantTokens(in: target)
+        guard !targetTokens.isEmpty else { return items }
+
+        return items.filter { item in
+            let itemTokens = significantTokens(in: item.food_name)
+            return targetTokens.isDisjoint(with: itemTokens)
+        }
+    }
+
+    private static func significantTokens(in text: String) -> Set<String> {
+        let ignored: Set<String> = ["a", "an", "the", "of", "with", "and", "to", "that", "it"]
+        return Set(text.lowercased()
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+            .map { token in token.hasSuffix("s") && token.count > 3 ? String(token.dropLast()) : token }
+            .filter { $0.count > 1 && !ignored.contains($0) })
     }
 }
 

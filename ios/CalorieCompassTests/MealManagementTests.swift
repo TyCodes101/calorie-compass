@@ -159,6 +159,99 @@ final class BackendServiceErrorMappingTests: XCTestCase {
     }
 }
 
+final class MealAssistantParityTests: XCTestCase {
+    func testRequestStateCarriesReviewItemsForQuantityCorrections() {
+        let salmon = Self.item("salmon", quantity: 1, unit: "fillet")
+        let broccoli = Self.item("broccoli", quantity: 1, unit: "cup")
+        var state = MealAssistantState()
+        state.currentMealText = "salmon with broccoli"
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: state,
+            currentMealItems: [salmon, broccoli],
+            incomingUserMessage: "8 ounces of salmon"
+        )
+
+        XCTAssertEqual(requestState.currentMealItems.map(\.food_name), ["salmon", "broccoli"])
+        XCTAssertEqual(requestState.currentMealText, "salmon with broccoli")
+        XCTAssertEqual(requestState.previousUserMessage, "8 ounces of salmon")
+        XCTAssertFalse(requestState.saved)
+    }
+
+    func testSavedStateStartsFreshMealWithoutLeakingOldItems() {
+        var state = MealAssistantState()
+        state.currentMealItems = [Self.item("old shake")]
+        state.currentMealText = "old shake"
+        state.saved = true
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: state,
+            currentMealItems: [Self.item("old shake")],
+            incomingUserMessage: "one banana"
+        )
+
+        XCTAssertTrue(requestState.currentMealItems.isEmpty)
+        XCTAssertEqual(requestState.currentMealText, "one banana")
+        XCTAssertFalse(requestState.saved)
+    }
+
+    func testDiscardAndSaveCommandsAreHandledLocallyBeforeFoodLookup() {
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("start over", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("save it", hasActiveMeal: true), .save)
+        XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: false))
+    }
+
+    func testRemoveFriesUpdatesActiveMealItemsLocally() {
+        let burger = Self.item("turkey sandwich with mayo")
+        let fries = Self.item("fries")
+
+        let nextItems = MealAssistantClientLogic.removingItems(matching: "fries", from: [burger, fries])
+
+        XCTAssertEqual(nextItems.map(\.food_name), ["turkey sandwich with mayo"])
+    }
+
+    func testMealAssistantPayloadPreservesWebFoodSourceFields() throws {
+        let item = MealRequestItem(
+            food_name: "banana",
+            quantity: 1,
+            unit: "medium",
+            calories: 105,
+            protein: 1,
+            carbs: 27,
+            fat: 0,
+            fiber: 3,
+            sugar: 14,
+            sodium: 1,
+            notes: nil,
+            source_type: "USDA_FOUNDATION",
+            source_name: "USDA",
+            confidence_label: "High",
+            is_trusted: true,
+            catalog_food_id: "food-banana"
+        )
+        let body = MealAssistantRequest(
+            message: "one banana",
+            state: MealAssistantClientLogic.buildRequestState(assistantState: MealAssistantState(), currentMealItems: [item], incomingUserMessage: "one banana"),
+            context: nil,
+            conversationHistory: [MealAssistantTranscriptMessage(role: "user", text: "one banana")]
+        )
+
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any]
+        let state = try XCTUnwrap(json?["state"] as? [String: Any])
+        let items = try XCTUnwrap(state["currentMealItems"] as? [[String: Any]])
+        let encodedItem = try XCTUnwrap(items.first)
+
+        XCTAssertEqual(encodedItem["food_name"] as? String, "banana")
+        XCTAssertEqual(encodedItem["is_trusted"] as? Bool, true)
+        XCTAssertEqual(encodedItem["catalog_food_id"] as? String, "food-banana")
+    }
+
+    private static func item(_ name: String, quantity: Double = 1, unit: String = "serving") -> MealRequestItem {
+        MealRequestItem(food_name: name, quantity: quantity, unit: unit, calories: 100, protein: 10, carbs: 10, fat: 2, fiber: 0, sugar: 0, sodium: 0, notes: nil, source_type: nil, source_name: nil, confidence_label: nil)
+    }
+}
+
 final class AppConfigTests: XCTestCase {
     func testDefaultBaseURLUsesProductionBackend() {
         let url = AppConfig.resolvedBaseURL(

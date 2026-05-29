@@ -37,7 +37,10 @@ struct LogChatView: View {
                                     .redacted(reason: .placeholder)
                             }
                             if showReviewCard {
-                                MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: { showReviewCard = false })
+                                MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
+                                    .onChange(of: reviewItems) { nextItems in
+                                        syncActiveMealItems(nextItems)
+                                    }
                                 if let saveError {
                                     Text(saveError)
                                         .font(.caption)
@@ -135,6 +138,11 @@ struct LogChatView: View {
         }
         inputText = ""
         mealInputFocused = false
+
+        if !isRetry, handleLocalCommand(userMessage) {
+            return
+        }
+
         isLoading = true
         error = nil
         retryMessage = nil
@@ -155,6 +163,9 @@ struct LogChatView: View {
                     messages.append(MealAssistantTranscriptMessage(role: "assistant", text: resp.assistant_reply))
                     assistantState = resp.next_state
                     reviewItems = resp.meal.items.map(MealItem.init(from:))
+                    if !reviewItems.isEmpty {
+                        syncActiveMealItems(reviewItems)
+                    }
                     showReviewCard = !reviewItems.isEmpty && resp.next_state.saved == false
                     if resp.next_state.saved {
                         reviewItems.removeAll()
@@ -176,18 +187,66 @@ struct LogChatView: View {
     }
 
     private func buildAssistantRequestState(for userMessage: String) -> MealAssistantState {
-        var state = assistantState
-        state.previousUserMessage = userMessage
-        if state.currentMealText == nil || state.saved {
-            state.currentMealText = userMessage
+        MealAssistantClientLogic.buildRequestState(
+            assistantState: assistantState,
+            currentMealItems: reviewItems.map { $0.asMealRequestItem() },
+            incomingUserMessage: userMessage
+        )
+    }
+
+    private func handleLocalCommand(_ userMessage: String) -> Bool {
+        let activeItems = reviewItems.map { $0.asMealRequestItem() }
+        guard let command = MealAssistantClientLogic.detectLocalCommand(userMessage, hasActiveMeal: !activeItems.isEmpty) else {
+            return false
         }
-        if state.saved {
-            state.currentMealItems = []
-            state.saved = false
-            state.activeMode = "logging_mode"
-            state.activeTopic = "meal"
+
+        switch command {
+        case .discard:
+            discardActiveMeal()
+            messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Discarded that meal. What would you like to log instead?"))
+            return true
+        case .save:
+            saveMeal(items: reviewItems)
+            return true
+        case .removeItem(let target):
+            let nextItems = MealAssistantClientLogic.removingItems(matching: target, from: activeItems)
+            guard nextItems.count < activeItems.count else {
+                return false
+            }
+            reviewItems = nextItems.map(MealItem.init(from:))
+            syncActiveMealItems(reviewItems)
+            showReviewCard = !reviewItems.isEmpty
+            let reply = reviewItems.isEmpty
+                ? "Removed \(target). There’s nothing left in this meal, so I cleared the draft."
+                : "Removed \(target). Review what’s left, then save when it looks right."
+            if reviewItems.isEmpty {
+                resetAssistantDraft()
+            }
+            messages.append(MealAssistantTranscriptMessage(role: "assistant", text: reply))
+            return true
         }
-        return state
+    }
+
+    private func syncActiveMealItems(_ items: [MealItem]) {
+        assistantState.currentMealItems = items.map { $0.asMealRequestItem() }
+        assistantState.saved = false
+        if !items.isEmpty {
+            assistantState.activeMode = "logging_mode"
+            assistantState.activeTopic = "meal"
+        }
+    }
+
+    private func discardActiveMeal() {
+        resetAssistantDraft()
+        showReviewCard = false
+        saveError = nil
+        error = nil
+    }
+
+    private func resetAssistantDraft() {
+        assistantState = MealAssistantState()
+        reviewItems.removeAll()
+        retryMessage = nil
     }
 
     func saveMeal(items: [MealItem]) {
@@ -214,6 +273,11 @@ struct LogChatView: View {
                 case .success:
                     showReviewCard = false
                     reviewItems.removeAll()
+                    assistantState = MealAssistantClientLogic.buildRequestState(
+                        assistantState: assistantState,
+                        currentMealItems: items.map { $0.asMealRequestItem() },
+                        incomingUserMessage: assistantState.currentMealText ?? ""
+                    )
                     assistantState.saved = true
                     messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Saved. Ready for the next one?"))
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
