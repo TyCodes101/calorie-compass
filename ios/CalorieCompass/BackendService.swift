@@ -309,6 +309,10 @@ struct MealAssistantClientLogic {
         !currentItems.isEmpty && responseItems.isEmpty && !responseSaved
     }
 
+    static func canAttemptSave(items: [MealRequestItem], isSaving: Bool) -> Bool {
+        !isSaving && !items.isEmpty
+    }
+
     static func removingItems(matching target: String, from items: [MealRequestItem]) -> [MealRequestItem] {
         let targetTokens = significantTokens(in: target)
         guard !targetTokens.isEmpty else { return items }

@@ -263,11 +263,12 @@ struct LogChatView: View {
     }
 
     func saveMeal(items: [MealItem]) {
-        guard !isSavingMeal else {
-            stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Meal review"))
+        guard MealAssistantClientLogic.canAttemptSave(items: items.map { $0.asMealRequestItem() }, isSaving: isSavingMeal) else {
+            if isSavingMeal {
+                stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Meal review"))
+            }
             return
         }
-        guard !items.isEmpty else { return }
         isSavingMeal = true
         saveError = nil
         let req = PostMealRequest(

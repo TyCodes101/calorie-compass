@@ -152,6 +152,13 @@ final class BackendServiceErrorMappingTests: XCTestCase {
         XCTAssertEqual(BackendService.mapHTTPError(statusCode: 502, data: data), .server("Request failed with status 502."))
     }
 
+    func testRateLimitAndBadRequestErrorsStayFriendly() {
+        let rateLimit = #"{"error":"Too many meal requests. Please wait a minute."}"#.data(using: .utf8)
+
+        XCTAssertEqual(BackendService.mapHTTPError(statusCode: 400, data: nil), .server("Request failed with status 400."))
+        XCTAssertEqual(BackendService.mapHTTPError(statusCode: 429, data: rateLimit), .server("Too many meal requests. Please wait a minute."))
+    }
+
     func testNetworkOfflineErrorsMapToOfflineMessage() {
         let error = NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)
         XCTAssertEqual(BackendService.mapTransportError(error), .offline)
@@ -297,6 +304,14 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertTrue(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false))
         XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [Self.item("broccoli")], responseSaved: false))
         XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: true))
+    }
+
+    func testSaveGuardPreventsEmptyAndDuplicateSubmissions() {
+        let items = [Self.item("protein shake")]
+
+        XCTAssertTrue(MealAssistantClientLogic.canAttemptSave(items: items, isSaving: false))
+        XCTAssertFalse(MealAssistantClientLogic.canAttemptSave(items: items, isSaving: true))
+        XCTAssertFalse(MealAssistantClientLogic.canAttemptSave(items: [], isSaving: false))
     }
 
     func testSimpleAndCompoundFoodPromptsCarryStableRequestState() {
