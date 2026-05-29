@@ -32,7 +32,8 @@ function makeLabelResponse(input: NutritionLookupInput) {
         is_trusted: true,
         source_type: 'GENERIC_REFERENCE',
         source_name: 'User-provided nutrition label',
-        confidence_label: 'Verified',
+        confidence_label: 'Very High',
+        match_type: 'verified_database',
         matched_query: input.nutritionLabel.name?.trim() || 'Nutrition label entry',
         original_user_text: input.text,
         provider_used: 'nutrition-label',
@@ -87,6 +88,7 @@ function decorateLookupItems(items: ParsedFoodItem[], originalUserText: string) 
     original_user_text: originalUserText,
     matched_query: item.matched_query ?? originalUserText,
     provider_used: item.provider_used ?? inferProviderUsed(item),
+    match_type: item.match_type ?? (item.source_type === 'OFFICIAL_RESTAURANT' ? 'exact_restaurant' : item.source_type === 'AI_ESTIMATE' ? 'ai_estimate' : item.is_trusted ? 'verified_database' : 'unknown'),
     used_ai_fallback: item.used_ai_fallback ?? item.source_type === 'AI_ESTIMATE',
   }));
 }
@@ -97,7 +99,8 @@ function decorateEstimatedItem(item: ParsedFoodItem, originalUserText: string): 
     notes: item.notes ?? 'No verified match found, estimated with AI.',
     source_type: 'AI_ESTIMATE',
     source_name: item.source_name ?? 'AI estimate',
-    confidence_label: 'Estimated',
+    confidence_label: 'Low',
+    match_type: 'ai_estimate',
     matched_query: item.matched_query ?? originalUserText,
     original_user_text: originalUserText,
     provider_used: 'ai-estimate-fallback',

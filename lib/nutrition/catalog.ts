@@ -195,7 +195,8 @@ export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit
     is_trusted: true,
     source_type: (source?.sourceType as ParsedFoodItem['source_type']) ?? null,
     source_name: source?.name ?? null,
-    confidence_label: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : 'High confidence',
+    confidence_label: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'Very High' : source?.brand ? 'Very High' : 'High',
+    match_type: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'exact_restaurant' : source?.brand ? 'exact_branded' : 'verified_database',
     catalog_food_id: food.id,
   };
 }
@@ -260,7 +261,8 @@ export function makeEstimatedItem(
     is_trusted: false,
     source_type: 'AI_ESTIMATE',
     source_name: 'Fallback estimate',
-    confidence_label: 'Estimated',
+    confidence_label: 'Low',
+    match_type: 'ai_estimate',
     catalog_food_id: null,
   };
 }

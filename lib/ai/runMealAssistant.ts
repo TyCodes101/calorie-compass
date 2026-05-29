@@ -1680,6 +1680,7 @@ type GenericEstimateSpec = {
   sodium?: number;
   sourceName?: string;
   sourceType?: ParsedFoodItem['source_type'];
+  matchType?: ParsedFoodItem['match_type'];
   notes?: string;
 };
 
@@ -1930,7 +1931,8 @@ function makeGenericEstimate(spec: GenericEstimateSpec, originalText: string): P
     is_trusted: isTrusted,
     source_type: sourceType,
     source_name: spec.sourceName ?? 'Calorie Compass common-food fallback',
-    confidence_label: sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : sourceType === 'GENERIC_REFERENCE' ? 'High confidence' : 'Estimated',
+    confidence_label: sourceType === 'OFFICIAL_RESTAURANT' ? 'Very High' : sourceType === 'GENERIC_REFERENCE' ? 'High' : 'Low',
+    match_type: spec.matchType ?? (sourceType === 'OFFICIAL_RESTAURANT' ? 'exact_restaurant' : sourceType === 'GENERIC_REFERENCE' ? 'generic_estimate' : 'ai_estimate'),
     matched_query: spec.key,
     original_user_text: originalText,
     provider_used: sourceType === 'OFFICIAL_RESTAURANT' ? 'local-verified-catalog' : sourceType === 'GENERIC_REFERENCE' ? 'database-match' : null,
@@ -2712,7 +2714,36 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (/\bcoffee\b/.test(normalized)) {
+  if (/\bstarbucks\b/.test(normalized) && /\blatte\b/.test(normalized)) {
+    const size = /\bventi\b/.test(normalized) ? 'venti' : /\bgrande\b/.test(normalized) ? 'grande' : 'tall';
+    const calories = size === 'venti' ? 250 : size === 'grande' ? 190 : 150;
+    const protein = size === 'venti' ? 17 : size === 'grande' ? 13 : 10;
+    const carbs = size === 'venti' ? 24 : size === 'grande' ? 18 : 14;
+    const fat = size === 'venti' ? 9 : size === 'grande' ? 7 : 6;
+    const sodium = size === 'venti' ? 200 : size === 'grande' ? 150 : 115;
+    items.push(
+      makeGenericEstimate(
+        {
+          key: `starbucks latte ${size}`,
+          label: `Starbucks Caffe Latte ${size[0].toUpperCase()}${size.slice(1)}`,
+          quantity: 1,
+          unit: size,
+          calories,
+          protein,
+          carbs,
+          fat,
+          sugar: carbs,
+          sodium,
+          sourceName: 'Starbucks official nutrition',
+          sourceType: 'OFFICIAL_RESTAURANT',
+          matchType: 'exact_restaurant',
+        },
+        message,
+      ),
+    );
+  }
+
+  if (/\bcoffee\b/.test(normalized) && !/\bstarbucks\b/.test(normalized)) {
     const hasCream = /\bcream|creamer|latte|milk\b/.test(normalized);
     items.push(
       makeGenericEstimate(
@@ -3196,6 +3227,7 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
           sodium: isElite ? 260 : 180,
           sourceName: isFairlife ? 'Fairlife nutrition reference' : 'Protein shake common serving estimate',
           sourceType: isFairlife ? 'GENERIC_REFERENCE' : 'AI_ESTIMATE',
+          matchType: isFairlife ? 'exact_branded' : undefined,
         },
         message,
       ),
@@ -3613,13 +3645,35 @@ function messageHasRestaurantCue(message: string) {
   );
 }
 
+function hasHighPriorityBrandedCatalogMatch(items: ParsedFoodItem[]) {
+  return items.some((item) => item.match_type === 'exact_branded' || item.match_type === 'fuzzy_branded');
+}
+
+function messageHasPackagedBrandCue(message: string) {
+  return /\b(?:barebells?|celsius|cheez[-\s]?it|chobani|chobanni|clif|coke zero|coca cola|core power|david|doritos|dorittos|dr pepper|dr peper|fairlife|gatorade|goldfish|gold fish|kodiak|kodiac|legendary|legendairy|muscle milk|musclemilk|nature valley|oikos|pop[-\s]?tarts?|poptarts?|premier protein|pure protein|quest|quaker|rxbar|rx bar|trader joe'?s)\b/i.test(message);
+}
+
+function knownItemsAlreadyHaveReliableBrandMatch(items: ParsedFoodItem[]) {
+  return items.some((item) => item.is_trusted && Boolean(item.source_name && !/generic|common-food fallback|fallback estimate/i.test(item.source_name)));
+}
+
 function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, mealType: MealAssistantState['mealType']) {
   const knownItems = detectKnownFoodEstimates(message);
+  const trustedItems = getTrustedCatalogEstimate(message, mealType)?.items ?? [];
+
+  if (
+    knownItems.length <= 1
+    && messageHasPackagedBrandCue(message)
+    && !knownItemsAlreadyHaveReliableBrandMatch(knownItems)
+    && hasHighPriorityBrandedCatalogMatch(trustedItems)
+  ) {
+    return trustedItems;
+  }
+
   if (!knownItems.length || !messageHasRestaurantCue(message) || knownItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')) {
     return knownItems;
   }
 
-  const trustedItems = getTrustedCatalogEstimate(message, mealType)?.items ?? [];
   return trustedItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT') ? trustedItems : knownItems;
 }
 

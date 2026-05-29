@@ -34,17 +34,44 @@ type KnownRestaurantBrand =
   | null;
 
 type KnownPackagedBrand =
+  | 'Barebells'
   | 'Celsius'
+  | 'Cheez-It'
+  | 'Chobani'
+  | 'Clif Bar'
   | 'Coca-Cola'
   | 'Core Power'
+  | 'David'
+  | 'Doritos'
+  | 'Dr Pepper'
   | 'Fairlife'
   | 'Gatorade'
+  | 'Goldfish'
+  | 'Kodiak'
+  | 'Legendary Foods'
+  | 'Muscle Milk'
+  | 'Nature Valley'
   | 'Oikos'
+  | 'Pop-Tarts'
   | 'Premier Protein'
+  | 'Pure Protein'
   | 'Quest'
   | 'Quaker'
+  | 'RXBAR'
   | "Trader Joe's"
   | null;
+
+function defaultConfidenceLabel(item: ParsedFoodItem): ParsedFoodItem['confidence_label'] {
+  if (item.source_type === 'OFFICIAL_RESTAURANT') return 'Very High';
+  if (item.source_type === 'AI_ESTIMATE') return 'Low';
+  return 'High';
+}
+
+function defaultMatchType(item: ParsedFoodItem): ParsedFoodItem['match_type'] {
+  if (item.source_type === 'OFFICIAL_RESTAURANT') return 'exact_restaurant';
+  if (item.source_type === 'AI_ESTIMATE') return 'ai_estimate';
+  return 'verified_database';
+}
 
 function detectRestaurantBrand(text: string): KnownRestaurantBrand {
   const compact = text.replace(/[^a-z0-9]+/g, '');
@@ -81,6 +108,21 @@ function detectPackagedBrand(text: string): KnownPackagedBrand {
   if (text.includes('celsius')) return 'Celsius';
   if (text.includes('coke zero') || text.includes('coca cola') || text.includes('coke')) return 'Coca-Cola';
   if (text.includes('oikos')) return 'Oikos';
+  if (text.includes('chobani') || text.includes('chobanni')) return 'Chobani';
+  if (text.includes('kodiak') || text.includes('kodiac')) return 'Kodiak';
+  if (text.includes('david') && text.includes('sunflower')) return 'David';
+  if (text.includes('dr pepper') || text.includes('dr peper')) return 'Dr Pepper';
+  if (text.includes('doritos') || text.includes('dorittos')) return 'Doritos';
+  if (text.includes('goldfish') || text.includes('gold fish')) return 'Goldfish';
+  if (text.includes('barebells') || text.includes('barebell')) return 'Barebells';
+  if (text.includes('legendary') || text.includes('legendairy')) return 'Legendary Foods';
+  if (text.includes('pure protein')) return 'Pure Protein';
+  if (text.includes('nature valley')) return 'Nature Valley';
+  if (text.includes('pop tart') || text.includes('poptart')) return 'Pop-Tarts';
+  if (text.includes('cheez')) return 'Cheez-It';
+  if (text.includes('clif')) return 'Clif Bar';
+  if (text.includes('rxbar') || text.includes('rx bar')) return 'RXBAR';
+  if (text.includes('muscle milk') || text.includes('musclemilk')) return 'Muscle Milk';
   return null;
 }
 
@@ -191,6 +233,16 @@ function matchStarbucksSegment(segment: string, factor: number): ParsedFoodItem[
     return food ? scaleItems([scaleCatalogFood(food, 1, 'sandwich')], factor) : [];
   }
 
+  if (segment.includes('pink drink')) {
+    return [makeEstimatedItem(
+      'Starbucks Grande Pink Drink',
+      1,
+      'grande',
+      { calories: 140, protein: 1, carbs: 28, fat: 2.5, fiber: 0, sugar: 25, sodium: 65 },
+      'Structured restaurant estimate for Starbucks Grande Pink Drink.'
+    )].map((item) => ({ ...item, is_trusted: true, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Starbucks nutrition reference', confidence_label: 'High', provider_used: 'local-verified-catalog', used_ai_fallback: false, match_type: 'fuzzy_restaurant' }));
+  }
+
   if (segment.includes('latte')) {
     const food = segment.includes('venti')
       ? findCatalogFoodById('starbucks_latte_venti')
@@ -232,6 +284,16 @@ function matchChickFilASegment(segment: string, factor: number): ParsedFoodItem[
 }
 
 function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[] {
+  if (segment.includes('big mac') || segment.includes('bigmac')) {
+    const food = findCatalogFoodById('mcdonalds_big_mac');
+    return food ? scaleItems([scaleCatalogFood(food, 1, 'burger')], factor) : [];
+  }
+
+  if (segment.includes('mcchicken') || segment.includes('mc chicken')) {
+    const food = findCatalogFoodById('mcdonalds_mcchicken');
+    return food ? scaleItems([scaleCatalogFood(food, 1, 'sandwich')], factor) : [];
+  }
+
   if (segment.includes('mcdouble') || segment.includes('mc double')) {
     const food = findCatalogFoodById('mcdonalds_mcdouble');
     return food ? scaleItems([scaleCatalogFood(food, 1, 'burger')], factor) : [];
@@ -256,6 +318,10 @@ function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[
 }
 
 function matchRestaurantAlias(segment: string, brand: Exclude<KnownRestaurantBrand, null>, factor: number) {
+  if (brand === 'Taco Bell' && segment.includes('crunch') && segment.includes('wrap')) {
+    return [makeEstimatedItem('Taco Bell Crunchwrap Supreme', 1, 'item', { calories: 540, protein: 16, carbs: 71, fat: 21, fiber: 6, sugar: 6, sodium: 1210 }, 'Structured restaurant estimate for Taco Bell Crunchwrap Supreme.')].map((item) => ({ ...item, is_trusted: true, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Taco Bell nutrition reference', confidence_label: 'High', provider_used: 'local-verified-catalog', used_ai_fallback: false, match_type: 'fuzzy_restaurant' }));
+  }
+
   const food = findCatalogFoodByBestMatch(segment, brand);
   const quantity = extractRestaurantItemQuantity(segment);
   return food ? scaleItems([scaleCatalogFood(food, quantity, food.servingUnit)], factor) : [];
@@ -360,11 +426,10 @@ function matchPackagedSegment(segment: string): ParsedFoodItem[] {
   const brand = detectPackagedBrand(segment);
   const packagedSearch = normalizePackagedSearch(segment);
   const candidateMatches = [
-    findCatalogFoodMatch(packagedSearch),
     ...(brand ? getPackagedBrandCandidates(brand, packagedSearch).map((candidateBrand) => findCatalogFoodMatch(packagedSearch, candidateBrand)) : []),
   ].filter((candidate): candidate is NonNullable<ReturnType<typeof findCatalogFoodMatch>> => Boolean(candidate));
 
-  const match = candidateMatches.sort((left, right) => right.score - left.score)[0] ?? null;
+  const match = candidateMatches.sort((left, right) => right.score - left.score)[0] ?? findCatalogFoodMatch(packagedSearch) ?? null;
 
   if (!match) {
     return [];
@@ -381,6 +446,10 @@ function matchPackagedSegment(segment: string): ParsedFoodItem[] {
       source_name: match.exactProduct || match.exactAlias
         ? `${scaled.source_name ?? 'Branded nutrition reference'} · high-confidence product match`
         : scaled.source_name,
+      confidence_label: match.exactProduct || match.exactAlias ? 'Very High' : 'High',
+      match_type: match.exactProduct || match.exactAlias ? 'exact_branded' : 'fuzzy_branded',
+      matched_query: food.canonicalName,
+      used_ai_fallback: false,
     },
   ];
 }
@@ -583,7 +652,12 @@ export function getTrustedCatalogEstimate(text: string, mealType: MealTypeValue)
       : matchGenericSegment(segment);
 
     if (matchedItems.length) {
-      items.push(...matchedItems);
+      items.push(...matchedItems.map((item) => ({
+        ...item,
+        confidence_label: (item.confidence_label ?? defaultConfidenceLabel(item)) as ParsedFoodItem['confidence_label'],
+        match_type: (item.match_type ?? defaultMatchType(item)) as ParsedFoodItem['match_type'],
+      }) as ParsedFoodItem));
+
       continue;
     }
 

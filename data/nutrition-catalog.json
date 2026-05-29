@@ -239,6 +239,126 @@
       "brand": "Jersey Mike's",
       "citation": "Jersey Mike's standard menu nutrition reference",
       "notes": "Used for broader restaurant/branded-food matching"
+    },
+    {
+      "id": "david_reference",
+      "name": "David nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "David",
+      "citation": "David branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "chobani_reference",
+      "name": "Chobani nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Chobani",
+      "citation": "Chobani branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "kodiak_reference",
+      "name": "Kodiak Cakes nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Kodiak",
+      "citation": "Kodiak branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "drpepper_reference",
+      "name": "Dr Pepper nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Dr Pepper",
+      "citation": "Dr Pepper branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "doritos_reference",
+      "name": "Doritos nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Doritos",
+      "citation": "Doritos branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "goldfish_reference",
+      "name": "Goldfish nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Goldfish",
+      "citation": "Goldfish branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "barebells_reference",
+      "name": "Barebells nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Barebells",
+      "citation": "Barebells branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "legendary_reference",
+      "name": "Legendary Foods nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Legendary Foods",
+      "citation": "Legendary Foods branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "pureprotein_reference",
+      "name": "Pure Protein nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Pure Protein",
+      "citation": "Pure Protein branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "naturevalley_reference",
+      "name": "Nature Valley nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Nature Valley",
+      "citation": "Nature Valley branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "poptarts_reference",
+      "name": "Pop-Tarts nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Pop-Tarts",
+      "citation": "Pop-Tarts branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "cheezit_reference",
+      "name": "Cheez-It nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Cheez-It",
+      "citation": "Cheez-It branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "clif_reference",
+      "name": "Clif Bar nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Clif Bar",
+      "citation": "Clif Bar branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "rxbar_reference",
+      "name": "RXBAR nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "RXBAR",
+      "citation": "RXBAR branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
+    },
+    {
+      "id": "musclemilk_reference",
+      "name": "Muscle Milk nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Muscle Milk",
+      "citation": "Muscle Milk branded nutrition reference",
+      "notes": "Used for Phase 1/2 branded benchmark matching"
     }
   ],
   "foods": [
@@ -1666,6 +1786,353 @@
         "jersey mike turkey sub",
         "jersey mike's turkey sub",
         "turkey sub"
+      ]
+    },
+    {
+      "fiber": 1,
+      "sugar": 1,
+      "sodium": 340,
+      "active": true,
+      "id": "quest_bbq_protein_chips",
+      "canonicalName": "Quest BBQ Protein Chips",
+      "brand": "Quest",
+      "servingQuantity": 1,
+      "servingUnit": "bag",
+      "calories": 140,
+      "protein": 19,
+      "carbs": 5,
+      "fat": 5,
+      "sourceId": "quest_reference",
+      "aliases": [
+        "quest bbq protein chips",
+        "quest bbq chips",
+        "quest bbq protien chips",
+        "quest barbecue protein chips"
+      ]
+    },
+    {
+      "fiber": 1,
+      "sugar": 1,
+      "sodium": 350,
+      "active": true,
+      "id": "quest_nacho_cheese_protein_chips",
+      "canonicalName": "Quest Nacho Cheese Protein Chips",
+      "brand": "Quest",
+      "servingQuantity": 1,
+      "servingUnit": "bag",
+      "calories": 140,
+      "protein": 18,
+      "carbs": 5,
+      "fat": 5,
+      "sourceId": "quest_reference",
+      "aliases": [
+        "quest nacho cheese protein chips",
+        "quest nacho protein chips",
+        "quest nacho cheese chips"
+      ]
+    },
+    {
+      "fiber": 3,
+      "sugar": 1,
+      "sodium": 1860,
+      "active": true,
+      "id": "david_sunflower_seeds",
+      "canonicalName": "David Sunflower Seeds",
+      "brand": "David",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 190,
+      "protein": 7,
+      "carbs": 7,
+      "fat": 15,
+      "sourceId": "david_reference",
+      "aliases": [
+        "david sunflower seeds",
+        "sunflower seeds david"
+      ]
+    },
+    {
+      "fiber": 0,
+      "sugar": 15,
+      "sodium": 65,
+      "active": true,
+      "id": "chobani_strawberry_greek_yogurt",
+      "canonicalName": "Chobani Greek Yogurt Strawberry",
+      "brand": "Chobani",
+      "servingQuantity": 1,
+      "servingUnit": "container",
+      "calories": 120,
+      "protein": 11,
+      "carbs": 16,
+      "fat": 0,
+      "sourceId": "chobani_reference",
+      "aliases": [
+        "chobani greek yogurt strawberry",
+        "chobani strawberry greek yogurt",
+        "chobanni greek yogurt"
+      ]
+    },
+    {
+      "fiber": 5,
+      "sugar": 3,
+      "sodium": 380,
+      "active": true,
+      "id": "kodiak_protein_pancake_mix",
+      "canonicalName": "Kodiak Cakes Protein Pancake Mix",
+      "brand": "Kodiak",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 190,
+      "protein": 14,
+      "carbs": 30,
+      "fat": 2,
+      "sourceId": "kodiak_reference",
+      "aliases": [
+        "kodiak cakes protein pancake mix",
+        "kodiac cakes",
+        "kodiak cakes"
+      ]
+    },
+    {
+      "fiber": 0,
+      "sugar": 0,
+      "sodium": 55,
+      "active": true,
+      "id": "dr_pepper_zero",
+      "canonicalName": "Dr Pepper Zero",
+      "brand": "Dr Pepper",
+      "servingQuantity": 1,
+      "servingUnit": "can",
+      "calories": 0,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 0,
+      "sourceId": "drpepper_reference",
+      "aliases": [
+        "dr pepper zero",
+        "dr peper zero"
+      ]
+    },
+    {
+      "fiber": 1,
+      "sugar": 1,
+      "sodium": 210,
+      "active": true,
+      "id": "doritos_nacho_cheese",
+      "canonicalName": "Doritos Nacho Cheese",
+      "brand": "Doritos",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 150,
+      "protein": 2,
+      "carbs": 18,
+      "fat": 8,
+      "sourceId": "doritos_reference",
+      "aliases": [
+        "doritos nacho cheese",
+        "dorittos nacho chees"
+      ]
+    },
+    {
+      "fiber": 1,
+      "sugar": 0,
+      "sodium": 250,
+      "active": true,
+      "id": "goldfish_crackers",
+      "canonicalName": "Goldfish Crackers",
+      "brand": "Goldfish",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 140,
+      "protein": 3,
+      "carbs": 20,
+      "fat": 5,
+      "sourceId": "goldfish_reference",
+      "aliases": [
+        "goldfish crackers",
+        "gold fish crackers"
+      ]
+    },
+    {
+      "fiber": 3,
+      "sugar": 1,
+      "sodium": 200,
+      "active": true,
+      "id": "barebells_protein_bar",
+      "canonicalName": "Barebells Protein Bar",
+      "brand": "Barebells",
+      "servingQuantity": 1,
+      "servingUnit": "bar",
+      "calories": 200,
+      "protein": 20,
+      "carbs": 20,
+      "fat": 7,
+      "sourceId": "barebells_reference",
+      "aliases": [
+        "barebells protein bar",
+        "barebell protein bar",
+        "barebells"
+      ]
+    },
+    {
+      "fiber": 9,
+      "sugar": 1,
+      "sodium": 380,
+      "active": true,
+      "id": "legendary_protein_pastry",
+      "canonicalName": "Legendary Foods Protein Pastry",
+      "brand": "Legendary Foods",
+      "servingQuantity": 1,
+      "servingUnit": "pastry",
+      "calories": 180,
+      "protein": 20,
+      "carbs": 24,
+      "fat": 8,
+      "sourceId": "legendary_reference",
+      "aliases": [
+        "legendary foods protein pastry",
+        "legendairy protein pastry",
+        "legendary protein pastry"
+      ]
+    },
+    {
+      "fiber": 1,
+      "sugar": 2,
+      "sodium": 180,
+      "active": true,
+      "id": "pure_protein_bar",
+      "canonicalName": "Pure Protein Bar",
+      "brand": "Pure Protein",
+      "servingQuantity": 1,
+      "servingUnit": "bar",
+      "calories": 200,
+      "protein": 20,
+      "carbs": 17,
+      "fat": 6,
+      "sourceId": "pureprotein_reference",
+      "aliases": [
+        "pure protein bar"
+      ]
+    },
+    {
+      "fiber": 2,
+      "sugar": 11,
+      "sodium": 140,
+      "active": true,
+      "id": "nature_valley_granola_bar",
+      "canonicalName": "Nature Valley Granola Bar",
+      "brand": "Nature Valley",
+      "servingQuantity": 1,
+      "servingUnit": "bar",
+      "calories": 190,
+      "protein": 4,
+      "carbs": 29,
+      "fat": 7,
+      "sourceId": "naturevalley_reference",
+      "aliases": [
+        "nature valley granola bar"
+      ]
+    },
+    {
+      "fiber": 1,
+      "sugar": 16,
+      "sodium": 170,
+      "active": true,
+      "id": "poptarts_frosted_strawberry",
+      "canonicalName": "Pop-Tarts Frosted Strawberry",
+      "brand": "Pop-Tarts",
+      "servingQuantity": 1,
+      "servingUnit": "pastry",
+      "calories": 190,
+      "protein": 2,
+      "carbs": 36,
+      "fat": 5,
+      "sourceId": "poptarts_reference",
+      "aliases": [
+        "pop-tarts frosted strawberry",
+        "poptart strawberry",
+        "pop tarts strawberry"
+      ]
+    },
+    {
+      "fiber": 1,
+      "sugar": 0,
+      "sodium": 230,
+      "active": true,
+      "id": "cheezit_original",
+      "canonicalName": "Cheez-It Original",
+      "brand": "Cheez-It",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 150,
+      "protein": 3,
+      "carbs": 17,
+      "fat": 8,
+      "sourceId": "cheezit_reference",
+      "aliases": [
+        "cheez-it original",
+        "cheez its",
+        "cheez it"
+      ]
+    },
+    {
+      "fiber": 5,
+      "sugar": 17,
+      "sodium": 190,
+      "active": true,
+      "id": "clif_bar_chocolate_chip",
+      "canonicalName": "Clif Bar Chocolate Chip",
+      "brand": "Clif Bar",
+      "servingQuantity": 1,
+      "servingUnit": "bar",
+      "calories": 250,
+      "protein": 10,
+      "carbs": 43,
+      "fat": 5,
+      "sourceId": "clif_reference",
+      "aliases": [
+        "clif bar chocolate chip"
+      ]
+    },
+    {
+      "fiber": 5,
+      "sugar": 13,
+      "sodium": 310,
+      "active": true,
+      "id": "rxbar_chocolate_sea_salt",
+      "canonicalName": "RXBAR Chocolate Sea Salt",
+      "brand": "RXBAR",
+      "servingQuantity": 1,
+      "servingUnit": "bar",
+      "calories": 210,
+      "protein": 12,
+      "carbs": 23,
+      "fat": 9,
+      "sourceId": "rxbar_reference",
+      "aliases": [
+        "rxbar chocolate sea salt",
+        "rx bar chocolate sea salt"
+      ]
+    },
+    {
+      "fiber": 5,
+      "sugar": 0,
+      "sodium": 200,
+      "active": true,
+      "id": "muscle_milk_protein_shake",
+      "canonicalName": "Muscle Milk Protein Shake",
+      "brand": "Muscle Milk",
+      "servingQuantity": 1,
+      "servingUnit": "bottle",
+      "calories": 160,
+      "protein": 25,
+      "carbs": 9,
+      "fat": 3,
+      "sourceId": "musclemilk_reference",
+      "aliases": [
+        "muscle milk protein shake",
+        "musclemilk shake",
+        "muscle milk shake"
       ]
     }
   ]
