@@ -249,7 +249,7 @@ struct MealAssistantClientLogic {
         let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
 
-        if hasActiveMeal && ["discard", "discard that", "cancel", "clear", "clear meal", "clear everything", "reset", "reset meal", "start over", "start over please", "delete this meal", "delete meal", "nevermind", "never mind"].contains(normalized) {
+        if hasActiveMeal && ["discard", "discard that", "cancel", "clear", "clear meal", "clear everything", "reset", "reset meal", "start over", "start over please", "new meal", "delete this meal", "delete meal", "nevermind", "never mind"].contains(normalized) {
             return .discard
         }
 
@@ -303,6 +303,10 @@ struct MealAssistantClientLogic {
         }
 
         return nil
+    }
+
+    static func shouldPreserveActiveMeal(currentItems: [MealRequestItem], responseItems: [MealRequestItem], responseSaved: Bool) -> Bool {
+        !currentItems.isEmpty && responseItems.isEmpty && !responseSaved
     }
 
     static func removingItems(matching target: String, from items: [MealRequestItem]) -> [MealRequestItem] {

@@ -200,6 +200,7 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Delete this meal", hasActiveMeal: true), .discard)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Clear everything", hasActiveMeal: true), .discard)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("start over", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("new meal", hasActiveMeal: true), .discard)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("save it", hasActiveMeal: true), .save)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Save", hasActiveMeal: true), .save)
         XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: false))
@@ -269,6 +270,67 @@ final class MealAssistantParityTests: XCTestCase {
 
         XCTAssertNotNil(MealAssistantClientLogic.foodMatchWarning(for: "Turkey sandwich with mayo and chips", items: [Self.item("Sun Chips")]))
         XCTAssertNil(MealAssistantClientLogic.foodMatchWarning(for: "Turkey sandwich with mayo and chips", items: [Self.item("turkey sandwich with mayo"), Self.item("chips")]))
+    }
+
+    func testBrandedFoodsDoNotTriggerGenericBadMatchGuards() {
+        let brands = [
+            "Quest BBQ Protein Chips",
+            "Fairlife Core Power",
+            "Premier Protein shake",
+            "David Sunflower Seeds",
+            "McDonald's Big Mac",
+            "Chick-fil-A Nuggets",
+            "Starbucks Iced Latte",
+            "Chipotle Chicken Bowl",
+            "Chobani Greek Yogurt",
+            "Coke Zero"
+        ]
+
+        for brand in brands {
+            XCTAssertNil(MealAssistantClientLogic.foodMatchWarning(for: brand, items: [Self.trustedItem(brand)]), brand)
+        }
+    }
+
+    func testOffTopicEmptyAssistantResponsePreservesActiveMealState() {
+        let currentItems = [Self.item("chicken breast"), Self.item("rice")]
+
+        XCTAssertTrue(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false))
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [Self.item("broccoli")], responseSaved: false))
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: true))
+    }
+
+    func testSimpleAndCompoundFoodPromptsCarryStableRequestState() {
+        let prompts = [
+            "apple",
+            "banana",
+            "rice",
+            "eggs",
+            "chicken breast",
+            "oatmeal",
+            "protein shake",
+            "peanut butter toast",
+            "burger fries and soda",
+            "eggs toast bacon and orange juice",
+            "chicken rice broccoli",
+            "quest chips and fairlife shake",
+            "big mac meal with fries and coke",
+            "chipotle bowl with extra chicken"
+        ]
+
+        for prompt in prompts {
+            let requestState = MealAssistantClientLogic.buildRequestState(assistantState: MealAssistantState(), currentMealItems: [], incomingUserMessage: prompt)
+            XCTAssertEqual(requestState.currentMealText, prompt)
+            XCTAssertEqual(requestState.previousUserMessage, prompt)
+            XCTAssertFalse(requestState.saved)
+        }
+    }
+
+    func testMalformedMealAssistantResponsesFailDecodingInsteadOfApplyingPartialState() throws {
+        let missingMeal = #"{"assistant_reply":"ok","next_state":{},"intent":"new_food_item"}"#.data(using: .utf8)
+        let malformedJSON = #"{"assistant_reply":"ok","meal": "#.data(using: .utf8)
+
+        XCTAssertThrowsError(try JSONDecoder().decode(MealAssistantResponse.self, from: try XCTUnwrap(missingMeal)))
+        XCTAssertThrowsError(try JSONDecoder().decode(MealAssistantResponse.self, from: try XCTUnwrap(malformedJSON)))
     }
 
     func testStateResetAfterSaveStartsFreshMeal() {
@@ -355,6 +417,10 @@ final class MealAssistantParityTests: XCTestCase {
 
     private static func item(_ name: String, quantity: Double = 1, unit: String = "serving") -> MealRequestItem {
         MealRequestItem(food_name: name, quantity: quantity, unit: unit, calories: 100, protein: 10, carbs: 10, fat: 2, fiber: 0, sugar: 0, sodium: 0, notes: nil, source_type: nil, source_name: nil, confidence_label: nil)
+    }
+
+    private static func trustedItem(_ name: String) -> MealRequestItem {
+        MealRequestItem(food_name: name, quantity: 1, unit: "serving", calories: 100, protein: 10, carbs: 10, fat: 2, fiber: 0, sugar: 0, sodium: 0, notes: "Exact branded match", source_type: "BRANDED", source_name: "Nutrition catalog", confidence_label: "High", is_trusted: true, catalog_food_id: "brand-\(name.lowercased().replacingOccurrences(of: " ", with: "-"))")
     }
 }
 
