@@ -266,7 +266,7 @@ describe('lookupNutrition', () => {
       carbs: 33,
       fat: 20,
       source_type: 'OFFICIAL_RESTAURANT',
-      confidence_label: 'Verified',
+      confidence_label: 'Very High',
       matched_query: "McDonald's McDouble",
       provider_used: 'local-verified-catalog',
       used_ai_fallback: false,
@@ -278,7 +278,7 @@ describe('lookupNutrition', () => {
     const response = await lookupNutrition({ text: 'a mcdouble', mealType: 'lunch' });
 
     expect(response?.items[0]?.calories).toBe(390);
-    expect(response?.items[0]?.confidence_label).toBe('Verified');
+    expect(response?.items[0]?.confidence_label).toBe('Very High');
   });
 
   it('scales quantities for verified restaurant items', async () => {
@@ -476,7 +476,7 @@ describe('lookupNutrition', () => {
     expect(response.items[1]).toMatchObject({
       food_name: "McDonald's McDouble",
       provider_used: 'local-verified-catalog',
-      confidence_label: 'Verified',
+      confidence_label: 'Very High',
     });
     expect(response.totals.calories).toBe(730);
   });
@@ -521,7 +521,7 @@ describe('lookupNutrition', () => {
     const localMatch = await lookupNutrition({ text: 'mcdouble', mealType: 'lunch' }, { aiEstimateProvider: aiProvider });
     const fallback = await lookupNutrition({ text: 'mystery casserole surprise', mealType: 'dinner' }, { aiEstimateProvider: aiProvider });
 
-    expect(localMatch?.items[0]?.confidence_label).toBe('Verified');
+    expect(localMatch?.items[0]?.confidence_label).toBe('Very High');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(aiLookup).toHaveBeenCalledTimes(1);
     expect(fallback?.items[0]).toMatchObject({
