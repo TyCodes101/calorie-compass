@@ -1,18 +1,18 @@
 # Nutrition Accuracy Benchmark
 
-Generated: 2026-05-29T23:28:25.279Z
+Generated: 2026-05-29T23:32:30.358Z
 
 This report measures the current deterministic nutrition pipeline against the Phase 9A baseline case set. Improvements must be interpreted as benchmark deltas, not as perfect nutrition accuracy.
 
 ## Overall
 
 - Total tested: 125
-- Passed: 93
-- Failed: 32
+- Passed: 94
+- Failed: 31
 - Recognition rate: 92%
 - Exact-match rate: 66%
 - Generic fallback rate: 0%
-- Obvious wrong-result rate: 23%
+- Obvious wrong-result rate: 22%
 
 ## Summary by category
 
@@ -20,9 +20,9 @@ This report measures the current deterministic nutrition pipeline against the Ph
 {
   "branded": {
     "total": 25,
-    "passed": 20,
-    "failed": 5,
-    "exactMatchPercentage": 72,
+    "passed": 21,
+    "failed": 4,
+    "exactMatchPercentage": 76,
     "brandedMatchPercentage": 96,
     "restaurantMatchPercentage": 0,
     "genericFallbackPercentage": 0,
@@ -73,8 +73,8 @@ This report measures the current deterministic nutrition pipeline against the Ph
 
 ## Confidence label distribution
 
-- Very High: 60
-- High: 38
+- Very High: 64
+- High: 34
 - High; Low: 2
 - Low: 12
 - missing: 10
@@ -85,7 +85,6 @@ This report measures the current deterministic nutrition pipeline against the Ph
 
 - branded: I had Fairlife Core Power Chocolate → Fairlife chocolate protein shake (Expected Fairlife Core Power Chocolate; got Fairlife chocolate protein shake.)
 - branded: I had Fairlife Nutrition Plan Chocolate → Fairlife chocolate protein shake (Expected Fairlife Nutrition Plan Chocolate; got Fairlife chocolate protein shake.)
-- branded: I had Nature Valley Granola Bar → Granola (Expected Nature Valley Granola Bar; got Granola.)
 - branded: I had Gatorade Zero → Gatorade (Expected Gatorade Zero; got Gatorade.)
 - branded: I had Muscle Milk Protein Shake → Milk, Protein shake (Expected Muscle Milk Protein Shake; got Milk, Protein shake.)
 - restaurant: I had Starbucks grande pink drink → Starbucks Grande Pink Drink (Expected Starbucks Grande Pink Drink; got Starbucks Grande Pink Drink.)
@@ -103,6 +102,7 @@ This report measures the current deterministic nutrition pipeline against the Ph
 - grocery: I had cheddar cheese → no items (Expected cheddar cheese; got no items.)
 - grocery: I had ground beef → no items (Expected ground beef; got no items.)
 - grocery: I had cereal → no items (Expected cereal; got no items.)
+- typo: I had premeir protein → no items (Expected Premier Protein; got no items.)
 
 ## Benchmark limitations
 
@@ -125,15 +125,15 @@ This report measures the current deterministic nutrition pipeline against the Ph
 | 7 | Chobani Greek Yogurt Strawberry | I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | branded | branded | Chobani nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 8 | Oikos Triple Zero Vanilla | I had Oikos Triple Zero Vanilla | Oikos Triple Zero Vanilla | Oikos Triple Zero Greek Yogurt | branded | branded | Oikos nutrition reference | High | fuzzy | PASS | Pass under current benchmark criteria. |
 | 9 | Kodiak Cakes Protein Pancake Mix | I had Kodiak Cakes Protein Pancake Mix | Kodiak Cakes Protein Pancake Mix | Kodiak Cakes Protein Pancake Mix | branded | branded | Kodiak Cakes nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 10 | Coke Zero | I had Coke Zero | Coke Zero | Coke Zero | branded | branded | Coca-Cola nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
+| 10 | Coke Zero | I had Coke Zero | Coke Zero | Coke Zero | branded | branded | Coca-Cola nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 11 | Dr Pepper Zero | I had Dr Pepper Zero | Dr Pepper Zero | Dr Pepper Zero | branded | branded | Dr Pepper nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 12 | Doritos Nacho Cheese | I had Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | branded | branded | Doritos nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 13 | Goldfish Crackers | I had Goldfish Crackers | Goldfish Crackers | Goldfish Crackers | branded | branded | Goldfish nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 14 | Barebells Protein Bar | I had Barebells Protein Bar | Barebells Protein Bar | Barebells Protein Bar | branded | branded | Barebells nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 15 | Legendary Foods Protein Pastry | I had Legendary Foods Protein Pastry | Legendary Foods Protein Pastry | Legendary Foods Protein Pastry | branded | branded | Legendary Foods nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 16 | Pure Protein Bar | I had Pure Protein Bar | Pure Protein Bar | Pure Protein Bar | branded | branded | Pure Protein nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 17 | Nature Valley Granola Bar | I had Nature Valley Granola Bar | Nature Valley Granola Bar | Granola | branded | branded | Granola common serving estimate | High | miss | FAIL | Expected Nature Valley Granola Bar; got Granola. |
-| 18 | Quaker Rice Cakes | I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker rice cakes | branded | branded | Quaker-style rice cake estimate | High | exact | PASS | Pass under current benchmark criteria. |
+| 17 | Nature Valley Granola Bar | I had Nature Valley Granola Bar | Nature Valley Granola Bar | Nature Valley Granola Bar | branded | branded | Nature Valley nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
+| 18 | Quaker Rice Cakes | I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | branded | branded | Quaker nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 19 | Gatorade Zero | I had Gatorade Zero | Gatorade Zero | Gatorade | branded | branded | Gatorade nutrition reference | High | miss | FAIL | Expected Gatorade Zero; got Gatorade. |
 | 20 | Celsius Energy Drink | I had Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | branded | branded | Celsius nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 21 | Pop-Tarts Frosted Strawberry | I had Pop-Tarts Frosted Strawberry | Pop-Tarts Frosted Strawberry | Pop-Tarts Frosted Strawberry | branded | branded | Pop-Tarts nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
@@ -212,7 +212,7 @@ This report measures the current deterministic nutrition pipeline against the Ph
 | 94 | cheez its | I had cheez its | Cheez-It | Cheez-It Original | branded | branded | Cheez-It nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 95 | barebell protein bar | I had barebell protein bar | Barebells Protein Bar | Barebells Protein Bar | branded | branded | Barebells nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 96 | legendairy protein pastry | I had legendairy protein pastry | Legendary Protein Pastry | Legendary Foods Protein Pastry | branded | branded | Legendary Foods nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 97 | quaker rice cake | I had quaker rice cake | Quaker Rice Cake | Quaker rice cakes | branded | branded | Quaker-style rice cake estimate | High | exact | PASS | Pass under current benchmark criteria. |
+| 97 | quaker rice cake | I had quaker rice cake | Quaker Rice Cake | Quaker Rice Cakes | branded | branded | Quaker nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 98 | celsius drink | I had celsius drink | Celsius | Celsius Energy Drink | branded | branded | Celsius nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
 | 99 | musclemilk shake | I had musclemilk shake | Muscle Milk Shake | Muscle Milk Protein Shake | branded | branded | Muscle Milk nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 100 | poptart strawberry | I had poptart strawberry | Pop-Tarts Strawberry | Pop-Tarts Frosted Strawberry | branded | branded | Pop-Tarts nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |

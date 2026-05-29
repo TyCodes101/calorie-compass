@@ -3654,7 +3654,7 @@ function messageHasPackagedBrandCue(message: string) {
 }
 
 function knownItemsAlreadyHaveReliableBrandMatch(items: ParsedFoodItem[]) {
-  return items.some((item) => item.is_trusted && Boolean(item.source_name && !/generic|common-food fallback|fallback estimate/i.test(item.source_name)));
+  return items.some((item) => item.match_type === 'exact_branded' || item.match_type === 'fuzzy_branded');
 }
 
 function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, mealType: MealAssistantState['mealType']) {
