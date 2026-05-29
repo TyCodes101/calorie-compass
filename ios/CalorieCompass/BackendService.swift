@@ -325,11 +325,18 @@ struct MealAssistantClientLogic {
 
     private static func significantTokens(in text: String) -> Set<String> {
         let ignored: Set<String> = ["a", "an", "the", "of", "with", "and", "to", "that", "it"]
-        return Set(text.lowercased()
-            .split { !$0.isLetter && !$0.isNumber }
-            .map(String.init)
-            .map { token in token.hasSuffix("s") && token.count > 3 ? String(token.dropLast()) : token }
-            .filter { $0.count > 1 && !ignored.contains($0) })
+        let normalized = text.lowercased()
+        let rawParts = normalized.split { character in
+            !character.isLetter && !character.isNumber
+        }
+        let words = rawParts.map(String.init)
+        let singularized = words.map { token in
+            token.hasSuffix("s") && token.count > 3 ? String(token.dropLast()) : token
+        }
+        let filtered = singularized.filter { token in
+            token.count > 1 && !ignored.contains(token)
+        }
+        return Set(filtered)
     }
 }
 
