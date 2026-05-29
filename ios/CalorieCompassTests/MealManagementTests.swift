@@ -209,9 +209,11 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("start over", hasActiveMeal: true), .discard)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("new meal", hasActiveMeal: true), .discard)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("save it", hasActiveMeal: true), .save)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Save the meal", hasActiveMeal: true), .save)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Okay now save the meal", hasActiveMeal: true), .save)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Save", hasActiveMeal: true), .save)
         XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: false))
-        XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Save", hasActiveMeal: false))
+        XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Save the meal", hasActiveMeal: false))
     }
 
     func testRemoveFriesUpdatesActiveMealItemsLocally() {

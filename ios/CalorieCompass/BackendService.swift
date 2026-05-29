@@ -253,7 +253,7 @@ struct MealAssistantClientLogic {
             return .discard
         }
 
-        if hasActiveMeal && ["save", "save it", "save meal", "log it", "log this", "log meal"].contains(normalized) {
+        if hasActiveMeal && ["save", "save it", "save meal", "save the meal", "okay now save the meal", "ok now save the meal", "log it", "log this", "log meal", "log the meal"].contains(normalized) {
             return .save
         }
 
