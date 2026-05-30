@@ -148,6 +148,58 @@ function responseMatchesBrand(response: ParsedMealResponse | null, brandHint: st
   });
 }
 
+type LookupIntent = {
+  brandHint: string | null;
+  hasProteinSignal: boolean;
+  hasSnackSignal: boolean;
+  hasExplicitLargeServing: boolean;
+};
+
+function extractLookupIntent(input: NutritionLookupInput, searchText: string, brandHint: string | null): LookupIntent {
+  const normalized = normalizeComparableText(`${input.text} ${searchText}`);
+  return {
+    brandHint,
+    hasProteinSignal: /\bprotein\b|\bcore power\b|\bfairlife\b|\bquest\b|\bpremier protein\b|\bmuscle milk\b|\bbarebells?\b/i.test(normalized),
+    hasSnackSignal: /\bchips?\b|\bcrisps?\b|\bcrackers?\b|\bbars?\b|\bshake\b|\byogurt\b|\bsnack\b/i.test(normalized),
+    hasExplicitLargeServing: /\b\d+(?:\.\d+)?\s*(?:oz|ounce|ounces|bag|bags|serving|servings)\b/i.test(normalized),
+  };
+}
+
+function itemServingLooksUnrealistic(item: ParsedFoodItem, intent: LookupIntent) {
+  const quantity = Number(item.quantity ?? 1);
+  const unit = normalizeComparableText(item.unit);
+
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return true;
+  }
+
+  if (intent.hasSnackSignal && !intent.hasExplicitLargeServing) {
+    if ((unit === 'oz' || unit === 'ounce' || unit === 'ounces') && quantity > 4) return true;
+    if ((unit === 'g' || unit === 'gram' || unit === 'grams') && quantity > 120) return true;
+  }
+
+  return false;
+}
+
+function itemMacrosLookPlausible(item: ParsedFoodItem, intent: LookupIntent) {
+  const calories = Number(item.calories ?? 0);
+  const protein = Number(item.protein ?? 0);
+  const carbs = Number(item.carbs ?? 0);
+
+  if (!Number.isFinite(calories) || calories < 0 || calories > 1500) return false;
+
+  if (intent.hasProteinSignal) {
+    if (protein < 10) return false;
+    if (carbs > 60 && protein < 15) return false;
+  }
+
+  return true;
+}
+
+function responseMatchesPlausibility(response: ParsedMealResponse, intent: LookupIntent) {
+  return response.items.every((item) => !itemServingLooksUnrealistic(item, intent) && itemMacrosLookPlausible(item, intent));
+}
+
 function makeClarificationResponse(input: NutritionLookupInput, question: string) {
   return normalizeParsedMealResponse({
     needs_clarification: true,
@@ -195,6 +247,7 @@ export async function lookupNutrition(
 
   const shouldProtectBrandIntent = usingDefaultProviders
     && shouldClarifyUnresolvedBrand(normalizedQuery.brandHint, normalizedQuery.searchText);
+  const intent = extractLookupIntent(input, normalizedQuery.searchText, normalizedQuery.brandHint);
 
   for (const provider of supportingProviders) {
     const result = await provider.lookup(context);
@@ -206,6 +259,13 @@ export async function lookupNutrition(
       return makeClarificationResponse(
         input,
         `I found possible nutrition data, but not a clear ${normalizedQuery.brandHint} match. Which exact item or serving should I use?`,
+      );
+    }
+
+    if (!responseMatchesPlausibility(result, intent)) {
+      return makeClarificationResponse(
+        input,
+        'I found possible nutrition data, but the serving or macros do not look right for what you described. Which exact item or serving should I use?',
       );
     }
 

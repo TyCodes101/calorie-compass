@@ -168,6 +168,23 @@ function detectBrandHint(text: string) {
 }
 
 function buildBrandedPackagedSearch(text: string) {
+  const hasQuest = /\bquest\b/.test(text);
+  const hasProteinChips = /\bprotein\b/.test(text) && /\bchips?\b/.test(text);
+
+  if (hasQuest && hasProteinChips) {
+    const flavor = /\b(?:bbq|barbecue)\b/.test(text)
+      ? 'bbq'
+      : /\bnacho\b/.test(text)
+        ? 'nacho cheese'
+        : null;
+    const parts = ['quest', flavor, 'protein chips'].filter(Boolean);
+    return {
+      searchText: parts.join(' '),
+      matchedQuery: titleCase(parts.join(' ')).replace(/Bbq/, 'BBQ'),
+      unitHint: 'bag' as const,
+    };
+  }
+
   const hasRiceCakes = /\brice cake\b/.test(text);
   const hasWhiteCheddar = /\bwhite cheddar\b/.test(text);
   const hasQuaker = /\bquaker(?: oats)?\b/.test(text);

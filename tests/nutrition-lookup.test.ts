@@ -516,6 +516,77 @@ describe('lookupNutrition', () => {
     expect(response?.clarifying_question).toMatch(/Wendy's/i);
   });
 
+  it('does not return generic chips for Quest BBQ protein chips when catalog data is available', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Northgate Gonzalez, Inc. CHIPS',
+            dataType: 'Branded',
+            servingSize: 28.35,
+            servingSizeUnit: 'oz',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 494 },
+              { nutrientName: 'Protein', value: 7 },
+              { nutrientName: 'Carbohydrate, by difference', value: 77 },
+              { nutrientName: 'Total lipid (fat)', value: 18 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'Quest BBQ protein chips', mealType: 'snack' });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response?.items[0]).toMatchObject({
+      food_name: 'Quest BBQ Protein Chips',
+      quantity: 1,
+      unit: 'bag',
+      calories: 140,
+      protein: 19,
+      provider_used: 'local-verified-catalog',
+      match_type: 'exact_branded',
+    });
+  });
+
+  it('asks clarification when supporting data conflicts with branded protein snack intent', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Quest BBQ Flavored Chips',
+            brandOwner: 'Quest',
+            dataType: 'Branded',
+            servingSize: 28.35,
+            servingSizeUnit: 'oz',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 494 },
+              { nutrientName: 'Protein', value: 7 },
+              { nutrientName: 'Carbohydrate, by difference', value: 77 },
+              { nutrientName: 'Total lipid (fat)', value: 18 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'Quest sour cream protein chips', mealType: 'snack' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response).toMatchObject({
+      needs_clarification: true,
+      items: [],
+    });
+    expect(response?.clarifying_question).toMatch(/serving|macros|exact item/i);
+  });
+
   it('uses supporting USDA data only when it matches the requested brand intent', async () => {
     vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
     const fetchMock = vi.fn().mockImplementation(async () => ({
