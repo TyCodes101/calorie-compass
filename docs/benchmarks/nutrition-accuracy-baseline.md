@@ -1,14 +1,14 @@
 # Nutrition Accuracy Benchmark
 
-Generated: 2026-05-29T23:32:30.358Z
+Generated: 2026-05-30T00:44:30.513Z
 
 This report measures the current deterministic nutrition pipeline against the Phase 9A baseline case set. Improvements must be interpreted as benchmark deltas, not as perfect nutrition accuracy.
 
 ## Overall
 
 - Total tested: 125
-- Passed: 94
-- Failed: 31
+- Passed: 96
+- Failed: 29
 - Recognition rate: 92%
 - Exact-match rate: 66%
 - Generic fallback rate: 0%
@@ -30,11 +30,11 @@ This report measures the current deterministic nutrition pipeline against the Ph
   },
   "restaurant": {
     "total": 25,
-    "passed": 19,
-    "failed": 6,
+    "passed": 20,
+    "failed": 5,
     "exactMatchPercentage": 60,
     "brandedMatchPercentage": 0,
-    "restaurantMatchPercentage": 92,
+    "restaurantMatchPercentage": 96,
     "genericFallbackPercentage": 0,
     "correctionSuccessPercentage": null
   },
@@ -50,11 +50,11 @@ This report measures the current deterministic nutrition pipeline against the Ph
   },
   "typo": {
     "total": 25,
-    "passed": 18,
-    "failed": 7,
+    "passed": 19,
+    "failed": 6,
     "exactMatchPercentage": 68,
     "brandedMatchPercentage": 72,
-    "restaurantMatchPercentage": 16,
+    "restaurantMatchPercentage": 20,
     "genericFallbackPercentage": 0,
     "correctionSuccessPercentage": null
   },
@@ -74,10 +74,10 @@ This report measures the current deterministic nutrition pipeline against the Ph
 ## Confidence label distribution
 
 - Very High: 64
-- High: 34
+- High: 36
 - High; Low: 2
-- Low: 12
 - missing: 10
+- Low: 10
 - Very High; High: 2
 - Low; High: 1
 
@@ -87,10 +87,9 @@ This report measures the current deterministic nutrition pipeline against the Ph
 - branded: I had Fairlife Nutrition Plan Chocolate → Fairlife chocolate protein shake (Expected Fairlife Nutrition Plan Chocolate; got Fairlife chocolate protein shake.)
 - branded: I had Gatorade Zero → Gatorade (Expected Gatorade Zero; got Gatorade.)
 - branded: I had Muscle Milk Protein Shake → Milk, Protein shake (Expected Muscle Milk Protein Shake; got Milk, Protein shake.)
-- restaurant: I had Starbucks grande pink drink → Starbucks Grande Pink Drink (Expected Starbucks Grande Pink Drink; got Starbucks Grande Pink Drink.)
 - restaurant: I had Dunkin cold brew → Dunkin' Medium Latte (Expected Dunkin Cold Brew; got Dunkin' Medium Latte.)
 - restaurant: I had Dunkin wake-up wrap → Dunkin' Medium Latte (Expected Dunkin Wake-Up Wrap; got Dunkin' Medium Latte.)
-- restaurant: I had Wendy's Dave's Single → Chick-fil-A Chicken Sandwich (Expected Wendy's Dave's Single; got Chick-fil-A Chicken Sandwich.)
+- restaurant: I had Wendy's Dave's Single → Wendy's Spicy Chicken Sandwich (Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich.)
 - restaurant: I had Panda Express chow mein → Panda Express Orange Chicken (Expected Panda Express Chow Mein; got Panda Express Orange Chicken.)
 - restaurant: I had Texas Roadhouse sirloin → no items (Expected Texas Roadhouse Sirloin; got no items.)
 - grocery: I had white rice → Rice (Expected white rice; got Rice.)
@@ -103,6 +102,7 @@ This report measures the current deterministic nutrition pipeline against the Ph
 - grocery: I had ground beef → no items (Expected ground beef; got no items.)
 - grocery: I had cereal → no items (Expected cereal; got no items.)
 - typo: I had premeir protein → no items (Expected Premier Protein; got no items.)
+- typo: I had starbuks iced vanila latte → no items (Expected Starbucks Iced Vanilla Latte; got no items.)
 
 ## Benchmark limitations
 
@@ -149,12 +149,12 @@ This report measures the current deterministic nutrition pipeline against the Ph
 | 31 | Chipotle Chicken Bowl | I had Chipotle chicken bowl | Chipotle Chicken Bowl | Chipotle bowl with chicken, white rice, black beans | restaurant | restaurant | Chipotle official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 32 | Chipotle Chicken Burrito | I had Chipotle burrito with chicken | Chipotle Chicken Burrito | Chipotle chicken bowl | restaurant | restaurant | Chipotle official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
 | 33 | Starbucks Venti Iced Vanilla Latte | I had Starbucks venti iced vanilla latte | Starbucks Venti Iced Vanilla Latte | Starbucks Caffe Latte Venti | restaurant | restaurant | Starbucks official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 34 | Starbucks Grande Pink Drink | I had Starbucks grande pink drink | Starbucks Grande Pink Drink | Starbucks Grande Pink Drink | restaurant | estimated | Starbucks nutrition reference | Low | exact | FAIL | Expected Starbucks Grande Pink Drink; got Starbucks Grande Pink Drink. |
+| 34 | Starbucks Grande Pink Drink | I had Starbucks grande pink drink | Starbucks Grande Pink Drink | Starbucks Grande Pink Drink | restaurant | restaurant | Starbucks nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
 | 35 | Dunkin Cold Brew | I had Dunkin cold brew | Dunkin Cold Brew | Dunkin' Medium Latte | restaurant | restaurant | Dunkin' official nutrition | Very High | miss | FAIL | Expected Dunkin Cold Brew; got Dunkin' Medium Latte. |
 | 36 | Dunkin Wake-Up Wrap | I had Dunkin wake-up wrap | Dunkin Wake-Up Wrap | Dunkin' Medium Latte | restaurant | restaurant | Dunkin' official nutrition | Very High | miss | FAIL | Expected Dunkin Wake-Up Wrap; got Dunkin' Medium Latte. |
 | 37 | Taco Bell Crunchwrap Supreme | I had Taco Bell Crunchwrap Supreme | Taco Bell Crunchwrap Supreme | Taco Bell Crunchwrap Supreme | restaurant | restaurant | Taco Bell nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
 | 38 | Taco Bell Soft Taco | I had Taco Bell soft taco | Taco Bell Soft Taco | Taco Bell Spicy Potato Soft Taco | restaurant | restaurant | Taco Bell official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 39 | Wendy's Dave's Single | I had Wendy's Dave's Single | Wendy's Dave's Single | Chick-fil-A Chicken Sandwich | restaurant | restaurant | Chick-fil-A official nutrition | Very High | miss | FAIL | Expected Wendy's Dave's Single; got Chick-fil-A Chicken Sandwich. |
+| 39 | Wendy's Dave's Single | I had Wendy's Dave's Single | Wendy's Dave's Single | Wendy's Spicy Chicken Sandwich | restaurant | restaurant | Wendy's official nutrition | Very High | miss | FAIL | Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich. |
 | 40 | Wendy's Spicy Chicken Sandwich | I had Wendy's spicy chicken sandwich | Wendy's Spicy Chicken Sandwich | Wendy's Spicy Chicken Sandwich | restaurant | restaurant | Wendy's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 41 | Panera Mac and Cheese | I had Panera mac and cheese | Panera Mac and Cheese | Panera Mac and Cheese | restaurant | restaurant | Panera official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 42 | Subway Turkey Footlong | I had Subway turkey footlong | Subway Turkey Footlong | Subway Turkey Footlong | restaurant | restaurant | Subway official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
@@ -204,8 +204,8 @@ This report measures the current deterministic nutrition pipeline against the Ph
 | 86 | coke zerro | I had coke zerro | Coke Zero | Coke | branded | branded | Coca-Cola common serving estimate | High | miss | FAIL | Expected Coke Zero; got Coke. |
 | 87 | dr peper zero | I had dr peper zero | Dr Pepper Zero | Dr Pepper Zero | branded | branded | Dr Pepper nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 88 | panda expres orange chicken | I had panda expres orange chicken | Panda Express Orange Chicken | Chicken | branded | branded | Chicken common serving estimate | High | miss | FAIL | Expected Panda Express Orange Chicken; got Chicken. |
-| 89 | tacobell crunch wrap | I had tacobell crunch wrap | Taco Bell Crunchwrap | Taco Bell Crunchwrap Supreme | branded | estimated | Taco Bell nutrition reference | Low | exact | FAIL | Expected Taco Bell Crunchwrap; got Taco Bell Crunchwrap Supreme. |
-| 90 | wendys daves single | I had wendys daves single | Wendy's Dave's Single | Chick-fil-A Chicken Sandwich | branded | restaurant | Chick-fil-A official nutrition | Very High | miss | FAIL | Expected Wendy's Dave's Single; got Chick-fil-A Chicken Sandwich. |
+| 89 | tacobell crunch wrap | I had tacobell crunch wrap | Taco Bell Crunchwrap | Taco Bell Crunchwrap Supreme | branded | restaurant | Taco Bell nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
+| 90 | wendys daves single | I had wendys daves single | Wendy's Dave's Single | Wendy's Spicy Chicken Sandwich | branded | restaurant | Wendy's official nutrition | Very High | miss | FAIL | Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich. |
 | 91 | subway turky footlong | I had subway turky footlong | Subway Turkey Footlong | Subway Turkey Footlong | branded | restaurant | Subway official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 92 | kodiac cakes | I had kodiac cakes | Kodiak Cakes | Kodiak Cakes Protein Pancake Mix | branded | branded | Kodiak Cakes nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 93 | gold fish crackers | I had gold fish crackers | Goldfish Crackers | Goldfish Crackers | branded | branded | Goldfish nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |

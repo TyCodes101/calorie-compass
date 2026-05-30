@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-29T23:32:30.356Z",
+  "generatedAt": "2026-05-30T00:44:30.511Z",
   "summary": {
     "branded": {
       "total": 25,
@@ -13,11 +13,11 @@
     },
     "restaurant": {
       "total": 25,
-      "passed": 19,
-      "failed": 6,
+      "passed": 20,
+      "failed": 5,
       "exactMatchPercentage": 60,
       "brandedMatchPercentage": 0,
-      "restaurantMatchPercentage": 92,
+      "restaurantMatchPercentage": 96,
       "genericFallbackPercentage": 0,
       "correctionSuccessPercentage": null
     },
@@ -33,11 +33,11 @@
     },
     "typo": {
       "total": 25,
-      "passed": 18,
-      "failed": 7,
+      "passed": 19,
+      "failed": 6,
       "exactMatchPercentage": 68,
       "brandedMatchPercentage": 72,
-      "restaurantMatchPercentage": 16,
+      "restaurantMatchPercentage": 20,
       "genericFallbackPercentage": 0,
       "correctionSuccessPercentage": null
     },
@@ -522,12 +522,12 @@
       "expectedIdentity": "Starbucks Grande Pink Drink",
       "actualIdentity": "Starbucks Grande Pink Drink",
       "expectedCategory": "restaurant",
-      "actualCategory": "estimated",
+      "actualCategory": "restaurant",
       "sourceUsed": "Starbucks nutrition reference",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "High",
       "matchType": "exact",
-      "passed": false,
-      "notes": "Expected Starbucks Grande Pink Drink; got Starbucks Grande Pink Drink."
+      "passed": true,
+      "notes": "Pass under current benchmark criteria."
     },
     {
       "name": "Dunkin Cold Brew",
@@ -590,14 +590,14 @@
       "category": "restaurant",
       "prompt": "I had Wendy's Dave's Single",
       "expectedIdentity": "Wendy's Dave's Single",
-      "actualIdentity": "Chick-fil-A Chicken Sandwich",
+      "actualIdentity": "Wendy's Spicy Chicken Sandwich",
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
-      "sourceUsed": "Chick-fil-A official nutrition",
+      "sourceUsed": "Wendy's official nutrition",
       "confidenceLabel": "Very High",
       "matchType": "miss",
       "passed": false,
-      "notes": "Expected Wendy's Dave's Single; got Chick-fil-A Chicken Sandwich."
+      "notes": "Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich."
     },
     {
       "name": "Wendy's Spicy Chicken Sandwich",
@@ -1292,26 +1292,26 @@
       "expectedIdentity": "Taco Bell Crunchwrap",
       "actualIdentity": "Taco Bell Crunchwrap Supreme",
       "expectedCategory": "branded",
-      "actualCategory": "estimated",
+      "actualCategory": "restaurant",
       "sourceUsed": "Taco Bell nutrition reference",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "High",
       "matchType": "exact",
-      "passed": false,
-      "notes": "Expected Taco Bell Crunchwrap; got Taco Bell Crunchwrap Supreme."
+      "passed": true,
+      "notes": "Pass under current benchmark criteria."
     },
     {
       "name": "wendys daves single",
       "category": "typo",
       "prompt": "I had wendys daves single",
       "expectedIdentity": "Wendy's Dave's Single",
-      "actualIdentity": "Chick-fil-A Chicken Sandwich",
+      "actualIdentity": "Wendy's Spicy Chicken Sandwich",
       "expectedCategory": "branded",
       "actualCategory": "restaurant",
-      "sourceUsed": "Chick-fil-A official nutrition",
+      "sourceUsed": "Wendy's official nutrition",
       "confidenceLabel": "Very High",
       "matchType": "miss",
       "passed": false,
-      "notes": "Expected Wendy's Dave's Single; got Chick-fil-A Chicken Sandwich."
+      "notes": "Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich."
     },
     {
       "name": "subway turky footlong",

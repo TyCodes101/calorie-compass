@@ -108,6 +108,63 @@ function decorateEstimatedItem(item: ParsedFoodItem, originalUserText: string): 
   };
 }
 
+const restaurantBrands = new Set([
+  'CAVA',
+  'Chick-fil-A',
+  'Chipotle',
+  'Dunkin',
+  "McDonald's",
+  'Panda Express',
+  'Panera',
+  'Starbucks',
+  'Subway',
+  'Taco Bell',
+  'Texas Roadhouse',
+  "Wendy's",
+]);
+
+function normalizeComparableText(text: string | null | undefined) {
+  return (text ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function brandTokens(brandHint: string) {
+  const normalized = normalizeComparableText(brandHint);
+  if (normalized === 'mcdonald s') return ['mcdonald', 'mcdonalds'];
+  if (normalized === 'wendy s') return ['wendy', 'wendys'];
+  if (normalized === 'chick fil a') return ['chick', 'fil'];
+  return normalized.split(' ').filter((token) => token.length > 1);
+}
+
+function responseMatchesBrand(response: ParsedMealResponse | null, brandHint: string | null) {
+  if (!response || !brandHint) return true;
+  const tokens = brandTokens(brandHint);
+  return response.items.some((item) => {
+    const haystack = normalizeComparableText(`${item.food_name} ${item.source_name ?? ''} ${item.notes ?? ''}`);
+    return tokens.every((token) => haystack.includes(token));
+  });
+}
+
+function makeClarificationResponse(input: NutritionLookupInput, question: string) {
+  return normalizeParsedMealResponse({
+    needs_clarification: true,
+    clarifying_question: question,
+    meal_type: input.mealType,
+    confidence_score: 0.35,
+    items: [],
+  });
+}
+
+function shouldClarifyUnresolvedBrand(brandHint: string | null, searchText: string) {
+  if (!brandHint) return false;
+  if (restaurantBrands.has(brandHint)) return true;
+  const normalizedSearch = normalizeComparableText(searchText);
+  return normalizedSearch.split(' ').length >= 2;
+}
+
 export async function lookupNutrition(
   input: NutritionLookupInput,
   options?: {
@@ -127,13 +184,39 @@ export async function lookupNutrition(
     normalizedQuery,
   };
 
+  const usingDefaultProviders = !options?.providers;
   const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, commercialDatabaseProvider];
+  const [primaryProvider, ...supportingProviders] = providers;
+  const primaryResult = primaryProvider ? await primaryProvider.lookup(context) : null;
 
-  for (const provider of providers) {
+  if (primaryResult) {
+    return primaryResult;
+  }
+
+  const shouldProtectBrandIntent = usingDefaultProviders
+    && shouldClarifyUnresolvedBrand(normalizedQuery.brandHint, normalizedQuery.searchText);
+
+  for (const provider of supportingProviders) {
     const result = await provider.lookup(context);
-    if (result) {
-      return result;
+    if (!result) {
+      continue;
     }
+
+    if (shouldProtectBrandIntent && !responseMatchesBrand(result, normalizedQuery.brandHint)) {
+      return makeClarificationResponse(
+        input,
+        `I found possible nutrition data, but not a clear ${normalizedQuery.brandHint} match. Which exact item or serving should I use?`,
+      );
+    }
+
+    return result;
+  }
+
+  if (shouldProtectBrandIntent) {
+    return makeClarificationResponse(
+      input,
+      `I could not find a clear ${normalizedQuery.brandHint} match. Which exact item or serving should I use?`,
+    );
   }
 
   if (options?.aiEstimateProvider) {

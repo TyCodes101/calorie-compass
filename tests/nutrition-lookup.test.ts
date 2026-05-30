@@ -481,6 +481,74 @@ describe('lookupNutrition', () => {
     expect(response.totals.calories).toBe(730);
   });
 
+
+  it('asks for clarification instead of using an unsupported restaurant or brand mismatch', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Chick-fil-A Chicken Sandwich',
+            brandOwner: 'Chick-fil-A',
+            dataType: 'Branded',
+            servingSize: 1,
+            servingSizeUnit: 'sandwich',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 420 },
+              { nutrientName: 'Protein', value: 29 },
+              { nutrientName: 'Carbohydrate, by difference', value: 41 },
+              { nutrientName: 'Total lipid (fat)', value: 18 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: "Wendy's Dave's Single", mealType: 'lunch' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response).toMatchObject({
+      needs_clarification: true,
+      items: [],
+    });
+    expect(response?.clarifying_question).toMatch(/Wendy's/i);
+  });
+
+  it('uses supporting USDA data only when it matches the requested brand intent', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Dunkin Cold Brew Coffee',
+            brandOwner: 'Dunkin',
+            dataType: 'Branded',
+            servingSize: 1,
+            servingSizeUnit: 'medium',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 5 },
+              { nutrientName: 'Protein', value: 0 },
+              { nutrientName: 'Carbohydrate, by difference', value: 1 },
+              { nutrientName: 'Total lipid (fat)', value: 0 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'Dunkin cold brew', mealType: 'snack' });
+
+    expect(response?.needs_clarification).toBe(false);
+    expect(response?.items[0]).toMatchObject({
+      food_name: 'Dunkin Dunkin Cold Brew Coffee',
+      provider_used: 'usda-fdc',
+    });
+  });
+
   it('uses AI only after database providers fail, and not before', async () => {
     vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
     const fetchMock = installUsdaFetchMock();
