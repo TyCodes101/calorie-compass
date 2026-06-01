@@ -29,22 +29,16 @@ struct MealManagementView: View {
     @State private var error: String?
     @State private var mutationMessage: String?
     @State private var inFlightMealID: String?
+    @State private var searchText = ""
+    @State private var selectedMealType: MealTypeOption?
 
     var body: some View {
         NavigationView {
             MacroMeshScreen {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        AppCard(padding: 20) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Meal history")
-                                    .font(.largeTitle.weight(.bold))
-                                    .foregroundColor(MacroMeshTheme.text)
-                                Text("Review and manage meals saved from Log.")
-                                    .font(.subheadline)
-                                    .foregroundColor(MacroMeshTheme.muted)
-                            }
-                        }
+                        historyHero
+                        historyControls
 
                         if loading && meals.isEmpty {
                             EmptyStateCard(icon: "clock.arrow.circlepath", title: "Loading meals", message: "Your saved meals will appear here in a moment.", buttonTitle: nil, action: nil)
@@ -53,20 +47,19 @@ struct MealManagementView: View {
                             EmptyStateCard(icon: "wifi.exclamationmark", title: "Meals unavailable", message: error, buttonTitle: "Retry", action: loadMeals)
                         } else if meals.isEmpty {
                             EmptyStateCard(icon: "fork.knife.circle.fill", title: "No saved meals yet", message: "Meals you save from Log will appear here as a clean history of your day.", buttonTitle: "Log a meal", action: openLog)
+                        } else if filteredMeals.isEmpty {
+                            EmptyStateCard(icon: "magnifyingglass", title: "No matching meals", message: "Try a different search or filter.", buttonTitle: nil, action: nil)
                         } else {
-                            VStack(spacing: 12) {
-                                ForEach(meals) { meal in
-                                    NavigationLink(destination: MealDetailView(meal: meal, isMutating: inFlightMealID == meal.stableID, onSave: updateMeal, onDelete: deleteMeal)) {
-                                        MealHistoryCard(meal: meal)
-                                    }
-                                    .buttonStyle(.plain)
+                            VStack(alignment: .leading, spacing: 16) {
+                                ForEach(groupedMealDays) { group in
+                                    DailyMealSection(group: group, inFlightMealID: inFlightMealID, updateMeal: updateMeal, deleteMeal: deleteMeal)
                                 }
                             }
                         }
                     }
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, MacroMeshSpacing.screenHorizontal)
                     .padding(.top, 12)
-                    .padding(.bottom, 88)
+                    .padding(.bottom, MacroMeshSpacing.bottomPadding)
                     .refreshable { refreshMeals() }
                 }
             }
@@ -93,6 +86,83 @@ struct MealManagementView: View {
             }
             .onAppear(perform: loadMeals)
         }
+    }
+
+    private var historyHero: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("History")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .textCase(.uppercase)
+                Text("Saved meals")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundColor(MacroMeshTheme.text)
+                Text("Search, filter, and inspect the meals that shaped each day.")
+                    .font(.subheadline)
+                    .foregroundColor(MacroMeshTheme.muted)
+            }
+            Spacer()
+            InsightPill(title: "Meals", value: "\(meals.count)", tint: MacroMeshTheme.primary, systemImage: "clock.fill")
+        }
+    }
+
+    private var historyControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(MacroMeshTheme.muted)
+                TextField("Search foods or meals", text: $searchText)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+            }
+            .padding(12)
+            .background(MacroMeshTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: MacroMeshRadius.md, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: MacroMeshRadius.md, style: .continuous)
+                    .stroke(MacroMeshTheme.border, lineWidth: 1)
+            )
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    MealFilterChip(title: "All", selected: selectedMealType == nil) {
+                        selectedMealType = nil
+                    }
+                    ForEach(MealTypeOption.allCases) { option in
+                        MealFilterChip(title: option.label, selected: selectedMealType == option) {
+                            selectedMealType = option
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var filteredMeals: [MealResponse] {
+        meals.filter { meal in
+            let typeMatches = selectedMealType.map { meal.normalizedMealType == $0.rawValue } ?? true
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let searchMatches = query.isEmpty || meal.searchableText.contains(query)
+            return typeMatches && searchMatches
+        }
+    }
+
+    private var groupedMealDays: [MealDayGroup] {
+        let calendar = Calendar.current
+        let groups = Dictionary(grouping: filteredMeals) { meal -> Date in
+            let date = DateParser.parseMealDate(meal.date ?? meal.createdAt) ?? Date.distantPast
+            return calendar.startOfDay(for: date)
+        }
+
+        return groups
+            .map { day, meals in
+                MealDayGroup(
+                    day: day,
+                    meals: meals.sorted { ($0.date ?? $0.createdAt ?? "") > ($1.date ?? $1.createdAt ?? "") }
+                )
+            }
+            .sorted { $0.day > $1.day }
     }
 
     private func openLog() {
@@ -170,6 +240,80 @@ struct MealManagementView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     error = err.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+struct MealDayGroup: Identifiable {
+    let day: Date
+    let meals: [MealResponse]
+
+    var id: TimeInterval { day.timeIntervalSince1970 }
+    var calories: Double { meals.reduce(0) { $0 + $1.safeTotalCalories } }
+    var protein: Double { meals.reduce(0) { $0 + $1.safeTotalProtein } }
+
+    var title: String {
+        if Calendar.current.isDateInToday(day) {
+            return "Today"
+        }
+        if Calendar.current.isDateInYesterday(day) {
+            return "Yesterday"
+        }
+        return DateFormatter.historySection.string(from: day)
+    }
+}
+
+struct MealFilterChip: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(selected ? .white : MacroMeshTheme.primaryDark)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(selected ? MacroMeshTheme.primary : MacroMeshTheme.cardSubtle)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct DailyMealSection: View {
+    let group: MealDayGroup
+    let inFlightMealID: String?
+    let updateMeal: (MealResponse, PostMealRequest) -> Void
+    let deleteMeal: (MealResponse) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.title)
+                        .font(.headline.weight(.bold))
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text("\(group.meals.count) meal\(group.meals.count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+                Spacer()
+                HStack(spacing: 8) {
+                    InsightPill(title: "Calories", value: "\(Int(group.calories))", tint: MacroMeshTheme.primary, systemImage: "flame.fill")
+                    InsightPill(title: "Protein", value: "\(Int(group.protein))g", tint: MacroMeshTheme.blue, systemImage: "bolt.fill")
+                }
+            }
+
+            VStack(spacing: 10) {
+                ForEach(group.meals) { meal in
+                    NavigationLink(destination: MealDetailView(meal: meal, isMutating: inFlightMealID == meal.stableID, onSave: updateMeal, onDelete: deleteMeal)) {
+                        MealHistoryCard(meal: meal)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -550,6 +694,13 @@ extension MealResponse {
         guard let parsed = DateParser.parseMealDate(date ?? createdAt) else { return "Date unavailable" }
         return DateFormatter.mealDisplay.string(from: parsed)
     }
+    var searchableText: String {
+        let itemText = (items ?? [])
+            .map { "\($0.food_name) \($0.unit)" }
+            .joined(separator: " ")
+        return "\(displayTitle) \(displayMealType) \(displayDate) \(itemText)"
+            .lowercased()
+    }
 }
 
 extension NumberFormatter {
@@ -566,6 +717,13 @@ extension DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
+        return formatter
+    }
+
+    static var historySection: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        formatter.timeStyle = .none
         return formatter
     }
 }

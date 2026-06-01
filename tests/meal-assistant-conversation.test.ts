@@ -2398,6 +2398,18 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).not.toMatch(/100g|candies|mars|usda/i);
   });
 
+  it('uses a natural Snickers bar serving for the exact TestFlight prompt', async () => {
+    const [response] = await runConversation(['A Snickers']);
+    const item = response.meal.items[0];
+
+    expect(item?.food_name).toBe('Snickers Bar');
+    expect(item?.quantity).toBe(1);
+    expect(item?.unit).toBe('bar');
+    expect(item?.calories).toBeLessThan(320);
+    expect(response.assistant_reply).toMatch(/Snickers/i);
+    expect(response.assistant_reply).not.toMatch(/100g|candies|mars|usda/i);
+  });
+
   it('uses one full baked potato for a baked potato by default', async () => {
     const [response] = await runConversation(['A baked potato']);
     const item = response.meal.items[0];
@@ -2406,6 +2418,18 @@ describe('meal assistant conversational coverage', () => {
     expect(item?.quantity).toBe(1);
     expect(item?.unit).toMatch(/potato/i);
     expect(response.assistant_reply).not.toMatch(/\b1 cup potatoes\b|100g|usda/i);
+  });
+
+  it('replaces active Snickers with the exact TestFlight Skittles correction', async () => {
+    const responses = await runConversation(['A Snickers', 'A skittles pack i meant']);
+    const correction = responses[1];
+
+    expect(correction?.intent).toBe('correction');
+    expect(correction?.meal.items).toHaveLength(1);
+    expect(correction?.meal.items[0]?.food_name).toBe('Skittles Candy');
+    expect(correction?.next_state.currentMealItems[0]?.food_name).toBe('Skittles Candy');
+    expect(correction?.assistant_reply).toMatch(/Skittles/i);
+    expect(correction?.assistant_reply).not.toMatch(/removed|snickers|100g|candies|mars|usda|need a little more detail/i);
   });
 
   it('treats suffix "I meant" as a replacement correction', async () => {

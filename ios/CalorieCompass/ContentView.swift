@@ -27,16 +27,16 @@ struct ContentView: View {
             MacroMeshScreen {
                 TabView(selection: $selectedTab) {
                     DashboardView()
-                        .tabItem { Label("Today", systemImage: "house") }
+                        .tabItem { Label("Today", systemImage: "chart.pie.fill") }
                         .tag(MainTab.today)
                     LogChatView()
-                        .tabItem { Label("Log", systemImage: "plus.bubble") }
+                        .tabItem { Label("Log", systemImage: "plus.bubble.fill") }
                         .tag(MainTab.log)
                     HistoryView()
-                        .tabItem { Label("History", systemImage: "clock") }
+                        .tabItem { Label("History", systemImage: "calendar") }
                         .tag(MainTab.history)
                     ProfileView()
-                        .tabItem { Label("Profile", systemImage: "person") }
+                        .tabItem { Label("Profile", systemImage: "person.crop.circle") }
                         .tag(MainTab.profile)
                 }
                 .tint(MacroMeshTheme.primary)

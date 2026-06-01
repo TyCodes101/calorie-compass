@@ -80,6 +80,10 @@ struct ProfileView: View {
                                 )
                             } else {
                                 ProfileSummaryCard(profile: profile, isGuest: sessionStore.state.authSession.isGuest)
+                                ProfileGoalProgressCard(profile: profile)
+                                ProfileMacroGoalsCard(profile: profile)
+                                ProfileWeightTrendCard(profile: profile)
+                                ProfilePreferenceCard(profile: profile)
                                 Button {
                                     dirtyProfile = profile; editing = true
                                 } label: {
@@ -405,6 +409,157 @@ struct ProfileDecimalField: View {
     }
 }
 
+struct ProfileGoalProgressCard: View {
+    let profile: ProfileData?
+
+    private var calorieGoal: Double { Double(profile?.dailyCalorieGoal ?? 2200) }
+    private var proteinGoal: Double { Double(profile?.proteinGoal ?? 160) }
+    private var completedFields: Double {
+        Double([
+            profile?.dailyCalorieGoal != nil,
+            profile?.proteinGoal != nil,
+            profile?.weightLbs != nil,
+            profile?.nutritionPreferences?.nilIfBlank != nil,
+        ].filter { $0 }.count)
+    }
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeader("Goal setup", subtitle: "Complete profile details improve estimates and daily targets.")
+                HStack(alignment: .center, spacing: 12) {
+                    IconBadge(systemName: "target", tint: MacroMeshTheme.primary, size: 42)
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack {
+                            Text("\(Int(completedFields))/4 complete")
+                                .font(.headline.weight(.bold))
+                                .foregroundColor(MacroMeshTheme.text)
+                            Spacer()
+                            Text("\(Int((completedFields / 4) * 100))%")
+                                .font(.caption.weight(.bold))
+                                .foregroundColor(MacroMeshTheme.primary)
+                        }
+                        ProgressView(value: completedFields, total: 4)
+                            .tint(MacroMeshTheme.primary)
+                    }
+                }
+                HStack(spacing: 8) {
+                    InsightPill(title: "Daily target", value: "\(Int(calorieGoal)) cal", tint: MacroMeshTheme.primary, systemImage: "target")
+                    InsightPill(title: "Protein target", value: "\(Int(proteinGoal))g", tint: MacroMeshTheme.blue, systemImage: "bolt.fill")
+                }
+            }
+        }
+    }
+}
+
+struct ProfileMacroGoalsCard: View {
+    let profile: ProfileData?
+
+    private var calories: Double { Double(profile?.dailyCalorieGoal ?? 2200) }
+    private var protein: Double { Double(profile?.proteinGoal ?? 160) }
+    private var carbsGoal: Double { max((calories - protein * 4 - 70 * 9) / 4, 120) }
+    private var fatGoal: Double { max((calories * 0.28) / 9, 45) }
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeader("Macro goals")
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ProfileGoalTile(title: "Protein", value: "\(Int(protein))g", tint: MacroMeshTheme.protein, icon: "bolt.fill")
+                    ProfileGoalTile(title: "Carbs", value: "\(Int(carbsGoal))g", tint: MacroMeshTheme.carbs, icon: "flame.fill")
+                    ProfileGoalTile(title: "Fat", value: "\(Int(fatGoal))g", tint: MacroMeshTheme.fat, icon: "drop.fill")
+                    ProfileGoalTile(title: "Calories", value: "\(Int(calories))", tint: MacroMeshTheme.blue, icon: "target")
+                }
+            }
+        }
+    }
+}
+
+struct ProfileGoalTile: View {
+    let title: String
+    let value: String
+    let tint: Color
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            IconBadge(systemName: icon, tint: tint, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
+                Text(value)
+                    .font(.headline.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.text)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.09))
+        .clipShape(RoundedRectangle(cornerRadius: MacroMeshRadius.md, style: .continuous))
+    }
+}
+
+struct ProfileWeightTrendCard: View {
+    let profile: ProfileData?
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 13) {
+                SectionHeader("Weight trend", subtitle: "A cleaner snapshot today; check-ins can fill this chart later.")
+                HStack(alignment: .bottom, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(profile?.weightLbs.map { "\(Int($0)) lbs" } ?? "Add weight")
+                            .font(.system(size: 30, weight: .bold, design: .rounded))
+                            .foregroundColor(MacroMeshTheme.text)
+                        Text(profile?.goal?.goalLabel ?? "Maintain")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(MacroMeshTheme.muted)
+                    }
+                    Spacer()
+                    MiniTrendBars()
+                        .frame(width: 112, height: 46)
+                }
+            }
+        }
+    }
+}
+
+struct MiniTrendBars: View {
+    private let values: [CGFloat] = [0.46, 0.58, 0.52, 0.66, 0.62, 0.74, 0.70]
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 5) {
+            ForEach(Array(values.enumerated()), id: \.offset) { _, value in
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(MacroMeshTheme.primary.opacity(0.25 + Double(value) * 0.45))
+                    .frame(width: 10, height: 44 * value)
+            }
+        }
+    }
+}
+
+struct ProfilePreferenceCard: View {
+    let profile: ProfileData?
+
+    var body: some View {
+        AppCard(padding: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                IconBadge(systemName: "slider.horizontal.3", tint: MacroMeshTheme.orange, size: 36)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Preferences")
+                        .font(.headline.weight(.bold))
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text(profile?.nutritionPreferences?.nilIfBlank ?? "Add cuisine, diet, allergies, or coaching style preferences.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
 struct ProfileSummaryCard: View {
     let profile: ProfileData?
     let isGuest: Bool
@@ -489,6 +644,13 @@ extension String {
     }
 
     var nilIfBlankForTesting: String? { nilIfBlank }
+
+    var goalLabel: String {
+        lowercased()
+            .split(separator: "_")
+            .map { part in part.prefix(1).uppercased() + String(part.dropFirst()) }
+            .joined(separator: " ")
+    }
 }
 
 struct AccountSignInEntryPoint: View {

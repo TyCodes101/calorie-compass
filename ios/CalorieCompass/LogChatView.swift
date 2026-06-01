@@ -29,12 +29,14 @@ struct LogChatView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
                             introCard
+                            if !reviewItems.isEmpty {
+                                ActiveReviewSummary(items: reviewItems)
+                            }
                             ForEach(Array(messages.enumerated()), id: \.offset) { _, msg in
                                 ChatBubble(role: msg.role, text: msg.text)
                             }
                             if isLoading {
-                                ChatBubble(role: "assistant", text: "Checking that...")
-                                    .redacted(reason: .placeholder)
+                                AssistantTypingBubble()
                             }
                             if showReviewCard {
                                 MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
@@ -66,23 +68,35 @@ struct LogChatView: View {
 
     private var introCard: some View {
         AppCard(padding: 18) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Log")
-                    .font(.caption.weight(.bold))
-                    .foregroundColor(MacroMeshTheme.primary)
-                    .textCase(.uppercase)
-                    .tracking(1.1)
-                Text("What did you eat?")
-                    .font(.title.weight(.bold))
-                    .foregroundColor(MacroMeshTheme.text)
-                Text(sessionStore.state.isPreparingSession ? "Setting up your guest session. You can type now and send in a moment." : "Type it naturally. You will review before saving.")
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 12) {
+                    IconBadge(systemName: "plus.bubble.fill", tint: MacroMeshTheme.primary, size: 42)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Log")
+                            .font(.caption.weight(.bold))
+                            .foregroundColor(MacroMeshTheme.primary)
+                            .textCase(.uppercase)
+                        Text("Tell MacroMesh what you ate")
+                            .font(.title2.weight(.bold))
+                            .foregroundColor(MacroMeshTheme.text)
+                    }
+                }
+                Text(sessionStore.state.isPreparingSession ? "Guest mode is setting up. Draft naturally and send in a moment." : "Use normal language. MacroMesh builds the review card, then you decide what gets saved.")
                     .font(.subheadline)
                     .foregroundColor(MacroMeshTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        PromptChip(text: "A Snickers")
-                        PromptChip(text: "Baked potato")
-                        PromptChip(text: "Greek yogurt bowl")
+                        ForEach(["Quest BBQ protein chips", "A Snickers", "Greek yogurt bowl", "Baked potato"], id: \.self) { prompt in
+                            Button {
+                                inputText = prompt
+                                mealInputFocused = true
+                            } label: {
+                                PromptChip(text: prompt)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Use suggestion \(prompt)")
+                        }
                     }
                 }
             }
@@ -118,8 +132,8 @@ struct LogChatView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)
-        .padding(.bottom, 10)
-        .background(.ultraThinMaterial)
+        .padding(.bottom, 12)
+        .background(.thinMaterial)
     }
 
     func sendMessage(retryText: String? = nil) {
@@ -316,13 +330,82 @@ struct PromptChip: View {
     let text: String
 
     var body: some View {
-        Text(text)
-            .font(.caption.weight(.medium))
-            .foregroundColor(MacroMeshTheme.primaryDark)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(MacroMeshTheme.cardSubtle)
-            .clipShape(Capsule())
+        HStack(spacing: 6) {
+            Image(systemName: "sparkles")
+                .font(.caption2.weight(.bold))
+            Text(text)
+                .font(.caption.weight(.medium))
+        }
+        .foregroundColor(MacroMeshTheme.primaryDark)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(MacroMeshTheme.cardSubtle)
+        .overlay(
+            Capsule()
+                .stroke(MacroMeshTheme.primary.opacity(0.08), lineWidth: 1)
+        )
+        .clipShape(Capsule())
+    }
+}
+
+struct ActiveReviewSummary: View {
+    let items: [MealItem]
+
+    private var calories: Double { items.reduce(0) { $0 + $1.calories } }
+    private var protein: Double { items.reduce(0) { $0 + $1.protein } }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconBadge(systemName: "checklist.checked", tint: MacroMeshTheme.blue, size: 36)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Active review")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.blue)
+                    .textCase(.uppercase)
+                Text(items.map(\.displayName).prefix(2).joined(separator: ", "))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.text)
+                    .lineLimit(1)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(calories))")
+                    .font(.headline.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.primary)
+                Text("\(Int(protein))g protein")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
+            }
+        }
+        .padding(14)
+        .background(MacroMeshTheme.cardCool)
+        .clipShape(RoundedRectangle(cornerRadius: MacroMeshRadius.lg, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: MacroMeshRadius.lg, style: .continuous)
+                .stroke(MacroMeshTheme.border, lineWidth: 1)
+        )
+    }
+}
+
+struct AssistantTypingBubble: View {
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            IconBadge(systemName: "leaf.fill", tint: MacroMeshTheme.primary, size: 28)
+            HStack(spacing: 6) {
+                ProgressView()
+                    .tint(MacroMeshTheme.primary)
+                    .scaleEffect(0.72)
+                Text("Checking serving and source...")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(MacroMeshTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: MacroMeshRadius.md, style: .continuous))
+            Spacer(minLength: 50)
+        }
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 }
 
@@ -349,16 +432,20 @@ struct ChatBubble: View {
     private var displayText: String { isUser ? text : MealAssistantDisplayCopy.clean(text) }
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        HStack(alignment: .bottom, spacing: 8) {
             if isUser { Spacer(minLength: 50) }
+            if !isUser {
+                IconBadge(systemName: "leaf.fill", tint: MacroMeshTheme.primary, size: 28)
+            }
             Text(displayText)
                 .font(.subheadline)
                 .foregroundColor(isUser ? .white : MacroMeshTheme.text)
-                .padding(12)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 11)
                 .frame(maxWidth: 310, alignment: isUser ? .trailing : .leading)
                 .background(isUser ? MacroMeshTheme.primary : MacroMeshTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: MacroMeshTheme.shadow, radius: 8, x: 0, y: 5)
+                .clipShape(RoundedRectangle(cornerRadius: MacroMeshRadius.md, style: .continuous))
+                .shadow(color: isUser ? MacroMeshTheme.primary.opacity(0.18) : MacroMeshTheme.shadow, radius: 8, x: 0, y: 5)
             if !isUser { Spacer(minLength: 50) }
         }
     }

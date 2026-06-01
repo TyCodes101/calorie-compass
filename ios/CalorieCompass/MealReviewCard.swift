@@ -181,27 +181,22 @@ struct MealReviewCard: View {
         if !showCard {
             EmptyView()
         } else {
-            AppCard(padding: 16) {
-                VStack(alignment: .leading, spacing: 14) {
+            AppCard(padding: 15) {
+                VStack(alignment: .leading, spacing: 13) {
                     HStack(alignment: .center, spacing: 12) {
-                        Image(systemName: "checklist.checked")
-                            .font(.title3.weight(.semibold))
-                            .foregroundColor(MacroMeshTheme.primary)
-                            .frame(width: 34, height: 34)
-                            .background(MacroMeshTheme.cardSubtle)
-                            .clipShape(Circle())
+                        IconBadge(systemName: "checklist.checked", tint: MacroMeshTheme.primary, size: 36)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Review meal")
-                                .font(.title3.weight(.bold))
+                            Text("Ready to save?")
+                                .font(.headline.weight(.bold))
                                 .foregroundColor(MacroMeshTheme.text)
-                            Text("Confirm before anything is saved.")
+                            Text("Adjust the draft first if serving or source looks off.")
                                 .font(.caption)
                                 .foregroundColor(MacroMeshTheme.muted)
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
                             Text("\(Int(totalCalories))")
-                                .font(.title3.weight(.bold))
+                                .font(.system(size: 24, weight: .bold, design: .rounded))
                                 .foregroundColor(MacroMeshTheme.primary)
                             Text("cal")
                                 .font(.caption2.weight(.semibold))
@@ -210,9 +205,9 @@ struct MealReviewCard: View {
                     }
 
                     HStack(spacing: 8) {
-                        ReviewMacroPill(label: "Protein", value: totalProtein)
-                        ReviewMacroPill(label: "Carbs", value: totalCarbs)
-                        ReviewMacroPill(label: "Fat", value: totalFat)
+                        ReviewMacroPill(label: "Protein", value: totalProtein, tint: MacroMeshTheme.protein)
+                        ReviewMacroPill(label: "Carbs", value: totalCarbs, tint: MacroMeshTheme.carbs)
+                        ReviewMacroPill(label: "Fat", value: totalFat, tint: MacroMeshTheme.fat)
                     }
 
                     VStack(spacing: 8) {
@@ -223,13 +218,20 @@ struct MealReviewCard: View {
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundColor(MacroMeshTheme.text)
                                         .lineLimit(2)
-                                    Text("\(items[idx].displayServing) | \(Int(items[idx].calories)) cal")
-                                        .font(.caption)
-                                        .foregroundColor(MacroMeshTheme.muted)
+                                    HStack(spacing: 7) {
+                                        Label(items[idx].displayServing, systemImage: "scalemass")
+                                        Text("\(Int(items[idx].calories)) cal")
+                                    }
+                                    .font(.caption)
+                                    .foregroundColor(MacroMeshTheme.muted)
                                     if let source = items[idx].displaySource {
                                         Text(source)
-                                            .font(.caption2.weight(.medium))
-                                            .foregroundColor(MacroMeshTheme.primaryDark.opacity(0.75))
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundColor(MacroMeshTheme.primaryDark)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(MacroMeshTheme.primary.opacity(0.09))
+                                            .clipShape(Capsule())
                                     }
                                 }
                                 Spacer()
@@ -241,8 +243,8 @@ struct MealReviewCard: View {
                                 .accessibilityLabel("Remove \(items[idx].displayName)")
                             }
                             .padding(12)
-                            .background(MacroMeshTheme.cardSubtle.opacity(0.78))
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(MacroMeshTheme.cardSubtle.opacity(0.72))
+                            .clipShape(RoundedRectangle(cornerRadius: MacroMeshRadius.md, style: .continuous))
                         }
                     }
 
@@ -251,10 +253,16 @@ struct MealReviewCard: View {
                     }
 
                     HStack(spacing: 12) {
-                        Button("Cancel", action: onCancel)
+                        Button(action: onCancel) {
+                            Label("Cancel", systemImage: "xmark")
+                        }
                             .buttonStyle(SecondaryCTAButtonStyle())
                         Button(action: saveMeal) {
-                            if isSaving { ProgressView().tint(.white) } else { Text("Save meal") }
+                            if isSaving {
+                                ProgressView().tint(.white)
+                            } else {
+                                Label("Save meal", systemImage: "checkmark")
+                            }
                         }
                         .buttonStyle(PrimaryCTAButtonStyle())
                         .disabled(isSaving || items.isEmpty)
@@ -277,6 +285,7 @@ struct MealReviewCard: View {
 struct ReviewMacroPill: View {
     let label: String
     let value: Double
+    let tint: Color
 
     var body: some View {
         VStack(spacing: 2) {
@@ -285,10 +294,10 @@ struct ReviewMacroPill: View {
             Text(label)
                 .font(.caption2)
         }
-        .foregroundColor(MacroMeshTheme.primaryDark)
+        .foregroundColor(MacroMeshTheme.text)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
-        .background(MacroMeshTheme.cardSubtle)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(tint.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: MacroMeshRadius.md, style: .continuous))
     }
 }
