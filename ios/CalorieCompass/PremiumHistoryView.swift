@@ -21,7 +21,7 @@ struct PremiumHistoryView: View {
                     ScrollView {
                         VStack(spacing: 32) {
                             // Group meals by date
-                            ForEach(groupedMealDates, id: \.self) { date in
+                            ForEach(groupedMealDates, id: \.self) { date in
                                 Section(header: HistoryDayHeaderCard(date: date, meals: mealsByDate[date] ?? [])) {
                                     VStack(spacing: 14) {
                                         ForEach(mealsByDate[date] ?? []) { meal in
