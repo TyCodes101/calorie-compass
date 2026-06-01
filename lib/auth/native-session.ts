@@ -4,12 +4,16 @@ import type { ActivityLevel, GoalType } from '@prisma/client';
 
 import type { VerifiedAppleIdentity } from '@/lib/auth/apple-token-verification';
 import { prisma } from '@/lib/prisma';
+import { defaultProfileSettings } from '@/lib/profile-settings';
 
 const nativeAuthProvider = 'apple';
 const nativeSessionTokenBytes = 32;
 export const nativeSessionTtlMs = 1000 * 60 * 60 * 24 * 30;
 
 type NativeSessionTransaction = {
+  user: {
+    create: (args: unknown) => Promise<SessionUserPayload>;
+  };
   userAuthProvider: {
     upsert: (args: unknown) => Promise<{
       userId: string;
@@ -73,6 +77,12 @@ export type IssuedNativeSession = {
   user: SessionUserPayload;
   provider: typeof nativeAuthProvider;
   providerSubject: string;
+};
+
+export type IssuedNativeGuestSession = {
+  token: string;
+  expiresAt: Date;
+  user: SessionUserPayload;
 };
 
 export type RevokeNativeSessionResult =
@@ -194,6 +204,53 @@ export async function issueNativeSessionForAppleIdentity({
       demo: result.user.demo,
     },
   };
+}
+
+export async function issueNativeGuestSession({
+  now = new Date(),
+  tokenFactory = generateNativeSessionToken,
+  client = nativeSessionPrisma,
+}: {
+  now?: Date;
+  tokenFactory?: () => string;
+  client?: NativeSessionPrisma;
+} = {}): Promise<IssuedNativeGuestSession> {
+  const token = tokenFactory();
+  const tokenHash = hashNativeSessionToken(token);
+  const expiresAt = getNativeSessionExpiresAt(now);
+
+  const user = await client.$transaction(async (tx) => {
+    const guest = await tx.user.create({
+      data: {
+        name: 'Guest',
+        demo: true,
+        profile: {
+          create: {
+            age: defaultProfileSettings.age ?? null,
+            heightCm: defaultProfileSettings.heightCm ?? null,
+            weightLbs: defaultProfileSettings.weightLbs ?? null,
+            goal: defaultProfileSettings.goal,
+            activityLevel: defaultProfileSettings.activityLevel,
+            dailyCalorieGoal: defaultProfileSettings.dailyCalorieGoal,
+            proteinGoal: defaultProfileSettings.proteinGoal,
+            aiPreferenceNotes: defaultProfileSettings.nutritionPreferences ?? null,
+          },
+        },
+      },
+    });
+
+    await tx.nativeSession.create({
+      data: {
+        userId: guest.id,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+    return guest;
+  });
+
+  return { token, expiresAt, user };
 }
 
 export async function getUserForNativeSessionToken(

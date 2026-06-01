@@ -3,6 +3,7 @@ import { cookies, headers } from 'next/headers';
 import { buildGuestUserEmail, getGuestPlaceholderName, guestSessionCookieName } from '@/lib/auth-session';
 import { getUserForNativeSessionToken } from '@/lib/auth/native-session';
 import { prisma } from '@/lib/prisma';
+import { defaultProfileSettings } from '@/lib/profile-settings';
 
 export function hasDatabaseConnectionString() {
   return Boolean(process.env.DATABASE_URL);
@@ -76,6 +77,46 @@ async function getOrCreateGuestUserWithProfile() {
       name: getGuestPlaceholderName(),
       email,
       demo: true,
+      profile: {
+        create: {
+          age: defaultProfileSettings.age ?? null,
+          heightCm: defaultProfileSettings.heightCm ?? null,
+          weightLbs: defaultProfileSettings.weightLbs ?? null,
+          goal: defaultProfileSettings.goal,
+          activityLevel: defaultProfileSettings.activityLevel,
+          dailyCalorieGoal: defaultProfileSettings.dailyCalorieGoal,
+          proteinGoal: defaultProfileSettings.proteinGoal,
+          aiPreferenceNotes: defaultProfileSettings.nutritionPreferences ?? null,
+        },
+      },
+    },
+    include: { profile: true },
+  });
+}
+
+async function ensureProfileForUser<T extends { id: string; profile?: unknown | null }>(user: T | null) {
+  if (!user || user.profile) {
+    return user;
+  }
+
+  return prisma.user.update({
+    where: { id: user.id },
+    data: {
+      profile: {
+        upsert: {
+          create: {
+            age: defaultProfileSettings.age ?? null,
+            heightCm: defaultProfileSettings.heightCm ?? null,
+            weightLbs: defaultProfileSettings.weightLbs ?? null,
+            goal: defaultProfileSettings.goal,
+            activityLevel: defaultProfileSettings.activityLevel,
+            dailyCalorieGoal: defaultProfileSettings.dailyCalorieGoal,
+            proteinGoal: defaultProfileSettings.proteinGoal,
+            aiPreferenceNotes: defaultProfileSettings.nutritionPreferences ?? null,
+          },
+          update: {},
+        },
+      },
     },
     include: { profile: true },
   });
@@ -114,7 +155,7 @@ export async function getCurrentUserWithProfile() {
 
   const nativeSessionUser = await getUserForNativeSessionToken(await readNativeSessionToken());
   if (nativeSessionUser) {
-    return nativeSessionUser;
+    return ensureProfileForUser(nativeSessionUser);
   }
 
   const guestUser = await getOrCreateGuestUserWithProfile();
@@ -122,10 +163,10 @@ export async function getCurrentUserWithProfile() {
     return guestUser;
   }
 
-  return prisma.user.findFirst({
+  return ensureProfileForUser(await prisma.user.findFirst({
     orderBy: { createdAt: 'asc' },
     include: { profile: true },
-  });
+  }));
 }
 
 export async function getCurrentUserId() {

@@ -33,4 +33,8 @@ struct RetryCopy {
     static func nonDestructiveFailure(action: String, error: Error) -> String {
         "We couldn’t \(action). Nothing was deleted or overwritten. \(error.localizedDescription)"
     }
+
+    static func recoveryMessage(action: String, error: Error) -> String {
+        "We’re setting things up and couldn’t \(action) yet. Your guest session is safe — try again in a moment. \(error.localizedDescription)"
+    }
 }

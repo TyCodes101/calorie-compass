@@ -14,6 +14,18 @@ struct ProfileData: Codable, Equatable {
     var dailyCalorieGoal: Int?
     var proteinGoal: Int?
     var nutritionPreferences: String?
+
+    static let guestDefault = ProfileData(
+        name: "Guest",
+        age: nil,
+        heightCm: nil,
+        weightLbs: nil,
+        goal: "MAINTAIN",
+        activityLevel: "MODERATE",
+        dailyCalorieGoal: 2200,
+        proteinGoal: 160,
+        nutritionPreferences: nil
+    )
 }
 
 struct ProfileView: View {
@@ -89,6 +101,11 @@ struct ProfileView: View {
                                         .font(.caption.weight(.semibold))
                                         .foregroundColor(MacroMeshTheme.primary)
                                 }
+                                if let error = error {
+                                    Text(error)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                         .padding(.horizontal, 20)
@@ -126,7 +143,9 @@ struct ProfileView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Profile", message: err.localizedDescription))
-                    error = err.localizedDescription
+                    let fallback = profile ?? .guestDefault
+                    profile = fallback; dirtyProfile = fallback
+                    error = RetryCopy.recoveryMessage(action: "load your profile", error: err)
                 }
             }
         }

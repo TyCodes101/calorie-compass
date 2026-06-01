@@ -126,6 +126,11 @@ struct LogChatView: View {
         let isRetry = retryText != nil
         let trimmedInput = (retryText ?? inputText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty else { return }
+        guard sessionStore.state != .unknown && sessionStore.state != .loading else {
+            sessionStore.refresh()
+            error = "Guest mode is still setting up. Try again in a moment - your message was not sent yet."
+            return
+        }
         guard !isLoading else {
             stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Log"))
             return
@@ -190,7 +195,7 @@ struct LogChatView: View {
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Log", message: err.localizedDescription))
                     retryMessage = userMessage
-                    error = RetryCopy.nonDestructiveFailure(action: "send that meal description", error: err)
+                    error = RetryCopy.recoveryMessage(action: "send that meal description", error: err)
                 }
             }
         }
@@ -300,7 +305,7 @@ struct LogChatView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Meal review", message: err.localizedDescription))
-                    saveError = RetryCopy.nonDestructiveFailure(action: "save this meal", error: err)
+                    saveError = RetryCopy.recoveryMessage(action: "save this meal", error: err)
                 }
             }
         }
