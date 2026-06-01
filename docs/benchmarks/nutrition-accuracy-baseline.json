@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-30T00:52:18.669Z",
+  "generatedAt": "2026-06-01T21:00:45.191Z",
   "summary": {
     "branded": {
       "total": 25,
@@ -43,13 +43,13 @@
     },
     "correction": {
       "total": 25,
-      "passed": 20,
-      "failed": 5,
+      "passed": 21,
+      "failed": 4,
       "exactMatchPercentage": 64,
       "brandedMatchPercentage": 48,
-      "restaurantMatchPercentage": 24,
+      "restaurantMatchPercentage": 28,
       "genericFallbackPercentage": 0,
-      "correctionSuccessPercentage": 80
+      "correctionSuccessPercentage": 84
     }
   },
   "results": [
@@ -1556,14 +1556,14 @@
       "category": "correction",
       "prompt": "I had a Starbucks latte → Make it venti",
       "expectedIdentity": "Venti Starbucks Latte",
-      "actualIdentity": "",
+      "actualIdentity": "Starbucks Caffe Latte Tall",
       "expectedCategory": "generic",
-      "actualCategory": "unknown",
-      "sourceUsed": null,
-      "confidenceLabel": null,
-      "matchType": "miss",
-      "passed": false,
-      "notes": "Expected Venti Starbucks Latte; got no items."
+      "actualCategory": "restaurant",
+      "sourceUsed": "Starbucks official nutrition",
+      "confidenceLabel": "Very High",
+      "matchType": "fuzzy",
+      "passed": true,
+      "notes": "Pass under current benchmark criteria."
     },
     {
       "name": "I had Chipotle chicken bowl → Add extra chicken",
@@ -1612,7 +1612,7 @@
       "category": "correction",
       "prompt": "I had 12 nuggets → Actually Chick-fil-A 12 count nuggets",
       "expectedIdentity": "Chick-fil-A 12 count nuggets",
-      "actualIdentity": "12 Chick-fil-A Nuggets",
+      "actualIdentity": "12 Chick-fil-A Nuggets 12 Count",
       "expectedCategory": "generic",
       "actualCategory": "restaurant",
       "sourceUsed": "Chick-fil-A official nutrition",
@@ -1742,7 +1742,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Doritos nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Very High",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1756,7 +1756,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Chobani nutrition reference",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "High",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."

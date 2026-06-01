@@ -148,6 +148,18 @@ function responseMatchesBrand(response: ParsedMealResponse | null, brandHint: st
   });
 }
 
+function responseMatchesCategory(response: ParsedMealResponse | null, searchText: string) {
+  if (!response) return true;
+  const normalized = normalizeComparableText(searchText);
+  const wantsProteinChips = /\bprotein\b/.test(normalized) && /\bchips?\b/.test(normalized);
+  if (!wantsProteinChips) return true;
+
+  return response.items.some((item) => {
+    const haystack = normalizeComparableText(`${item.food_name} ${item.notes ?? ''} ${item.matched_query ?? ''}`);
+    return /\bprotein\b/.test(haystack) && /\bchips?\b/.test(haystack);
+  });
+}
+
 type LookupIntent = {
   brandHint: string | null;
   hasProteinSignal: boolean;
@@ -259,6 +271,13 @@ export async function lookupNutrition(
       return makeClarificationResponse(
         input,
         `I found possible nutrition data, but not a clear ${normalizedQuery.brandHint} match. Which exact item or serving should I use?`,
+      );
+    }
+
+    if (!responseMatchesCategory(result, normalizedQuery.searchText)) {
+      return makeClarificationResponse(
+        input,
+        'I found possible nutrition data, but not a clear match for the food type you described. Which exact item or serving should I use?',
       );
     }
 

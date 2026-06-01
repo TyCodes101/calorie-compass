@@ -33,8 +33,7 @@ struct LogChatView: View {
                                 ChatBubble(role: msg.role, text: msg.text)
                             }
                             if isLoading {
-                                ChatBubble(role: "assistant", text: "Estimating nutrition…")
-                                    .redacted(reason: .placeholder)
+                                AssistantTypingCard()
                             }
                             if showReviewCard {
                                 MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
@@ -79,6 +78,9 @@ struct LogChatView: View {
                     .font(.subheadline)
                     .foregroundColor(MacroMeshTheme.muted)
                 VStack(alignment: .leading, spacing: 8) {
+                    Text("Try a natural phrase")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.muted)
                     PromptChip(text: "Greek yogurt with granola and berries")
                     PromptChip(text: "Chicken burrito bowl for lunch")
                     PromptChip(text: "Two eggs, toast, and coffee")
@@ -118,6 +120,11 @@ struct LogChatView: View {
         .padding(.top, 10)
         .padding(.bottom, 10)
         .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(MacroMeshTheme.border)
+                .frame(height: 1)
+        }
     }
 
     func sendMessage(retryText: String? = nil) {
@@ -328,15 +335,43 @@ struct ChatBubble: View {
     var body: some View {
         HStack(alignment: .bottom) {
             if isUser { Spacer(minLength: 50) }
-            Text(text)
-                .font(.subheadline)
-                .foregroundColor(isUser ? .white : MacroMeshTheme.text)
-                .padding(12)
-                .background(isUser ? MacroMeshTheme.primary : Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: MacroMeshTheme.shadow, radius: 10, x: 0, y: 6)
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+                Text(isUser ? "You" : "MacroMesh")
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.muted)
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundColor(isUser ? .white : MacroMeshTheme.text)
+                    .padding(12)
+                    .background(isUser ? MacroMeshTheme.primary : Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: MacroMeshTheme.shadow, radius: 10, x: 0, y: 6)
+            }
             if !isUser { Spacer(minLength: 50) }
         }
+    }
+}
+
+struct AssistantTypingCard: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .tint(MacroMeshTheme.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Checking nutrition")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.text)
+                Text("Matching food, serving, and confidence…")
+                    .font(.caption)
+                    .foregroundColor(MacroMeshTheme.muted)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: MacroMeshTheme.shadow, radius: 10, x: 0, y: 6)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 }
 

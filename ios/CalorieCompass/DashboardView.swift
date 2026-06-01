@@ -79,32 +79,28 @@ struct DashboardView: View {
         let goal = dashboard?.displayedGoalCalories ?? 2_000
         let remaining = max(goal - used, 0)
         return AppCard(padding: 20) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .center, spacing: 18) {
+                    CalorieRing(value: used, goal: goal, size: 132)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Calories consumed")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundColor(MacroMeshTheme.muted)
-                        Text("\(Int(used))")
-                            .font(.system(size: 46, weight: .bold, design: .rounded))
-                            .foregroundColor(MacroMeshTheme.text)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 4) {
                         Text("Remaining")
-                            .font(.caption)
+                            .font(.caption.weight(.bold))
                             .foregroundColor(MacroMeshTheme.muted)
-                        Text("\(Int(remaining))")
-                            .font(.title2.weight(.bold))
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+                        Text("\(Int(remaining)) cal")
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .foregroundColor(MacroMeshTheme.text)
+                        Text(remaining > 0 ? "left for today" : "goal reached")
+                            .font(.subheadline.weight(.semibold))
                             .foregroundColor(MacroMeshTheme.primary)
                     }
+                    Spacer()
                 }
-                ProgressView(value: goal > 0 ? min(used / goal, 1) : 0)
-                    .tint(MacroMeshTheme.primary)
-                    .scaleEffect(x: 1, y: 2.2, anchor: .center)
-                Text("Daily goal: \(Int(goal)) calories")
-                    .font(.caption)
-                    .foregroundColor(MacroMeshTheme.muted)
+                HStack(spacing: 10) {
+                    MetricPill(title: "Protein", value: "\(Int(dashboard?.displayedProtein ?? 0))g", icon: "bolt.heart.fill", tint: MacroMeshTheme.primary)
+                    MetricPill(title: "Meals", value: "\(dashboard?.mealCount ?? dashboard?.recentMeals?.count ?? 0)", icon: "fork.knife", tint: MacroMeshTheme.orange)
+                }
             }
         }
     }
@@ -112,7 +108,7 @@ struct DashboardView: View {
     private var macroSection: some View {
         AppCard {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeader("Macro targets", subtitle: "Progress updates as meals are saved.")
+                SectionHeader("Macro targets", subtitle: "Protein first, then balance carbs and fats around the day.")
                 MacroProgressRow(title: "Protein", value: dashboard?.displayedProtein ?? 0, goal: dashboard?.displayedProteinGoal ?? 120, unit: "g", tint: MacroMeshTheme.primary)
                 MacroProgressRow(title: "Carbs", value: dashboard?.displayedCarbs ?? 0, goal: dashboard?.displayedCarbsGoal ?? 220, unit: "g", tint: MacroMeshTheme.orange)
                 MacroProgressRow(title: "Fat", value: dashboard?.displayedFat ?? 0, goal: dashboard?.displayedFatGoal ?? 70, unit: "g", tint: MacroMeshTheme.purple)

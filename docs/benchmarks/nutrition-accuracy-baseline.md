@@ -1,15 +1,15 @@
 # Nutrition Accuracy Benchmark
 
-Generated: 2026-05-30T00:52:18.671Z
+Generated: 2026-06-01T21:00:45.194Z
 
 This report measures the current deterministic nutrition pipeline against the Phase 9A baseline case set. Improvements must be interpreted as benchmark deltas, not as perfect nutrition accuracy.
 
 ## Overall
 
 - Total tested: 125
-- Passed: 96
-- Failed: 29
-- Recognition rate: 92%
+- Passed: 97
+- Failed: 28
+- Recognition rate: 93%
 - Exact-match rate: 66%
 - Generic fallback rate: 0%
 - Obvious wrong-result rate: 22%
@@ -60,23 +60,23 @@ This report measures the current deterministic nutrition pipeline against the Ph
   },
   "correction": {
     "total": 25,
-    "passed": 20,
-    "failed": 5,
+    "passed": 21,
+    "failed": 4,
     "exactMatchPercentage": 64,
     "brandedMatchPercentage": 48,
-    "restaurantMatchPercentage": 24,
+    "restaurantMatchPercentage": 28,
     "genericFallbackPercentage": 0,
-    "correctionSuccessPercentage": 80
+    "correctionSuccessPercentage": 84
   }
 }
 ```
 
 ## Confidence label distribution
 
-- Very High: 64
+- Very High: 65
 - High: 36
 - High; Low: 2
-- missing: 10
+- missing: 9
 - Low: 10
 - Very High; High: 2
 - Low; High: 1
@@ -223,11 +223,11 @@ This report measures the current deterministic nutrition pipeline against the Ph
 | 105 | I had white rice → Change it to brown rice | I had white rice → Change it to brown rice | Brown Rice | Rice | generic | branded | Rice common serving estimate | High | miss | FAIL | Expected Brown Rice; got Rice. |
 | 106 | I had chicken → Make it 6 oz grilled chicken | I had chicken → Make it 6 oz grilled chicken | Grilled Chicken | 6 Chicken | generic | branded | Chicken common serving estimate | High | miss | FAIL | Expected Grilled Chicken; got 6 Chicken. |
 | 107 | I had a Big Mac and fries → Remove the fries | I had a Big Mac and fries → Remove the fries | Big Mac | McDonald's Big Mac | generic | restaurant | McDonald's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 108 | I had a Starbucks latte → Make it venti | I had a Starbucks latte → Make it venti | Venti Starbucks Latte | — | generic | unknown | — | — | miss | FAIL | Expected Venti Starbucks Latte; got no items. |
+| 108 | I had a Starbucks latte → Make it venti | I had a Starbucks latte → Make it venti | Venti Starbucks Latte | Starbucks Caffe Latte Tall | generic | restaurant | Starbucks official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
 | 109 | I had Chipotle chicken bowl → Add extra chicken | I had Chipotle chicken bowl → Add extra chicken | Chipotle Chicken Bowl Extra Chicken | Chipotle bowl with chicken, white rice, black beans, Chicken | generic | restaurant | Chipotle official nutrition; Chicken common serving estimate | Very High; High | fuzzy | PASS | Pass under current benchmark criteria. |
 | 110 | I had a protein shake → Actually it was Fairlife Core Power | I had a protein shake → Actually it was Fairlife Core Power | Fairlife Core Power | Fairlife protein shake | generic | branded | Fairlife nutrition reference | High | miss | FAIL | Expected Fairlife Core Power; got Fairlife protein shake. |
 | 111 | I had McDonald's burger → Actually Big Mac | I had McDonald's burger → Actually Big Mac | Big Mac | McDonald's Big Mac | generic | restaurant | McDonald's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 112 | I had 12 nuggets → Actually Chick-fil-A 12 count nuggets | I had 12 nuggets → Actually Chick-fil-A 12 count nuggets | Chick-fil-A 12 count nuggets | 12 Chick-fil-A Nuggets | generic | restaurant | Chick-fil-A official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
+| 112 | I had 12 nuggets → Actually Chick-fil-A 12 count nuggets | I had 12 nuggets → Actually Chick-fil-A 12 count nuggets | Chick-fil-A 12 count nuggets | 12 Chick-fil-A Nuggets 12 Count | generic | restaurant | Chick-fil-A official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 113 | I had oatmeal → Add peanut butter | I had oatmeal → Add peanut butter | Oatmeal Peanut Butter | Oatmeal, Peanut butter | generic | branded | Oatmeal common serving estimate; Peanut butter common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
 | 114 | I had a smoothie → Actually homemade banana peanut butter smoothie | I had a smoothie → Actually homemade banana peanut butter smoothie | Banana Peanut Butter Smoothie | Smoothie with banana and peanut butter | generic | branded | Smoothie common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
 | 115 | I had a turkey sandwich → Remove cheese | I had a turkey sandwich → Remove cheese | Turkey Sandwich | — | generic | unknown | — | — | miss | FAIL | Expected Turkey Sandwich; got no items. |
@@ -236,8 +236,8 @@ This report measures the current deterministic nutrition pipeline against the Ph
 | 118 | I had Panera mac → Actually large mac and cheese | I had Panera mac → Actually large mac and cheese | Panera Mac and Cheese | 1 large mac and cheese | generic | estimated | Generic nutrition reference | Low | fuzzy | PASS | Pass under current benchmark criteria. |
 | 119 | I had Panda Express → Add orange chicken and chow mein | I had Panda Express → Add orange chicken and chow mein | Panda Express Orange Chicken Chow Mein | Panda Express Orange Chicken, Chicken | generic | restaurant | Panda Express official nutrition; Chicken common serving estimate | Very High; High | fuzzy | PASS | Pass under current benchmark criteria. |
 | 120 | I had a burrito → Actually Chipotle chicken burrito | I had a burrito → Actually Chipotle chicken burrito | Chipotle Chicken Burrito | Chipotle chicken bowl | generic | restaurant | Chipotle official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 121 | I had chips → Actually Doritos Nacho Cheese | I had chips → Actually Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | generic | branded | Doritos nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 122 | I had yogurt → Actually Chobani Greek Yogurt Strawberry | I had yogurt → Actually Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | generic | branded | Chobani nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
+| 121 | I had chips → Actually Doritos Nacho Cheese | I had chips → Actually Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | generic | branded | Doritos nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
+| 122 | I had yogurt → Actually Chobani Greek Yogurt Strawberry | I had yogurt → Actually Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | generic | branded | Chobani nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
 | 123 | I had protein bar → Actually Barebells | I had protein bar → Actually Barebells | Barebells Protein Bar | Barebells Protein Bar | generic | branded | Barebells nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 124 | I had toast → Add peanut butter | I had toast → Add peanut butter | Toast Peanut Butter | Toast, Peanut butter | generic | estimated | Toast common serving estimate; Peanut butter common serving estimate | Low; High | exact | PASS | Pass under current benchmark criteria. |
 | 125 | I had chicken rice broccoli → Double the chicken | I had chicken rice broccoli → Double the chicken | Chicken Rice Broccoli | 2 Chicken, Rice, Broccoli | generic | branded | Chicken common serving estimate; Rice common serving estimate; Broccoli common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |

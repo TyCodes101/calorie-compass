@@ -77,6 +77,7 @@ struct MealReviewCard: View {
     private var totalProtein: Double { items.reduce(0) { $0 + $1.protein } }
     private var totalCarbs: Double { items.reduce(0) { $0 + $1.carbs } }
     private var totalFat: Double { items.reduce(0) { $0 + $1.fat } }
+    private var trustedCount: Int { items.filter { ($0.isTrusted ?? false) || ($0.confidence ?? "").localizedCaseInsensitiveContains("high") }.count }
 
     var body: some View {
         if !showCard {
@@ -84,12 +85,18 @@ struct MealReviewCard: View {
         } else {
             AppCard(padding: 18) {
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack(alignment: .top) {
+                    HStack(alignment: .top, spacing: 14) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.title2)
+                            .foregroundColor(MacroMeshTheme.primary)
+                            .frame(width: 42, height: 42)
+                            .background(MacroMeshTheme.primary.opacity(0.12))
+                            .clipShape(Circle())
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Review before saving")
                                 .font(.title3.weight(.bold))
                                 .foregroundColor(MacroMeshTheme.text)
-                            Text("Nothing is saved until you confirm.")
+                            Text("Check serving sizes and confidence. Nothing is saved until you confirm.")
                                 .font(.caption)
                                 .foregroundColor(MacroMeshTheme.muted)
                         }
@@ -107,14 +114,21 @@ struct MealReviewCard: View {
 
                     VStack(spacing: 10) {
                         ForEach(items.indices, id: \.self) { idx in
-                            HStack(alignment: .top, spacing: 10) {
+                            HStack(alignment: .top, spacing: 12) {
+                                FoodAvatar(name: items[idx].name)
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(items[idx].name)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundColor(MacroMeshTheme.text)
-                                    Text("\(items[idx].quantity, specifier: "%.0f") \(items[idx].unit) · \(Int(items[idx].calories)) cal")
+                                    Text(servingText(for: items[idx]))
                                         .font(.caption)
                                         .foregroundColor(MacroMeshTheme.muted)
+                                    HStack(spacing: 6) {
+                                        ConfidenceBadge(label: items[idx].confidence, isTrusted: items[idx].isTrusted)
+                                        Text("\(Int(items[idx].calories)) cal")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundColor(MacroMeshTheme.primaryDark)
+                                    }
                                 }
                                 Spacer()
                                 Button(role: .destructive) {
@@ -125,10 +139,18 @@ struct MealReviewCard: View {
                                 .accessibilityLabel("Remove \(items[idx].name)")
                             }
                             .padding(12)
-                            .background(MacroMeshTheme.cardSubtle.opacity(0.7))
+                            .background(Color.white.opacity(0.86))
                             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(MacroMeshTheme.border, lineWidth: 1)
+                            )
                         }
                     }
+
+                    Text("\(trustedCount) of \(items.count) items matched with high-confidence or trusted nutrition data.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
 
                     if let error {
                         Text(error).font(.caption).foregroundColor(.red)
@@ -155,6 +177,54 @@ struct MealReviewCard: View {
         error = nil
         onConfirm(items)
         isSaving = false
+    }
+
+    private func servingText(for item: MealItem) -> String {
+        let quantity = item.quantity == floor(item.quantity) ? String(Int(item.quantity)) : String(format: "%.1f", item.quantity)
+        let unit = item.unit.trimmingCharacters(in: .whitespacesAndNewlines)
+        return unit.isEmpty ? "Serving: \(quantity)" : "Serving: \(quantity) \(unit)"
+    }
+}
+
+struct FoodAvatar: View {
+    let name: String
+
+    private var symbol: String {
+        let lower = name.lowercased()
+        if lower.contains("drink") || lower.contains("shake") || lower.contains("coffee") { return "takeoutbag.and.cup.and.straw.fill" }
+        if lower.contains("bar") || lower.contains("pack") || lower.contains("chips") { return "bag.fill" }
+        return "fork.knife.circle.fill"
+    }
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.headline)
+            .foregroundColor(MacroMeshTheme.primary)
+            .frame(width: 38, height: 38)
+            .background(MacroMeshTheme.cardSubtle)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+struct ConfidenceBadge: View {
+    let label: String?
+    let isTrusted: Bool?
+
+    var body: some View {
+        Text(display)
+            .font(.caption2.weight(.bold))
+            .foregroundColor(isTrusted == false ? MacroMeshTheme.orange : MacroMeshTheme.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background((isTrusted == false ? MacroMeshTheme.orange : MacroMeshTheme.primary).opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private var display: String {
+        if let label, !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return label
+        }
+        return isTrusted == false ? "Estimated" : "High confidence"
     }
 }
 
