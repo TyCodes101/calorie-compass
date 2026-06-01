@@ -94,10 +94,6 @@ struct ProfileView: View {
                     }
                 }
             }
-        
-            // PHASE 4C PREMIUM REDESIGN START
-            ProfileHeroLayout(profile: $profile, editing: $editing, dirtyProfile: $dirtyProfile, saveError: $saveError, saving: $saving, showConfirmSave: $showConfirmSave, showSuccess: $showSuccess, sessionStore: sessionStore, error: $error, loading: $loading, onProfileLoad: loadProfile, onProfileSave: saveProfile)
-            // PHASE 4C PREMIUM REDESIGN END
             MacroMeshScreen {
                 if loading && profile == nil {
                     VStack(spacing: 12) {

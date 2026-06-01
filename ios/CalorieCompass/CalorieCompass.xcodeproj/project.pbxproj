@@ -26,6 +26,14 @@
 		100000000000000000000111 /* MacroMeshDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000011 /* MacroMeshDesign.swift */; };
 		100000000000000000000201 /* MealManagementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* MealManagementTests.swift */; };
 		100000000000000000000202 /* ProfileViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000022 /* ProfileViewTests.swift */; };
+		100000000000000000000112 /* ProfileV4CHeroCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000012 /* ProfileV4CHeroCard.swift */; };
+		100000000000000000000113 /* ProfileV4CMetricGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* ProfileV4CMetricGrid.swift */; };
+		100000000000000000000114 /* ProfileV4CActionPills.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* ProfileV4CActionPills.swift */; };
+		100000000000000000000115 /* ProfileV4CCoachingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000015 /* ProfileV4CCoachingCard.swift */; };
+		100000000000000000000116 /* PremiumHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* PremiumHistoryView.swift */; };
+		100000000000000000000117 /* HistoryEmptyStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* HistoryEmptyStateCard.swift */; };
+		100000000000000000000118 /* HistoryDayHeaderCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000018 /* HistoryDayHeaderCard.swift */; };
+		100000000000000000000119 /* HistoryMealCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000019 /* HistoryMealCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +68,14 @@
 		100000000000000000000022 /* ProfileViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewTests.swift; sourceTree = "<group>"; };
 		100000000000000000000601 /* CalorieCompass.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Calorie Compass.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000602 /* CalorieCompassTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CalorieCompassTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000012 /* ProfileV4CHeroCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileV4CHeroCard.swift; sourceTree = "<group>"; };
+		100000000000000000000013 /* ProfileV4CMetricGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileV4CMetricGrid.swift; sourceTree = "<group>"; };
+		100000000000000000000014 /* ProfileV4CActionPills.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileV4CActionPills.swift; sourceTree = "<group>"; };
+		100000000000000000000015 /* ProfileV4CCoachingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileV4CCoachingCard.swift; sourceTree = "<group>"; };
+		100000000000000000000016 /* PremiumHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumHistoryView.swift; sourceTree = "<group>"; };
+		100000000000000000000017 /* HistoryEmptyStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryEmptyStateCard.swift; sourceTree = "<group>"; };
+		100000000000000000000018 /* HistoryDayHeaderCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryDayHeaderCard.swift; sourceTree = "<group>"; };
+		100000000000000000000019 /* HistoryMealCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryMealCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,6 +113,14 @@
 				10000000000000000000000F /* StabilitySupport.swift */,
 				100000000000000000000010 /* AppConfig.swift */,
 				100000000000000000000011 /* MacroMeshDesign.swift */,
+				100000000000000000000019 /* HistoryMealCard.swift */,
+				100000000000000000000018 /* HistoryDayHeaderCard.swift */,
+				100000000000000000000017 /* HistoryEmptyStateCard.swift */,
+				100000000000000000000016 /* PremiumHistoryView.swift */,
+				100000000000000000000015 /* ProfileV4CCoachingCard.swift */,
+				100000000000000000000014 /* ProfileV4CActionPills.swift */,
+				100000000000000000000013 /* ProfileV4CMetricGrid.swift */,
+				100000000000000000000012 /* ProfileV4CHeroCard.swift */,
 			);
 			path = "";
 			sourceTree = "<group>";
@@ -188,7 +212,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		100000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000101, 100000000000000000000102, 100000000000000000000103, 100000000000000000000104, 100000000000000000000105, 100000000000000000000106, 100000000000000000000107, 100000000000000000000108, 100000000000000000000109, 10000000000000000000010A, 10000000000000000000010B, 10000000000000000000010D, 10000000000000000000010E, 10000000000000000000010F, 100000000000000000000110, 100000000000000000000111, ); runOnlyForDeploymentPostprocessing = 0; };
+		100000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000101, 100000000000000000000102, 100000000000000000000103, 100000000000000000000104, 100000000000000000000105, 100000000000000000000106, 100000000000000000000107, 100000000000000000000108, 100000000000000000000109, 10000000000000000000010A, 10000000000000000000010B, 10000000000000000000010D, 10000000000000000000010E, 10000000000000000000010F, 100000000000000000000110, 100000000000000000000111, 100000000000000000000112, 100000000000000000000113, 100000000000000000000114, 100000000000000000000115, 100000000000000000000116, 100000000000000000000117, 100000000000000000000118, 100000000000000000000119, ); runOnlyForDeploymentPostprocessing = 0; };
 		100000000000000000000902 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000201, 100000000000000000000202, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
