@@ -50,7 +50,7 @@ struct ProfileView: View {
                     ProfileFallbackView(message: "Your guest profile will appear here once MacroMesh finishes setup.", retry: loadProfile)
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 16) {
                             if editing {
                                 ProfileEditorCard(
                                     profile: $dirtyProfile,
@@ -68,11 +68,12 @@ struct ProfileView: View {
                                 )
                             } else {
                                 ProfileSummaryCard(profile: profile, isGuest: sessionStore.state.authSession.isGuest)
-                                Button("Edit Profile") {
+                                Button {
                                     dirtyProfile = profile; editing = true
+                                } label: {
+                                    Label("Edit profile", systemImage: "pencil")
                                 }
                                 .buttonStyle(PrimaryCTAButtonStyle())
-                                .padding(.top, 4)
                                 if sessionStore.state.authSession.isSignedIn {
                                     AccountStatusSection(response: sessionStore.state.sessionResponse)
                                     AccountSignInEntryPoint(
@@ -84,7 +85,9 @@ struct ProfileView: View {
                                     GuestProfileNote()
                                 }
                                 if showSuccess {
-                                    Text("Profile updated! Save confirmed.").foregroundColor(.green)
+                                    Text("Profile updated.")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundColor(MacroMeshTheme.primary)
                                 }
                             }
                         }
@@ -388,13 +391,19 @@ struct ProfileSummaryCard: View {
     let isGuest: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: isGuest ? "person.crop.circle" : "person.crop.circle.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .frame(width: 42, height: 42)
+                    .background(MacroMeshTheme.cardSubtle)
+                    .clipShape(Circle())
                 VStack(alignment: .leading, spacing: 4) {
                     Text(profile?.name.nilIfBlank ?? (isGuest ? "Guest profile" : "Profile"))
                         .font(.title3)
                         .fontWeight(.semibold)
-                    Text(isGuest ? "Guest session" : "Account profile")
+                    Text(isGuest ? "Guest mode is active" : "Synced account profile")
                         .font(.caption)
                         .foregroundColor(MacroMeshTheme.muted)
                 }
@@ -402,9 +411,10 @@ struct ProfileSummaryCard: View {
                 Text(isGuest ? "Guest" : "Synced")
                     .font(.caption2)
                     .fontWeight(.semibold)
-                    .padding(.horizontal, 8)
+                    .foregroundColor(isGuest ? MacroMeshTheme.orange : MacroMeshTheme.primaryDark)
+                    .padding(.horizontal, 9)
                     .padding(.vertical, 5)
-                    .background(Color.orange.opacity(isGuest ? 0.16 : 0.0))
+                    .background((isGuest ? MacroMeshTheme.orange : MacroMeshTheme.primary).opacity(0.14))
                     .clipShape(Capsule())
             }
             Divider()
@@ -413,6 +423,10 @@ struct ProfileSummaryCard: View {
             ProfileInfoRow(label: "Height", value: profile?.heightCm.map { "\($0) cm" } ?? "Add height")
             ProfileInfoRow(label: "Weight", value: profile?.weightLbs.map { "\(Int($0)) lbs" } ?? "Add weight")
             ProfileInfoRow(label: "Preferences", value: profile?.nutritionPreferences?.nilIfBlank ?? "Add preferences")
+            Text("These defaults help MacroMesh estimate meals and daily targets. Sign-in stays optional.")
+                .font(.caption)
+                .foregroundColor(MacroMeshTheme.muted)
+                .padding(.top, 2)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -435,6 +449,7 @@ struct ProfileInfoRow: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .multilineTextAlignment(.trailing)
+                .lineLimit(2)
         }
     }
 }

@@ -1,6 +1,6 @@
 # Nutrition Accuracy Benchmark
 
-Generated: 2026-05-30T00:52:18.671Z
+Generated: 2026-06-01T05:30:08.055Z
 
 This report measures the current deterministic nutrition pipeline against the Phase 9A baseline case set. Improvements must be interpreted as benchmark deltas, not as perfect nutrition accuracy.
 
@@ -73,8 +73,8 @@ This report measures the current deterministic nutrition pipeline against the Ph
 
 ## Confidence label distribution
 
-- Very High: 64
-- High: 36
+- Very High: 65
+- High: 35
 - High; Low: 2
 - missing: 10
 - Low: 10
@@ -236,7 +236,7 @@ This report measures the current deterministic nutrition pipeline against the Ph
 | 118 | I had Panera mac → Actually large mac and cheese | I had Panera mac → Actually large mac and cheese | Panera Mac and Cheese | 1 large mac and cheese | generic | estimated | Generic nutrition reference | Low | fuzzy | PASS | Pass under current benchmark criteria. |
 | 119 | I had Panda Express → Add orange chicken and chow mein | I had Panda Express → Add orange chicken and chow mein | Panda Express Orange Chicken Chow Mein | Panda Express Orange Chicken, Chicken | generic | restaurant | Panda Express official nutrition; Chicken common serving estimate | Very High; High | fuzzy | PASS | Pass under current benchmark criteria. |
 | 120 | I had a burrito → Actually Chipotle chicken burrito | I had a burrito → Actually Chipotle chicken burrito | Chipotle Chicken Burrito | Chipotle chicken bowl | generic | restaurant | Chipotle official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 121 | I had chips → Actually Doritos Nacho Cheese | I had chips → Actually Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | generic | branded | Doritos nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
+| 121 | I had chips → Actually Doritos Nacho Cheese | I had chips → Actually Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | generic | branded | Doritos nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 122 | I had yogurt → Actually Chobani Greek Yogurt Strawberry | I had yogurt → Actually Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | generic | branded | Chobani nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 123 | I had protein bar → Actually Barebells | I had protein bar → Actually Barebells | Barebells Protein Bar | Barebells Protein Bar | generic | branded | Barebells nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
 | 124 | I had toast → Add peanut butter | I had toast → Add peanut butter | Toast Peanut Butter | Toast, Peanut butter | generic | estimated | Toast common serving estimate; Peanut butter common serving estimate | Low; High | exact | PASS | Pass under current benchmark criteria. |

@@ -212,25 +212,34 @@ struct MealHistoryCard: View {
     let meal: MealResponse
 
     var body: some View {
-        AppCard(padding: 16) {
+        AppCard(padding: 15) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "fork.knife.circle.fill")
                     .font(.title2)
                     .foregroundColor(MacroMeshTheme.primary)
+                    .frame(width: 34, height: 34)
+                    .background(MacroMeshTheme.cardSubtle)
+                    .clipShape(Circle())
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(meal.displayTitle)
                             .font(.headline)
                             .foregroundColor(MacroMeshTheme.text)
-                            .lineLimit(1)
+                            .lineLimit(2)
                         Spacer()
                         Text("\(Int(meal.safeTotalCalories)) cal")
                             .font(.subheadline.weight(.bold))
                             .foregroundColor(MacroMeshTheme.primary)
                     }
-                    Text("\(meal.displayMealType) · \(meal.displayDate)")
+                    Text("\(meal.displayMealType) | \(meal.displayDate)")
                         .font(.caption)
                         .foregroundColor(MacroMeshTheme.muted)
+                    if let serving = meal.displayServingSummary {
+                        Text(serving)
+                            .font(.caption)
+                            .foregroundColor(MacroMeshTheme.muted)
+                            .lineLimit(2)
+                    }
                     HStack(spacing: 8) {
                         Text("P \(Int(meal.safeTotalProtein))g")
                         Text("C \(Int(meal.safeTotalCarbs))g")
@@ -345,8 +354,8 @@ struct MealDetailView: View {
                                         .keyboardType(.decimalPad)
                                 }
                             } else {
-                                Text(item.food_name.capitalized).font(.headline)
-                                Text("\(item.quantity.formatted()) \(item.unit)")
+                                Text(FoodDisplayFormatter.cleanName(item.food_name)).font(.headline)
+                                Text(FoodDisplayFormatter.servingText(quantity: item.quantity, unit: item.unit, foodName: item.food_name))
                                     .foregroundColor(.secondary)
                             }
                             Text("\(Int(item.calories)) cal · P \(Int(item.protein))g · C \(Int(item.carbs))g · F \(Int(item.fat))g")
@@ -519,9 +528,21 @@ extension MealResponse {
     }
 
     var displayTitle: String {
-        if let rawText, !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return rawText }
-        if let first = items?.first?.food_name, !first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return first.capitalized }
+        if let rawText, !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return FoodDisplayFormatter.cleanName(rawText)
+        }
+        if let first = items?.first?.food_name, !first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return FoodDisplayFormatter.cleanName(first)
+        }
         return "Saved meal"
+    }
+    var displayServingSummary: String? {
+        guard let items, !items.isEmpty else { return nil }
+        if items.count == 1, let item = items.first {
+            return FoodDisplayFormatter.servingText(quantity: item.quantity, unit: item.unit, foodName: item.food_name)
+        }
+        let names = items.prefix(2).map { FoodDisplayFormatter.cleanName($0.food_name) }.joined(separator: ", ")
+        return items.count > 2 ? "\(names) +\(items.count - 2) more" : names
     }
     var normalizedMealType: String { (mealType ?? "snack").lowercased() }
     var displayMealType: String { MealTypeOption(rawValue: normalizedMealType)?.label ?? "Snack" }

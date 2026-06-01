@@ -2387,6 +2387,57 @@ describe('meal assistant conversational coverage', () => {
     expect(second?.assistant_reply).not.toMatch(/usda|match|reference/i);
   });
 
+  it('normalizes Peanut M&Ms to a natural serving instead of raw database text', async () => {
+    const [response] = await runConversation(['Peanut m/ms']);
+    const item = response.meal.items[0];
+
+    expect(item?.food_name).toBe("Peanut M&M's");
+    expect(item?.quantity).toBe(1);
+    expect(item?.unit).toMatch(/serving|bag/i);
+    expect(response.assistant_reply).toMatch(/Peanut M&M/i);
+    expect(response.assistant_reply).not.toMatch(/100g|candies|mars|usda/i);
+  });
+
+  it('uses one full baked potato for a baked potato by default', async () => {
+    const [response] = await runConversation(['A baked potato']);
+    const item = response.meal.items[0];
+
+    expect(item?.food_name).toBe('Baked potato');
+    expect(item?.quantity).toBe(1);
+    expect(item?.unit).toMatch(/potato/i);
+    expect(response.assistant_reply).not.toMatch(/\b1 cup potatoes\b|100g|usda/i);
+  });
+
+  it('treats suffix "I meant" as a replacement correction', async () => {
+    const [response] = await runConversation(['Skittles I meant'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Snickers Bar', quantity: 1, unit: 'bar', calories: 250, protein: 4, carbs: 33, fat: 12 })],
+        currentMealText: '1 bar Snickers Bar',
+      }),
+    });
+
+    expect(response.intent).toBe('correction');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe('Skittles Candy');
+    expect(response.assistant_reply).not.toMatch(/removed|snickers|100g|candies|mars|usda/i);
+  });
+
+  it('updates a potato correction to one full potato instead of removing potatoes', async () => {
+    const [response] = await runConversation(['No like just 1 full potato'], {
+      initialState: buildState({
+        currentMealItems: [createItem({ food_name: 'Potatoes', quantity: 1, unit: 'cup', calories: 160, protein: 4, carbs: 37, fat: 0.2 })],
+        currentMealText: '1 cup Potatoes',
+      }),
+    });
+
+    expect(response.intent).toBe('quantity_change');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe('Baked potato');
+    expect(response.meal.items[0]?.quantity).toBe(1);
+    expect(response.meal.items[0]?.unit).toMatch(/potato/i);
+    expect(response.assistant_reply).not.toMatch(/removed|1 cup potatoes|100g|usda/i);
+  });
+
   it('handles a generic chipotle bowl and remove-cheese follow-up without restarting the meal', async () => {
     const responses = await runConversation(['Chipotle bowl', 'remove cheese']);
     const first = responses[0];

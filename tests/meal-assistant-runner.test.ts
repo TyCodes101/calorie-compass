@@ -182,6 +182,60 @@ describe('runMealAssistant', () => {
     expect(response.assistant_reply).toMatch(/980 calories/i);
   });
 
+  it('cleans USDA candy text and keeps a Snickers as one bar pending review', async () => {
+    const saveMeal = vi.fn().mockResolvedValue(undefined);
+
+    const response = await runMealAssistant(
+      {
+        message: 'A snickers',
+        state: buildState({ mealType: 'snack' }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'snickers',
+                brand: null,
+                quantity: 1,
+                unit: 'bar',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: 'Candies, MARS SNACKFOOD US, SNICKERS Bar',
+              quantity: 100,
+              unit: 'g',
+              calories: 491,
+              protein: 7.5,
+              carbs: 61,
+              fat: 24,
+              source_type: 'GENERIC_REFERENCE',
+              source_name: 'USDA FoodData Central',
+            }),
+          ]),
+        ),
+        saveMeal,
+      },
+    );
+
+    expect(saveMeal).not.toHaveBeenCalled();
+    expect(response.next_state.saved).toBe(false);
+    expect(response.meal.items[0]).toMatchObject({
+      food_name: 'Snickers Bar',
+      quantity: 1,
+      unit: 'bar',
+    });
+    expect(response.assistant_reply).not.toMatch(/100g|Candies|MARS SNACKFOOD|USDA/i);
+  });
+
   it('replaces a stale clarification with the corrected branded food', async () => {
     const correctedItem = buildItem({
       food_name: 'Quaker White Cheddar Rice Cakes',

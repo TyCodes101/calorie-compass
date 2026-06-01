@@ -36,6 +36,9 @@ const brandHints = [
   { pattern: /\bdoritos\b/, brand: 'Doritos' },
   { pattern: /\bgoldfish\b|\bgold fish\b/, brand: 'Goldfish' },
   { pattern: /\bcheez it\b|\bcheezit\b/, brand: 'Cheez-It' },
+  { pattern: /\bsnickers\b/, brand: 'Snickers' },
+  { pattern: /\bskittles?\b/, brand: 'Skittles' },
+  { pattern: /\bm\s*(?:&|\/|\s)\s*m'?s?\b/, brand: "M&M's" },
 ];
 
 const fillerRegex = /\b(?:which|that|are|is|were|was|they|them|the|a|an|my|had|ate|drank|with|and|for|of|about|around|roughly|like|plain|cooked|butter|oil|or|did|have|i|it|no|not|actually|sorry|correction|meant|just|each|cal|cals|calorie|calories)\b/g;

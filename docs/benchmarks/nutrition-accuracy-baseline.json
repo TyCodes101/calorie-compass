@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-30T00:52:18.669Z",
+  "generatedAt": "2026-06-01T05:30:08.053Z",
   "summary": {
     "branded": {
       "total": 25,
@@ -1742,7 +1742,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Doritos nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Very High",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."

@@ -18,4 +18,11 @@ describe('meal display polish', () => {
     expect(formatFoodItemForDisplay({ food_name: 'Large egg', quantity: 4, unit: 'egg' })).toBe('4 large eggs');
     expect(formatFoodItemForDisplay({ food_name: 'Potato, french fries, NFS', quantity: 100, unit: 'g' })).toBe('100g Potato, French Fries, NFS');
   });
+
+  it('cleans raw database food names before showing history titles', () => {
+    expect(polishMealText('Candies, MARS SNACKFOOD US, SNICKERS Bar')).toBe('Snickers Bar');
+    expect(polishMealText('Candies, MARS SNACKFOOD US, SKITTLES Sours Original')).toBe('Skittles Sour Candy');
+    expect(polishMealText('100g Multigrain chips (Sun Chips)')).toBe('Sun Chips Multigrain Chips');
+    expect(formatMealTitleForDisplay(null, [{ food_name: 'Candies, MARS SNACKFOOD US, SNICKERS Bar', quantity: 1, unit: 'bar' }])).toBe('Snickers Bar');
+  });
 });

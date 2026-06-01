@@ -33,7 +33,7 @@ struct LogChatView: View {
                                 ChatBubble(role: msg.role, text: msg.text)
                             }
                             if isLoading {
-                                ChatBubble(role: "assistant", text: "Estimating nutrition…")
+                                ChatBubble(role: "assistant", text: "Checking that...")
                                     .redacted(reason: .placeholder)
                             }
                             if showReviewCard {
@@ -67,7 +67,7 @@ struct LogChatView: View {
     private var introCard: some View {
         AppCard(padding: 18) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Conversational logging")
+                Text("Log")
                     .font(.caption.weight(.bold))
                     .foregroundColor(MacroMeshTheme.primary)
                     .textCase(.uppercase)
@@ -75,13 +75,15 @@ struct LogChatView: View {
                 Text("What did you eat?")
                     .font(.title.weight(.bold))
                     .foregroundColor(MacroMeshTheme.text)
-                Text(sessionStore.state.isPreparingSession ? "Setting up your guest session. You can type now and send in a moment." : "Describe a meal naturally. MacroMesh estimates nutrition, then asks you to review before anything is saved.")
+                Text(sessionStore.state.isPreparingSession ? "Setting up your guest session. You can type now and send in a moment." : "Type it naturally. You will review before saving.")
                     .font(.subheadline)
                     .foregroundColor(MacroMeshTheme.muted)
-                VStack(alignment: .leading, spacing: 8) {
-                    PromptChip(text: "Greek yogurt with granola and berries")
-                    PromptChip(text: "Chicken burrito bowl for lunch")
-                    PromptChip(text: "Two eggs, toast, and coffee")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        PromptChip(text: "A Snickers")
+                        PromptChip(text: "Baked potato")
+                        PromptChip(text: "Greek yogurt bowl")
+                    }
                 }
             }
         }
@@ -91,7 +93,7 @@ struct LogChatView: View {
         VStack(spacing: 8) {
             NutritionDisclaimerView()
             HStack(spacing: 10) {
-                TextField(sessionStore.state.isPreparingSession ? "Setting up guest session…" : "Describe your meal", text: $inputText)
+                TextField(sessionStore.state.isPreparingSession ? "Setting up guest session..." : "Meal, snack, or correction", text: $inputText)
                     .textFieldStyle(MacroMeshTextFieldStyle())
                     .disabled(isLoading || sessionStore.state.isActionBlocked)
                     .focused($mealInputFocused)
@@ -319,22 +321,39 @@ struct PromptChip: View {
     }
 }
 
+enum MealAssistantDisplayCopy {
+    static func clean(_ raw: String) -> String {
+        var text = raw
+            .replacingOccurrences(of: #"100g\s+Candies,\s*MARS SNACKFOOD US,\s*SNICKERS Bar"#, with: "1 Snickers Bar", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"Candies,\s*MARS SNACKFOOD US,\s*SNICKERS Bar"#, with: "Snickers Bar", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"Candies,\s*MARS SNACKFOOD US,\s*SKITTLES Sours Original"#, with: "Skittles Sour Candy", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"100g\s+Cracker chips"#, with: "1 serving crackers", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"1 cup Potatoes"#, with: "1 medium potato", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: "USDA match", with: "Reference estimate", options: .caseInsensitive)
+            .replacingOccurrences(of: "USDA", with: "reference", options: .caseInsensitive)
+        text = text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 struct ChatBubble: View {
     let role: String
     let text: String
 
     var isUser: Bool { role == "user" }
+    private var displayText: String { isUser ? text : MealAssistantDisplayCopy.clean(text) }
 
     var body: some View {
         HStack(alignment: .bottom) {
             if isUser { Spacer(minLength: 50) }
-            Text(text)
+            Text(displayText)
                 .font(.subheadline)
                 .foregroundColor(isUser ? .white : MacroMeshTheme.text)
                 .padding(12)
-                .background(isUser ? MacroMeshTheme.primary : Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: MacroMeshTheme.shadow, radius: 10, x: 0, y: 6)
+                .frame(maxWidth: 310, alignment: isUser ? .trailing : .leading)
+                .background(isUser ? MacroMeshTheme.primary : MacroMeshTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: MacroMeshTheme.shadow, radius: 8, x: 0, y: 5)
             if !isUser { Spacer(minLength: 50) }
         }
     }

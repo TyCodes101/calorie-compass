@@ -40,6 +40,31 @@ final class MealManagementTests: XCTestCase {
         XCTAssertEqual(MealDraft(meal: malformed).mealType, "snack")
     }
 
+    func testHistoryDisplayCleansRawDatabaseFoodNames() {
+        let meal = MealResponse(
+            id: "meal-clean",
+            mealType: "snack",
+            rawText: "100g Multigrain chips (Sun Chips)",
+            date: "2026-05-25T12:00:00.000Z",
+            createdAt: nil,
+            confidenceScore: 0.9,
+            totalCalories: 140,
+            totalProtein: 2,
+            totalCarbs: 18,
+            totalFat: 6,
+            itemCount: 1,
+            trustedCount: 1,
+            estimatedCount: 0,
+            coverageSummary: nil,
+            items: [MealRequestItem(food_name: "100g Multigrain chips (Sun Chips)", quantity: 1, unit: "serving", calories: 140, protein: 2, carbs: 18, fat: 6, fiber: 2, sugar: 2, sodium: 170, notes: nil, source_type: "USDA_FOUNDATION", source_name: "USDA", confidence_label: "High")]
+        )
+
+        XCTAssertEqual(FoodDisplayFormatter.cleanName("Candies, MARS SNACKFOOD US, SNICKERS Bar"), "Snickers Bar")
+        XCTAssertEqual(FoodDisplayFormatter.cleanName("Candies, MARS SNACKFOOD US, SKITTLES Sours Original"), "Skittles Sour Candy")
+        XCTAssertEqual(meal.displayTitle, "Sun Chips Multigrain Chips")
+        XCTAssertEqual(meal.displayServingSummary, "1 serving")
+    }
+
     func testMealResponseDecodesItemWithMissingNutrients() throws {
         let data = """
         {

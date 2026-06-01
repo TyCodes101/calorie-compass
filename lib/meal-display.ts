@@ -17,10 +17,39 @@ const brandOverrides: Array<[RegExp, string]> = [
   [/\bfairlife\b/gi, 'Fairlife'],
   [/\busda\b/gi, 'USDA'],
   [/\bnfs\b/g, 'NFS'],
+  [/\bsnickers\b/gi, 'Snickers'],
+  [/\bskittles\b/gi, 'Skittles'],
 ];
 
 function normalizeWhitespace(value: string) {
-  return value.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return value.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function cleanFoodNameForDisplay(value: string | null | undefined) {
+  const normalized = normalizeWhitespace(value ?? '').replace(/\s+,/g, ',');
+  if (!normalized) return '';
+
+  const compact = normalized.toLowerCase();
+
+  if (/candies,\s*mars snackfood us,\s*snickers/i.test(normalized) || /\bsnickers\b/i.test(normalized)) {
+    return 'Snickers Bar';
+  }
+
+  if (/candies,\s*mars snackfood us,\s*skittles/i.test(normalized) || /\bskittles\b/i.test(normalized)) {
+    return /sours?|sour/i.test(normalized) ? 'Skittles Sour Candy' : 'Skittles Candy';
+  }
+
+  if (/\bpeanut\b/i.test(normalized) && /\bm\s*(?:&|\/|\s)\s*m'?s?\b/i.test(normalized)) {
+    return "Peanut M&M's";
+  }
+
+  if (/sun\s*chips/i.test(normalized) || /multigrain chips/i.test(compact)) {
+    if (/sun\s*chips/i.test(normalized) || /\(sun chips\)/i.test(normalized)) {
+      return 'Sun Chips Multigrain Chips';
+    }
+  }
+
+  return normalized;
 }
 
 function titleCaseWord(word: string, index: number) {
@@ -32,7 +61,7 @@ function titleCaseWord(word: string, index: number) {
 }
 
 export function polishMealText(value: string | null | undefined) {
-  const normalized = normalizeWhitespace(value ?? '');
+  const normalized = cleanFoodNameForDisplay(value);
   if (!normalized) return '';
 
   let polished = normalized
@@ -53,7 +82,7 @@ export function polishMealText(value: string | null | undefined) {
 }
 
 export function formatFoodItemForDisplay(item: Pick<ParsedFoodItem, 'food_name' | 'quantity' | 'unit'>) {
-  const name = polishMealText(item.food_name);
+  const name = polishMealText(cleanFoodNameForDisplay(item.food_name));
   const quantity = Number.isFinite(item.quantity) ? item.quantity : null;
   const unit = item.unit?.trim().toLowerCase() ?? '';
 
