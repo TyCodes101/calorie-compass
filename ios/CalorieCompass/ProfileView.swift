@@ -32,6 +32,72 @@ struct ProfileView: View {
 
     var body: some View {
         NavigationView {
+            ZStack {
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
+                if loading && profile == nil {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Preparing your profile…")
+                            .font(.headline)
+                            .foregroundColor(MacroMeshTheme.text)
+                        Text("MacroMesh is loading your guest defaults.")
+                            .font(.caption)
+                            .foregroundColor(MacroMeshTheme.muted)
+                    }
+                    .padding()
+                } else if let error = error {
+                    ProfileFallbackView(message: profileFallbackMessage(error), retry: loadProfile)
+                } else if profile == nil {
+                    ProfileFallbackView(message: "Your guest profile will appear here once MacroMesh finishes setup.", retry: loadProfile)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 24) {
+                            ProfileV4CHeroCard(profile: profile)
+                            ProfileV4CMetricGrid(profile: profile)
+                            ProfileV4CActionPills(onEdit: { dirtyProfile = profile; editing = true })
+                            ProfileV4CCoachingCard(profile: profile)
+                            if showSuccess {
+                                Text("Profile updated! Save confirmed.")
+                                    .foregroundColor(.green)
+                            }
+                            if editing {
+                                ProfileEditorCard(
+                                    profile: $dirtyProfile,
+                                    saveError: saveError,
+                                    saving: saving,
+                                    onCancel: {
+                                        focusedProfileField = false
+                                        editing = false
+                                        dirtyProfile = profile
+                                    },
+                                    onSave: {
+                                        focusedProfileField = false
+                                        showConfirmSave = true
+                                    }
+                                )
+                            }
+                            if sessionStore.state.authSession.isSignedIn {
+                                AccountStatusSection(response: sessionStore.state.sessionResponse)
+                                AccountSignInEntryPoint(
+                                    authSession: sessionStore.state.authSession,
+                                    onSessionChanged: sessionStore.refresh
+                                )
+                                SessionAndPrivacyNote()
+                            } else {
+                                GuestProfileNote()
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        .padding(.bottom, 96)
+                    }
+                }
+            }
+        
+            // PHASE 4C PREMIUM REDESIGN START
+            ProfileHeroLayout(profile: $profile, editing: $editing, dirtyProfile: $dirtyProfile, saveError: $saveError, saving: $saving, showConfirmSave: $showConfirmSave, showSuccess: $showSuccess, sessionStore: sessionStore, error: $error, loading: $loading, onProfileLoad: loadProfile, onProfileSave: saveProfile)
+            // PHASE 4C PREMIUM REDESIGN END
             MacroMeshScreen {
                 if loading && profile == nil {
                     VStack(spacing: 12) {
