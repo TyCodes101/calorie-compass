@@ -43,7 +43,7 @@ struct LogChatView: View {
                                 }
                                 if showReviewCard {
                                     MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
-                                        .onChange(of: reviewItems) { nextItems in
+                                        .onChange(of: reviewItems) { _, nextItems in
                                             syncActiveMealItems(nextItems)
                                         }
                                     if let saveError {
@@ -63,10 +63,10 @@ struct LogChatView: View {
                             .padding(.top, 12)
                             .padding(.bottom, 16)
                         }
-                        .onChange(of: messages.count) { _ in scrollToBottom(proxy) }
-                        .onChange(of: isLoading) { _ in scrollToBottom(proxy) }
-                        .onChange(of: showReviewCard) { _ in scrollToBottom(proxy) }
-                        .onChange(of: reviewItems.count) { _ in scrollToBottom(proxy) }
+                        .onChange(of: messages.count) { _, _ in scrollToBottom(proxy) }
+                        .onChange(of: isLoading) { _, _ in scrollToBottom(proxy) }
+                        .onChange(of: showReviewCard) { _, _ in scrollToBottom(proxy) }
+                        .onChange(of: reviewItems.count) { _, _ in scrollToBottom(proxy) }
                     }
                     composer
                 }

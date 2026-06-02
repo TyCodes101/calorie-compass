@@ -2,6 +2,7 @@
 // Calorie Compass iOS - Phase 5 native profile and account status
 // Native Profile with backend fetch/edit/confirm, robust states
 import AuthenticationServices
+import Foundation
 import SwiftUI
 
 struct ProfileData: Codable, Equatable {
@@ -318,11 +319,19 @@ struct WeightTrackingCard: View {
     let response: WeightEntriesResponse?
     let onLogWeight: () -> Void
 
+    private var subtitle: String {
+        guard let latestWeight = response?.trend.latestWeightLbs else {
+            return "Track weight without changing your goals automatically."
+        }
+
+        return String(format: "Latest %.1f lbs", latestWeight)
+    }
+
     var body: some View {
         AppCard(padding: 16) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    SectionHeader("Weight", subtitle: response?.trend.latestWeightLbs.map { "Latest \($0, specifier: "%.1f") lbs" } ?? "Track weight without changing your goals automatically.")
+                    SectionHeader("Weight", subtitle: subtitle)
                     Spacer()
                     Button("Log", action: onLogWeight)
                         .font(.caption.weight(.semibold))

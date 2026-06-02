@@ -56,7 +56,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .macroMeshOpenLogTab)) { _ in
             selectedTab = .log
         }
-        .onChange(of: sessionStore.state) { _ in
+        .onChange(of: sessionStore.state) { _, _ in
             showSessionPill = true
         }
     }
