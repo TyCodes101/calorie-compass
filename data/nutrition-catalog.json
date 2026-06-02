@@ -1296,6 +1296,28 @@
       ]
     },
     {
+      "id": "quest_chocolate_chip_cookie",
+      "canonicalName": "Quest Chocolate Chip Cookie",
+      "brand": "Quest",
+      "servingQuantity": 1,
+      "servingUnit": "cookie",
+      "calories": 250,
+      "protein": 15,
+      "carbs": 19,
+      "fat": 17,
+      "fiber": 11,
+      "sugar": 1,
+      "sodium": 220,
+      "sourceId": "quest_reference",
+      "active": true,
+      "aliases": [
+        "quest chocolate chip cookie",
+        "chocolate chip quest cookie",
+        "quest cookie",
+        "quest protein cookie"
+      ]
+    },
+    {
       "id": "gatorade_bottle",
       "canonicalName": "Gatorade",
       "brand": "Gatorade",
@@ -1848,7 +1870,10 @@
       "sourceId": "david_reference",
       "aliases": [
         "david sunflower seeds",
-        "sunflower seeds david"
+        "sunflower seeds david",
+        "david ranch sunflower seeds",
+        "david ranch seeds",
+        "david ranch flavor"
       ]
     },
     {

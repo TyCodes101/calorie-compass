@@ -21,38 +21,48 @@ struct LogChatView: View {
     @State private var saveError: String? = nil
     @FocusState private var mealInputFocused: Bool
     private let stabilityReporter = ConsoleStabilityReporter()
+    private let bottomAnchorID = "meal-log-bottom-anchor"
 
     var body: some View {
         NavigationView {
             MacroMeshScreen {
                 VStack(spacing: 0) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 14) {
-                            introCard
-                            ForEach(Array(messages.enumerated()), id: \.offset) { _, msg in
-                                ChatBubble(role: msg.role, text: msg.text)
-                            }
-                            if isLoading {
-                                AssistantTypingCard()
-                            }
-                            if showReviewCard {
-                                MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
-                                    .onChange(of: reviewItems) { nextItems in
-                                        syncActiveMealItems(nextItems)
-                                    }
-                                if let saveError {
-                                    Text(saveError)
-                                        .font(.caption)
-                                        .foregroundColor(.red)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 14) {
+                                introCard
+                                ForEach(Array(messages.enumerated()), id: \.offset) { _, msg in
+                                    ChatBubble(role: msg.role, text: msg.text)
                                 }
+                                if isLoading {
+                                    AssistantTypingCard()
+                                }
+                                if showReviewCard {
+                                    MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
+                                        .onChange(of: reviewItems) { nextItems in
+                                            syncActiveMealItems(nextItems)
+                                        }
+                                    if let saveError {
+                                        Text(saveError)
+                                            .font(.caption)
+                                            .foregroundColor(.red)
+                                    }
+                                }
+                                if let error {
+                                    InlineRecoveryCard(message: error, retry: retryFailedMessage)
+                                }
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id(bottomAnchorID)
                             }
-                            if let error {
-                                InlineRecoveryCard(message: error, retry: retryFailedMessage)
-                            }
+                            .padding(.horizontal, 18)
+                            .padding(.top, 12)
+                            .padding(.bottom, 16)
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.top, 12)
-                        .padding(.bottom, 16)
+                        .onChange(of: messages.count) { _ in scrollToBottom(proxy) }
+                        .onChange(of: isLoading) { _ in scrollToBottom(proxy) }
+                        .onChange(of: showReviewCard) { _ in scrollToBottom(proxy) }
+                        .onChange(of: reviewItems.count) { _ in scrollToBottom(proxy) }
                     }
                     composer
                 }
@@ -204,6 +214,14 @@ struct LogChatView: View {
     private func retryFailedMessage() {
         guard let retryMessage else { return }
         sendMessage(retryText: retryMessage)
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+            }
+        }
     }
 
     private func buildAssistantRequestState(for userMessage: String) -> MealAssistantState {

@@ -110,7 +110,7 @@ function detectPackagedBrand(text: string): KnownPackagedBrand {
   if (text.includes('oikos')) return 'Oikos';
   if (text.includes('chobani') || text.includes('chobanni')) return 'Chobani';
   if (text.includes('kodiak') || text.includes('kodiac')) return 'Kodiak';
-  if (text.includes('david') && text.includes('sunflower')) return 'David';
+  if (text.includes('david') && (text.includes('sunflower') || text.includes('seeds') || text.includes('ranch'))) return 'David';
   if (text.includes('dr pepper') || text.includes('dr peper')) return 'Dr Pepper';
   if (text.includes('doritos') || text.includes('dorittos')) return 'Doritos';
   if (text.includes('goldfish') || text.includes('gold fish')) return 'Goldfish';
@@ -304,9 +304,10 @@ function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[
     return food ? scaleItems([scaleCatalogFood(food, 1, 'burger')], factor) : [];
   }
 
-  if (segment.includes('fries')) {
+  if (segment.includes('fries') || /\bfry\b/.test(segment)) {
     const food = findCatalogFoodById('mcdonalds_fries');
-    return food ? scaleItems([scaleCatalogFood(food, 1, 'medium order')], factor) : [];
+    const unit = segment.includes('large') ? 'large order' : segment.includes('small') ? 'small order' : 'medium order';
+    return food ? scaleItems([scaleCatalogFood(food, 1, unit)], factor) : [];
   }
 
   if (segment.includes('coke') || segment.includes('sprite') || segment.includes('drink')) {
@@ -370,7 +371,11 @@ function extractPackagedQuantity(segment: string, unit: string) {
   }
 
   if (unit === 'serving') {
-    return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:serving|servings|bag|bags|pack|packs)/, 1);
+    return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:serving|servings|bag|bags|pack|packs)/, /\b(?:whole|entire)\s+bag\b/.test(quantityReadySegment) ? 1 : 1);
+  }
+
+  if (unit === 'cookie') {
+    return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:cookie|cookies)/, 1);
   }
 
   return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)/, 1);
@@ -558,6 +563,11 @@ function matchGenericSegment(segment: string): ParsedFoodItem[] {
     if (bagel) items.push(scaleCatalogFood(bagel, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:bagel|bagels)/, 1), 'bagel'));
   }
 
+  if (segment.includes('quest') && segment.includes('cookie')) {
+    const cookie = findCatalogFoodById('quest_chocolate_chip_cookie');
+    if (cookie) items.push(scaleCatalogFood(cookie, extractPackagedQuantity(segment, 'cookie'), 'cookie'));
+  }
+
   if (segment.includes('protein bar')) {
     const proteinBar = findCatalogFoodById('generic_protein_bar');
     if (proteinBar) items.push(scaleCatalogFood(proteinBar, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:protein bar|protein bars)/, 1), 'bar'));
@@ -641,6 +651,14 @@ function estimateFallbackSegment(segment: string): ParsedFoodItem | null {
 
 export function getTrustedCatalogEstimate(text: string, mealType: MealTypeValue): ParsedMealResponse | null {
   const normalized = text.toLowerCase();
+  if (/\bdavid\b/.test(normalized) && /\branch\b/.test(normalized) && /\b(?:flavou?r|sunflower|seeds?)\b/.test(normalized)) {
+    const davidSeeds = findCatalogFoodById('david_sunflower_seeds');
+    if (davidSeeds) {
+      const unit = /\b(?:whole|entire)\s+bag\b|\bbag\b/.test(normalized) ? 'bag' : 'serving';
+      return makeCatalogMealResponse(mealType, [{ ...scaleCatalogFood(davidSeeds, 1, unit), used_ai_fallback: false }], 0.9);
+    }
+  }
+
   const restaurantBrand = detectRestaurantBrand(normalized);
   const segments = restaurantBrand ? splitRestaurantSegments(normalized) : splitGenericSegments(normalized);
   const items: ParsedFoodItem[] = [];

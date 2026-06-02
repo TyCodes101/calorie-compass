@@ -13,9 +13,9 @@ vi.mock('@/lib/current-user', () => ({
   getCurrentUserWithProfile,
 }));
 
-import { PATCH } from '@/app/api/profile/route';
+import { GET, PATCH } from '@/app/api/profile/route';
 
-describe('profile PATCH route', () => {
+describe('profile route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getCurrentUserWithProfile.mockResolvedValue({
@@ -33,6 +33,37 @@ describe('profile PATCH route', () => {
       },
     });
     saveProfile.mockResolvedValue({ id: 'user_1' });
+  });
+
+
+  it('returns the current profile snapshot for native profile loading', async () => {
+    const response = await GET();
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      name: 'Tyler',
+      age: 21,
+      heightCm: 180,
+      weightLbs: 180,
+      goal: 'MAINTAIN',
+      activityLevel: 'MODERATE',
+      dailyCalorieGoal: 2200,
+      proteinGoal: 160,
+      nutritionPreferences: 'high protein',
+    });
+  });
+
+  it('returns guest-safe defaults when profile loading fails', async () => {
+    getCurrentUserWithProfile.mockRejectedValueOnce(new Error('database unavailable'));
+
+    const response = await GET();
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.name).toBe('Guest');
+    expect(payload.dailyCalorieGoal).toBe(2200);
+    expect(payload.nutritionPreferences).toBe('');
   });
 
   it('merges partial updates with the existing profile snapshot', async () => {

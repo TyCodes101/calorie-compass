@@ -133,6 +133,12 @@ struct MealReviewCard: View {
                                             .font(.caption.weight(.semibold))
                                             .foregroundColor(MacroMeshTheme.primaryDark)
                                     }
+                                    if let source = items[idx].source?.trimmingCharacters(in: .whitespacesAndNewlines), !source.isEmpty {
+                                        Text("Source: \(source)")
+                                            .font(.caption2)
+                                            .foregroundColor(MacroMeshTheme.muted)
+                                            .lineLimit(2)
+                                    }
                                 }
                                 Spacer()
                                 Button(role: .destructive) {
@@ -152,7 +158,7 @@ struct MealReviewCard: View {
                         }
                     }
 
-                    Text("\(trustedCount) of \(items.count) items matched with high-confidence or trusted nutrition data.")
+                    Text(items.isEmpty ? "No items left in this draft." : "\(trustedCount) of \(items.count) items matched with high-confidence or trusted nutrition data.")
                         .font(.caption)
                         .foregroundColor(MacroMeshTheme.muted)
 

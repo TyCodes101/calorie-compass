@@ -23,12 +23,25 @@ const patchSchema = requestSchema
   .partial()
   .refine((payload) => Object.keys(payload).length > 0, { message: 'At least one setting is required.' });
 
+export async function GET() {
+  try {
+    return NextResponse.json(buildProfileSettingsSnapshot(await getCurrentUserWithProfile()));
+  } catch (error) {
+    logWriteFailure('profile.route.get', error);
+    return NextResponse.json({
+      ...buildProfileSettingsSnapshot(null),
+      name: 'Guest',
+      nutritionPreferences: '',
+    });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const payload = requestSchema.parse(body);
     const user = await saveProfile(payload);
-    return NextResponse.json(user);
+    return NextResponse.json(buildProfileSettingsSnapshot(user));
   } catch (error) {
     logWriteFailure('profile.route', error);
 
@@ -56,7 +69,7 @@ export async function PATCH(request: Request) {
     };
 
     const user = await saveProfile(payload);
-    return NextResponse.json(user);
+    return NextResponse.json(buildProfileSettingsSnapshot(user));
   } catch (error) {
     logWriteFailure('profile.route.patch', error);
 
