@@ -182,6 +182,167 @@ describe('runMealAssistant', () => {
     expect(response.assistant_reply).toMatch(/980 calories/i);
   });
 
+  it('logs a baked potato as one specific potato item instead of duplicate potato matches', async () => {
+    const response = await runMealAssistant(
+      {
+        message: 'a baked potato',
+        state: buildState({ mealType: 'lunch' }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'baked potato',
+                brand: null,
+                quantity: 1,
+                unit: null,
+                modifiers: [],
+                action: 'add',
+              },
+              {
+                name: 'potatoes',
+                brand: null,
+                quantity: 1,
+                unit: 'cup',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn(async ({ item }) => {
+          if (/baked potato/i.test(item.name)) {
+            return buildParsedMealResponse([
+              buildItem({
+                food_name: 'Potato, baked, NFS',
+                quantity: 1,
+                unit: 'potato',
+                calories: 160,
+                protein: 4,
+                carbs: 37,
+                fat: 0,
+                source_type: 'GENERIC_REFERENCE',
+                source_name: 'USDA FoodData Central',
+              }),
+            ]);
+          }
+
+          return buildParsedMealResponse([
+            buildItem({
+              food_name: 'Potatoes',
+              quantity: 1,
+              unit: 'cup',
+              calories: 160,
+              protein: 4,
+              carbs: 37,
+              fat: 0,
+              source_type: 'GENERIC_REFERENCE',
+              source_name: 'Potatoes common serving estimate',
+            }),
+          ]);
+        }),
+      },
+    );
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/baked potato|potato, baked/i);
+    expect(response.meal.items[0]?.food_name).not.toBe('Potatoes');
+    expect(response.assistant_reply).not.toMatch(/and Potatoes/i);
+  });
+
+  it('does not carry a high-confidence Snickers card forward when corrected to Skittles', async () => {
+    const snickers = buildItem({
+      food_name: 'Candies, MARS SNACKFOOD US, SNICKERS Bar',
+      quantity: 100,
+      unit: 'g',
+      calories: 491,
+      protein: 7,
+      carbs: 61,
+      fat: 23,
+      source_type: 'GENERIC_REFERENCE',
+      source_name: 'USDA FoodData Central',
+      confidence_label: 'High confidence',
+    });
+
+    const response = await runMealAssistant(
+      {
+        message: 'A skittles pack I meant',
+        state: buildState({
+          currentMealItems: [snickers],
+          currentMealText: 'Snickers',
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'correction',
+            assistant_reply: 'I need a little more detail for a reliable estimate.',
+            should_lookup_nutrition: false,
+            should_ask_clarification: true,
+            clarification_question: 'Which Skittles pack size should I use?',
+            confidence: 'low',
+          }),
+        ),
+      },
+    );
+
+    expect(response.meal.items.map((item) => item.food_name).join(' ')).not.toMatch(/snickers/i);
+    expect(response.next_state.currentMealItems.map((item) => item.food_name).join(' ')).not.toMatch(/snickers/i);
+    if (response.should_ask_clarification) {
+      expect(response.clarification_question).toMatch(/skittles/i);
+      expect(response.meal.items).toHaveLength(0);
+    } else {
+      expect(response.meal.items[0]?.food_name).toMatch(/skittles/i);
+    }
+    expect(response.assistant_reply).not.toMatch(/snickers/i);
+  });
+
+  it('clears stale active food when a replacement clarification has no reliable item', async () => {
+    const snickers = buildItem({
+      food_name: 'Candies, MARS SNACKFOOD US, SNICKERS Bar',
+      quantity: 100,
+      unit: 'g',
+      calories: 491,
+      protein: 7,
+      carbs: 61,
+      fat: 23,
+      source_type: 'GENERIC_REFERENCE',
+      source_name: 'USDA FoodData Central',
+      confidence_label: 'High confidence',
+    });
+
+    const response = await runMealAssistant(
+      {
+        message: 'A sour candy pack I meant',
+        state: buildState({
+          currentMealItems: [snickers],
+          currentMealText: 'Snickers',
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'correction',
+            assistant_reply: 'I need a little more detail for a reliable estimate.',
+            should_lookup_nutrition: false,
+            should_ask_clarification: true,
+            clarification_question: 'Which sour candy pack should I use?',
+            confidence: 'low',
+          }),
+        ),
+      },
+    );
+
+    expect(response.should_ask_clarification).toBe(true);
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.next_state.currentMealItems).toHaveLength(0);
+    expect(response.assistant_reply).not.toMatch(/snickers/i);
+  });
+
   it('replaces a stale clarification with the corrected branded food', async () => {
     const correctedItem = buildItem({
       food_name: 'Quaker White Cheddar Rice Cakes',

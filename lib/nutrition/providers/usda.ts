@@ -40,6 +40,8 @@ function countOverlap(left: string[], right: string[]) {
 function normalizeUnit(unit: string | null | undefined) {
   const normalized = normalizeText(unit ?? '');
   if (!normalized) return null;
+  if (/^(?:\d+(?:\.\d+)?\s+)?(?:g|gram|grams)$/.test(normalized)) return 'g';
+  if (/^(?:\d+(?:\.\d+)?\s+)?(?:oz|ounce|ounces|onz|onzs)$/.test(normalized)) return 'oz';
   if (['g', 'gram', 'grams'].includes(normalized)) return 'g';
   if (['oz', 'ounce', 'ounces'].includes(normalized)) return 'oz';
   if (['slice', 'slices'].includes(normalized)) return 'slice';
@@ -72,6 +74,16 @@ function findUsdaNutrient(food: UsdaFood, names: string[], nutrientNumbers: stri
 function pickServingText(food: UsdaFood) {
   if (!food.servingSize && !food.servingSizeUnit && /foundation|survey|sr legacy/i.test(food.dataType ?? '')) {
     return 'g';
+  }
+
+  const servingSizeUnit = normalizeUnit(food.servingSizeUnit);
+  if (servingSizeUnit === 'g' || servingSizeUnit === 'oz') {
+    return servingSizeUnit;
+  }
+
+  const householdServingUnit = normalizeUnit(food.householdServingFullText);
+  if (householdServingUnit === 'g' || householdServingUnit === 'oz') {
+    return householdServingUnit;
   }
 
   return food.householdServingFullText?.trim() || food.servingSizeUnit?.trim() || 'serving';

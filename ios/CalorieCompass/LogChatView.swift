@@ -175,7 +175,7 @@ struct LogChatView: View {
                         return
                     }
                     messages.append(MealAssistantTranscriptMessage(role: "assistant", text: resp.assistant_reply))
-                    if MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: activeItemsBeforeResponse, responseItems: resp.meal.items, responseSaved: resp.next_state.saved) {
+                    if MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: activeItemsBeforeResponse, responseItems: resp.meal.items, responseSaved: resp.next_state.saved, incomingUserMessage: userMessage) {
                         assistantState = resp.next_state
                         assistantState.currentMealItems = activeItemsBeforeResponse
                         showReviewCard = true

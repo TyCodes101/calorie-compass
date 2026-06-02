@@ -66,6 +66,8 @@ struct MealItem: Identifiable, Codable, Equatable {
 }
 
 struct MealReviewCard: View {
+    static let reviewTitle = "Review meal"
+
     @Binding var items: [MealItem]
     @Binding var showCard: Bool
     @State private var isSaving = false
@@ -93,9 +95,11 @@ struct MealReviewCard: View {
                             .background(MacroMeshTheme.primary.opacity(0.12))
                             .clipShape(Circle())
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Review before saving")
+                            Text(Self.reviewTitle)
                                 .font(.title3.weight(.bold))
                                 .foregroundColor(MacroMeshTheme.text)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
                             Text("Check serving sizes and confidence. Nothing is saved until you confirm.")
                                 .font(.caption)
                                 .foregroundColor(MacroMeshTheme.muted)

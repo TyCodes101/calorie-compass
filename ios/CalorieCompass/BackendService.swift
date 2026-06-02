@@ -305,8 +305,8 @@ struct MealAssistantClientLogic {
         return nil
     }
 
-    static func shouldPreserveActiveMeal(currentItems: [MealRequestItem], responseItems: [MealRequestItem], responseSaved: Bool) -> Bool {
-        !currentItems.isEmpty && responseItems.isEmpty && !responseSaved
+    static func shouldPreserveActiveMeal(currentItems: [MealRequestItem], responseItems: [MealRequestItem], responseSaved: Bool, incomingUserMessage: String) -> Bool {
+        !currentItems.isEmpty && responseItems.isEmpty && !responseSaved && !looksLikeReplacementClarification(incomingUserMessage, currentItems: currentItems)
     }
 
     static func canAttemptSave(items: [MealRequestItem], isSaving: Bool) -> Bool {
@@ -337,6 +337,30 @@ struct MealAssistantClientLogic {
             token.count > 1 && !ignored.contains(token)
         }
         return Set(filtered)
+    }
+
+    private static func looksLikeReplacementClarification(_ message: String, currentItems: [MealRequestItem]) -> Bool {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let hasReplacementCue = normalized.hasPrefix("actually") ||
+            normalized.hasPrefix("no ") ||
+            normalized.hasPrefix("nah ") ||
+            normalized.contains("meant") ||
+            normalized.contains("instead") ||
+            normalized.contains("change it") ||
+            normalized.contains("change that") ||
+            normalized.contains("make that")
+        guard hasReplacementCue else { return false }
+
+        let ignored: Set<String> = ["actually", "meant", "instead", "change", "make", "pack", "packet", "package", "please"]
+        let foodCueTokens: Set<String> = ["skittle", "skittles", "snicker", "snickers", "quest", "bbq", "barbecue", "protein", "chip", "chips", "candy", "candies", "potato", "potatoes", "mms"]
+        let messageTokens = significantTokens(in: normalized).subtracting(ignored)
+        guard !messageTokens.isEmpty && !messageTokens.isDisjoint(with: foodCueTokens) else { return false }
+
+        let currentTokens = currentItems.reduce(into: Set<String>()) { partialResult, item in
+            partialResult.formUnion(significantTokens(in: item.food_name))
+        }
+
+        return !messageTokens.isSubset(of: currentTokens)
     }
 }
 

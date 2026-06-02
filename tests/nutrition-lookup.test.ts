@@ -553,6 +553,73 @@ describe('lookupNutrition', () => {
     });
   });
 
+  it('cleans malformed USDA household serving units before display metadata reaches clients', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'CHIPS',
+            dataType: 'Branded',
+            servingSize: 28.35,
+            servingSizeUnit: 'g',
+            householdServingFullText: '1 onz',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 150 },
+              { nutrientName: 'Protein', value: 2 },
+              { nutrientName: 'Carbohydrate, by difference', value: 17 },
+              { nutrientName: 'Total lipid (fat)', value: 8 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'chips', mealType: 'snack' });
+
+    expect(response?.items[0]).toMatchObject({
+      quantity: 28.35,
+      unit: 'g',
+    });
+    expect(`${response?.items[0]?.quantity} ${response?.items[0]?.unit}`).not.toMatch(/onz|28\.35 1/i);
+  });
+
+  it('does not accept a Snickers USDA row for Skittles branded candy intent', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Candies, MARS SNACKFOOD US, SNICKERS Bar',
+            brandOwner: 'MARS SNACKFOOD US',
+            dataType: 'Branded',
+            servingSize: 100,
+            servingSizeUnit: 'g',
+            householdServingFullText: '100 g',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 491 },
+              { nutrientName: 'Protein', value: 7 },
+              { nutrientName: 'Carbohydrate, by difference', value: 61 },
+              { nutrientName: 'Total lipid (fat)', value: 23 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'a skittles pack', mealType: 'snack' });
+
+    expect(response).toMatchObject({
+      needs_clarification: true,
+      items: [],
+    });
+    expect(response?.clarifying_question).toMatch(/Skittles|exact item|serving/i);
+  });
+
   it('asks clarification when supporting data conflicts with branded protein snack intent', async () => {
     vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
     const fetchMock = vi.fn().mockImplementation(async () => ({

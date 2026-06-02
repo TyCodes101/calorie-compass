@@ -303,9 +303,21 @@ final class MealAssistantParityTests: XCTestCase {
     func testOffTopicEmptyAssistantResponsePreservesActiveMealState() {
         let currentItems = [Self.item("chicken breast"), Self.item("rice")]
 
-        XCTAssertTrue(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false))
-        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [Self.item("broccoli")], responseSaved: false))
-        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: true))
+        XCTAssertTrue(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "thanks"))
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [Self.item("broccoli")], responseSaved: false, incomingUserMessage: "thanks"))
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: true, incomingUserMessage: "thanks"))
+    }
+
+    func testReplacementClarificationDoesNotPreserveStaleReviewCard() {
+        let currentItems = [Self.item("Candies, MARS SNACKFOOD US, SNICKERS Bar")]
+
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "A skittles pack I meant"))
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "actually Quest BBQ protein chips"))
+    }
+
+    func testMealReviewTitleUsesShortNonTruncatedCopy() {
+        XCTAssertEqual(MealReviewCard.reviewTitle, "Review meal")
+        XCTAssertLessThanOrEqual(MealReviewCard.reviewTitle.count, 16)
     }
 
     func testSaveGuardPreventsEmptyAndDuplicateSubmissions() {

@@ -84,7 +84,7 @@ const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
 const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|(?:lets|let's) go back to|go back to|back to|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
-const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chick[-\s]*fil[-\s]*a|starbucks|subway|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|trader joe'?s?|mcchicken|big mac|nuggets?|tacos?|sandwich|burgers?|fries|fry|latte|macchiato|footlong|orange chicken|caniac|mac and cheese|fairlife|core power|quest|pop[-\s]*tarts?|cheez[-\s]*its?|cheezits?|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|whey|shakes?|grilled chicken|chicken breast|chicken tenders?|chicken|turkey sausage|sausage|coke zero|coke|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|granola|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|sauce|ranch|pasta|gummy worms?|snickers|skittles|candy|candy bars?)\b/i;
+const strongFoodSignalRegex = /\b(?:oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chick[-\s]*fil[-\s]*a|starbucks|subway|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|trader joe'?s?|mcchicken|big mac|nuggets?|tacos?|sandwich|burgers?|fries|fry|latte|macchiato|footlong|orange chicken|caniac|mac and cheese|fairlife|core power|quest|pop[-\s]*tarts?|cheez[-\s]*its?|cheezits?|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|whey|shakes?|grilled chicken|chicken breast|chicken tenders?|chicken|turkey sausage|sausage|coke zero|coke|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|granola|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|sauce|ranch|pasta|gummy worms?|skittles?|snickers?|m&ms?|mms?|candy|candies|candy bars?)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -326,6 +326,14 @@ function normalizeQuantityUnit(unit: string | null | undefined) {
   }
 
   const normalized = unit.toLowerCase().trim();
+  if (/^(?:\d+(?:\.\d+)?\s+)?(?:g|gram|grams)$/.test(normalized)) {
+    return 'g';
+  }
+
+  if (/^(?:\d+(?:\.\d+)?\s+)?(?:oz|ounce|ounces|onz|onzs)$/.test(normalized)) {
+    return 'oz';
+  }
+
   if (normalized === 'g' || normalized === 'gram' || normalized === 'grams') {
     return 'g';
   }
@@ -521,6 +529,29 @@ function isNonFoodDialogueMessage(message: string) {
     jokeRequestRegex.test(normalized) ||
     (isQuestionLikeText(normalized) && !hasStrongFoodSignal(normalized))
   );
+}
+
+function isFoodReplacementClarification(message: string, state: MealAssistantState) {
+  if (!state.currentMealItems.length) {
+    return false;
+  }
+
+  const normalized = stripEmotionalPreface(message).toLowerCase();
+  const hasReplacementCue =
+    correctionCueRegex.test(normalized) ||
+    /\b(?:meant|actually|instead)\b/i.test(normalized);
+
+  if (!hasReplacementCue || !hasStrongFoodSignal(normalized)) {
+    return false;
+  }
+
+  const currentText = itemTextForCoverage(state.currentMealItems);
+  const relevantTokens = normalizeText(normalized)
+    .split(' ')
+    .filter((token) => token.length > 2)
+    .filter((token) => !['actually', 'meant', 'instead', 'that', 'this', 'pack', 'packet', 'package'].includes(token));
+
+  return relevantTokens.some((token) => !currentText.includes(token));
 }
 
 function hasAffirmativeSaveCommand(message: string) {
@@ -3437,7 +3468,28 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (/\bpotatoes\b|\bpotato\b/.test(normalized)) {
+  if (/\bbaked (?:potato|potatoes)\b/.test(normalized)) {
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'baked potato',
+          label: 'Baked potato',
+          quantity: 1,
+          unit: 'potato',
+          calories: 160,
+          protein: 4,
+          carbs: 37,
+          fat: 0.2,
+          fiber: 4,
+          sugar: 2,
+          sodium: 20,
+          sourceName: 'Baked potato common serving estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  } else if (/\bpotatoes\b|\bpotato\b/.test(normalized)) {
     const cupMatch = normalized.match(/\b(\d+(?:\.\d+)?|\.\d+|one|two|three|four|half|a half)\s+cups?\s+(?:of\s+)?potatoes\b/);
     const quantity = cupMatch ? parseCount(cupMatch[1] ?? '1') : 1;
     items.push(
@@ -3849,6 +3901,16 @@ function hardenResolvedItems(args: { message: string; resolvedItems: ParsedFoodI
     nextItems = nextItems.filter((item) => itemCoversTerm([item], 'pizza'));
   }
 
+  if (knownEstimates.some((estimate) => /\bbaked potato\b/i.test(estimate.food_name))) {
+    const hasSpecificBakedPotato = nextItems.some((item) => /\bpotato\b/i.test(item.food_name) && /\bbaked\b/i.test(item.food_name));
+    if (hasSpecificBakedPotato) {
+      nextItems = nextItems.filter((item) => (
+        !/\b(?:potato|potatoes)\b/i.test(item.food_name) ||
+        /\bbaked\b/i.test(item.food_name)
+      ));
+    }
+  }
+
   for (const estimate of knownEstimates) {
     if (
       /\bchipotle\b/i.test(estimate.food_name)
@@ -3903,7 +3965,24 @@ function hardenResolvedItems(args: { message: string; resolvedItems: ParsedFoodI
     }
   }
 
-  return dedupeParsedItems(nextItems);
+  return suppressNearDuplicateResolvedItems(dedupeParsedItems(nextItems), message);
+}
+
+function suppressNearDuplicateResolvedItems(items: ParsedFoodItem[], message: string) {
+  const normalizedMessage = normalizeFoodText(message);
+  let nextItems = [...items];
+
+  if (/\bbaked (?:potato|potatoes)\b/.test(normalizedMessage)) {
+    const hasSpecificBakedPotato = nextItems.some((item) => /\bpotato\b/i.test(item.food_name) && /\bbaked\b/i.test(item.food_name));
+    if (hasSpecificBakedPotato) {
+      nextItems = nextItems.filter((item) => (
+        !/\b(?:potato|potatoes)\b/i.test(item.food_name) ||
+        /\bbaked\b/i.test(item.food_name)
+      ));
+    }
+  }
+
+  return nextItems;
 }
 
 function buildFoodAwareFallbackReply(message: string, items: ParsedFoodItem[]) {
@@ -8205,21 +8284,26 @@ function guardAssistantDecision(decision: MealAssistantModelOutput, input: MealA
     decision.should_mutate_pending_meal === true ||
     decision.contains_quantity_update === true ||
     decision.action === 'remove_item';
+  const isReplacementClarification = isFoodReplacementClarification(input.message, input.state);
+  const isNonFoodDialogue = isNonFoodDialogueMessage(input.message) && !isReplacementClarification;
 
   if (
     decision.should_ask_clarification &&
     decision.clarification_question &&
-    !isNonFoodDialogueMessage(input.message)
+    !isNonFoodDialogue
   ) {
     return {
       ...decision,
+      action: 'unclear',
+      operations: [],
       items: safeItems,
       should_lookup_nutrition: false,
+      should_mutate_pending_meal: false,
     };
   }
 
   if (
-    isNonFoodDialogueMessage(input.message) ||
+    isNonFoodDialogue ||
     isNonMutatingIntent(decision.intent) ||
     ((!isExplicitMealMutation && decision.contains_food_to_log === false) || (!isExplicitMealMutation && decision.should_mutate_pending_meal === false))
   ) {
@@ -8761,6 +8845,12 @@ export async function runMealAssistant(
     nextState.pendingClarification = decision.clarification_question;
     nextState.lastAssistantQuestion = decision.clarification_question;
     nextState.saved = false;
+    if (isFoodReplacementClarification(workingInput.message, nextState)) {
+      nextState.currentMealItems = [];
+      nextState.currentMealText = null;
+      nextState.confidenceScore = 0.82;
+      resolvedItems = [];
+    }
   } else if (decision.should_ask_clarification && decision.clarification_question === state.lastAssistantQuestion) {
     suppressedClarification = true;
     nextState.pendingClarification = state.pendingClarification;
@@ -8837,7 +8927,7 @@ export async function runMealAssistant(
     }
   }
 
-  const mealItems = withServingMetadataForItems(nextState.currentMealItems);
+  const mealItems = withServingMetadataForItems(suppressNearDuplicateResolvedItems(nextState.currentMealItems, workingInput.message));
   nextState = {
     ...nextState,
     currentMealItems: mealItems,
