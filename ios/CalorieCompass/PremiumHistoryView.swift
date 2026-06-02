@@ -74,7 +74,7 @@ struct PremiumHistoryView: View {
 
     private var groupedMealDates: [String] {
         let formatter = DateFormatter.mealDisplay
-        let dates = Set(meals.compactMap { meal in
+        let dates: Set<String> = Set(meals.compactMap { meal -> String? in
             guard let date = DateParser.parseMealDate(meal.date ?? meal.createdAt) else { return nil }
             return formatter.string(from: date)
         })
