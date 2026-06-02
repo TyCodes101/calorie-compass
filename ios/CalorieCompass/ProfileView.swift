@@ -352,7 +352,7 @@ struct ReminderSettings: Codable, Equatable {
 
     var sanitized: ReminderSettings {
         let allowedHours = quietHoursEnabled ? 5...22 : 0...23
-        ReminderSettings(
+        return ReminderSettings(
             mealReminderEnabled: mealReminderEnabled,
             weeklyReportEnabled: weeklyReportEnabled,
             reminderHour: allowedHours.contains(reminderHour) ? reminderHour : ReminderSettings.standard.reminderHour,
