@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
-import { createFavoriteMealTemplate } from '@/lib/reusable-meals';
+import { buildReusableMealSummaryFromRecord, createFavoriteMealTemplate, getReusableMealLibrary } from '@/lib/reusable-meals';
 
 const parsedItemSchema = z.object({
   food_name: z.string().min(1),
@@ -36,11 +36,20 @@ const requestSchema = z.object({
   items: z.array(parsedItemSchema).min(1),
 });
 
+export async function GET() {
+  try {
+    return NextResponse.json(await getReusableMealLibrary());
+  } catch (error) {
+    logWriteFailure('favorite.route.get', error);
+    return NextResponse.json({ favoriteMeals: [], recentMeals: [] });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const payload = requestSchema.parse(body);
-    const favoriteMeal = await createFavoriteMealTemplate(payload);
+    const favoriteMeal = buildReusableMealSummaryFromRecord(await createFavoriteMealTemplate(payload));
 
     return NextResponse.json({ favoriteMeal });
   } catch (error) {

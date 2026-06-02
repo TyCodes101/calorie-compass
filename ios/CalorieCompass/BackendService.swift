@@ -215,6 +215,15 @@ enum MealAssistantQuantityResolution: Equatable {
 }
 
 struct MealAssistantClientLogic {
+    static func applyingMealType(_ mealType: String, to state: MealAssistantState) -> MealAssistantState {
+        let normalized = mealType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let allowed = ["breakfast", "lunch", "dinner", "snack"]
+        guard allowed.contains(normalized) else { return state }
+        var next = state
+        next.mealType = normalized
+        return next
+    }
+
     static func buildRequestState(
         assistantState: MealAssistantState,
         currentMealItems: [MealRequestItem],
@@ -430,6 +439,7 @@ struct DashboardResponse: Codable {
     let mealCount: Int?
     let remainingCalories: Double?
     let dailySummary: DailySummary?
+    let streaks: DashboardStreaks?
 
     var displayedCalories: Double { totals?.calories ?? calories ?? 0 }
     var displayedGoalCalories: Double { macroGoals?.calories ?? goalCalories ?? 1 }
@@ -439,6 +449,13 @@ struct DashboardResponse: Codable {
     var displayedCarbsGoal: Double { macroGoals?.carbs ?? max(carbs ?? 0, 1) }
     var displayedFat: Double { totals?.fat ?? fat ?? 0 }
     var displayedFatGoal: Double { macroGoals?.fat ?? max(fat ?? 0, 1) }
+}
+
+struct DashboardStreaks: Codable, Equatable {
+    let currentStreakDays: Int
+    let mealsLoggedThisWeek: Int
+    let proteinGoalHitDaysThisWeek: Int
+    let summary: String?
 }
 
 struct DashboardTotals: Codable {
@@ -458,6 +475,129 @@ struct MacroGoals: Codable {
 struct DailySummary: Codable {
     let title: String?
     let description: String?
+}
+
+struct ReusableMealSummary: Codable, Equatable, Identifiable {
+    let id: String
+    let title: String
+    let rawText: String?
+    let mealType: String
+    let lastUsedAt: String?
+    let totalCalories: Double
+    let totalProtein: Double?
+    let itemCount: Int
+    let trustedCount: Int?
+    let confidenceScore: Double?
+    let items: [MealRequestItem]?
+}
+
+struct ReusableMealsResponse: Codable, Equatable {
+    let favoriteMeals: [ReusableMealSummary]
+    let recentMeals: [ReusableMealSummary]
+}
+
+struct FavoriteMealRequest: Codable {
+    let reusable_meal_id: String?
+    let meal_type: String
+    let confidence_score: Double
+    let raw_text: String?
+    let items: [MealRequestItem]
+}
+
+struct FavoriteMealMutationResponse: Codable, Equatable {
+    let favoriteMeal: ReusableMealSummary?
+}
+
+struct AnalyticsResponse: Codable, Equatable {
+    let analytics: NutritionAnalyticsSummary
+    let weightTrend: WeightTrendSummary
+}
+
+struct NutritionAnalyticsSummary: Codable, Equatable {
+    let sevenDayAverageCalories: Double
+    let sevenDayAverageProtein: Double
+    let thirtyDayAverageCalories: Double
+    let highestProteinDay: HighestProteinDay?
+    let macroConsistencySummary: String
+}
+
+struct HighestProteinDay: Codable, Equatable {
+    let date: String
+    let protein: Double
+}
+
+struct WeightEntry: Codable, Equatable, Identifiable {
+    let id: String
+    let date: String
+    let weightLbs: Double
+}
+
+struct WeightTrendSummary: Codable, Equatable {
+    let latestWeightLbs: Double?
+    let changeLbs: Double
+    let direction: String
+}
+
+struct WeightEntriesResponse: Codable, Equatable {
+    let entries: [WeightEntry]
+    let trend: WeightTrendSummary
+}
+
+struct CreateWeightEntryRequest: Codable {
+    let weightLbs: Double
+    let date: String?
+}
+
+enum ProteinPreference {
+    case moderate
+    case high
+}
+
+struct GoalTargets: Equatable {
+    let dailyCalorieGoal: Int
+    let proteinGoal: Int
+    let carbsGoal: Int
+    let fatGoal: Int
+}
+
+enum GoalSetupCalculator {
+    static func calculate(
+        weightLbs: Double,
+        goalWeightLbs: Double?,
+        goal: String,
+        activityLevel: String,
+        ratePerWeekLbs: Double,
+        proteinPreference: ProteinPreference
+    ) -> GoalTargets {
+        let activityMultiplier: Double
+        switch activityLevel {
+        case "LOW": activityMultiplier = 13
+        case "HIGH": activityMultiplier = 17
+        case "VERY_HIGH": activityMultiplier = 19
+        default: activityMultiplier = 15
+        }
+
+        let boundedRate = min(max(ratePerWeekLbs, 0), 2)
+        let maintenance = weightLbs * activityMultiplier
+        let targetDelta = goalWeightLbs.map { $0 - weightLbs }
+        let shouldAdjustForGoal = targetDelta == nil ||
+            (goal == "LOSE_WEIGHT" && (targetDelta ?? 0) < -0.5) ||
+            (goal == "GAIN_MUSCLE" && (targetDelta ?? 0) > 0.5)
+        let adjustment: Double
+        switch goal {
+        case "LOSE_WEIGHT": adjustment = shouldAdjustForGoal ? -boundedRate * 500 : 0
+        case "GAIN_MUSCLE": adjustment = shouldAdjustForGoal ? boundedRate * 325 : 0
+        default: adjustment = 0
+        }
+
+        let dailyCalories = max(1500, Int((maintenance + adjustment).rounded()))
+        let proteinPerPound = proteinPreference == .high || goal != "MAINTAIN" ? 0.9 : 0.75
+        let protein = Int((weightLbs * proteinPerPound).rounded())
+        let fat = max(45, Int(((Double(dailyCalories) * 0.25) / 9).rounded()))
+        let carbs = max(0, Int(((Double(dailyCalories) - Double(protein * 4) - Double(fat * 9)) / 4).rounded()))
+
+        return GoalTargets(dailyCalorieGoal: dailyCalories, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat)
+    }
 }
 
 struct NativeAppleAuthRequest: Encodable {
@@ -781,6 +921,23 @@ class BackendService {
         perform(urlRequest, completion: completion)
     }
 
+    static func fetchReusableMeals(completion: @escaping (Result<ReusableMealsResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/reusable-meals", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func saveFavoriteMeal(request body: FavoriteMealRequest, completion: @escaping (Result<FavoriteMealMutationResponse, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/reusable-meals", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        do { urlRequest.httpBody = try JSONEncoder().encode(body) } catch { completion(.failure(error)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func repeatReusableMeal(id: String, completion: @escaping (Result<PostMealResponse, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/reusable-meals/\(id)/repeat", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        urlRequest.httpBody = Data()
+        perform(urlRequest, completion: completion)
+    }
+
     static func fetchMeals(completion: @escaping (Result<[MealResponse], Error>) -> Void) {
         guard let urlRequest = request(path: "api/meals", method: "GET") else { completion(.failure(BackendError.badURL)); return }
         perform(urlRequest) { (result: Result<MealsListResponse, Error>) in
@@ -809,6 +966,32 @@ class BackendService {
         perform(urlRequest, completion: completion)
     }
 
+    static func fetchAnalytics(completion: @escaping (Result<AnalyticsResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/analytics", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func fetchWeightEntries(completion: @escaping (Result<WeightEntriesResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/weight-entries", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func createWeightEntry(weightLbs: Double, date: String? = nil, completion: @escaping (Result<WeightEntry, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/weight-entries", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(CreateWeightEntryRequest(weightLbs: weightLbs, date: date))
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        perform(urlRequest) { (result: Result<CreateWeightEntryResponse, Error>) in
+            switch result {
+            case .success(let response): completion(.success(response.entry))
+            case .failure(let error): completion(.failure(error))
+            }
+        }
+    }
+
     static func fetchProfile(completion: @escaping (Result<ProfileData, Error>) -> Void) {
         guard let urlRequest = request(path: "api/profile", method: "GET") else { completion(.failure(BackendError.badURL)); return }
         perform(urlRequest, completion: completion)
@@ -819,6 +1002,10 @@ class BackendService {
         do { urlRequest.httpBody = try JSONEncoder().encode(profile) } catch { completion(.failure(error)); return }
         perform(urlRequest, completion: completion)
     }
+}
+
+private struct CreateWeightEntryResponse: Codable {
+    let entry: WeightEntry
 }
 
 private struct APIErrorResponse: Codable {

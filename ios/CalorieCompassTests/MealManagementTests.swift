@@ -320,6 +320,91 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertLessThanOrEqual(MealReviewCard.reviewTitle.count, 16)
     }
 
+    func testQuickMealTypeSelectionUpdatesAssistantState() {
+        var state = MealAssistantState()
+
+        state = MealAssistantClientLogic.applyingMealType("lunch", to: state)
+
+        XCTAssertEqual(state.mealType, "lunch")
+    }
+
+    func testGoalSetupCalculatorBuildsProteinForwardTargets() {
+        let result = GoalSetupCalculator.calculate(
+            weightLbs: 180,
+            goalWeightLbs: 170,
+            goal: "LOSE_WEIGHT",
+            activityLevel: "MODERATE",
+            ratePerWeekLbs: 1,
+            proteinPreference: .high
+        )
+
+        XCTAssertGreaterThanOrEqual(result.dailyCalorieGoal, 1500)
+        XCTAssertGreaterThanOrEqual(result.proteinGoal, 160)
+        XCTAssertGreaterThan(result.carbsGoal, 0)
+        XCTAssertGreaterThan(result.fatGoal, 40)
+    }
+
+    func testDashboardResponseDecodesStreakStats() throws {
+        let data = """
+        {
+          "totals": { "calories": 900, "protein": 95, "carbs": 80, "fat": 28 },
+          "macroGoals": { "calories": 2100, "protein": 160, "carbs": 210, "fat": 70 },
+          "mealCount": 2,
+          "streaks": {
+            "currentStreakDays": 3,
+            "mealsLoggedThisWeek": 12,
+            "proteinGoalHitDaysThisWeek": 4,
+            "summary": "3 day streak"
+          }
+        }
+        """.data(using: .utf8)
+
+        let response = try JSONDecoder().decode(DashboardResponse.self, from: try XCTUnwrap(data))
+
+        XCTAssertEqual(response.streaks?.currentStreakDays, 3)
+        XCTAssertEqual(response.streaks?.mealsLoggedThisWeek, 12)
+        XCTAssertEqual(response.streaks?.proteinGoalHitDaysThisWeek, 4)
+    }
+
+    func testAnalyticsAndWeightResponsesDecodeNativeSummaries() throws {
+        let analyticsData = """
+        {
+          "analytics": {
+            "sevenDayAverageCalories": 1775,
+            "sevenDayAverageProtein": 149,
+            "thirtyDayAverageCalories": 1801,
+            "highestProteinDay": { "date": "2026-06-01", "protein": 185 },
+            "macroConsistencySummary": "4 protein days"
+          },
+          "weightTrend": {
+            "latestWeightLbs": 181,
+            "changeLbs": -3,
+            "direction": "down"
+          }
+        }
+        """.data(using: .utf8)
+        let weightData = """
+        {
+          "entries": [
+            { "id": "weight-1", "date": "2026-06-02T00:00:00.000Z", "weightLbs": 181 }
+          ],
+          "trend": {
+            "latestWeightLbs": 181,
+            "changeLbs": -3,
+            "direction": "down"
+          }
+        }
+        """.data(using: .utf8)
+
+        let analytics = try JSONDecoder().decode(AnalyticsResponse.self, from: try XCTUnwrap(analyticsData))
+        let weights = try JSONDecoder().decode(WeightEntriesResponse.self, from: try XCTUnwrap(weightData))
+
+        XCTAssertEqual(analytics.analytics.sevenDayAverageCalories, 1775)
+        XCTAssertEqual(analytics.weightTrend.direction, "down")
+        XCTAssertEqual(weights.entries.first?.weightLbs, 181)
+        XCTAssertEqual(weights.trend.changeLbs, -3)
+    }
+
     func testSaveGuardPreventsEmptyAndDuplicateSubmissions() {
         let items = [Self.item("protein shake")]
 

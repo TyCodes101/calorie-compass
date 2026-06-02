@@ -7,6 +7,7 @@ import { calculateRemainingCalories, toProgressValue } from '@/lib/nutrition';
 import { summarizeStoredItems } from '@/lib/trust';
 import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/current-user';
 import { formatMealTitleForDisplay, isFixtureMealRecord } from '@/lib/meal-display';
+import { buildDashboardStreaks } from '@/lib/growth-metrics';
 
 type DashboardWriteClient = PrismaClient | Prisma.TransactionClient;
 
@@ -111,6 +112,7 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       },
       recentMeals: [],
       weeklyTrend: buildWeeklyTrendFromMeals([], date, profile.dailyCalorieGoal),
+      streaks: buildDashboardStreaks({ currentDate: date, meals: [], proteinGoal: profile.proteinGoal }),
       disclaimer: 'Nutrition estimates are approximate and are not medical or dietary advice.',
     };
   }
@@ -242,6 +244,17 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       };
     }),
     weeklyTrend,
+    streaks: buildDashboardStreaks({
+      currentDate: date,
+      proteinGoal: profile.proteinGoal,
+      meals: weeklyMeals.map((meal) => ({
+        date: meal.date,
+        totalCalories: meal.totalCalories,
+        totalProtein: meal.totalProtein,
+        totalCarbs: meal.totalCarbs,
+        totalFat: meal.totalFat,
+      })),
+    }),
     disclaimer: 'Nutrition estimates are approximate and are not medical or dietary advice.',
   };
 }

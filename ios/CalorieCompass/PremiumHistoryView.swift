@@ -6,6 +6,7 @@ struct PremiumHistoryView: View {
     @State private var loading = false
     @State private var refreshing = false
     @State private var error: String?
+    @State private var actionMessage: String?
     
     var body: some View {
         NavigationView {
@@ -20,12 +21,23 @@ struct PremiumHistoryView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 32) {
+                            if let actionMessage {
+                                AppCard(padding: 12) {
+                                    Text(actionMessage)
+                                        .font(.caption)
+                                        .foregroundColor(MacroMeshTheme.primaryDark)
+                                }
+                            }
                             // Group meals by date
                             ForEach(groupedMealDates, id: \.self) { date in
                                 Section(header: HistoryDayHeaderCard(date: date, meals: mealsByDate[date] ?? [])) {
                                     VStack(spacing: 14) {
                                         ForEach(mealsByDate[date] ?? []) { meal in
-                                            HistoryMealCard(meal: meal)
+                                            HistoryMealCard(
+                                                meal: meal,
+                                                onFavorite: { favoriteMeal(meal) },
+                                                onRepeat: { repeatMeal(meal) }
+                                            )
                                         }
                                     }
                                 }
@@ -67,6 +79,62 @@ struct PremiumHistoryView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     error = err.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func favoriteMeal(_ meal: MealResponse) {
+        guard let items = meal.items, !items.isEmpty else {
+            actionMessage = "This meal needs item details before it can become a favorite."
+            return
+        }
+
+        let request = FavoriteMealRequest(
+            reusable_meal_id: nil,
+            meal_type: meal.mealType?.lowercased() ?? "snack",
+            confidence_score: meal.confidenceScore ?? 0.82,
+            raw_text: meal.rawText ?? meal.displayTitle,
+            items: items
+        )
+        BackendService.saveFavoriteMeal(request: request) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    actionMessage = "Saved \(meal.displayTitle) as a favorite."
+                case .failure(let error):
+                    sessionStore.apply(error)
+                    actionMessage = RetryCopy.nonDestructiveFailure(action: "save that favorite", error: error)
+                }
+            }
+        }
+    }
+
+    private func repeatMeal(_ meal: MealResponse) {
+        guard let items = meal.items, !items.isEmpty else {
+            actionMessage = "This meal needs item details before it can be repeated."
+            return
+        }
+
+        let request = PostMealRequest(
+            meal_type: meal.mealType?.lowercased() ?? "snack",
+            confidence_score: meal.confidenceScore ?? 0.82,
+            raw_text: meal.rawText ?? meal.displayTitle,
+            source_reusable_meal_id: nil,
+            notes: "Repeated from History",
+            date: nil,
+            items: items
+        )
+        BackendService.saveConfirmedMeal(request: request) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    actionMessage = "Repeated \(meal.displayTitle) for today."
+                    NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
+                    loadMeals()
+                case .failure(let error):
+                    sessionStore.apply(error)
+                    actionMessage = RetryCopy.nonDestructiveFailure(action: "repeat that meal", error: error)
                 }
             }
         }

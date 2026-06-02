@@ -2,6 +2,8 @@ import SwiftUI
 
 struct HistoryMealCard: View {
     let meal: MealResponse
+    var onFavorite: (() -> Void)? = nil
+    var onRepeat: (() -> Void)? = nil
 
     var body: some View {
         AppCard(padding: 15) {
@@ -31,8 +33,37 @@ struct HistoryMealCard: View {
                     HistoryMacroChip(label: "F", value: Int(meal.safeTotalFat), color: .purple)
                 }
                 .padding(.top, 2)
+                if onFavorite != nil || onRepeat != nil {
+                    HStack(spacing: 8) {
+                        if let onFavorite {
+                            Button(action: onFavorite) {
+                                Label("Favorite", systemImage: "star")
+                            }
+                            .buttonStyle(HistoryActionButtonStyle())
+                        }
+                        if let onRepeat {
+                            Button(action: onRepeat) {
+                                Label("Repeat", systemImage: "arrow.clockwise")
+                            }
+                            .buttonStyle(HistoryActionButtonStyle())
+                        }
+                    }
+                    .padding(.top, 6)
+                }
             }
         }
+    }
+}
+
+struct HistoryActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption.weight(.semibold))
+            .foregroundColor(MacroMeshTheme.primaryDark)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(MacroMeshTheme.cardSubtle.opacity(configuration.isPressed ? 0.65 : 1))
+            .clipShape(Capsule())
     }
 }
 

@@ -24,6 +24,7 @@ struct DashboardView: View {
                                 InlineRecoveryCard(message: recoverableDashboardMessage(error), retry: loadDashboard)
                             }
                             calorieSummaryCard
+                            streaksCard
                             macroSection
                             Button(action: openLog) {
                                 Label(hasLoggedMeal ? "Log another meal" : "Log first meal", systemImage: "plus.circle.fill")
@@ -112,6 +113,19 @@ struct DashboardView: View {
                 MacroProgressRow(title: "Protein", value: dashboard?.displayedProtein ?? 0, goal: dashboard?.displayedProteinGoal ?? 120, unit: "g", tint: MacroMeshTheme.primary)
                 MacroProgressRow(title: "Carbs", value: dashboard?.displayedCarbs ?? 0, goal: dashboard?.displayedCarbsGoal ?? 220, unit: "g", tint: MacroMeshTheme.orange)
                 MacroProgressRow(title: "Fat", value: dashboard?.displayedFat ?? 0, goal: dashboard?.displayedFatGoal ?? 70, unit: "g", tint: MacroMeshTheme.purple)
+            }
+        }
+    }
+
+    private var streaksCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Streaks", subtitle: dashboard?.streaks?.summary ?? "Build consistency one saved meal at a time.")
+                HStack(spacing: 10) {
+                    MetricPill(title: "Current", value: "\(dashboard?.streaks?.currentStreakDays ?? 0)d", icon: "flame.fill", tint: MacroMeshTheme.orange)
+                    MetricPill(title: "This week", value: "\(dashboard?.streaks?.mealsLoggedThisWeek ?? 0)", icon: "calendar", tint: MacroMeshTheme.primary)
+                    MetricPill(title: "Protein", value: "\(dashboard?.streaks?.proteinGoalHitDaysThisWeek ?? 0)/7", icon: "bolt.fill", tint: MacroMeshTheme.blue)
+                }
             }
         }
     }

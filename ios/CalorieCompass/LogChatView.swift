@@ -14,6 +14,10 @@ struct LogChatView: View {
     @State private var error: String?
     @State private var retryMessage: String?
     @State private var assistantState = MealAssistantState()
+    @State private var selectedMealType = "snack"
+    @State private var favoriteMeals: [ReusableMealSummary] = []
+    @State private var recentMeals: [ReusableMealSummary] = []
+    @State private var quickActionMessage: String?
 
     @State private var reviewItems: [MealItem] = []
     @State private var showReviewCard = false
@@ -70,6 +74,7 @@ struct LogChatView: View {
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
+            .onAppear(perform: loadReusableMeals)
         }
     }
 
@@ -95,12 +100,14 @@ struct LogChatView: View {
                     PromptChip(text: "Chicken burrito bowl for lunch")
                     PromptChip(text: "Two eggs, toast, and coffee")
                 }
+                quickRepeatSection
             }
         }
     }
 
     private var composer: some View {
         VStack(spacing: 8) {
+            mealTypeSelector
             NutritionDisclaimerView()
             HStack(spacing: 10) {
                 TextField(sessionStore.state.isPreparingSession ? "Setting up guest session…" : "Describe your meal", text: $inputText)
@@ -134,6 +141,62 @@ struct LogChatView: View {
             Rectangle()
                 .fill(MacroMeshTheme.border)
                 .frame(height: 1)
+        }
+    }
+
+    private var mealTypeSelector: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(["breakfast", "lunch", "dinner", "snack"], id: \.self) { mealType in
+                    Button {
+                        selectedMealType = mealType
+                        assistantState = MealAssistantClientLogic.applyingMealType(mealType, to: assistantState)
+                    } label: {
+                        Text(mealType.capitalized)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(selectedMealType == mealType ? MacroMeshTheme.primary : MacroMeshTheme.cardSubtle)
+                            .foregroundColor(selectedMealType == mealType ? .white : MacroMeshTheme.primaryDark)
+                            .clipShape(Capsule())
+                    }
+                    .accessibilityLabel("Set meal type to \(mealType)")
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private var quickRepeatSection: some View {
+        let favorites = Array(favoriteMeals.prefix(3))
+        let recents = Array(recentMeals.prefix(3))
+
+        return VStack(alignment: .leading, spacing: 8) {
+            if !favorites.isEmpty || !recents.isEmpty {
+                Text("Quick repeat")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(favorites) { meal in
+                            QuickRepeatMealButton(meal: meal, label: "Favorite") {
+                                repeatFavoriteMeal(meal)
+                            }
+                        }
+                        ForEach(recents) { meal in
+                            QuickRepeatMealButton(meal: meal, label: "Recent") {
+                                repeatRecentMeal(meal)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            if let quickActionMessage {
+                Text(quickActionMessage)
+                    .font(.caption)
+                    .foregroundColor(MacroMeshTheme.primaryDark)
+            }
         }
     }
 
@@ -225,11 +288,72 @@ struct LogChatView: View {
     }
 
     private func buildAssistantRequestState(for userMessage: String) -> MealAssistantState {
-        MealAssistantClientLogic.buildRequestState(
-            assistantState: assistantState,
+        let typedState = MealAssistantClientLogic.applyingMealType(selectedMealType, to: assistantState)
+        return MealAssistantClientLogic.buildRequestState(
+            assistantState: typedState,
             currentMealItems: reviewItems.map { $0.asMealRequestItem() },
-            incomingUserMessage: userMessage
+            incomingUserMessage: userMessage,
+            fallbackMealType: selectedMealType
         )
+    }
+
+    private func loadReusableMeals() {
+        BackendService.fetchReusableMeals { result in
+            DispatchQueue.main.async {
+                if case .success(let response) = result {
+                    favoriteMeals = response.favoriteMeals
+                    recentMeals = response.recentMeals
+                }
+            }
+        }
+    }
+
+    private func repeatFavoriteMeal(_ meal: ReusableMealSummary) {
+        quickActionMessage = "Repeating \(meal.title)..."
+        BackendService.repeatReusableMeal(id: meal.id) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    quickActionMessage = "Repeated \(meal.title) for today."
+                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Repeated \(meal.title) and saved it for today."))
+                    NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
+                    loadReusableMeals()
+                case .failure(let error):
+                    quickActionMessage = RetryCopy.nonDestructiveFailure(action: "repeat that meal", error: error)
+                }
+            }
+        }
+    }
+
+    private func repeatRecentMeal(_ meal: ReusableMealSummary) {
+        guard let items = meal.items, !items.isEmpty else {
+            quickActionMessage = "That recent meal is missing item details. Open History to review it first."
+            return
+        }
+
+        quickActionMessage = "Repeating \(meal.title)..."
+        let request = PostMealRequest(
+            meal_type: meal.mealType,
+            confidence_score: meal.confidenceScore ?? 0.82,
+            raw_text: meal.rawText ?? meal.title,
+            source_reusable_meal_id: nil,
+            notes: "Repeated from recent meal",
+            date: nil,
+            items: items
+        )
+        BackendService.saveConfirmedMeal(request: request) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    quickActionMessage = "Repeated \(meal.title) for today."
+                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Repeated \(meal.title) and saved it for today."))
+                    NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
+                    loadReusableMeals()
+                case .failure(let error):
+                    quickActionMessage = RetryCopy.nonDestructiveFailure(action: "repeat that meal", error: error)
+                }
+            }
+        }
     }
 
     private func handleLocalCommand(_ userMessage: String) -> Bool {
@@ -320,6 +444,7 @@ struct LogChatView: View {
                     assistantState.saved = true
                     messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Saved. Ready for the next one?"))
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
+                    loadReusableMeals()
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Meal review", message: err.localizedDescription))
@@ -341,6 +466,36 @@ struct PromptChip: View {
             .padding(.vertical, 7)
             .background(MacroMeshTheme.cardSubtle)
             .clipShape(Capsule())
+    }
+}
+
+struct QuickRepeatMealButton: View {
+    let meal: ReusableMealSummary
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label)
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .textCase(.uppercase)
+                Text(meal.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.text)
+                    .lineLimit(2)
+                Text("\(Int(meal.totalCalories)) cal")
+                    .font(.caption2)
+                    .foregroundColor(MacroMeshTheme.muted)
+            }
+            .frame(width: 144, alignment: .leading)
+            .padding(10)
+            .background(MacroMeshTheme.cardSubtle)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Repeat \(meal.title)")
     }
 }
 

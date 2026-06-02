@@ -27,6 +27,11 @@ struct ProfileView: View {
     @State private var saving = false
     @State private var showConfirmSave = false
     @State private var showSuccess = false
+    @State private var showGoalWizard = false
+    @State private var showWeightSheet = false
+    @State private var analytics: AnalyticsResponse?
+    @State private var weightEntries: WeightEntriesResponse?
+    @State private var profileActionMessage: String?
     @FocusState private var focusedProfileField: Bool
     private let stabilityReporter = ConsoleStabilityReporter()
 
@@ -68,6 +73,14 @@ struct ProfileView: View {
                                 )
                             } else {
                                 ProfileSummaryCard(profile: profile, isGuest: sessionStore.state.authSession.isGuest)
+                                GoalSetupCard(profile: profile, onLaunch: { showGoalWizard = true })
+                                AnalyticsSummaryCard(analytics: analytics)
+                                WeightTrackingCard(response: weightEntries, onLogWeight: { showWeightSheet = true })
+                                if let profileActionMessage {
+                                    Text(profileActionMessage)
+                                        .font(.caption)
+                                        .foregroundColor(MacroMeshTheme.primaryDark)
+                                }
                                 Button("Edit Profile") {
                                     dirtyProfile = profile; editing = true
                                 }
@@ -95,8 +108,21 @@ struct ProfileView: View {
                 }
             }
             .navigationTitle("Profile")
-            .onAppear(perform: loadProfile)
+            .onAppear {
+                loadProfile()
+                loadGrowthData()
+            }
             .scrollDismissesKeyboard(.interactively)
+            .sheet(isPresented: $showGoalWizard) {
+                GoalSetupWizardSheet(profile: profile) { result in
+                    applyGoalSetup(result)
+                }
+            }
+            .sheet(isPresented: $showWeightSheet) {
+                WeightEntrySheet(latestWeight: weightEntries?.trend.latestWeightLbs ?? profile?.weightLbs) { weight in
+                    logWeight(weight)
+                }
+            }
             .alert(isPresented: $showConfirmSave) {
                 Alert(
                     title: Text("Confirm save?"),
@@ -129,6 +155,23 @@ struct ProfileView: View {
         }
     }
 
+    private func loadGrowthData() {
+        BackendService.fetchAnalytics { result in
+            DispatchQueue.main.async {
+                if case .success(let response) = result {
+                    analytics = response
+                }
+            }
+        }
+        BackendService.fetchWeightEntries { result in
+            DispatchQueue.main.async {
+                if case .success(let response) = result {
+                    weightEntries = response
+                }
+            }
+        }
+    }
+
     private func profileFallbackMessage(_ error: String) -> String {
         if error.localizedCaseInsensitiveContains("profile") || error.localizedCaseInsensitiveContains("no data") {
             return "Your guest profile is still getting ready. Nothing was changed — reload in a moment."
@@ -154,6 +197,283 @@ struct ProfileView: View {
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Profile", message: err.localizedDescription))
                     saveError = RetryCopy.nonDestructiveFailure(action: "save your profile", error: err)
+                }
+            }
+        }
+    }
+
+    private func applyGoalSetup(_ result: GoalSetupResult) {
+        var candidate = profile ?? ProfileData(name: result.name.nilIfBlank ?? "Guest", age: nil, heightCm: nil, weightLbs: nil, goal: nil, activityLevel: nil, dailyCalorieGoal: nil, proteinGoal: nil, nutritionPreferences: nil)
+        if let name = result.name.nilIfBlank {
+            candidate.name = name
+        }
+        candidate.weightLbs = result.weightLbs
+        candidate.goal = result.goal
+        candidate.activityLevel = result.activityLevel
+        candidate.dailyCalorieGoal = result.targets.dailyCalorieGoal
+        candidate.proteinGoal = result.targets.proteinGoal
+        dirtyProfile = candidate
+        saving = true
+        profileActionMessage = "Saving goal setup..."
+        BackendService.saveProfile(candidate) { saveResult in
+            DispatchQueue.main.async {
+                saving = false
+                switch saveResult {
+                case .success(let saved):
+                    profile = saved
+                    dirtyProfile = saved
+                    profileActionMessage = "Goals updated."
+                    loadGrowthData()
+                case .failure(let error):
+                    sessionStore.apply(error)
+                    profileActionMessage = RetryCopy.nonDestructiveFailure(action: "save your goals", error: error)
+                }
+            }
+        }
+    }
+
+    private func logWeight(_ weight: Double) {
+        profileActionMessage = "Saving weight..."
+        BackendService.createWeightEntry(weightLbs: weight) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    profile?.weightLbs = weight
+                    dirtyProfile = profile
+                    profileActionMessage = "Weight logged."
+                    loadGrowthData()
+                case .failure(let error):
+                    sessionStore.apply(error)
+                    profileActionMessage = RetryCopy.nonDestructiveFailure(action: "save that weight", error: error)
+                }
+            }
+        }
+    }
+}
+
+struct GoalSetupResult: Equatable {
+    let name: String
+    let weightLbs: Double
+    let goalWeightLbs: Double?
+    let goal: String
+    let activityLevel: String
+    let targets: GoalTargets
+}
+
+struct GoalSetupCard: View {
+    let profile: ProfileData?
+    let onLaunch: () -> Void
+
+    var body: some View {
+        AppCard(padding: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: "target")
+                    .font(.title2)
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .frame(width: 40, height: 40)
+                    .background(MacroMeshTheme.cardSubtle)
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(profile?.dailyCalorieGoal == nil ? "Set up goals" : "Update goals")
+                        .font(.headline)
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text("Guided calories and protein defaults for your current goal.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+                Spacer()
+                Button("Start", action: onLaunch)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(MacroMeshTheme.primary)
+                    .clipShape(Capsule())
+            }
+        }
+    }
+}
+
+struct AnalyticsSummaryCard: View {
+    let analytics: AnalyticsResponse?
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Analytics", subtitle: analytics?.analytics.macroConsistencySummary ?? "Log meals to unlock weekly patterns.")
+                HStack(spacing: 10) {
+                    MetricPill(title: "7-day cal", value: "\(Int(analytics?.analytics.sevenDayAverageCalories ?? 0))", icon: "chart.bar.fill", tint: MacroMeshTheme.primary)
+                    MetricPill(title: "7-day protein", value: "\(Int(analytics?.analytics.sevenDayAverageProtein ?? 0))g", icon: "bolt.fill", tint: MacroMeshTheme.blue)
+                }
+                HStack(spacing: 10) {
+                    MetricPill(title: "30-day cal", value: "\(Int(analytics?.analytics.thirtyDayAverageCalories ?? 0))", icon: "calendar", tint: MacroMeshTheme.orange)
+                    MetricPill(title: "Best protein", value: "\(Int(analytics?.analytics.highestProteinDay?.protein ?? 0))g", icon: "star.fill", tint: MacroMeshTheme.purple)
+                }
+            }
+        }
+    }
+}
+
+struct WeightTrackingCard: View {
+    let response: WeightEntriesResponse?
+    let onLogWeight: () -> Void
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    SectionHeader("Weight", subtitle: response?.trend.latestWeightLbs.map { "Latest \($0, specifier: "%.1f") lbs" } ?? "Track weight without changing your goals automatically.")
+                    Spacer()
+                    Button("Log", action: onLogWeight)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(MacroMeshTheme.primary)
+                        .clipShape(Capsule())
+                }
+                if let trend = response?.trend, trend.latestWeightLbs != nil {
+                    Text("\(trend.changeLbs, specifier: "%.1f") lbs \(trend.direction) across recent entries")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+                ForEach(Array((response?.entries ?? []).prefix(3))) { entry in
+                    HStack {
+                        Text(entry.date.prefix(10))
+                            .font(.caption)
+                            .foregroundColor(MacroMeshTheme.muted)
+                        Spacer()
+                        Text("\(entry.weightLbs, specifier: "%.1f") lbs")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(MacroMeshTheme.text)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct GoalSetupWizardSheet: View {
+    let profile: ProfileData?
+    let onSave: (GoalSetupResult) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var weightText: String
+    @State private var goalWeightText: String
+    @State private var goal: String
+    @State private var activityLevel: String
+    @State private var ratePerWeek: Double = 1
+    @State private var highProtein = true
+
+    init(profile: ProfileData?, onSave: @escaping (GoalSetupResult) -> Void) {
+        self.profile = profile
+        self.onSave = onSave
+        _name = State(initialValue: profile?.name ?? "")
+        _weightText = State(initialValue: profile?.weightLbs.map { String(Int($0)) } ?? "")
+        _goalWeightText = State(initialValue: "")
+        _goal = State(initialValue: profile?.goal ?? "MAINTAIN")
+        _activityLevel = State(initialValue: profile?.activityLevel ?? "MODERATE")
+    }
+
+    private var weight: Double {
+        Double(weightText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? profile?.weightLbs ?? 180
+    }
+
+    private var goalWeight: Double? {
+        Double(goalWeightText.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private var targets: GoalTargets {
+        GoalSetupCalculator.calculate(
+            weightLbs: weight,
+            goalWeightLbs: goalWeight,
+            goal: goal,
+            activityLevel: activityLevel,
+            ratePerWeekLbs: ratePerWeek,
+            proteinPreference: highProtein ? .high : .moderate
+        )
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Basics") {
+                    TextField("Name", text: $name)
+                    TextField("Current weight", text: $weightText)
+                        .keyboardType(.decimalPad)
+                    TextField("Goal weight optional", text: $goalWeightText)
+                        .keyboardType(.decimalPad)
+                }
+                Section("Goal") {
+                    Picker("Goal", selection: $goal) {
+                        Text("Lose").tag("LOSE_WEIGHT")
+                        Text("Maintain").tag("MAINTAIN")
+                        Text("Gain").tag("GAIN_MUSCLE")
+                    }
+                    Picker("Activity", selection: $activityLevel) {
+                        Text("Low").tag("LOW")
+                        Text("Moderate").tag("MODERATE")
+                        Text("High").tag("HIGH")
+                        Text("Very high").tag("VERY_HIGH")
+                    }
+                    Stepper("Rate \(ratePerWeek, specifier: "%.1f") lb/week", value: $ratePerWeek, in: 0...2, step: 0.5)
+                    Toggle("Protein forward", isOn: $highProtein)
+                }
+                Section("Suggested targets") {
+                    LabeledContent("Calories", value: "\(targets.dailyCalorieGoal) cal")
+                    LabeledContent("Protein", value: "\(targets.proteinGoal)g")
+                    LabeledContent("Carbs", value: "\(targets.carbsGoal)g")
+                    LabeledContent("Fat", value: "\(targets.fatGoal)g")
+                }
+            }
+            .navigationTitle("Goal setup")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(GoalSetupResult(name: name, weightLbs: weight, goalWeightLbs: goalWeight, goal: goal, activityLevel: activityLevel, targets: targets))
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct WeightEntrySheet: View {
+    let latestWeight: Double?
+    let onSave: (Double) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var weightText: String
+
+    init(latestWeight: Double?, onSave: @escaping (Double) -> Void) {
+        self.latestWeight = latestWeight
+        self.onSave = onSave
+        _weightText = State(initialValue: latestWeight.map { String(Int($0)) } ?? "")
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Weight") {
+                    TextField("Weight in lbs", text: $weightText)
+                        .keyboardType(.decimalPad)
+                }
+            }
+            .navigationTitle("Log weight")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        if let weight = Double(weightText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                            onSave(weight)
+                            dismiss()
+                        }
+                    }
                 }
             }
         }

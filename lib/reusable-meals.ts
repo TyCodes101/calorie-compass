@@ -4,6 +4,7 @@ import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/cu
 import { logConnectionReady, logWriteFailure, logWriteStart, logWriteSuccess } from '@/lib/persistence';
 import { prisma } from '@/lib/prisma';
 import { formatMealTitleForDisplay, isFixtureMealRecord } from '@/lib/meal-display';
+import { saveConfirmedMeal, type SaveMealPayload } from '@/lib/meals';
 
 type MealTypeValue = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 type StoredMealType = Uppercase<MealTypeValue>;
@@ -50,6 +51,17 @@ type StoredReusableMealItemLike = {
   catalogFoodId?: string | null;
 };
 
+type ReusableMealSummaryRecord = {
+  id: string;
+  title: string;
+  mealType: string;
+  rawText?: string | null;
+  lastUsedAt?: Date | null;
+  updatedAt?: Date | null;
+  confidenceScore?: number | null;
+  items: StoredReusableMealItemLike[];
+};
+
 export type LoggerDraft = {
   title: string;
   rawText: string;
@@ -67,6 +79,7 @@ export type FavoriteMealSummary = {
   mealType: MealTypeValue;
   lastUsedAt: string | null;
   totalCalories: number;
+  totalProtein: number;
   itemCount: number;
   trustedCount: number;
   confidenceScore?: number | null;
@@ -179,6 +192,72 @@ export function buildLoggerDraftFromReusableMealRecord(record: {
     items: record.items.map(toParsedFoodItem),
     sourceReusableMealId: record.id,
     editingMealId: null,
+  };
+}
+
+export function buildRepeatMealPayloadFromReusableMealRecord(record: {
+  id: string;
+  title: string;
+  mealType: string;
+  rawText?: string | null;
+  confidenceScore?: number | null;
+  items: StoredReusableMealItemLike[];
+}): SaveMealPayload {
+  const draft = buildLoggerDraftFromReusableMealRecord(record);
+
+  return {
+    meal_type: draft.mealType,
+    confidence_score: draft.confidenceScore,
+    raw_text: draft.rawText,
+    source_reusable_meal_id: record.id,
+    items: draft.items,
+  };
+}
+
+export function buildRecentMealSummaries(records: Array<{
+  id: string;
+  mealType: string;
+  rawText?: string | null;
+  confidenceScore?: number | null;
+  date?: Date | null;
+  createdAt?: Date | null;
+  totalCalories: number;
+  totalProtein: number;
+  items: StoredMealItemLike[];
+}>): FavoriteMealSummary[] {
+  return records
+    .filter((meal) => !isFixtureMealRecord({ rawText: meal.rawText, items: meal.items }))
+    .map((meal) => ({
+      id: meal.id,
+      title: formatMealTitleForDisplay(meal.rawText, meal.items.map((item) => ({ food_name: item.foodName, quantity: item.quantity, unit: item.unit }))),
+      rawText: meal.rawText ?? null,
+      mealType: toDraftMealType(meal.mealType),
+      lastUsedAt: meal.createdAt?.toISOString() ?? meal.date?.toISOString() ?? null,
+      totalCalories: Math.round(meal.totalCalories),
+      totalProtein: Math.round(meal.totalProtein),
+      itemCount: meal.items.length,
+      trustedCount: meal.items.filter((item) => item.nutritionSourceType && item.nutritionSourceType !== 'AI_ESTIMATE').length,
+      confidenceScore: meal.confidenceScore,
+      items: meal.items.map(toParsedFoodItem),
+    }));
+}
+
+export function buildReusableMealSummaryFromRecord(favorite: ReusableMealSummaryRecord): FavoriteMealSummary {
+  return {
+    id: favorite.id,
+    title: formatMealTitleForDisplay(
+      favorite.title || favorite.rawText,
+      favorite.items.map((item) => ({ food_name: item.foodName, quantity: item.quantity, unit: item.unit })),
+    ),
+    rawText: favorite.rawText ?? null,
+    mealType: toDraftMealType(favorite.mealType),
+    lastUsedAt: favorite.lastUsedAt?.toISOString() ?? favorite.updatedAt?.toISOString() ?? null,
+    totalCalories: Math.round(favorite.items.reduce((sum, item) => sum + item.calories, 0)),
+    totalProtein: Math.round(favorite.items.reduce((sum, item) => sum + item.protein, 0)),
+    itemCount: favorite.items.length,
+    trustedCount: favorite.items.filter((item) => item.isTrusted && item.sourceType !== 'AI_ESTIMATE').length,
+    confidenceScore: favorite.confidenceScore,
+    items: favorite.items.map(toParsedFoodItem),
   };
 }
 
@@ -426,16 +505,55 @@ export async function getFavoriteMeals(): Promise<FavoriteMealSummary[]> {
 
   return favorites
     .filter((favorite) => !isFixtureMealRecord({ rawText: `${favorite.title} ${favorite.rawText ?? ''}`, items: favorite.items }))
-    .map((favorite) => ({
-    id: favorite.id,
-    title: formatMealTitleForDisplay(favorite.title || favorite.rawText, favorite.items.map((item) => ({ food_name: item.foodName, quantity: item.quantity, unit: item.unit }))),
-    rawText: favorite.rawText,
-    mealType: favorite.mealType.toLowerCase() as MealTypeValue,
-    lastUsedAt: favorite.lastUsedAt?.toISOString() ?? null,
-    totalCalories: Math.round(favorite.items.reduce((sum, item) => sum + item.calories, 0)),
-    itemCount: favorite.items.length,
-    trustedCount: favorite.items.filter((item) => item.isTrusted && item.sourceType !== 'AI_ESTIMATE').length,
-    confidenceScore: favorite.confidenceScore,
-    items: favorite.items.map(toParsedFoodItem),
-  }));
+    .map(buildReusableMealSummaryFromRecord);
+}
+
+export async function getRecentMeals(): Promise<FavoriteMealSummary[]> {
+  if (!hasDatabaseConnectionString()) {
+    return [];
+  }
+
+  const user = await getCurrentUserWithProfile();
+  if (!user) {
+    return [];
+  }
+
+  const meals = await prisma.meal.findMany({
+    where: { userId: user.id },
+    include: { items: true },
+    orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    take: 12,
+  });
+
+  return buildRecentMealSummaries(meals).slice(0, 8);
+}
+
+export async function getReusableMealLibrary() {
+  const [favoriteMeals, recentMeals] = await Promise.all([getFavoriteMeals(), getRecentMeals()]);
+  return { favoriteMeals, recentMeals };
+}
+
+export async function repeatReusableMeal(reusableMealId: string) {
+  if (!hasDatabaseConnectionString()) {
+    throw new Error('Favorites need a live backend before they can be repeated.');
+  }
+
+  const user = await getCurrentUserWithProfile();
+  if (!user) {
+    throw new Error('No user found. Complete onboarding first.');
+  }
+
+  const reusableMeal = await prisma.reusableMeal.findFirst({
+    where: {
+      id: reusableMealId,
+      userId: user.id,
+    },
+    include: { items: true },
+  });
+
+  if (!reusableMeal) {
+    throw new Error('Favorite meal not found.');
+  }
+
+  return saveConfirmedMeal(buildRepeatMealPayloadFromReusableMealRecord(reusableMeal));
 }
