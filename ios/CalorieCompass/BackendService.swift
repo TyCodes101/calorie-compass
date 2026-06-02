@@ -510,6 +510,7 @@ struct FavoriteMealMutationResponse: Codable, Equatable {
 
 struct AnalyticsResponse: Codable, Equatable {
     let analytics: NutritionAnalyticsSummary
+    let weeklyReport: WeeklyReportSummary?
     let weightTrend: WeightTrendSummary
 }
 
@@ -524,6 +525,84 @@ struct NutritionAnalyticsSummary: Codable, Equatable {
 struct HighestProteinDay: Codable, Equatable {
     let date: String
     let protein: Double
+}
+
+struct WeeklyReportSummary: Codable, Equatable {
+    let startDate: String
+    let endDate: String
+    let loggedDays: Int
+    let mealCount: Int
+    let averageCalories: Double
+    let averageProtein: Double
+    let calorieTargetDays: Int
+    let proteinTargetDays: Int
+    let topMealType: String?
+    let summary: String
+    let highlights: [String]
+}
+
+struct CustomFoodSummary: Codable, Equatable, Identifiable {
+    let id: String
+    let name: String
+    let brand: String?
+    let servingQuantity: Double
+    let servingUnit: String
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let fiber: Double
+    let sugar: Double
+    let sodium: Double
+
+    var servingLabel: String {
+        let quantity = servingQuantity == Double(Int(servingQuantity)) ? "\(Int(servingQuantity))" : String(format: "%.1f", servingQuantity)
+        return "\(quantity) \(servingUnit)"
+    }
+
+    var mealRequestItem: MealRequestItem {
+        MealRequestItem(
+            food_name: name,
+            quantity: servingQuantity,
+            unit: servingUnit,
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: fiber,
+            sugar: sugar,
+            sodium: sodium,
+            notes: "Custom food",
+            source_type: "GENERIC_REFERENCE",
+            source_name: brand.map { "Custom food: \($0)" } ?? "Custom food",
+            confidence_label: "Verified",
+            is_trusted: true,
+            catalog_food_id: nil
+        )
+    }
+}
+
+struct CustomFoodsResponse: Codable, Equatable {
+    let customFoods: [CustomFoodSummary]
+}
+
+struct CustomFoodRequest: Codable {
+    let name: String
+    let brand: String?
+    let servingQuantity: Double
+    let servingUnit: String
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let fiber: Double
+    let sugar: Double
+    let sodium: Double
+}
+
+struct CustomFoodMutationResponse: Codable, Equatable {
+    let customFood: CustomFoodSummary?
+    let ok: Bool?
 }
 
 struct WeightEntry: Codable, Equatable, Identifiable {
@@ -968,6 +1047,38 @@ class BackendService {
 
     static func fetchAnalytics(completion: @escaping (Result<AnalyticsResponse, Error>) -> Void) {
         guard let urlRequest = request(path: "api/analytics", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func fetchCustomFoods(completion: @escaping (Result<CustomFoodsResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/custom-foods", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func createCustomFood(request body: CustomFoodRequest, completion: @escaping (Result<CustomFoodSummary, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/custom-foods", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        perform(urlRequest) { (result: Result<CustomFoodMutationResponse, Error>) in
+            switch result {
+            case .success(let response):
+                if let customFood = response.customFood {
+                    completion(.success(customFood))
+                } else {
+                    completion(.failure(BackendError.malformedResponse))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    static func deleteCustomFood(id: String, completion: @escaping (Result<CustomFoodMutationResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/custom-foods/\(id)", method: "DELETE") else { completion(.failure(BackendError.badURL)); return }
         perform(urlRequest, completion: completion)
     }
 

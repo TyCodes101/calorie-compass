@@ -405,6 +405,78 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(weights.trend.changeLbs, -3)
     }
 
+    func testPhase5AResponsesDecodeWeeklyReportAndCustomFoods() throws {
+        let analyticsData = """
+        {
+          "analytics": {
+            "sevenDayAverageCalories": 1775,
+            "sevenDayAverageProtein": 149,
+            "thirtyDayAverageCalories": 1801,
+            "highestProteinDay": { "date": "2026-06-01", "protein": 185 },
+            "macroConsistencySummary": "4 protein days"
+          },
+          "weeklyReport": {
+            "startDate": "2026-05-27",
+            "endDate": "2026-06-02",
+            "loggedDays": 4,
+            "mealCount": 9,
+            "averageCalories": 1775,
+            "averageProtein": 149,
+            "calorieTargetDays": 3,
+            "proteinTargetDays": 2,
+            "topMealType": "lunch",
+            "summary": "4 of 7 days logged with 9 meals total.",
+            "highlights": ["2 days hit your protein goal."]
+          },
+          "weightTrend": {
+            "latestWeightLbs": 181,
+            "changeLbs": -3,
+            "direction": "down"
+          }
+        }
+        """.data(using: .utf8)
+        let customFoodData = """
+        {
+          "customFoods": [
+            {
+              "id": "custom-1",
+              "name": "Turkey Chili",
+              "brand": "Home",
+              "servingQuantity": 1,
+              "servingUnit": "bowl",
+              "calories": 410,
+              "protein": 36,
+              "carbs": 32,
+              "fat": 14,
+              "fiber": 8,
+              "sugar": 6,
+              "sodium": 720
+            }
+          ]
+        }
+        """.data(using: .utf8)
+
+        let analytics = try JSONDecoder().decode(AnalyticsResponse.self, from: try XCTUnwrap(analyticsData))
+        let customFoods = try JSONDecoder().decode(CustomFoodsResponse.self, from: try XCTUnwrap(customFoodData))
+
+        XCTAssertEqual(analytics.weeklyReport?.loggedDays, 4)
+        XCTAssertEqual(analytics.weeklyReport?.topMealType, "lunch")
+        XCTAssertEqual(customFoods.customFoods.first?.name, "Turkey Chili")
+        XCTAssertEqual(customFoods.customFoods.first?.servingLabel, "1 bowl")
+    }
+
+    func testReminderSettingsClampUnsafeTimes() {
+        let settings = ReminderSettings(mealReminderEnabled: true, weeklyReportEnabled: true, reminderHour: 27, reminderMinute: -10, quietHoursEnabled: true)
+
+        XCTAssertEqual(settings.sanitized.reminderHour, 20)
+        XCTAssertEqual(settings.sanitized.reminderMinute, 0)
+        XCTAssertTrue(settings.sanitized.hasEnabledReminder)
+
+        let lateReminder = ReminderSettings(mealReminderEnabled: true, weeklyReportEnabled: false, reminderHour: 23, reminderMinute: 45, quietHoursEnabled: false)
+        XCTAssertEqual(lateReminder.sanitized.reminderHour, 23)
+        XCTAssertEqual(lateReminder.sanitized.reminderMinute, 45)
+    }
+
     func testSaveGuardPreventsEmptyAndDuplicateSubmissions() {
         let items = [Self.item("protein shake")]
 

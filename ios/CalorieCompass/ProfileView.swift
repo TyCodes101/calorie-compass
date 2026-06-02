@@ -4,6 +4,7 @@
 import AuthenticationServices
 import Foundation
 import SwiftUI
+import UserNotifications
 
 struct ProfileData: Codable, Equatable {
     var name: String
@@ -32,6 +33,10 @@ struct ProfileView: View {
     @State private var showWeightSheet = false
     @State private var analytics: AnalyticsResponse?
     @State private var weightEntries: WeightEntriesResponse?
+    @State private var customFoods: [CustomFoodSummary] = []
+    @State private var reminderSettings = ReminderSettings.standard
+    @State private var showReminderSheet = false
+    @State private var showCustomFoodSheet = false
     @State private var profileActionMessage: String?
     @FocusState private var focusedProfileField: Bool
     private let stabilityReporter = ConsoleStabilityReporter()
@@ -76,7 +81,11 @@ struct ProfileView: View {
                                 ProfileSummaryCard(profile: profile, isGuest: sessionStore.state.authSession.isGuest)
                                 GoalSetupCard(profile: profile, onLaunch: { showGoalWizard = true })
                                 AnalyticsSummaryCard(analytics: analytics)
+                                WeeklyReportCard(report: analytics?.weeklyReport)
                                 WeightTrackingCard(response: weightEntries, onLogWeight: { showWeightSheet = true })
+                                ReminderSettingsCard(settings: reminderSettings, onOpen: { showReminderSheet = true })
+                                CustomFoodsCard(customFoods: customFoods, onCreate: { showCustomFoodSheet = true }, onDelete: deleteCustomFood)
+                                AppStorePolishCard()
                                 if let profileActionMessage {
                                     Text(profileActionMessage)
                                         .font(.caption)
@@ -110,8 +119,10 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
             .onAppear {
+                reminderSettings = ReminderScheduler.load()
                 loadProfile()
                 loadGrowthData()
+                loadCustomFoods()
             }
             .scrollDismissesKeyboard(.interactively)
             .sheet(isPresented: $showGoalWizard) {
@@ -122,6 +133,16 @@ struct ProfileView: View {
             .sheet(isPresented: $showWeightSheet) {
                 WeightEntrySheet(latestWeight: weightEntries?.trend.latestWeightLbs ?? profile?.weightLbs) { weight in
                     logWeight(weight)
+                }
+            }
+            .sheet(isPresented: $showReminderSheet) {
+                ReminderSettingsSheet(settings: reminderSettings) { settings in
+                    saveReminderSettings(settings)
+                }
+            }
+            .sheet(isPresented: $showCustomFoodSheet) {
+                CustomFoodEditorSheet { draft in
+                    createCustomFood(draft)
                 }
             }
             .alert(isPresented: $showConfirmSave) {
@@ -168,6 +189,65 @@ struct ProfileView: View {
             DispatchQueue.main.async {
                 if case .success(let response) = result {
                     weightEntries = response
+                }
+            }
+        }
+    }
+
+    private func loadCustomFoods() {
+        BackendService.fetchCustomFoods { result in
+            DispatchQueue.main.async {
+                if case .success(let response) = result {
+                    customFoods = response.customFoods
+                }
+            }
+        }
+    }
+
+    private func saveReminderSettings(_ settings: ReminderSettings) {
+        let sanitized = settings.sanitized
+        reminderSettings = sanitized
+        profileActionMessage = "Saving reminders..."
+        ReminderScheduler.save(sanitized)
+        ReminderScheduler.apply(sanitized) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    profileActionMessage = sanitized.hasEnabledReminder ? "Reminders updated." : "Reminders turned off."
+                case .failure(let error):
+                    profileActionMessage = "Reminder settings were saved, but iOS could not schedule them: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func createCustomFood(_ draft: CustomFoodDraft) {
+        profileActionMessage = "Saving custom food..."
+        BackendService.createCustomFood(request: draft.request) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let customFood):
+                    customFoods.insert(customFood, at: 0)
+                    profileActionMessage = "Custom food saved."
+                case .failure(let error):
+                    sessionStore.apply(error)
+                    profileActionMessage = RetryCopy.nonDestructiveFailure(action: "save that custom food", error: error)
+                }
+            }
+        }
+    }
+
+    private func deleteCustomFood(_ customFood: CustomFoodSummary) {
+        profileActionMessage = "Deleting \(customFood.name)..."
+        BackendService.deleteCustomFood(id: customFood.id) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    customFoods.removeAll { $0.id == customFood.id }
+                    profileActionMessage = "Custom food deleted."
+                case .failure(let error):
+                    sessionStore.apply(error)
+                    profileActionMessage = RetryCopy.nonDestructiveFailure(action: "delete that custom food", error: error)
                 }
             }
         }
@@ -261,6 +341,135 @@ struct GoalSetupResult: Equatable {
     let targets: GoalTargets
 }
 
+struct ReminderSettings: Codable, Equatable {
+    static let standard = ReminderSettings(mealReminderEnabled: false, weeklyReportEnabled: false, reminderHour: 20, reminderMinute: 0, quietHoursEnabled: true)
+
+    let mealReminderEnabled: Bool
+    let weeklyReportEnabled: Bool
+    let reminderHour: Int
+    let reminderMinute: Int
+    let quietHoursEnabled: Bool
+
+    var sanitized: ReminderSettings {
+        let allowedHours = quietHoursEnabled ? 5...22 : 0...23
+        ReminderSettings(
+            mealReminderEnabled: mealReminderEnabled,
+            weeklyReportEnabled: weeklyReportEnabled,
+            reminderHour: allowedHours.contains(reminderHour) ? reminderHour : ReminderSettings.standard.reminderHour,
+            reminderMinute: (0...59).contains(reminderMinute) ? reminderMinute : ReminderSettings.standard.reminderMinute,
+            quietHoursEnabled: quietHoursEnabled
+        )
+    }
+
+    var hasEnabledReminder: Bool {
+        mealReminderEnabled || weeklyReportEnabled
+    }
+
+    var reminderTimeLabel: String {
+        String(format: "%02d:%02d", sanitized.reminderHour, sanitized.reminderMinute)
+    }
+}
+
+enum ReminderScheduler {
+    private static let storageKey = "macromesh.reminder-settings.v1"
+    private static let mealIdentifier = "macromesh.meal-reminder"
+    private static let weeklyIdentifier = "macromesh.weekly-report-reminder"
+
+    static func load() -> ReminderSettings {
+        guard let data = UserDefaults.standard.data(forKey: storageKey),
+              let decoded = try? JSONDecoder().decode(ReminderSettings.self, from: data) else {
+            return .standard
+        }
+
+        return decoded.sanitized
+    }
+
+    static func save(_ settings: ReminderSettings) {
+        if let data = try? JSONEncoder().encode(settings.sanitized) {
+            UserDefaults.standard.set(data, forKey: storageKey)
+        }
+    }
+
+    static func apply(_ settings: ReminderSettings, completion: @escaping (Result<Void, Error>) -> Void) {
+        let sanitized = settings.sanitized
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [mealIdentifier, weeklyIdentifier])
+
+        guard sanitized.hasEnabledReminder else {
+            completion(.success(()))
+            return
+        }
+
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+            guard granted else {
+                completion(.success(()))
+                return
+            }
+
+            if sanitized.mealReminderEnabled {
+                var dateComponents = DateComponents()
+                dateComponents.hour = sanitized.reminderHour
+                dateComponents.minute = sanitized.reminderMinute
+                let content = UNMutableNotificationContent()
+                content.title = "Log dinner when you are ready"
+                content.body = "A quick meal note keeps today's nutrition picture useful."
+                content.sound = .default
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+                center.add(UNNotificationRequest(identifier: mealIdentifier, content: content, trigger: trigger))
+            }
+
+            if sanitized.weeklyReportEnabled {
+                var dateComponents = DateComponents()
+                dateComponents.weekday = 2
+                dateComponents.hour = 9
+                dateComponents.minute = 0
+                let content = UNMutableNotificationContent()
+                content.title = "Weekly MacroMesh report"
+                content.body = "Review your logging streak, protein days, and calorie consistency."
+                content.sound = .default
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+                center.add(UNNotificationRequest(identifier: weeklyIdentifier, content: content, trigger: trigger))
+            }
+
+            completion(.success(()))
+        }
+    }
+}
+
+struct CustomFoodDraft: Equatable {
+    let name: String
+    let brand: String?
+    let servingQuantity: Double
+    let servingUnit: String
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let fiber: Double
+    let sugar: Double
+    let sodium: Double
+
+    var request: CustomFoodRequest {
+        CustomFoodRequest(
+            name: name,
+            brand: brand,
+            servingQuantity: servingQuantity,
+            servingUnit: servingUnit,
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: fiber,
+            sugar: sugar,
+            sodium: sodium
+        )
+    }
+}
+
 struct GoalSetupCard: View {
     let profile: ProfileData?
     let onLaunch: () -> Void
@@ -315,6 +524,27 @@ struct AnalyticsSummaryCard: View {
     }
 }
 
+struct WeeklyReportCard: View {
+    let report: WeeklyReportSummary?
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Weekly report", subtitle: report?.summary ?? "Save meals this week to unlock your report.")
+                HStack(spacing: 10) {
+                    MetricPill(title: "Logged", value: "\(report?.loggedDays ?? 0)/7", icon: "calendar.badge.checkmark", tint: MacroMeshTheme.primary)
+                    MetricPill(title: "Protein", value: "\(report?.proteinTargetDays ?? 0)d", icon: "bolt.fill", tint: MacroMeshTheme.blue)
+                }
+                ForEach(Array((report?.highlights ?? ["No weekly highlights yet."]).prefix(3)), id: \.self) { highlight in
+                    Label(highlight, systemImage: "checkmark.seal.fill")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+            }
+        }
+    }
+}
+
 struct WeightTrackingCard: View {
     let response: WeightEntriesResponse?
     let onLogWeight: () -> Void
@@ -358,6 +588,118 @@ struct WeightTrackingCard: View {
                     }
                 }
             }
+        }
+    }
+}
+
+struct ReminderSettingsCard: View {
+    let settings: ReminderSettings
+    let onOpen: () -> Void
+
+    private var detail: String {
+        if settings.mealReminderEnabled && settings.weeklyReportEnabled {
+            return "Meal reminder at \(settings.reminderTimeLabel), plus a weekly check-in."
+        }
+        if settings.mealReminderEnabled {
+            return "Meal reminder at \(settings.reminderTimeLabel)."
+        }
+        if settings.weeklyReportEnabled {
+            return "Weekly report reminders are on."
+        }
+        return "Local reminders are off."
+    }
+
+    var body: some View {
+        AppCard(padding: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.title2)
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .frame(width: 40, height: 40)
+                    .background(MacroMeshTheme.cardSubtle)
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Reminders")
+                        .font(.headline)
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+                Spacer()
+                Button("Edit", action: onOpen)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(MacroMeshTheme.primary)
+                    .clipShape(Capsule())
+            }
+        }
+    }
+}
+
+struct CustomFoodsCard: View {
+    let customFoods: [CustomFoodSummary]
+    let onCreate: () -> Void
+    let onDelete: (CustomFoodSummary) -> Void
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    SectionHeader("Custom foods", subtitle: customFoods.isEmpty ? "Create foods you eat often." : "\(customFoods.count) saved custom foods")
+                    Spacer()
+                    Button("New", action: onCreate)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(MacroMeshTheme.primary)
+                        .clipShape(Capsule())
+                }
+                if customFoods.isEmpty {
+                    Text("Add foods you eat often, then use them from Log as quick add buttons.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                } else {
+                    ForEach(Array(customFoods.prefix(4))) { food in
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(food.name)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(MacroMeshTheme.text)
+                                Text("\(food.servingLabel) | \(Int(food.calories)) cal | \(Int(food.protein))g protein")
+                                    .font(.caption)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                            }
+                            Spacer()
+                            Button(role: .destructive) {
+                                onDelete(food)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .foregroundColor(.red)
+                            .accessibilityLabel("Delete \(food.name)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct AppStorePolishCard: View {
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader("Privacy and review", subtitle: "Clear controls before anything reaches your log.")
+                Label("Reminders stay on this iPhone.", systemImage: "bell")
+                Label("Custom foods sync only with your account.", systemImage: "person.crop.circle.badge.checkmark")
+                Label("Nutrition estimates still wait for your review.", systemImage: "checkmark.seal")
+            }
+            .font(.caption)
+            .foregroundColor(MacroMeshTheme.muted)
         }
     }
 }
@@ -483,6 +825,175 @@ struct WeightEntrySheet: View {
                             dismiss()
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+struct ReminderSettingsSheet: View {
+    let onSave: (ReminderSettings) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var mealReminderEnabled: Bool
+    @State private var weeklyReportEnabled: Bool
+    @State private var reminderHour: Int
+    @State private var reminderMinute: Int
+    @State private var quietHoursEnabled: Bool
+
+    private var hourLabel: String {
+        String(format: "Hour %02d", reminderHour)
+    }
+
+    private var minuteLabel: String {
+        String(format: "Minute %02d", reminderMinute)
+    }
+
+    private var hourRange: ClosedRange<Int> {
+        quietHoursEnabled ? 5...22 : 0...23
+    }
+
+    init(settings: ReminderSettings, onSave: @escaping (ReminderSettings) -> Void) {
+        self.onSave = onSave
+        let sanitized = settings.sanitized
+        _mealReminderEnabled = State(initialValue: sanitized.mealReminderEnabled)
+        _weeklyReportEnabled = State(initialValue: sanitized.weeklyReportEnabled)
+        _reminderHour = State(initialValue: sanitized.reminderHour)
+        _reminderMinute = State(initialValue: sanitized.reminderMinute)
+        _quietHoursEnabled = State(initialValue: sanitized.quietHoursEnabled)
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Reminders") {
+                    Toggle("Meal reminder", isOn: $mealReminderEnabled)
+                    Toggle("Weekly report", isOn: $weeklyReportEnabled)
+                    Toggle("Quiet hours", isOn: $quietHoursEnabled)
+                }
+                Section("Meal reminder time") {
+                    Stepper(hourLabel, value: $reminderHour, in: hourRange)
+                    Stepper(minuteLabel, value: $reminderMinute, in: 0...55, step: 5)
+                }
+                Section("Privacy") {
+                    Text("MacroMesh schedules these locally on this iPhone. There is no push server in this build.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+            }
+            .navigationTitle("Reminders")
+            .onChange(of: quietHoursEnabled) { _, isEnabled in
+                if isEnabled && !(5...22).contains(reminderHour) {
+                    reminderHour = ReminderSettings.standard.reminderHour
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(ReminderSettings(
+                            mealReminderEnabled: mealReminderEnabled,
+                            weeklyReportEnabled: weeklyReportEnabled,
+                            reminderHour: reminderHour,
+                            reminderMinute: reminderMinute,
+                            quietHoursEnabled: quietHoursEnabled
+                        ))
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct CustomFoodEditorSheet: View {
+    let onSave: (CustomFoodDraft) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var brand = ""
+    @State private var servingQuantity = "1"
+    @State private var servingUnit = "serving"
+    @State private var calories = ""
+    @State private var protein = ""
+    @State private var carbs = ""
+    @State private var fat = ""
+    @State private var fiber = "0"
+    @State private var sugar = "0"
+    @State private var sodium = "0"
+
+    private var draft: CustomFoodDraft? {
+        guard let servingQuantityValue = Double(servingQuantity.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let caloriesValue = Double(calories.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let proteinValue = Double(protein.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let carbsValue = Double(carbs.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let fatValue = Double(fat.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return nil
+        }
+
+        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedUnit = servingUnit.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedName.isEmpty, !cleanedUnit.isEmpty, servingQuantityValue > 0 else {
+            return nil
+        }
+
+        return CustomFoodDraft(
+            name: cleanedName,
+            brand: brand.nilIfBlank,
+            servingQuantity: servingQuantityValue,
+            servingUnit: cleanedUnit,
+            calories: max(0, caloriesValue),
+            protein: max(0, proteinValue),
+            carbs: max(0, carbsValue),
+            fat: max(0, fatValue),
+            fiber: max(0, Double(fiber.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0),
+            sugar: max(0, Double(sugar.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0),
+            sodium: max(0, Double(sodium.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0)
+        )
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Food") {
+                    TextField("Name", text: $name)
+                    TextField("Brand optional", text: $brand)
+                    TextField("Serving quantity", text: $servingQuantity)
+                        .keyboardType(.decimalPad)
+                    TextField("Serving unit", text: $servingUnit)
+                }
+                Section("Macros") {
+                    TextField("Calories", text: $calories)
+                        .keyboardType(.decimalPad)
+                    TextField("Protein", text: $protein)
+                        .keyboardType(.decimalPad)
+                    TextField("Carbs", text: $carbs)
+                        .keyboardType(.decimalPad)
+                    TextField("Fat", text: $fat)
+                        .keyboardType(.decimalPad)
+                }
+                Section("Optional details") {
+                    TextField("Fiber", text: $fiber)
+                        .keyboardType(.decimalPad)
+                    TextField("Sugar", text: $sugar)
+                        .keyboardType(.decimalPad)
+                    TextField("Sodium mg", text: $sodium)
+                        .keyboardType(.decimalPad)
+                }
+            }
+            .navigationTitle("Custom food")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        if let draft {
+                            onSave(draft)
+                            dismiss()
+                        }
+                    }
+                    .disabled(draft == nil)
                 }
             }
         }

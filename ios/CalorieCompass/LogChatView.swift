@@ -17,6 +17,7 @@ struct LogChatView: View {
     @State private var selectedMealType = "snack"
     @State private var favoriteMeals: [ReusableMealSummary] = []
     @State private var recentMeals: [ReusableMealSummary] = []
+    @State private var customFoods: [CustomFoodSummary] = []
     @State private var quickActionMessage: String?
 
     @State private var reviewItems: [MealItem] = []
@@ -101,6 +102,7 @@ struct LogChatView: View {
                     PromptChip(text: "Two eggs, toast, and coffee")
                 }
                 quickRepeatSection
+                customFoodQuickAddSection
             }
         }
     }
@@ -196,6 +198,26 @@ struct LogChatView: View {
                 Text(quickActionMessage)
                     .font(.caption)
                     .foregroundColor(MacroMeshTheme.primaryDark)
+            }
+        }
+    }
+
+    private var customFoodQuickAddSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !customFoods.isEmpty {
+                Text("Custom foods")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(customFoods.prefix(6))) { food in
+                            CustomFoodQuickAddButton(food: food) {
+                                logCustomFood(food)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
             }
         }
     }
@@ -306,6 +328,13 @@ struct LogChatView: View {
                 }
             }
         }
+        BackendService.fetchCustomFoods { result in
+            DispatchQueue.main.async {
+                if case .success(let response) = result {
+                    customFoods = response.customFoods
+                }
+            }
+        }
     }
 
     private func repeatFavoriteMeal(_ meal: ReusableMealSummary) {
@@ -351,6 +380,33 @@ struct LogChatView: View {
                     loadReusableMeals()
                 case .failure(let error):
                     quickActionMessage = RetryCopy.nonDestructiveFailure(action: "repeat that meal", error: error)
+                }
+            }
+        }
+    }
+
+    private func logCustomFood(_ food: CustomFoodSummary) {
+        quickActionMessage = "Adding \(food.name)..."
+        let request = PostMealRequest(
+            meal_type: selectedMealType,
+            confidence_score: 1,
+            raw_text: food.name,
+            source_reusable_meal_id: nil,
+            notes: "Quick added custom food",
+            date: nil,
+            items: [food.mealRequestItem]
+        )
+        BackendService.saveConfirmedMeal(request: request) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    quickActionMessage = "Added \(food.name) to today."
+                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Added \(food.name) and saved it for today."))
+                    NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
+                    loadReusableMeals()
+                case .failure(let error):
+                    sessionStore.apply(error)
+                    quickActionMessage = RetryCopy.nonDestructiveFailure(action: "add that custom food", error: error)
                 }
             }
         }
@@ -496,6 +552,35 @@ struct QuickRepeatMealButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Repeat \(meal.title)")
+    }
+}
+
+struct CustomFoodQuickAddButton: View {
+    let food: CustomFoodSummary
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Custom")
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .textCase(.uppercase)
+                Text(food.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.text)
+                    .lineLimit(2)
+                Text("\(Int(food.calories)) cal | \(Int(food.protein))g protein")
+                    .font(.caption2)
+                    .foregroundColor(MacroMeshTheme.muted)
+            }
+            .frame(width: 144, alignment: .leading)
+            .padding(10)
+            .background(MacroMeshTheme.cardSubtle)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add custom food \(food.name)")
     }
 }
 
