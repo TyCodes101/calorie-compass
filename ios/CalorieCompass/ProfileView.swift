@@ -942,7 +942,7 @@ struct AccountStatusSection: View {
     }
 
     private var description: String {
-        response?.account?.description ?? "Native Sign in with Apple uses backend verification and remains optional while account tools are polished."
+        response?.account?.description ?? "Sign in with Apple is optional. You can keep using MacroMesh as a guest at any time."
     }
 
     private var providers: [AuthProviderSnapshot] {
@@ -951,7 +951,7 @@ struct AccountStatusSection: View {
                 id: "apple",
                 label: "Continue with Apple",
                 status: "planned",
-                detail: "Apple sign-in can request a backend-issued session; account-management polish and TestFlight auth QA are still pending."
+                detail: "Sign in to sync your data and unlock account tools like export and deletion."
             )
         ]
     }
@@ -990,7 +990,7 @@ struct AccountStatusSection: View {
         }
         .padding(.top, 12)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Account status. Apple sign-in remains optional and guest mode remains available.")
+        .accessibilityLabel("Account status. Apple sign-in is optional and guest mode remains available.")
     }
 }
 
