@@ -128,35 +128,42 @@ private struct ProfileIdentityHeader: View {
 
     var body: some View {
         AppCard(padding: 16) {
-            HStack(alignment: .center, spacing: 12) {
-                ZStack {
-                    Circle().fill(MacroMeshTheme.cardSubtle)
-                    Image(systemName: "person.fill")
-                        .foregroundColor(MacroMeshTheme.primary)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
+                    ZStack {
+                        Circle().fill(MacroMeshTheme.cardSubtle)
+                        Image(systemName: "person.fill")
+                            .foregroundColor(MacroMeshTheme.primary)
+                    }
+                    .frame(width: 44, height: 44)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.displayName)
+                            .font(.headline.weight(.semibold))
+                            .foregroundColor(MacroMeshTheme.text)
+                            .lineLimit(1)
+                        Text(model.isGuest ? "Guest mode" : "Account profile")
+                            .font(.caption)
+                            .foregroundColor(MacroMeshTheme.muted)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Text(model.statusPillText)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(model.statusPillTint.opacity(0.14))
+                        .foregroundColor(model.statusPillTint)
+                        .clipShape(Capsule())
+                        .accessibilityLabel(model.isGuest ? "Guest profile" : "Synced profile")
                 }
-                .frame(width: 44, height: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.displayName)
-                        .font(.headline.weight(.semibold))
-                        .foregroundColor(MacroMeshTheme.text)
-                        .lineLimit(1)
-                    Text(model.isGuest ? "Guest mode" : "Account profile")
-                        .font(.caption)
-                        .foregroundColor(MacroMeshTheme.muted)
-                        .lineLimit(1)
+                HStack(spacing: 12) {
+                    SnapshotMetric(title: "Current weight", value: model.currentWeightText)
+                    SnapshotMetric(title: "Streak", value: model.streakText)
                 }
-
-                Spacer()
-
-                Text(model.statusPillText)
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(model.statusPillTint.opacity(0.14))
-                    .foregroundColor(model.statusPillTint)
-                    .clipShape(Capsule())
-                    .accessibilityLabel(model.isGuest ? "Guest profile" : "Synced profile")
             }
         }
     }

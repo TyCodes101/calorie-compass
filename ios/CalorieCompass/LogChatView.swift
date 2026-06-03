@@ -350,9 +350,9 @@ struct LogChatView: View {
                     Text("Try a natural phrase")
                         .font(.caption.weight(.semibold))
                         .foregroundColor(MacroMeshTheme.muted)
-                    PromptChip(text: "Greek yogurt with granola and berries")
-                    PromptChip(text: "Chicken burrito bowl for lunch")
-                    PromptChip(text: "Two eggs, toast, and coffee")
+                    PromptChip(text: "Chipotle bowl with double chicken")
+                    PromptChip(text: "Quest BBQ protein chips")
+                    PromptChip(text: "Protein shake and banana")
                 }
                 logActionGrid
                 quickRepeatSection
@@ -1676,22 +1676,31 @@ struct ChatBubble: View {
     var isUser: Bool { role == "user" }
 
     var body: some View {
-        HStack(alignment: .bottom) {
-            if isUser { Spacer(minLength: 50) }
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+        HStack(alignment: .bottom, spacing: 10) {
+            if isUser { Spacer(minLength: 44) }
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
                 Text(isUser ? "You" : "MacroMesh")
                     .font(.caption2.weight(.bold))
                     .foregroundColor(MacroMeshTheme.muted)
                 Text(text)
-                    .font(.subheadline)
+                    .font(.body)
                     .foregroundColor(isUser ? .white : MacroMeshTheme.text)
-                    .padding(12)
-                    .background(isUser ? MacroMeshTheme.primary : Color.white)
+                    .multilineTextAlignment(isUser ? .trailing : .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(isUser ? MacroMeshTheme.primary : MacroMeshTheme.card)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(isUser ? Color.clear : MacroMeshTheme.border, lineWidth: 1)
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: MacroMeshTheme.shadow, radius: 10, x: 0, y: 6)
+                    .shadow(color: MacroMeshTheme.shadow.opacity(isUser ? 0.16 : 0.10), radius: 10, x: 0, y: 6)
+                    .frame(maxWidth: 320, alignment: isUser ? .trailing : .leading)
+                    .accessibilityLabel((isUser ? "You: " : "MacroMesh: ") + text)
             }
-            if !isUser { Spacer(minLength: 50) }
+            if !isUser { Spacer(minLength: 44) }
         }
+        .animation(.easeInOut(duration: 0.18), value: text)
     }
 }
 
