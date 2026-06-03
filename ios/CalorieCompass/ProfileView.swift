@@ -31,8 +31,12 @@ struct ProfileView: View {
     @State private var showGoalWizard = false
     @State private var showWeightSheet = false
     @State private var analytics: AnalyticsResponse?
+    @State private var dashboard: DashboardResponse?
     @State private var weightEntries: WeightEntriesResponse?
     @State private var profileActionMessage: String?
+    @State private var showWeeklyReport = false
+    @State private var showReminders = false
+    @State private var showPrivacyAbout = false
     @FocusState private var focusedProfileField: Bool
     private let stabilityReporter = ConsoleStabilityReporter()
 
@@ -53,7 +57,7 @@ struct ProfileView: View {
                 } else if let error = error {
                     ProfileFallbackView(message: profileFallbackMessage(error), retry: loadProfile)
                 } else if profile == nil {
-                    ProfileFallbackView(message: "Your guest profile will appear here once MacroMesh finishes setup.", retry: loadProfile)
+                    ProfileFallbackView(message: "We couldn’t load Profile yet. Your guest session is safe — try again.", retry: loadProfile)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
@@ -73,20 +77,36 @@ struct ProfileView: View {
                                     }
                                 )
                             } else {
-                                ProfileSummaryCard(profile: profile, isGuest: sessionStore.state.authSession.isGuest)
-                                GoalSetupCard(profile: profile, onLaunch: { showGoalWizard = true })
-                                AnalyticsSummaryCard(analytics: analytics)
-                                WeightTrackingCard(response: weightEntries, onLogWeight: { showWeightSheet = true })
+                                let model = ProfileDashboardModel.build(
+                                    profile: profile,
+                                    isGuest: sessionStore.state.authSession.isGuest,
+                                    analytics: analytics,
+                                    dashboard: dashboard,
+                                    weightEntries: weightEntries
+                                )
+                                ProfileDashboardView(
+                                    model: model,
+                                    onUpdateGoals: { showGoalWizard = true },
+                                    onLogWeight: { showWeightSheet = true },
+                                    onWeeklyReport: { showWeeklyReport = true },
+                                    onCustomFoods: { NotificationCenter.default.post(name: .macroMeshOpenLogTab, object: nil) },
+                                    onReminders: { showReminders = true },
+                                    onPrivacyAbout: { showPrivacyAbout = true }
+                                )
+
                                 if let profileActionMessage {
-                                    Text(profileActionMessage)
-                                        .font(.caption)
-                                        .foregroundColor(MacroMeshTheme.primaryDark)
+                                    AppCard(padding: 12) {
+                                        Text(profileActionMessage)
+                                            .font(.caption)
+                                            .foregroundColor(MacroMeshTheme.primaryDark)
+                                    }
                                 }
-                                Button("Edit Profile") {
+
+                                Button("Edit profile") {
                                     dirtyProfile = profile; editing = true
                                 }
                                 .buttonStyle(PrimaryCTAButtonStyle())
-                                .padding(.top, 4)
+                                .padding(.top, 2)
                                 if sessionStore.state.authSession.isSignedIn {
                                     AccountStatusSection(response: sessionStore.state.sessionResponse)
                                     AccountSignInEntryPoint(
@@ -123,6 +143,15 @@ struct ProfileView: View {
                 WeightEntrySheet(latestWeight: weightEntries?.trend.latestWeightLbs ?? profile?.weightLbs) { weight in
                     logWeight(weight)
                 }
+            }
+            .sheet(isPresented: $showWeeklyReport) {
+                WeeklyReportSheet(analytics: analytics, dashboard: dashboard, weightEntries: weightEntries)
+            }
+            .sheet(isPresented: $showReminders) {
+                RemindersEntrySheet()
+            }
+            .sheet(isPresented: $showPrivacyAbout) {
+                PrivacyAboutSheet(isGuest: sessionStore.state.authSession.isGuest)
             }
             .alert(isPresented: $showConfirmSave) {
                 Alert(
@@ -171,11 +200,19 @@ struct ProfileView: View {
                 }
             }
         }
+
+        BackendService.fetchDashboard { result in
+            DispatchQueue.main.async {
+                if case .success(let response) = result {
+                    dashboard = response
+                }
+            }
+        }
     }
 
     private func profileFallbackMessage(_ error: String) -> String {
         if error.localizedCaseInsensitiveContains("profile") || error.localizedCaseInsensitiveContains("no data") {
-            return "Your guest profile is still getting ready. Nothing was changed — reload in a moment."
+            return "We couldn’t load Profile details yet. Guest defaults are still available — reload in a moment."
         }
         return "We couldn’t refresh Profile yet. Nothing was changed — check your connection and try again."
     }

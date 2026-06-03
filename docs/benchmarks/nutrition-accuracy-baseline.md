@@ -1,6 +1,6 @@
 # Nutrition Accuracy Benchmark
 
-Generated: 2026-06-02T04:28:41.978Z
+Generated: 2026-06-03T03:37:28.524Z
 
 This report measures the current deterministic nutrition pipeline against the Phase 9A baseline case set. Improvements must be interpreted as benchmark deltas, not as perfect nutrition accuracy.
 

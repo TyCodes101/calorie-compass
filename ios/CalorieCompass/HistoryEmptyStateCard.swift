@@ -8,28 +8,29 @@ struct HistoryEmptyStateCard: View {
     let action: (() -> Void)?
 
     var body: some View {
-        VStack(spacing: 15) {
-            Image(systemName: icon)
-                .font(.system(size: 44, weight: .bold))
-                .foregroundColor(.accentColor)
-            Text(title)
-                .font(.title3)
-                .fontWeight(.bold)
-            Text(message)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.bottom, 2)
-            if let buttonTitle = buttonTitle, let action = action {
-                Button(buttonTitle, action: action)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+        AppCard(padding: 20) {
+            VStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundColor(MacroMeshTheme.primary)
+
+                VStack(spacing: 6) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundColor(MacroMeshTheme.muted)
+                        .multilineTextAlignment(.center)
+                }
+
+                if let buttonTitle, let action {
+                    Button(buttonTitle, action: action)
+                        .buttonStyle(PrimaryCTAButtonStyle())
+                }
             }
+            .frame(maxWidth: .infinity)
         }
-        .padding(30)
-        .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 18)
     }
 }

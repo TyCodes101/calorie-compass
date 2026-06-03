@@ -20,7 +20,7 @@ struct PremiumHistoryView: View {
                     HistoryEmptyStateCard(icon: "fork.knife.circle.fill", title: "No saved meals yet", message: "Meals you save from Log will appear here as a clean history of your day.", buttonTitle: "Log a meal", action: openLog)
                 } else {
                     ScrollView {
-                        VStack(spacing: 32) {
+                        LazyVStack(alignment: .leading, spacing: 18) {
                             if let actionMessage {
                                 AppCard(padding: 12) {
                                     Text(actionMessage)
@@ -28,10 +28,12 @@ struct PremiumHistoryView: View {
                                         .foregroundColor(MacroMeshTheme.primaryDark)
                                 }
                             }
-                            // Group meals by date
+
                             ForEach(groupedMealDates, id: \.self) { date in
-                                Section(header: HistoryDayHeaderCard(date: date, meals: mealsByDate[date] ?? [])) {
-                                    VStack(spacing: 14) {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    HistoryDayHeaderCard(date: date, meals: mealsByDate[date] ?? [])
+
+                                    VStack(spacing: 10) {
                                         ForEach(mealsByDate[date] ?? []) { meal in
                                             HistoryMealCard(
                                                 meal: meal,
@@ -41,15 +43,20 @@ struct PremiumHistoryView: View {
                                         }
                                     }
                                 }
+                                .padding(.top, 4)
                             }
-                        }.padding(.horizontal, 18).padding(.top, 18).padding(.bottom, 90)
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.top, 14)
+                        .padding(.bottom, 90)
                     }
+                    .refreshable { refreshMeals() }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: loadMeals) {
+                    Button(action: refreshMeals) {
                         if refreshing { ProgressView() } else { Image(systemName: "arrow.clockwise") }
                     }
                     .foregroundColor(MacroMeshTheme.primary)
@@ -79,6 +86,24 @@ struct PremiumHistoryView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     error = err.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func refreshMeals() {
+        guard !refreshing else { return }
+        refreshing = true
+        BackendService.fetchMeals { result in
+            DispatchQueue.main.async {
+                refreshing = false
+                switch result {
+                case .success(let data):
+                    meals = data
+                    error = nil
+                case .failure(let err):
+                    sessionStore.apply(err)
+                    error = RetryCopy.nonDestructiveFailure(action: "refresh meals", error: err)
                 }
             }
         }
