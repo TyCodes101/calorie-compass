@@ -6,6 +6,7 @@ import { getCurrentUserWithProfile } from '@/lib/current-user';
 import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
 import { buildProfileSettingsSnapshot } from '@/lib/profile-settings';
 import { saveProfile } from '@/lib/profile';
+import { getGuestPlaceholderName } from '@/lib/auth-session';
 
 const requestSchema = z.object({
   name: z.string().min(1),
@@ -28,7 +29,12 @@ export async function GET() {
     return NextResponse.json(buildProfileSettingsSnapshot(await getCurrentUserWithProfile()));
   } catch (error) {
     logWriteFailure('profile.route.get', error);
-    return NextResponse.json({ error: 'We couldn’t load your profile right now. Please try again.' }, { status: 500 });
+    const fallback = buildProfileSettingsSnapshot(null);
+    return NextResponse.json({
+      ...fallback,
+      name: getGuestPlaceholderName(),
+      nutritionPreferences: '',
+    });
   }
 }
 
