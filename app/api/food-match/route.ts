@@ -2,13 +2,13 @@ import OpenAI from 'openai';
 
 import { MACROMESH_SYSTEM_PROMPT } from './prompt';
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 const MAX_BATCH_SIZE = 15;
 
 const model = process.env.OPENAI_FOOD_MATCH_MODEL ?? 'gpt-4o-mini';
+
+function getOpenAIClient(apiKey: string) {
+  return new OpenAI({ apiKey });
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,9 +103,10 @@ async function runMatch(payload: unknown): Promise<MatchResult | BatchResponse> 
   let rawOutput = "";
 
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return buildSafeNoMatch('Missing OPENAI_API_KEY');
-    }
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return buildSafeNoMatch('Missing OPENAI_API_KEY');
+
+    const client = getOpenAIClient(apiKey);
 
     const completion = await client.chat.completions.create({
       model,
