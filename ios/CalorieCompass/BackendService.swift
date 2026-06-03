@@ -465,7 +465,8 @@ struct DashboardResponse: Codable {
             title: "Ready when you are",
             description: "Guest mode is setting up. You can log your first meal whenever you are ready.",
             streaks: nil
-        )
+        ),
+        streaks: nil
     )
 }
 
