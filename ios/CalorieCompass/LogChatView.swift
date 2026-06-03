@@ -172,6 +172,28 @@ enum LogActionSheet: Identifiable {
     }
 }
 
+enum LogToolLaunch: String, CaseIterable, Equatable {
+    case foodSearch
+    case barcodeManual
+    case barcodeCamera
+    case quickAdd
+    case customFood
+    case nutritionLabel
+    case photo
+
+    var sheet: LogActionSheet {
+        switch self {
+        case .foodSearch: return .foodSearch
+        case .barcodeManual: return .barcode(prefersCamera: false)
+        case .barcodeCamera: return .barcode(prefersCamera: true)
+        case .quickAdd: return .quickAdd(barcode: nil)
+        case .customFood: return .customFood(barcode: nil)
+        case .nutritionLabel: return .nutritionLabelFoundation
+        case .photo: return .photoFoundation
+        }
+    }
+}
+
 enum LogToolCatalog {
     static let foodToolTitles = ["Food Search", "Enter Barcode", "Quick Add", "Custom Food"]
     static let cameraToolTitles = ["Scan Barcode", "Scan Label", "Attach Photo"]
@@ -248,6 +270,10 @@ struct LogChatView: View {
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .onAppear(perform: loadReusableMeals)
+            .onReceive(NotificationCenter.default.publisher(for: .macroMeshOpenLogTool)) { notification in
+                guard let launch = notification.object as? LogToolLaunch else { return }
+                activeSheet = launch.sheet
+            }
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .foodSearch:

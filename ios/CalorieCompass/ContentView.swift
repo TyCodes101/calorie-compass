@@ -15,6 +15,7 @@ enum MainTab: Hashable {
 
 extension Notification.Name {
     static let macroMeshOpenLogTab = Notification.Name("macroMeshOpenLogTab")
+    static let macroMeshOpenLogTool = Notification.Name("macroMeshOpenLogTool")
 }
 
 struct ContentView: View {
@@ -54,6 +55,9 @@ struct ContentView: View {
             sessionStore.refresh()
         }
         .onReceive(NotificationCenter.default.publisher(for: .macroMeshOpenLogTab)) { _ in
+            selectedTab = .log
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .macroMeshOpenLogTool)) { _ in
             selectedTab = .log
         }
         .onChange(of: sessionStore.state) { _, _ in
