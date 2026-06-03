@@ -95,6 +95,7 @@ struct ProfileDashboardModel: Equatable {
 
 struct ProfileDashboardView: View {
     let model: ProfileDashboardModel
+    let weightEntries: WeightEntriesResponse?
 
     let onUpdateGoals: () -> Void
     let onLogWeight: () -> Void
@@ -108,6 +109,7 @@ struct ProfileDashboardView: View {
             ProfileIdentityHeader(model: model)
 
             FitnessSnapshotCard(model: model, onLogWeight: onLogWeight)
+            WeightHistoryTimelineView(rows: WeightHistoryTimelineProfileBuilder.build(weightEntries: weightEntries))
             NutritionSnapshotCard(model: model)
             WeeklyMomentumCard(model: model)
 
@@ -121,6 +123,22 @@ struct ProfileDashboardView: View {
                 onReminders: onReminders
             )
             PrivacyCard(onPrivacyAbout: onPrivacyAbout)
+        }
+    }
+}
+
+private enum WeightHistoryTimelineProfileBuilder {
+    static func build(weightEntries: WeightEntriesResponse?) -> [WeightHistoryTimelineView.Row] {
+        let parsed = (weightEntries?.entries ?? []).compactMap { entry -> (Date, Double, String)? in
+            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
+            return (date, entry.weightLbs, entry.id)
+        }
+        .sorted { $0.0 > $1.0 }
+
+        return parsed.enumerated().map { index, item in
+            let next = parsed.dropFirst(index + 1).first
+            let delta = next.map { item.1 - $0.1 }
+            return WeightHistoryTimelineView.Row(id: item.2, date: item.0, weightLbs: item.1, deltaLbs: delta)
         }
     }
 }

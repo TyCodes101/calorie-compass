@@ -87,6 +87,7 @@ struct ProfileView: View {
                                 )
                                 ProfileDashboardView(
                                     model: model,
+                                    weightEntries: weightEntries,
                                     onUpdateGoals: { showGoalWizard = true },
                                     onLogWeight: { showWeightSheet = true },
                                     onWeeklyReport: { showWeeklyReport = true },

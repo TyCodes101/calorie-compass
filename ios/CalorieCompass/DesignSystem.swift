@@ -81,3 +81,95 @@ public struct Badge: View {
             .clipShape(Capsule())
     }
 }
+
+// Weight History Timeline
+public struct WeightHistoryTimelineView: View {
+    public struct Row: Identifiable, Equatable {
+        public let id: String
+        public let date: Date
+        public let weightLbs: Double
+        public let deltaLbs: Double?
+    }
+
+    let title: String
+    let subtitle: String
+    let rows: [Row]
+
+    public init(title: String = "Weight history", subtitle: String = "Recent weigh-ins", rows: [Row]) {
+        self.title = title
+        self.subtitle = subtitle
+        self.rows = rows
+    }
+
+    public var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(title, subtitle: subtitle)
+
+                if rows.isEmpty {
+                    EmptyStateCard(
+                        icon: "scalemass",
+                        title: "Your weigh-ins will appear here",
+                        message: "Log 2–3 weigh-ins to unlock a clearer trend.",
+                        buttonTitle: nil,
+                        action: nil
+                    )
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(rows.prefix(10)) { row in
+                            WeightHistoryRow(row: row)
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct WeightHistoryRow: View {
+    let row: WeightHistoryTimelineView.Row
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Self.dateFormatter.string(from: row.date))
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
+                Text(String(format: "%.1f lbs", row.weightLbs))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.text)
+            }
+            Spacer(minLength: 0)
+            if let delta = row.deltaLbs {
+                let isUp = delta > 0.0001
+                let isDown = delta < -0.0001
+                let tint: Color = isUp ? MacroMeshTheme.orange : (isDown ? MacroMeshTheme.blue : MacroMeshTheme.muted)
+                let icon = isUp ? "arrow.up" : (isDown ? "arrow.down" : "minus")
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                        .font(.caption.weight(.bold))
+                    Text(String(format: "%+.1f", delta))
+                        .font(.caption.weight(.bold))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(tint.opacity(0.12))
+                .foregroundColor(tint)
+                .clipShape(Capsule())
+                .accessibilityLabel("Change \(String(format: "%+.1f", delta)) pounds")
+            }
+        }
+        .padding(12)
+        .background(MacroMeshTheme.cardSubtle.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMedium, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+}

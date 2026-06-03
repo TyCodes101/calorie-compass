@@ -274,6 +274,11 @@ struct LogChatView: View {
                 guard let launch = notification.object as? LogToolLaunch else { return }
                 activeSheet = launch.sheet
             }
+            .onReceive(NotificationCenter.default.publisher(for: .macroMeshPrefillLogText)) { notification in
+                guard let text = notification.object as? String else { return }
+                inputText = text
+                mealInputFocused = true
+            }
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .foodSearch:

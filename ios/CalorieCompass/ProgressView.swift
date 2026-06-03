@@ -50,6 +50,10 @@ struct ProgressScreenView: View {
                                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                             }
 
+                            WeightHistoryTimelineView(
+                                rows: WeightHistoryTimelineViewBuilder.build(weightEntries: weightEntries)
+                            )
+
                             GoalProgressCard(profile: profile, latestWeight: latestWeight)
                             WeeklySummaryCard(analytics: analytics, weightDeltaLast7Days: weightDeltaLast7Days)
                             MilestonesCard()
@@ -201,6 +205,22 @@ struct ProgressScreenView: View {
     }
 }
 
+private enum WeightHistoryTimelineViewBuilder {
+    static func build(weightEntries: WeightEntriesResponse?) -> [WeightHistoryTimelineView.Row] {
+        let parsed = (weightEntries?.entries ?? []).compactMap { entry -> (Date, Double, String)? in
+            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
+            return (date, entry.weightLbs, entry.id)
+        }
+        .sorted { $0.0 > $1.0 }
+
+        return parsed.enumerated().map { index, item in
+            let next = parsed.dropFirst(index + 1).first
+            let delta = next.map { item.1 - $0.1 }
+            return WeightHistoryTimelineView.Row(id: item.2, date: item.0, weightLbs: item.1, deltaLbs: delta)
+        }
+    }
+}
+
 enum ProgressRange: String, CaseIterable, Identifiable {
     case days7 = "7D"
     case days30 = "30D"
@@ -281,27 +301,79 @@ private struct GoalProgressCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader("Goal progress", subtitle: subtitle)
 
-                HStack(spacing: 12) {
-                    MetricTile(title: "Goal", value: goalLabel, icon: "target", tint: MacroMeshTheme.primary)
-                    MetricTile(title: "Progress", value: "—", icon: "chart.line.uptrend.xyaxis", tint: MacroMeshTheme.orange)
+                if goalWeightLbs == nil {
+                    EmptyStateCard(
+                        icon: "target",
+                        title: "Set a goal weight to unlock progress tracking",
+                        message: "Go to Profile → Update goals and add an optional goal weight.",
+                        buttonTitle: nil,
+                        action: nil
+                    )
+                } else if latestWeight == nil {
+                    EmptyStateCard(
+                        icon: "scalemass",
+                        title: "Log a weigh-in to start tracking",
+                        message: "Your goal progress will update after your first weigh-in.",
+                        buttonTitle: nil,
+                        action: nil
+                    )
+                } else {
+                    HStack(spacing: 12) {
+                        MetricTile(title: "Current", value: latestWeightText, icon: "scalemass", tint: MacroMeshTheme.primary)
+                        MetricTile(title: "Goal", value: goalWeightText, icon: "target", tint: MacroMeshTheme.orange)
+                    }
+                    if let remainingText {
+                        Text(remainingText)
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(MacroMeshTheme.muted)
+                    }
+
+                    if let progress {
+                        ProgressBar(progress: progress, color: MacroMeshTheme.primary)
+                            .accessibilityLabel("Goal progress \(Int(progress * 100)) percent")
+                    }
                 }
-                ProgressBar(progress: 0.0, color: MacroMeshTheme.primary)
-                    .accessibilityLabel("Goal progress not available yet")
             }
         }
     }
 
-    private var goalLabel: String {
-        guard let goal = profile?.goal?.nilIfBlank else { return "Set goals" }
-        switch goal {
-        case "LOSE_WEIGHT": return "Lose"
-        case "GAIN_MUSCLE": return "Gain"
-        default: return "Maintain"
-        }
-    }
+    // Goal weight is not currently persisted in ProfileData.
+    private var goalWeightLbs: Double? { nil }
 
     private var subtitle: String {
-        latestWeight == nil ? "Log weight to start tracking progress." : "Goal weight tracking is coming soon — your daily targets still apply."
+        if goalWeightLbs == nil {
+            return "Set a goal weight to unlock remaining and percent progress."
+        }
+        if latestWeight == nil {
+            return "Log a weigh-in to start tracking progress."
+        }
+        return "Progress updates as you log weigh-ins."
+    }
+
+    private var latestWeightText: String {
+        latestWeight.map { String(format: "%.1f lbs", $0) } ?? "—"
+    }
+
+    private var goalWeightText: String {
+        goalWeightLbs.map { String(format: "%.1f lbs", $0) } ?? "—"
+    }
+
+    private var remainingText: String? {
+        guard let current = latestWeight, let goal = goalWeightLbs else { return nil }
+        let remaining = goal - current
+        // Lose vs gain messaging based on direction.
+        if remaining > 0 {
+            return String(format: "%.1f lbs to go", remaining)
+        }
+        if remaining < 0 {
+            return String(format: "%.1f lbs past goal", abs(remaining))
+        }
+        return "Goal reached"
+    }
+
+    private var progress: Double? {
+        // Requires a starting weight and goal weight to compute safely.
+        nil
     }
 }
 

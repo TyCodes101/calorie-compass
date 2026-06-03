@@ -15,17 +15,24 @@ struct WeeklyReportSheet: View {
                     VStack(alignment: .leading, spacing: 14) {
                         AppCard(padding: 18) {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Weekly report")
+                                Text("This week at a glance")
                                     .font(.title2.weight(.bold))
                                     .foregroundColor(MacroMeshTheme.text)
-                                Text("A quick scan of your recent nutrition and weigh-ins.")
+                                Text("A quick scan of your recent logging and weigh-ins.")
                                     .font(.subheadline)
                                     .foregroundColor(MacroMeshTheme.muted)
                             }
                         }
 
-                        AnalyticsSummaryCard(analytics: analytics)
-                        WeightTrackingCard(response: weightEntries, onLogWeight: {})
+                        WeeklyAtAGlanceCard(analytics: analytics, dashboard: dashboard, weightEntries: weightEntries)
+
+                        if analytics != nil {
+                            AnalyticsSummaryCard(analytics: analytics)
+                        }
+
+                        if weightEntries != nil {
+                            WeightTrackingCard(response: weightEntries, onLogWeight: {})
+                        }
 
                         if let streaks = dashboard?.streaks {
                             AppCard(padding: 16) {
@@ -41,7 +48,7 @@ struct WeeklyReportSheet: View {
                         }
 
                         AppCard(padding: 14) {
-                            Text("Estimates: MacroMesh uses your saved meals and recent weigh-ins. If something looks off, log one more meal or weigh-in and re-check.")
+                            Text("Tip: Trends get better with consistency. Log a few meals and 2–3 weigh-ins to unlock clearer insights.")
                                 .font(.caption)
                                 .foregroundColor(MacroMeshTheme.muted)
                         }
@@ -58,6 +65,112 @@ struct WeeklyReportSheet: View {
                 }
             }
         }
+    }
+}
+
+private struct WeeklyAtAGlanceCard: View {
+    let analytics: AnalyticsResponse?
+    let dashboard: DashboardResponse?
+    let weightEntries: WeightEntriesResponse?
+
+    var body: some View {
+        let tiles = buildTiles()
+
+        return AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Highlights", subtitle: "Real data from your last 7 days.")
+
+                if tiles.isEmpty {
+                    EmptyStateCard(
+                        icon: "sparkles",
+                        title: "Not enough data yet",
+                        message: "Log and save a few meals this week to unlock a weekly summary.",
+                        buttonTitle: nil,
+                        action: nil
+                    )
+                } else {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(tiles) { tile in
+                            WeeklyHighlightTile(tile: tile)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func buildTiles() -> [WeeklyHighlightTileModel] {
+        var out: [WeeklyHighlightTileModel] = []
+
+        if let meals = dashboard?.streaks?.mealsLoggedThisWeek, meals > 0 {
+            out.append(WeeklyHighlightTileModel(id: "meals", title: "Meals logged", value: "\(meals)", icon: "fork.knife", tint: MacroMeshTheme.primary))
+        }
+
+        if let avgCals = analytics?.analytics.sevenDayAverageCalories, avgCals > 0 {
+            out.append(WeeklyHighlightTileModel(id: "avg-cals", title: "Avg calories", value: "\(Int(avgCals))", icon: "flame.fill", tint: MacroMeshTheme.orange))
+        }
+
+        if let avgProtein = analytics?.analytics.sevenDayAverageProtein, avgProtein > 0 {
+            out.append(WeeklyHighlightTileModel(id: "avg-protein", title: "Avg protein", value: "\(Int(avgProtein))g", icon: "bolt.heart.fill", tint: MacroMeshTheme.primary))
+        }
+
+        if let delta = weightDeltaLast7Days {
+            out.append(WeeklyHighlightTileModel(id: "weight", title: "Weight change", value: String(format: "%+.1f lbs", delta), icon: "scalemass", tint: delta > 0 ? MacroMeshTheme.orange : MacroMeshTheme.blue))
+        }
+
+        if let best = analytics?.analytics.highestProteinDay {
+            out.append(WeeklyHighlightTileModel(id: "best-protein", title: "Best protein day", value: "\(Int(best.protein))g", icon: "star.fill", tint: MacroMeshTheme.purple))
+        }
+
+        // Prefer showing 4 tiles max for hierarchy.
+        return Array(out.prefix(4))
+    }
+
+    private var weightDeltaLast7Days: Double? {
+        let parsed = (weightEntries?.entries ?? []).compactMap { entry -> (Date, Double)? in
+            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
+            return (date, entry.weightLbs)
+        }
+        .sorted { $0.0 < $1.0 }
+
+        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date().addingTimeInterval(-7 * 86400)
+        let window = parsed.filter { $0.0 >= cutoff }
+        guard let first = window.first?.1, let last = window.last?.1, window.count >= 2 else { return nil }
+        return last - first
+    }
+}
+
+private struct WeeklyHighlightTileModel: Identifiable {
+    let id: String
+    let title: String
+    let value: String
+    let icon: String
+    let tint: Color
+}
+
+private struct WeeklyHighlightTile: View {
+    let tile: WeeklyHighlightTileModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: tile.icon)
+                    .foregroundColor(tile.tint)
+                Spacer()
+            }
+            Text(tile.value)
+                .font(.title3.weight(.bold))
+                .foregroundColor(MacroMeshTheme.text)
+                .minimumScaleFactor(0.75)
+            Text(tile.title)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(MacroMeshTheme.muted)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
+        .background(MacroMeshTheme.cardSubtle.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 

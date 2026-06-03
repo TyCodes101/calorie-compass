@@ -85,7 +85,7 @@ struct HistoryMealCard: View {
                             }
                             if let onRepeat {
                                 Button(action: onRepeat) {
-                                    Label("Repeat today", systemImage: "arrow.clockwise")
+                                    Label("Log again", systemImage: "arrow.clockwise")
                                 }
                             }
                         } label: {

@@ -1,5 +1,22 @@
 import SwiftUI
 
+enum MealPrefillBuilder {
+    static func buildPrefill(meal: MealResponse) -> String {
+        if let items = meal.items, !items.isEmpty {
+            let names = items
+                .map { $0.food_name.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !names.isEmpty {
+                let joined = names.prefix(6).joined(separator: ", ")
+                return "Log this again: \(joined)."
+            }
+        }
+
+        let fallback = meal.rawText?.nilIfBlank ?? meal.displayTitle
+        return "Log this again: \(fallback)."
+    }
+}
+
 struct PremiumHistoryView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @State private var meals: [MealResponse] = []
@@ -136,33 +153,9 @@ struct PremiumHistoryView: View {
     }
 
     private func repeatMeal(_ meal: MealResponse) {
-        guard let items = meal.items, !items.isEmpty else {
-            actionMessage = "This meal needs item details before it can be repeated."
-            return
-        }
-
-        let request = PostMealRequest(
-            meal_type: meal.mealType?.lowercased() ?? "snack",
-            confidence_score: meal.confidenceScore ?? 0.82,
-            raw_text: meal.rawText ?? meal.displayTitle,
-            source_reusable_meal_id: nil,
-            notes: "Repeated from History",
-            date: nil,
-            items: items
-        )
-        BackendService.saveConfirmedMeal(request: request) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success:
-                    actionMessage = "Repeated \(meal.displayTitle) for today."
-                    NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
-                    loadMeals()
-                case .failure(let error):
-                    sessionStore.apply(error)
-                    actionMessage = RetryCopy.nonDestructiveFailure(action: "repeat that meal", error: error)
-                }
-            }
-        }
+        let prefill = MealPrefillBuilder.buildPrefill(meal: meal)
+        NotificationCenter.default.post(name: .macroMeshPrefillLogText, object: prefill)
+        actionMessage = "Ready to log \(meal.displayTitle) again. Review it before saving."
     }
 
     private var groupedMealDates: [String] {

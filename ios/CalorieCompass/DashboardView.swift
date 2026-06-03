@@ -266,19 +266,23 @@ struct DashboardView: View {
             if let meals = dashboard?.recentMeals, !meals.isEmpty {
                 VStack(spacing: 10) {
                     ForEach(Array(meals.prefix(4).enumerated()), id: \.offset) { _, meal in
-                        MealPreviewCard(meal: meal)
+                        MealPreviewCard(meal: meal, onLogAgain: logAgain)
                     }
                 }
             } else {
                 EmptyStateCard(
                     icon: "fork.knife.circle.fill",
                     title: "No meals logged yet",
-                    message: "Use Log to describe breakfast, lunch, dinner, or a snack. Nothing is saved until you review it.",
+                    message: "Start by logging breakfast, lunch, dinner, or a snack. Nothing is saved until you review it.",
                     buttonTitle: "Log a meal",
                     action: openLog
                 )
             }
         }
+    }
+
+    private func logAgain(_ meal: MealResponse) {
+        NotificationCenter.default.post(name: .macroMeshPrefillLogText, object: MealPrefillBuilder.buildPrefill(meal: meal))
     }
 
     private func openLog() {
@@ -373,6 +377,7 @@ struct DashboardQuickActionButton: View {
 
 struct MealPreviewCard: View {
     let meal: MealResponse
+    var onLogAgain: ((MealResponse) -> Void)? = nil
 
     var body: some View {
         AppCard(padding: 14) {
@@ -390,6 +395,21 @@ struct MealPreviewCard: View {
                         .foregroundColor(MacroMeshTheme.muted)
                 }
                 Spacer()
+                if let onLogAgain {
+                    Button {
+                        onLogAgain(meal)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(MacroMeshTheme.primary)
+                            .padding(10)
+                            .background(MacroMeshTheme.cardSubtle)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Log again")
+                    .accessibilityHint("Prefills this meal in the Log tab for review before saving.")
+                }
             }
         }
     }
