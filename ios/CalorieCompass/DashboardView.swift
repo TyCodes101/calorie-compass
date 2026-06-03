@@ -327,7 +327,8 @@ struct DashboardView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Today", message: err.localizedDescription))
-                    error = err.localizedDescription
+                    dashboard = dashboard ?? .empty
+                    error = RetryCopy.recoveryMessage(action: "load Today", error: err)
                 }
             }
         }
@@ -349,7 +350,8 @@ struct DashboardView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Today", message: err.localizedDescription))
-                    error = RetryCopy.nonDestructiveFailure(action: "refresh Today", error: err)
+                    dashboard = dashboard ?? .empty
+                    error = RetryCopy.recoveryMessage(action: "refresh Today", error: err)
                 }
             }
         }

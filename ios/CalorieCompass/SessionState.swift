@@ -149,6 +149,11 @@ struct SessionBannerModel: Equatable {
 final class SessionStore: ObservableObject {
     @Published private(set) var state: NativeSessionState = .unknown
     private var isRefreshing = false
+    private let storage: SecureAuthStorage
+
+    init(storage: SecureAuthStorage = KeychainAuthStorage()) {
+        self.storage = storage
+    }
 
     func refresh() {
         guard !isRefreshing else { return }
@@ -160,7 +165,36 @@ final class SessionStore: ObservableObject {
                 self.isRefreshing = false
                 switch result {
                 case .success(let response):
-                    self.state = NativeSessionState.fromSessionResponse(response)
+                    if response.user == nil && self.storage.readBackendSessionToken() == nil {
+                        self.bootstrapGuestSession()
+                    } else {
+                        self.state = NativeSessionState.fromSessionResponse(response)
+                    }
+                case .failure(let error):
+                    if self.storage.readBackendSessionToken() == nil {
+                        self.bootstrapGuestSession()
+                    } else {
+                        self.state = NativeSessionState.fromError(error)
+                    }
+                }
+            }
+        }
+    }
+
+    private func bootstrapGuestSession() {
+        state = .loading
+        BackendService.createGuestSession { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .success(let response):
+                    do {
+                        try self.storage.saveBackendSessionToken(response.session.token)
+                    } catch {
+                        self.state = .unauthenticated(message: "Guest mode is ready, but secure device storage is unavailable. You can retry or continue in the web app.")
+                        return
+                    }
+                    self.state = NativeSessionState.fromSessionResponse(response.sessionResponse)
                 case .failure(let error):
                     self.state = NativeSessionState.fromError(error)
                 }

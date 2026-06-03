@@ -89,6 +89,28 @@ describe('profile route', () => {
     });
   });
 
+  it('returns default profile settings when a first-launch guest profile is still being created', async () => {
+    getCurrentUserWithProfile.mockResolvedValue({
+      id: 'guest-user-1',
+      name: 'Tyler',
+      email: null,
+      demo: true,
+      profile: null,
+    });
+
+    const response = await GET();
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      name: 'Tyler',
+      goal: 'MAINTAIN',
+      activityLevel: 'MODERATE',
+      dailyCalorieGoal: 2200,
+      proteinGoal: 160,
+    });
+  });
+
   it('accepts nutrition preference updates in partial patches', async () => {
     const request = new Request('http://localhost/api/profile', {
       method: 'PATCH',
