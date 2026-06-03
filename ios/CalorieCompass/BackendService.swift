@@ -461,7 +461,11 @@ struct DashboardResponse: Codable {
         macroGoals: MacroGoals(calories: 2200, protein: 160, carbs: 220, fat: 73),
         mealCount: 0,
         remainingCalories: 2200,
-        dailySummary: DailySummary(title: "Ready when you are", description: "Guest mode is setting up. You can log your first meal whenever you are ready.")
+        dailySummary: DailySummary(
+            title: "Ready when you are",
+            description: "Guest mode is setting up. You can log your first meal whenever you are ready.",
+            streaks: nil
+        )
     )
 }
 
@@ -489,6 +493,7 @@ struct MacroGoals: Codable {
 struct DailySummary: Codable {
     let title: String?
     let description: String?
+    let streaks: DashboardStreaks?
 }
 
 struct ReusableMealSummary: Codable, Equatable, Identifiable {
