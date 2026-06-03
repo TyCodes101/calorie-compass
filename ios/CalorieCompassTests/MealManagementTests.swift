@@ -458,6 +458,15 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(model.normalizedBarcode, "012345678905")
         XCTAssertTrue(model.canLookup)
         XCTAssertEqual(model.aiDescriptionPrompt, "Barcode 012345678905: describe the food or package so MacroMesh can estimate it for review.")
+        XCTAssertEqual(model.fallbackActionTitles, ["Search Food", "Create Custom", "Quick Add", "Describe with AI"])
+    }
+
+    func testBarcodeFallbackModelRejectsTooShortScans() {
+        let model = BarcodeLookupFallbackModel(barcode: "12345")
+
+        XCTAssertEqual(model.normalizedBarcode, "12345")
+        XCTAssertFalse(model.canLookup)
+        XCTAssertEqual(model.validationMessage, "Enter 8 to 14 barcode digits.")
     }
 
     func testLogToolCatalogShowsMFPAndCameraFoundationActionsTogether() {
@@ -467,7 +476,17 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertTrue(LogToolCatalog.allTitles.contains("Scan Barcode"))
     }
 
-    func testNutritionLabelOCRTextNormalizesWithoutParsingMacros() {
+    func testLogToolLaunchMapsDashboardActionsToSheets() {
+        XCTAssertEqual(LogToolLaunch.foodSearch.sheet, .foodSearch)
+        XCTAssertEqual(LogToolLaunch.barcodeManual.sheet, .barcode(prefersCamera: false))
+        XCTAssertEqual(LogToolLaunch.barcodeCamera.sheet, .barcode(prefersCamera: true))
+        XCTAssertEqual(LogToolLaunch.quickAdd.sheet, .quickAdd(barcode: nil))
+        XCTAssertEqual(LogToolLaunch.customFood.sheet, .customFood(barcode: nil))
+        XCTAssertEqual(LogToolLaunch.nutritionLabel.sheet, .nutritionLabelFoundation)
+        XCTAssertEqual(LogToolLaunch.photo.sheet, .photoFoundation)
+    }
+
+    func testNutritionLabelOCRTextNormalizesForDeterministicParsing() {
         let result = NutritionLabelOCRResult.fromRecognizedText([
             "Nutrition Facts",
             "Calories 150",
@@ -478,6 +497,38 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(result.lines, ["Nutrition Facts", "Calories 150", "Protein 10g"])
         XCTAssertEqual(result.rawText, "Nutrition Facts\nCalories 150\nProtein 10g")
         XCTAssertTrue(result.hasUsableText)
+    }
+
+    func testNutritionLabelOCRParserExtractsOnlyVisibleLabelValues() {
+        let result = NutritionLabelOCRResult.fromRecognizedText([
+            "Nutrition Facts",
+            "Serving size 1 cup (170g)",
+            "Calories 150",
+            "Total Fat 3g",
+            "Total Carbohydrate 12g",
+            "Protein 10g"
+        ])
+
+        let parsed = NutritionLabelOCRParser.parse(result)
+
+        XCTAssertEqual(parsed.calories, 150)
+        XCTAssertEqual(parsed.protein, 10)
+        XCTAssertEqual(parsed.carbs, 12)
+        XCTAssertEqual(parsed.fat, 3)
+        XCTAssertEqual(parsed.servingSize, "1 cup (170g)")
+        XCTAssertTrue(parsed.hasAnyNutritionValue)
+        XCTAssertTrue(parsed.reviewPrompt.contains("Verify"))
+    }
+
+    func testNutritionLabelOCRParserDoesNotInventMissingMacros() {
+        let result = NutritionLabelOCRResult.fromRecognizedText(["Nutrition Facts", "Calories 90"])
+
+        let parsed = NutritionLabelOCRParser.parse(result)
+
+        XCTAssertEqual(parsed.calories, 90)
+        XCTAssertNil(parsed.protein)
+        XCTAssertNil(parsed.carbs)
+        XCTAssertNil(parsed.fat)
     }
 
     func testNutritionLabelManualEntryRequiresUserConfirmedValues() {
@@ -504,6 +555,7 @@ final class MealAssistantParityTests: XCTestCase {
 
         XCTAssertEqual(draft.storageStatus, "Local draft only")
         XCTAssertEqual(draft.accessibilityLabel, "Meal photo IMG_0001.jpg attached locally. Upload storage is deferred.")
+        XCTAssertEqual(draft.reviewStatusText, "Use as a visual note while entering nutrition.")
         XCTAssertTrue(draft.hasLocalPreview)
     }
 

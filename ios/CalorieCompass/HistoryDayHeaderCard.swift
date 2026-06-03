@@ -5,6 +5,7 @@ struct HistoryDayHeaderCard: View {
     let meals: [MealResponse]
 
     private var totalCals: Int { meals.reduce(0) { $0 + Int($1.safeTotalCalories) } }
+    private var totalProtein: Int { meals.reduce(0) { $0 + Int($1.safeTotalProtein) } }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -12,7 +13,7 @@ struct HistoryDayHeaderCard: View {
                 Text(date)
                     .font(.headline.weight(.semibold))
                     .foregroundColor(MacroMeshTheme.text)
-                Text("\(meals.count) meal\(meals.count == 1 ? "" : "s")")
+                Text("\(meals.count) meal\(meals.count == 1 ? "" : "s") | \(totalProtein)g protein")
                     .font(.caption)
                     .foregroundColor(MacroMeshTheme.muted)
             }

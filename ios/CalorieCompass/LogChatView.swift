@@ -5,10 +5,15 @@
 //  Native chat logger main view for Phase 2A
 //
 import AVFoundation
+import Foundation
 import PhotosUI
 import SwiftUI
 import UIKit
 import Vision
+
+extension Notification.Name {
+    static let macroMeshOpenLogTool = Notification.Name("macroMeshOpenLogTool")
+}
 
 enum BarcodeCameraPermissionState: Equatable {
     case notDetermined
@@ -67,6 +72,14 @@ struct BarcodeLookupFallbackModel: Equatable {
         (8...14).contains(normalizedBarcode.count)
     }
 
+    var validationMessage: String {
+        canLookup ? "Ready to look up barcode." : "Enter 8 to 14 barcode digits."
+    }
+
+    var fallbackActionTitles: [String] {
+        ["Search Food", "Create Custom", "Quick Add", "Describe with AI"]
+    }
+
     var aiDescriptionPrompt: String {
         if normalizedBarcode.isEmpty {
             return "Describe the food or package so MacroMesh can estimate it for review."
@@ -86,6 +99,72 @@ struct NutritionLabelOCRResult: Equatable {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression) }
             .filter { !$0.isEmpty }
         return NutritionLabelOCRResult(rawText: lines.joined(separator: "\n"), lines: lines)
+    }
+}
+
+struct NutritionLabelParsedValues: Equatable {
+    let calories: Double?
+    let protein: Double?
+    let carbs: Double?
+    let fat: Double?
+    let servingSize: String?
+
+    var hasAnyNutritionValue: Bool {
+        calories != nil || protein != nil || carbs != nil || fat != nil
+    }
+
+    var reviewPrompt: String {
+        hasAnyNutritionValue
+            ? "Verify the pre-filled label values before review."
+            : "Enter calories and macros from the visible label before review."
+    }
+}
+
+enum NutritionLabelOCRParser {
+    static func parse(_ result: NutritionLabelOCRResult) -> NutritionLabelParsedValues {
+        NutritionLabelParsedValues(
+            calories: value(in: result.lines, where: { $0.contains("calories") }),
+            protein: value(in: result.lines, where: { $0.contains("protein") }),
+            carbs: value(in: result.lines, where: { $0.contains("total carbohydrate") || $0.contains("carbohydrate") || $0.contains("carbs") }),
+            fat: value(in: result.lines, where: { line in
+                (line.contains("total fat") || line.hasPrefix("fat ")) && !line.contains("saturated")
+            }),
+            servingSize: servingSize(in: result.lines)
+        )
+    }
+
+    private static func value(in lines: [String], where matches: (String) -> Bool) -> Double? {
+        for line in lines {
+            let lower = line.lowercased()
+            guard matches(lower), let number = firstNumber(in: lower) else { continue }
+            return number
+        }
+        return nil
+    }
+
+    private static func servingSize(in lines: [String]) -> String? {
+        for line in lines {
+            let lower = line.lowercased()
+            guard lower.contains("serving size") else { continue }
+            let cleaned = line.replacingOccurrences(
+                of: #"(?i)^.*serving\s+size\s*"#,
+                with: "",
+                options: .regularExpression
+            )
+            let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        return nil
+    }
+
+    private static func firstNumber(in text: String) -> Double? {
+        guard let regex = try? NSRegularExpression(pattern: #"\d+(?:\.\d+)?"#) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let swiftRange = Range(match.range, in: text) else {
+            return nil
+        }
+        return Double(text[swiftRange])
     }
 }
 
@@ -147,12 +226,14 @@ struct MealPhotoDraft: Equatable, Identifiable {
 
     var storageStatus: String { "Local draft only" }
 
+    var reviewStatusText: String { "Use as a visual note while entering nutrition." }
+
     var accessibilityLabel: String {
         "Meal photo \(filename) attached locally. Upload storage is deferred."
     }
 }
 
-enum LogActionSheet: Identifiable {
+enum LogActionSheet: Identifiable, Equatable {
     case foodSearch
     case barcode(prefersCamera: Bool)
     case quickAdd(barcode: String?)
@@ -168,6 +249,28 @@ enum LogActionSheet: Identifiable {
         case .customFood(let barcode): return "custom-food-\(barcode ?? "none")"
         case .photoFoundation: return "photo-foundation"
         case .nutritionLabelFoundation: return "nutrition-label-foundation"
+        }
+    }
+}
+
+enum LogToolLaunch: String, CaseIterable, Equatable {
+    case foodSearch
+    case barcodeManual
+    case barcodeCamera
+    case quickAdd
+    case customFood
+    case nutritionLabel
+    case photo
+
+    var sheet: LogActionSheet {
+        switch self {
+        case .foodSearch: return .foodSearch
+        case .barcodeManual: return .barcode(prefersCamera: false)
+        case .barcodeCamera: return .barcode(prefersCamera: true)
+        case .quickAdd: return .quickAdd(barcode: nil)
+        case .customFood: return .customFood(barcode: nil)
+        case .nutritionLabel: return .nutritionLabelFoundation
+        case .photo: return .photoFoundation
         }
     }
 }
@@ -259,6 +362,8 @@ struct LogChatView: View {
                 case .barcode(let prefersCamera):
                     BarcodeLookupSheet(prefersCamera: prefersCamera) { result in
                         reviewSearchResult(result, assistantText: "Found \(result.name) from barcode lookup. Review before saving.")
+                    } onSearchFood: {
+                        activeSheet = .foodSearch
                     } onCreateCustomFood: { barcode in
                         activeSheet = .customFood(barcode: barcode)
                     } onQuickAdd: { barcode in
@@ -302,6 +407,11 @@ struct LogChatView: View {
                         activeSheet = .quickAdd(barcode: nil)
                     }
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .macroMeshOpenLogTool)) { notification in
+                guard let launch = notification.object as? LogToolLaunch else { return }
+                mealInputFocused = false
+                activeSheet = launch.sheet
             }
         }
     }
@@ -899,6 +1009,7 @@ struct FoodSearchSheet: View {
 struct BarcodeLookupSheet: View {
     let prefersCamera: Bool
     let onFound: (FoodSearchResult) -> Void
+    let onSearchFood: () -> Void
     let onCreateCustomFood: (String) -> Void
     let onQuickAdd: (String) -> Void
     let onDescribeWithAI: (String) -> Void
@@ -921,6 +1032,11 @@ struct BarcodeLookupSheet: View {
                         .keyboardType(.numberPad)
                         .textFieldStyle(MacroMeshTextFieldStyle())
                         .accessibilityLabel("Barcode digits")
+                    if !barcode.isEmpty && !fallbackModel.canLookup {
+                        Text(fallbackModel.validationMessage)
+                            .font(.caption)
+                            .foregroundColor(MacroMeshTheme.orange)
+                    }
                     Button(action: lookup) {
                         if isLoading { ProgressView().tint(.white) } else { Label("Look Up Barcode", systemImage: "barcode") }
                     }
@@ -928,21 +1044,27 @@ struct BarcodeLookupSheet: View {
                     .disabled(isLoading || !fallbackModel.canLookup)
                     VStack(spacing: 10) {
                         HStack(spacing: 10) {
+                            Button("Search Food") {
+                                onSearchFood()
+                            }
+                            .buttonStyle(SecondaryCTAButtonStyle())
                             Button("Create Custom") {
                                 onCreateCustomFood(fallbackModel.normalizedBarcode)
                             }
                             .buttonStyle(SecondaryCTAButtonStyle())
+                        }
+                        HStack(spacing: 10) {
                             Button("Quick Add") {
                                 onQuickAdd(fallbackModel.normalizedBarcode)
                             }
                             .buttonStyle(SecondaryCTAButtonStyle())
+                            Button("Describe with AI") {
+                                onDescribeWithAI(fallbackModel.normalizedBarcode)
+                            }
+                            .buttonStyle(SecondaryCTAButtonStyle())
                         }
-                        Button("Describe with AI") {
-                            onDescribeWithAI(fallbackModel.normalizedBarcode)
-                        }
-                        .buttonStyle(SecondaryCTAButtonStyle())
-                        .accessibilityLabel("Describe barcode item with AI")
                     }
+                    .accessibilityElement(children: .contain)
                 }
                 .padding(18)
             }
@@ -1365,7 +1487,7 @@ struct PhotoAttachmentFoundationSheet: View {
                                 Text(draft.storageStatus)
                                     .font(.caption.weight(.semibold))
                                     .foregroundColor(MacroMeshTheme.orange)
-                                Text("This photo is not uploaded or attached to saved meals yet. Use it as a visual reference while entering calories/macros.")
+                                Text(draft.reviewStatusText)
                                     .font(.caption)
                                     .foregroundColor(MacroMeshTheme.muted)
                             }
@@ -1420,6 +1542,7 @@ struct NutritionLabelFoundationSheet: View {
     @State private var selectedItem: PhotosPickerItem?
     @State private var previewImage: UIImage?
     @State private var ocrResult: NutritionLabelOCRResult?
+    @State private var parsedValues: NutritionLabelParsedValues?
     @State private var foodName = ""
     @State private var calories = ""
     @State private var protein = ""
@@ -1465,6 +1588,31 @@ struct NutritionLabelFoundationSheet: View {
                                     .font(.caption)
                                     .foregroundColor(MacroMeshTheme.muted)
                                     .textSelection(.enabled)
+                            }
+                        }
+                    }
+                    if let parsedValues {
+                        AppCard(padding: 14) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Label values")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundColor(MacroMeshTheme.text)
+                                Text(parsedValues.reviewPrompt)
+                                    .font(.caption)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                                HStack(spacing: 8) {
+                                    OCRValueChip(title: "Calories", value: parsedValues.calories, unit: "cal")
+                                    OCRValueChip(title: "Protein", value: parsedValues.protein, unit: "g")
+                                }
+                                HStack(spacing: 8) {
+                                    OCRValueChip(title: "Carbs", value: parsedValues.carbs, unit: "g")
+                                    OCRValueChip(title: "Fat", value: parsedValues.fat, unit: "g")
+                                }
+                                if let servingSize = parsedValues.servingSize {
+                                    Text("Serving: \(servingSize)")
+                                        .font(.caption2)
+                                        .foregroundColor(MacroMeshTheme.muted)
+                                }
                             }
                         }
                     }
@@ -1555,14 +1703,21 @@ struct NutritionLabelFoundationSheet: View {
                 .compactMap { $0.topCandidates(1).first?.string } ?? []
             DispatchQueue.main.async {
                 isProcessing = false
-                ocrResult = NutritionLabelOCRResult.fromRecognizedText(strings)
-                message = ocrResult?.hasUsableText == true
-                    ? "Text extracted. Verify the label and enter calories/macros manually before review."
+                let result = NutritionLabelOCRResult.fromRecognizedText(strings)
+                let parsed = NutritionLabelOCRParser.parse(result)
+                ocrResult = result
+                parsedValues = parsed
+                applyParsedValues(parsed)
+                message = result.hasUsableText
+                    ? "Text extracted. Verify any pre-filled values before review."
                     : "No reliable text was found. Enter the label values manually."
-                if let firstFoodLine = ocrResult?.lines.first, foodName.isEmpty, !firstFoodLine.lowercased().contains("nutrition") {
+                if let firstFoodLine = result.lines.first,
+                   foodName.isEmpty,
+                   !firstFoodLine.lowercased().contains("nutrition"),
+                   !firstFoodLine.lowercased().contains("serving") {
                     foodName = firstFoodLine
                 }
-                if error != nil && ocrResult?.hasUsableText != true {
+                if error != nil && result.hasUsableText != true {
                     message = "OCR could not read this label. Enter the label values manually."
                 }
             }
@@ -1580,6 +1735,13 @@ struct NutritionLabelFoundationSheet: View {
                 }
             }
         }
+    }
+
+    private func applyParsedValues(_ parsed: NutritionLabelParsedValues) {
+        if calories.isEmpty, let value = parsed.calories { calories = value.cleanServingQuantity }
+        if protein.isEmpty, let value = parsed.protein { protein = value.cleanServingQuantity }
+        if carbs.isEmpty, let value = parsed.carbs { carbs = value.cleanServingQuantity }
+        if fat.isEmpty, let value = parsed.fat { fat = value.cleanServingQuantity }
     }
 
     private func reviewManualValues() {
@@ -1603,6 +1765,27 @@ struct NutritionLabelFoundationSheet: View {
     }
 }
 
+struct OCRValueChip: View {
+    let title: String
+    let value: Double?
+    let unit: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value.map { "\($0.cleanServingQuantity) \(unit)" } ?? "Not found")
+                .font(.caption.weight(.bold))
+                .foregroundColor(value == nil ? MacroMeshTheme.muted : MacroMeshTheme.text)
+            Text(title)
+                .font(.caption2)
+                .foregroundColor(MacroMeshTheme.muted)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MacroMeshTheme.cardSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
 struct FoodSearchResultRow: View {
     let result: FoodSearchResult
     let action: () -> Void
@@ -1616,7 +1799,7 @@ struct FoodSearchResultRow: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(MacroMeshTheme.text)
                         .lineLimit(2)
-                    Text("\(Int(result.calories)) cal | \(Int(result.protein))g protein | \(result.servingQuantity.cleanServingQuantity) \(result.servingUnit)")
+                    Text("\(Int(result.calories)) cal | \(Int(result.protein))g protein | \(result.servingQuantity.cleanServingQuantity) \(ServingUnitFormatter.clean(result.servingUnit))")
                         .font(.caption)
                         .foregroundColor(MacroMeshTheme.muted)
                     Text(result.sourceLabel)

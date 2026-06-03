@@ -109,6 +109,7 @@ struct ProfileDashboardView: View {
 
             FitnessSnapshotCard(model: model, onLogWeight: onLogWeight)
             NutritionSnapshotCard(model: model)
+            GoalTargetRibbonCard(model: model)
             WeeklyMomentumCard(model: model)
 
             QuickActionsGrid(
@@ -187,6 +188,50 @@ private struct FitnessSnapshotCard: View {
                 MacroMeshFootnote("Estimated trend improves after 2–3 weigh-ins.")
             }
         }
+    }
+}
+
+private struct GoalTargetRibbonCard: View {
+    let model: ProfileDashboardModel
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Macro goals", subtitle: "Daily targets used by Today and Review.")
+                HStack(spacing: 10) {
+                    GoalTargetChip(title: "Calories", value: model.calorieGoalText, tint: MacroMeshTheme.primary)
+                    GoalTargetChip(title: "Protein", value: model.proteinGoalText, tint: MacroMeshTheme.blue)
+                }
+                HStack(spacing: 10) {
+                    GoalTargetChip(title: "Carbs", value: model.carbsGoalText, tint: MacroMeshTheme.orange)
+                    GoalTargetChip(title: "Fat", value: model.fatGoalText, tint: MacroMeshTheme.purple)
+                }
+            }
+        }
+    }
+}
+
+private struct GoalTargetChip: View {
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .foregroundColor(MacroMeshTheme.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundColor(MacroMeshTheme.muted)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.11))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 

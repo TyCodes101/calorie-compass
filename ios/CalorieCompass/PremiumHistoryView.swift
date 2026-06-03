@@ -1,5 +1,94 @@
 import SwiftUI
 
+enum HistoryFilter: String, CaseIterable, Identifiable, Equatable {
+    case all
+    case breakfast
+    case lunch
+    case dinner
+    case snack
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all: return "All"
+        case .breakfast, .lunch, .dinner, .snack: return rawValue.capitalized
+        }
+    }
+
+    func matches(_ meal: MealResponse) -> Bool {
+        self == .all || meal.normalizedMealType == rawValue
+    }
+}
+
+struct HistoryDayTotal: Equatable {
+    let calories: Int
+    let protein: Int
+}
+
+struct HistoryListModel: Equatable {
+    let visibleMeals: [MealResponse]
+    let groupedMealDates: [String]
+    let mealsByDate: [String: [MealResponse]]
+    let dayTotals: [String: HistoryDayTotal]
+    let summaryText: String
+
+    static func build(meals: [MealResponse], searchText: String, filter: HistoryFilter) -> HistoryListModel {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = meals.filter { meal in
+            let matchesFilter = filter.matches(meal)
+            let matchesSearch = query.isEmpty ||
+                meal.displayTitle.lowercased().contains(query) ||
+                meal.displayMealType.lowercased().contains(query) ||
+                (meal.items ?? []).contains { $0.food_name.lowercased().contains(query) }
+            return matchesFilter && matchesSearch
+        }
+
+        var grouped = [String: [MealResponse]]()
+        for meal in filtered {
+            guard let date = DateParser.parseMealDate(meal.date ?? meal.createdAt) else { continue }
+            let key = dayFormatter.string(from: date)
+            grouped[key, default: []].append(meal)
+        }
+
+        let sortedDates = grouped.keys.sorted { left, right in
+            guard let leftDate = dayFormatter.date(from: left),
+                  let rightDate = dayFormatter.date(from: right) else {
+                return left > right
+            }
+            return leftDate > rightDate
+        }
+
+        let totals = grouped.reduce(into: [String: HistoryDayTotal]()) { partial, pair in
+            partial[pair.key] = HistoryDayTotal(
+                calories: pair.value.reduce(0) { $0 + Int($1.safeTotalCalories) },
+                protein: pair.value.reduce(0) { $0 + Int($1.safeTotalProtein) }
+            )
+        }
+
+        let totalCalories = filtered.reduce(0) { $0 + Int($1.safeTotalCalories) }
+        let totalProtein = filtered.reduce(0) { $0 + Int($1.safeTotalProtein) }
+        let mealWord = filtered.count == 1 ? "meal" : "meals"
+
+        return HistoryListModel(
+            visibleMeals: filtered,
+            groupedMealDates: sortedDates,
+            mealsByDate: grouped,
+            dayTotals: totals,
+            summaryText: "\(filtered.count) \(mealWord), \(totalCalories) cal, \(totalProtein)g protein"
+        )
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+}
+
 struct PremiumHistoryView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @State private var meals: [MealResponse] = []
@@ -7,6 +96,8 @@ struct PremiumHistoryView: View {
     @State private var refreshing = false
     @State private var error: String?
     @State private var actionMessage: String?
+    @State private var searchText = ""
+    @State private var selectedFilter: HistoryFilter = .all
     
     var body: some View {
         NavigationView {
@@ -21,6 +112,9 @@ struct PremiumHistoryView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 18) {
+                            HistoryOverviewCard(summaryText: historyModel.summaryText, filter: selectedFilter)
+                            HistoryFilterBar(selectedFilter: $selectedFilter)
+
                             if let actionMessage {
                                 AppCard(padding: 12) {
                                     Text(actionMessage)
@@ -29,12 +123,34 @@ struct PremiumHistoryView: View {
                                 }
                             }
 
-                            ForEach(groupedMealDates, id: \.self) { date in
+                            if historyModel.visibleMeals.isEmpty {
+                                AppCard(padding: 18) {
+                                    VStack(spacing: 12) {
+                                        Image(systemName: "magnifyingglass")
+                                            .font(.title2)
+                                            .foregroundColor(MacroMeshTheme.primary)
+                                        Text("No matching meals")
+                                            .font(.headline.weight(.semibold))
+                                            .foregroundColor(MacroMeshTheme.text)
+                                        Text("Try another search or filter.")
+                                            .font(.subheadline)
+                                            .foregroundColor(MacroMeshTheme.muted)
+                                        Button("Clear filters") {
+                                            searchText = ""
+                                            selectedFilter = .all
+                                        }
+                                        .buttonStyle(SecondaryCTAButtonStyle())
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                            }
+
+                            ForEach(historyModel.groupedMealDates, id: \.self) { date in
                                 VStack(alignment: .leading, spacing: 10) {
-                                    HistoryDayHeaderCard(date: date, meals: mealsByDate[date] ?? [])
+                                    HistoryDayHeaderCard(date: date, meals: historyModel.mealsByDate[date] ?? [])
 
                                     VStack(spacing: 10) {
-                                        ForEach(mealsByDate[date] ?? []) { meal in
+                                        ForEach(historyModel.mealsByDate[date] ?? []) { meal in
                                             HistoryMealCard(
                                                 meal: meal,
                                                 onFavorite: { favoriteMeal(meal) },
@@ -54,6 +170,7 @@ struct PremiumHistoryView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search meals")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: refreshMeals) {
@@ -165,23 +282,64 @@ struct PremiumHistoryView: View {
         }
     }
 
-    private var groupedMealDates: [String] {
-        let formatter = DateFormatter.mealDisplay
-        let dates: Set<String> = Set(meals.compactMap { meal -> String? in
-            guard let date = DateParser.parseMealDate(meal.date ?? meal.createdAt) else { return nil }
-            return formatter.string(from: date)
-        })
-        return dates.sorted().reversed()
+    private var historyModel: HistoryListModel {
+        HistoryListModel.build(meals: meals, searchText: searchText, filter: selectedFilter)
     }
+}
 
-    private var mealsByDate: [String: [MealResponse]] {
-        let formatter = DateFormatter.mealDisplay
-        var dict = [String: [MealResponse]]()
-        for meal in meals {
-            guard let date = DateParser.parseMealDate(meal.date ?? meal.createdAt) else { continue }
-            let dateString = formatter.string(from: date)
-            dict[dateString, default: []].append(meal)
+struct HistoryOverviewCard: View {
+    let summaryText: String
+    let filter: HistoryFilter
+
+    var body: some View {
+        AppCard(padding: 18) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Meal history")
+                        .font(.title2.weight(.bold))
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text(filter == .all ? summaryText : "\(filter.label): \(summaryText)")
+                        .font(.subheadline)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+                Spacer()
+                Image(systemName: "chart.bar.doc.horizontal.fill")
+                    .font(.title2)
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .frame(width: 42, height: 42)
+                    .background(MacroMeshTheme.cardSubtle)
+                    .clipShape(Circle())
+            }
         }
-        return dict
+    }
+}
+
+struct HistoryFilterBar: View {
+    @Binding var selectedFilter: HistoryFilter
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(HistoryFilter.allCases) { filter in
+                    Button {
+                        selectedFilter = filter
+                    } label: {
+                        Text(filter.label)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(selectedFilter == filter ? MacroMeshTheme.primary : MacroMeshTheme.card)
+                            .foregroundColor(selectedFilter == filter ? .white : MacroMeshTheme.primaryDark)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule().stroke(MacroMeshTheme.border, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Filter history by \(filter.label)")
+                }
+            }
+            .padding(.vertical, 2)
+        }
     }
 }
