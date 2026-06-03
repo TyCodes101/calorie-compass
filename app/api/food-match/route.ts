@@ -8,7 +8,7 @@ const client = new OpenAI({
 
 const MAX_BATCH_SIZE = 15;
 
-const model = process.env.OPENAI_FOOD_MATCH_MODEL ?? 'gpt-4.1-mini';
+const model = process.env.OPENAI_FOOD_MATCH_MODEL ?? 'gpt-4o-mini';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
