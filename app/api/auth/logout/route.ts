@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 
 import { readNativeSessionTokenFromRequest, revokeNativeSessionToken } from '@/lib/auth/native-session';
 
-export async function POST(request?: Request) {
-  const sessionToken = request ? await readNativeSessionTokenFromRequest(request) : null;
+export async function POST(request: Request) {
+  const sessionToken = await readNativeSessionTokenFromRequest(request);
   const result = await revokeNativeSessionToken(sessionToken);
 
   if (result.revoked) {

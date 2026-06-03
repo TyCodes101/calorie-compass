@@ -18,11 +18,27 @@ const brandHints = [
   { pattern: /\bchick fil a\b|\bchickfila\b/, brand: 'Chick-fil-A' },
   { pattern: /\blittle caesars\b/, brand: 'Little Caesars' },
   { pattern: /\bstarbucks\b/, brand: 'Starbucks' },
+  { pattern: /\bwendys\b|\bwendy s\b/, brand: "Wendy's" },
+  { pattern: /\bdunkin\b/, brand: 'Dunkin' },
+  { pattern: /\bpanda express\b/, brand: 'Panda Express' },
+  { pattern: /\btexas roadhouse\b/, brand: 'Texas Roadhouse' },
   { pattern: /\bfairlife\b/, brand: 'Fairlife' },
   { pattern: /\bcore power\b/, brand: 'Core Power' },
   { pattern: /\bquest\b/, brand: 'Quest' },
   { pattern: /\bpremier protein\b/, brand: 'Premier Protein' },
   { pattern: /\bquaker(?: oats)?\b/, brand: 'Quaker' },
+  { pattern: /\bchobani\b/, brand: 'Chobani' },
+  { pattern: /\bkodiak\b/, brand: 'Kodiak' },
+  { pattern: /\bgatorade\b/, brand: 'Gatorade' },
+  { pattern: /\bnature valley\b/, brand: 'Nature Valley' },
+  { pattern: /\bmuscle milk\b|\bmusclemilk\b/, brand: 'Muscle Milk' },
+  { pattern: /\bbarebells?\b/, brand: 'Barebells' },
+  { pattern: /\bdoritos\b/, brand: 'Doritos' },
+  { pattern: /\bgoldfish\b|\bgold fish\b/, brand: 'Goldfish' },
+  { pattern: /\bcheez it\b|\bcheezit\b/, brand: 'Cheez-It' },
+  { pattern: /\bskittles?\b/, brand: 'Skittles' },
+  { pattern: /\bsnickers?\b/, brand: 'Snickers' },
+  { pattern: /\bmms?\b|\bm and ms?\b/, brand: "M&M's" },
 ];
 
 const fillerRegex = /\b(?:which|that|are|is|were|was|they|them|the|a|an|my|had|ate|drank|with|and|for|of|about|around|roughly|like|plain|cooked|butter|oil|or|did|have|i|it|no|not|actually|sorry|correction|meant|just|each|cal|cals|calorie|calories)\b/g;
@@ -52,6 +68,7 @@ function cleanupFreeText(text: string) {
     .replace(/\bcotaage\b/g, 'cottage')
     .replace(/\bcotage\b/g, 'cottage')
     .replace(/\bcottagee\b/g, 'cottage')
+    .replace(/\bm\s*[\/&]?\s*m'?s?\b/g, 'mms')
     .replace(/\bceasers\b/g, 'caesars')
     .replace(/\bcaesers\b/g, 'caesars')
     .replace(/\btacobell\b/g, 'taco bell')
@@ -155,6 +172,23 @@ function detectBrandHint(text: string) {
 }
 
 function buildBrandedPackagedSearch(text: string) {
+  const hasQuest = /\bquest\b/.test(text);
+  const hasProteinChips = /\bprotein\b/.test(text) && /\bchips?\b/.test(text);
+
+  if (hasQuest && hasProteinChips) {
+    const flavor = /\b(?:bbq|barbecue)\b/.test(text)
+      ? 'bbq'
+      : /\bnacho\b/.test(text)
+        ? 'nacho cheese'
+        : null;
+    const parts = ['quest', flavor, 'protein chips'].filter(Boolean);
+    return {
+      searchText: parts.join(' '),
+      matchedQuery: titleCase(parts.join(' ')).replace(/Bbq/, 'BBQ'),
+      unitHint: 'bag' as const,
+    };
+  }
+
   const hasRiceCakes = /\brice cake\b/.test(text);
   const hasWhiteCheddar = /\bwhite cheddar\b/.test(text);
   const hasQuaker = /\bquaker(?: oats)?\b/.test(text);

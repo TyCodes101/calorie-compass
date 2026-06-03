@@ -1,5 +1,6 @@
 // MealManagementTests.swift
 // Calorie Compass iOS — Phase 3C meal management coverage
+import AVFoundation
 import XCTest
 @testable import CalorieCompass
 
@@ -152,10 +153,575 @@ final class BackendServiceErrorMappingTests: XCTestCase {
         XCTAssertEqual(BackendService.mapHTTPError(statusCode: 502, data: data), .server("Request failed with status 502."))
     }
 
+    func testRateLimitAndBadRequestErrorsStayFriendly() {
+        let rateLimit = #"{"error":"Too many meal requests. Please wait a minute."}"#.data(using: .utf8)
+
+        XCTAssertEqual(BackendService.mapHTTPError(statusCode: 400, data: nil), .server("Request failed with status 400."))
+        XCTAssertEqual(BackendService.mapHTTPError(statusCode: 429, data: rateLimit), .server("Too many meal requests. Please wait a minute."))
+    }
+
     func testNetworkOfflineErrorsMapToOfflineMessage() {
         let error = NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)
         XCTAssertEqual(BackendService.mapTransportError(error), .offline)
         XCTAssertTrue(BackendError.offline.localizedDescription.contains("offline"))
+    }
+}
+
+final class MealAssistantParityTests: XCTestCase {
+    func testRequestStateCarriesReviewItemsForQuantityCorrections() {
+        let salmon = Self.item("salmon", quantity: 1, unit: "fillet")
+        let broccoli = Self.item("broccoli", quantity: 1, unit: "cup")
+        var state = MealAssistantState()
+        state.currentMealText = "salmon with broccoli"
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: state,
+            currentMealItems: [salmon, broccoli],
+            incomingUserMessage: "8 ounces of salmon"
+        )
+
+        XCTAssertEqual(requestState.currentMealItems.map(\.food_name), ["salmon", "broccoli"])
+        XCTAssertEqual(requestState.currentMealText, "salmon with broccoli")
+        XCTAssertEqual(requestState.previousUserMessage, "8 ounces of salmon")
+        XCTAssertFalse(requestState.saved)
+    }
+
+    func testSavedStateStartsFreshMealWithoutLeakingOldItems() {
+        var state = MealAssistantState()
+        state.currentMealItems = [Self.item("old shake")]
+        state.currentMealText = "old shake"
+        state.saved = true
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: state,
+            currentMealItems: [Self.item("old shake")],
+            incomingUserMessage: "one banana"
+        )
+
+        XCTAssertTrue(requestState.currentMealItems.isEmpty)
+        XCTAssertEqual(requestState.currentMealText, "one banana")
+        XCTAssertFalse(requestState.saved)
+    }
+
+    func testDiscardAndSaveCommandsAreHandledLocallyBeforeFoodLookup() {
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Delete this meal", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Clear everything", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("start over", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("new meal", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("save it", hasActiveMeal: true), .save)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Save the meal", hasActiveMeal: true), .save)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Okay now save the meal", hasActiveMeal: true), .save)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Save", hasActiveMeal: true), .save)
+        XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: false))
+        XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Save the meal", hasActiveMeal: false))
+    }
+
+    func testRemoveFriesUpdatesActiveMealItemsLocally() {
+        let burger = Self.item("turkey sandwich with mayo")
+        let fries = Self.item("fries")
+
+        let nextItems = MealAssistantClientLogic.removingItems(matching: "fries", from: [burger, fries])
+
+        XCTAssertEqual(nextItems.map(\.food_name), ["turkey sandwich with mayo"])
+    }
+
+    func testRemoveVariantsOnlyRemoveTargetItem() {
+        let items = [Self.item("sandwich"), Self.item("chips"), Self.item("Coke Zero")]
+
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Remove the chips", hasActiveMeal: true), .removeItem("the chips"))
+        XCTAssertEqual(MealAssistantClientLogic.removingItems(matching: "the chips", from: items).map(\.food_name), ["sandwich", "Coke Zero"])
+        XCTAssertEqual(MealAssistantClientLogic.removingItems(matching: "Coke Zero", from: items).map(\.food_name), ["sandwich", "chips"])
+        XCTAssertEqual(MealAssistantClientLogic.removingItems(matching: "sandwich", from: items).map(\.food_name), ["chips", "Coke Zero"])
+    }
+
+    func testWrongTargetCorrectionResolvesNamedItemOnly() {
+        let items = [Self.item("salmon"), Self.item("broccoli"), Self.item("mashed potatoes")]
+
+        let resolution = MealAssistantClientLogic.quantityResolution(for: "Make the salmon 8 ounces", items: items)
+
+        XCTAssertEqual(resolution, .target(foodName: "salmon"))
+    }
+
+    func testPronounQuantityCorrectionUsesLastItemOrClarifies() {
+        let items = [Self.item("salmon"), Self.item("broccoli")]
+
+        let resolution = MealAssistantClientLogic.quantityResolution(for: "Make it 8 ounces", items: items)
+
+        XCTAssertEqual(resolution, .target(foodName: "broccoli"))
+        XCTAssertNotEqual(resolution, .target(foodName: "salmon"))
+    }
+
+    func testQuantityUpdateVariantsResolveTargetsOrClarify() {
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Actually make that 2", items: [Self.item("Fairlife shake")]), .target(foodName: "Fairlife shake"))
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Double the chicken", items: [Self.item("chicken"), Self.item("rice")]), .target(foodName: "chicken"))
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Half the rice", items: [Self.item("chicken"), Self.item("rice")]), .target(foodName: "rice"))
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Make the fries large", items: [Self.item("burger"), Self.item("fries")]), .target(foodName: "fries"))
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Make it large", items: [Self.item("burger"), Self.item("fries")]), .target(foodName: "fries"))
+    }
+
+    func testBrandCorrectionUpdatesPreviousBrandItem() {
+        let fairlife = Self.item("Fairlife shake")
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: MealAssistantState(),
+            currentMealItems: [fairlife],
+            incomingUserMessage: "Actually make that 2"
+        )
+
+        XCTAssertEqual(requestState.currentMealItems.map(\.food_name), ["Fairlife shake"])
+        XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Actually make that 2", items: requestState.currentMealItems), .target(foodName: "Fairlife shake"))
+    }
+
+    func testBadFoodMatchWarningsCatchBananaPowderAndMissingSandwich() {
+        XCTAssertNotNil(MealAssistantClientLogic.foodMatchWarning(for: "One banana", items: [Self.item("banana powder")]))
+        XCTAssertNotNil(MealAssistantClientLogic.foodMatchWarning(for: "One banana", items: [Self.item("dehydrated banana")]))
+        XCTAssertNil(MealAssistantClientLogic.foodMatchWarning(for: "One banana", items: [Self.item("banana")]))
+
+        XCTAssertNotNil(MealAssistantClientLogic.foodMatchWarning(for: "Turkey sandwich with mayo and chips", items: [Self.item("Sun Chips")]))
+        XCTAssertNil(MealAssistantClientLogic.foodMatchWarning(for: "Turkey sandwich with mayo and chips", items: [Self.item("turkey sandwich with mayo"), Self.item("chips")]))
+    }
+
+    func testBrandedFoodsDoNotTriggerGenericBadMatchGuards() {
+        let brands = [
+            "Quest BBQ Protein Chips",
+            "Fairlife Core Power",
+            "Premier Protein shake",
+            "David Sunflower Seeds",
+            "McDonald's Big Mac",
+            "Chick-fil-A Nuggets",
+            "Starbucks Iced Latte",
+            "Chipotle Chicken Bowl",
+            "Chobani Greek Yogurt",
+            "Coke Zero"
+        ]
+
+        for brand in brands {
+            XCTAssertNil(MealAssistantClientLogic.foodMatchWarning(for: brand, items: [Self.trustedItem(brand)]), brand)
+        }
+    }
+
+    func testOffTopicEmptyAssistantResponsePreservesActiveMealState() {
+        let currentItems = [Self.item("chicken breast"), Self.item("rice")]
+
+        XCTAssertTrue(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "thanks"))
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [Self.item("broccoli")], responseSaved: false, incomingUserMessage: "thanks"))
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: true, incomingUserMessage: "thanks"))
+    }
+
+    func testReplacementClarificationDoesNotPreserveStaleReviewCard() {
+        let currentItems = [Self.item("Candies, MARS SNACKFOOD US, SNICKERS Bar")]
+
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "A skittles pack I meant"))
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "actually Quest BBQ protein chips"))
+    }
+
+    func testMealReviewTitleUsesShortNonTruncatedCopy() {
+        XCTAssertEqual(MealReviewCard.reviewTitle, "Review meal")
+        XCTAssertLessThanOrEqual(MealReviewCard.reviewTitle.count, 16)
+    }
+
+    func testMealItemServingScalingPreservesSourceMetadata() {
+        var item = MealItem(from: Self.trustedItem("Greek yogurt"))
+
+        item.applyServing(quantity: 2, unit: "servings")
+
+        XCTAssertEqual(item.quantity, 2)
+        XCTAssertEqual(item.unit, "serving")
+        XCTAssertEqual(item.calories, 200)
+        XCTAssertEqual(item.protein, 20)
+        XCTAssertEqual(item.source, "Nutrition catalog")
+        XCTAssertEqual(item.catalogFoodID, "brand-greek-yogurt")
+    }
+
+    func testServingUnitFormatterCleansMalformedUnits() {
+        XCTAssertEqual(ServingUnitFormatter.clean("28.4 1 onz"), "oz")
+        XCTAssertEqual(ServingUnitFormatter.clean("ounces"), "oz")
+        XCTAssertEqual(ServingUnitFormatter.clean("grams"), "g")
+    }
+
+    func testSearchAndBarcodeResponsesDecodeReviewItems() throws {
+        let data = """
+        {
+          "query": "egg",
+          "results": [
+            {
+              "id": "catalog:egg",
+              "name": "Large egg",
+              "brand": null,
+              "sourceLabel": "Verified",
+              "servingQuantity": 1,
+              "servingUnit": "egg",
+              "calories": 70,
+              "protein": 6,
+              "carbs": 0,
+              "fat": 5,
+              "barcode": null,
+              "mealType": "snack",
+              "confidenceScore": 1,
+              "sourceReusableMealId": null,
+              "items": [
+                {
+                  "food_name": "Large egg",
+                  "quantity": 1,
+                  "unit": "egg",
+                  "calories": 70,
+                  "protein": 6,
+                  "carbs": 0,
+                  "fat": 5,
+                  "fiber": 0,
+                  "sugar": 0,
+                  "sodium": 70,
+                  "source_type": "GENERIC_REFERENCE",
+                  "source_name": "Generic nutrition reference",
+                  "confidence_label": "High",
+                  "is_trusted": true,
+                  "catalog_food_id": "generic_large_egg"
+                }
+              ]
+            }
+          ]
+        }
+        """.data(using: .utf8)
+        let barcodeData = """
+        {
+          "barcode": "012345678905",
+          "found": true,
+          "result": {
+            "id": "custom-1",
+            "name": "Turkey Chili",
+            "brand": "Home",
+            "sourceLabel": "Custom",
+            "servingQuantity": 1,
+            "servingUnit": "bowl",
+            "calories": 410,
+            "protein": 36,
+            "carbs": 32,
+            "fat": 14,
+            "barcode": "012345678905",
+            "mealType": "snack",
+            "confidenceScore": 1,
+            "sourceReusableMealId": null,
+            "items": [
+              {
+                "food_name": "Turkey Chili",
+                "quantity": 1,
+                "unit": "bowl",
+                "calories": 410,
+                "protein": 36,
+                "carbs": 32,
+                "fat": 14,
+                "fiber": 8,
+                "sugar": 6,
+                "sodium": 720,
+                "source_type": "GENERIC_REFERENCE",
+                "source_name": "Custom food: Home",
+                "confidence_label": "Verified",
+                "is_trusted": true
+              }
+            ]
+          }
+        }
+        """.data(using: .utf8)
+
+        let search = try JSONDecoder().decode(FoodSearchResponse.self, from: try XCTUnwrap(data))
+        let barcode = try JSONDecoder().decode(BarcodeLookupResponse.self, from: try XCTUnwrap(barcodeData))
+
+        XCTAssertEqual(search.results.first?.reviewItems.first?.food_name, "Large egg")
+        XCTAssertEqual(barcode.result?.barcode, "012345678905")
+        XCTAssertEqual(barcode.result?.reviewItems.first?.food_name, "Turkey Chili")
+    }
+
+    func testManualQuickAddRejectsInvalidValuesAndBuildsReviewItem() {
+        XCTAssertNil(ManualQuickAddBuilder.build(calories: -1, protein: 0, carbs: 0, fat: 0, barcode: nil))
+
+        let item = ManualQuickAddBuilder.build(calories: 250, protein: 20, carbs: 25, fat: 7, barcode: "012345678905")
+
+        XCTAssertEqual(item?.food_name, "Manual Quick Add")
+        XCTAssertEqual(item?.calories, 250)
+        XCTAssertEqual(item?.protein, 20)
+        XCTAssertEqual(item?.notes, "Manual barcode: 012345678905")
+        XCTAssertEqual(item?.confidence_label, "Estimated")
+    }
+
+    func testBarcodeCameraPermissionStateMapsDeniedAndUnavailable() {
+        XCTAssertEqual(BarcodeCameraPermissionState.from(status: .authorized, hasCamera: true), .authorized)
+        XCTAssertEqual(BarcodeCameraPermissionState.from(status: .denied, hasCamera: true), .denied)
+        XCTAssertEqual(BarcodeCameraPermissionState.from(status: .authorized, hasCamera: false), .unavailable)
+        XCTAssertFalse(BarcodeCameraPermissionState.denied.allowsScanning)
+        XCTAssertTrue(BarcodeCameraPermissionState.authorized.permissionCopy.contains("read barcodes"))
+    }
+
+    func testBarcodeFallbackModelKeepsReviewBeforeSaveOptions() {
+        let model = BarcodeLookupFallbackModel(barcode: " 01234-5678905 ")
+
+        XCTAssertEqual(model.normalizedBarcode, "012345678905")
+        XCTAssertTrue(model.canLookup)
+        XCTAssertEqual(model.aiDescriptionPrompt, "Barcode 012345678905: describe the food or package so MacroMesh can estimate it for review.")
+    }
+
+    func testLogToolCatalogShowsMFPAndCameraFoundationActionsTogether() {
+        XCTAssertEqual(LogToolCatalog.foodToolTitles, ["Food Search", "Enter Barcode", "Quick Add", "Custom Food"])
+        XCTAssertEqual(LogToolCatalog.cameraToolTitles, ["Scan Barcode", "Scan Label", "Attach Photo"])
+        XCTAssertTrue(LogToolCatalog.allTitles.contains("Food Search"))
+        XCTAssertTrue(LogToolCatalog.allTitles.contains("Scan Barcode"))
+    }
+
+    func testNutritionLabelOCRTextNormalizesWithoutParsingMacros() {
+        let result = NutritionLabelOCRResult.fromRecognizedText([
+            "Nutrition Facts",
+            "Calories 150",
+            "Protein 10g",
+            "   "
+        ])
+
+        XCTAssertEqual(result.lines, ["Nutrition Facts", "Calories 150", "Protein 10g"])
+        XCTAssertEqual(result.rawText, "Nutrition Facts\nCalories 150\nProtein 10g")
+        XCTAssertTrue(result.hasUsableText)
+    }
+
+    func testNutritionLabelManualEntryRequiresUserConfirmedValues() {
+        let rejected = NutritionLabelManualEntryBuilder.build(foodName: " ", calories: 150, protein: 10, carbs: 12, fat: 3, extractedText: "Calories 150")
+        XCTAssertNil(rejected)
+
+        let item = NutritionLabelManualEntryBuilder.build(foodName: "Greek yogurt", calories: 150, protein: 10, carbs: 12, fat: 3, extractedText: "Calories 150")
+
+        XCTAssertEqual(item?.food_name, "Greek yogurt")
+        XCTAssertEqual(item?.unit, "label")
+        XCTAssertEqual(item?.calories, 150)
+        XCTAssertEqual(item?.source_type, "AI_ESTIMATE")
+        XCTAssertEqual(item?.source_name, "Nutrition label manual entry")
+        XCTAssertTrue(item?.notes?.contains("OCR text captured") == true)
+    }
+
+    func testMealPhotoDraftTracksLocalOnlyAttachmentStatus() {
+        let draft = MealPhotoDraft(
+            itemIdentifier: "local-asset-1",
+            filename: "IMG_0001.jpg",
+            createdAt: Date(timeIntervalSince1970: 0),
+            hasLocalPreview: true
+        )
+
+        XCTAssertEqual(draft.storageStatus, "Local draft only")
+        XCTAssertEqual(draft.accessibilityLabel, "Meal photo IMG_0001.jpg attached locally. Upload storage is deferred.")
+        XCTAssertTrue(draft.hasLocalPreview)
+    }
+
+    func testQuickMealTypeSelectionUpdatesAssistantState() {
+        var state = MealAssistantState()
+
+        state = MealAssistantClientLogic.applyingMealType("lunch", to: state)
+
+        XCTAssertEqual(state.mealType, "lunch")
+    }
+
+    func testGoalSetupCalculatorBuildsProteinForwardTargets() {
+        let result = GoalSetupCalculator.calculate(
+            weightLbs: 180,
+            goalWeightLbs: 170,
+            goal: "LOSE_WEIGHT",
+            activityLevel: "MODERATE",
+            ratePerWeekLbs: 1,
+            proteinPreference: .high
+        )
+
+        XCTAssertGreaterThanOrEqual(result.dailyCalorieGoal, 1500)
+        XCTAssertGreaterThanOrEqual(result.proteinGoal, 160)
+        XCTAssertGreaterThan(result.carbsGoal, 0)
+        XCTAssertGreaterThan(result.fatGoal, 40)
+    }
+
+    func testDashboardResponseDecodesStreakStats() throws {
+        let data = """
+        {
+          "totals": { "calories": 900, "protein": 95, "carbs": 80, "fat": 28 },
+          "macroGoals": { "calories": 2100, "protein": 160, "carbs": 210, "fat": 70 },
+          "mealCount": 2,
+          "streaks": {
+            "currentStreakDays": 3,
+            "mealsLoggedThisWeek": 12,
+            "proteinGoalHitDaysThisWeek": 4,
+            "summary": "3 day streak"
+          }
+        }
+        """.data(using: .utf8)
+
+        let response = try JSONDecoder().decode(DashboardResponse.self, from: try XCTUnwrap(data))
+
+        XCTAssertEqual(response.streaks?.currentStreakDays, 3)
+        XCTAssertEqual(response.streaks?.mealsLoggedThisWeek, 12)
+        XCTAssertEqual(response.streaks?.proteinGoalHitDaysThisWeek, 4)
+    }
+
+    func testAnalyticsAndWeightResponsesDecodeNativeSummaries() throws {
+        let analyticsData = """
+        {
+          "analytics": {
+            "sevenDayAverageCalories": 1775,
+            "sevenDayAverageProtein": 149,
+            "thirtyDayAverageCalories": 1801,
+            "highestProteinDay": { "date": "2026-06-01", "protein": 185 },
+            "macroConsistencySummary": "4 protein days"
+          },
+          "weightTrend": {
+            "latestWeightLbs": 181,
+            "changeLbs": -3,
+            "direction": "down"
+          }
+        }
+        """.data(using: .utf8)
+        let weightData = """
+        {
+          "entries": [
+            { "id": "weight-1", "date": "2026-06-02T00:00:00.000Z", "weightLbs": 181 }
+          ],
+          "trend": {
+            "latestWeightLbs": 181,
+            "changeLbs": -3,
+            "direction": "down"
+          }
+        }
+        """.data(using: .utf8)
+
+        let analytics = try JSONDecoder().decode(AnalyticsResponse.self, from: try XCTUnwrap(analyticsData))
+        let weights = try JSONDecoder().decode(WeightEntriesResponse.self, from: try XCTUnwrap(weightData))
+
+        XCTAssertEqual(analytics.analytics.sevenDayAverageCalories, 1775)
+        XCTAssertEqual(analytics.weightTrend.direction, "down")
+        XCTAssertEqual(weights.entries.first?.weightLbs, 181)
+        XCTAssertEqual(weights.trend.changeLbs, -3)
+    }
+
+    func testSaveGuardPreventsEmptyAndDuplicateSubmissions() {
+        let items = [Self.item("protein shake")]
+
+        XCTAssertTrue(MealAssistantClientLogic.canAttemptSave(items: items, isSaving: false))
+        XCTAssertFalse(MealAssistantClientLogic.canAttemptSave(items: items, isSaving: true))
+        XCTAssertFalse(MealAssistantClientLogic.canAttemptSave(items: [], isSaving: false))
+    }
+
+    func testSimpleAndCompoundFoodPromptsCarryStableRequestState() {
+        let prompts = [
+            "apple",
+            "banana",
+            "rice",
+            "eggs",
+            "chicken breast",
+            "oatmeal",
+            "protein shake",
+            "peanut butter toast",
+            "burger fries and soda",
+            "eggs toast bacon and orange juice",
+            "chicken rice broccoli",
+            "quest chips and fairlife shake",
+            "big mac meal with fries and coke",
+            "chipotle bowl with extra chicken"
+        ]
+
+        for prompt in prompts {
+            let requestState = MealAssistantClientLogic.buildRequestState(assistantState: MealAssistantState(), currentMealItems: [], incomingUserMessage: prompt)
+            XCTAssertEqual(requestState.currentMealText, prompt)
+            XCTAssertEqual(requestState.previousUserMessage, prompt)
+            XCTAssertFalse(requestState.saved)
+        }
+    }
+
+    func testMalformedMealAssistantResponsesFailDecodingInsteadOfApplyingPartialState() throws {
+        let missingMeal = #"{"assistant_reply":"ok","next_state":{},"intent":"new_food_item"}"#.data(using: .utf8)
+        let malformedJSON = #"{"assistant_reply":"ok","meal": "#.data(using: .utf8)
+
+        XCTAssertThrowsError(try JSONDecoder().decode(MealAssistantResponse.self, from: try XCTUnwrap(missingMeal)))
+        XCTAssertThrowsError(try JSONDecoder().decode(MealAssistantResponse.self, from: try XCTUnwrap(malformedJSON)))
+    }
+
+    func testStateResetAfterSaveStartsFreshMeal() {
+        var state = MealAssistantState()
+        state.currentMealItems = [Self.item("salmon")]
+        state.currentMealText = "salmon and broccoli"
+        state.saved = true
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: state,
+            currentMealItems: state.currentMealItems,
+            incomingUserMessage: "one banana"
+        )
+
+        XCTAssertTrue(requestState.currentMealItems.isEmpty)
+        XCTAssertEqual(requestState.currentMealText, "one banana")
+    }
+
+    func testEditRemoveSavePreservesAllSourceMetadata() throws {
+        let trusted = MealRequestItem(
+            food_name: "salmon",
+            quantity: 8,
+            unit: "oz",
+            calories: 360,
+            protein: 46,
+            carbs: 0,
+            fat: 18,
+            fiber: 0,
+            sugar: 0,
+            sodium: 120,
+            notes: "wild caught",
+            source_type: "USDA_FOUNDATION",
+            source_name: "USDA FoodData Central",
+            confidence_label: "High",
+            is_trusted: true,
+            catalog_food_id: "fdc-salmon"
+        )
+
+        let roundTripped = MealItem(from: trusted).asMealRequestItem()
+
+        XCTAssertEqual(roundTripped.food_name, "salmon")
+        XCTAssertEqual(roundTripped.is_trusted, true)
+        XCTAssertEqual(roundTripped.catalog_food_id, "fdc-salmon")
+        XCTAssertEqual(roundTripped.source_name, "USDA FoodData Central")
+        XCTAssertEqual(roundTripped.source_type, "USDA_FOUNDATION")
+        XCTAssertEqual(roundTripped.confidence_label, "High")
+    }
+
+    func testMealAssistantPayloadPreservesWebFoodSourceFields() throws {
+        let item = MealRequestItem(
+            food_name: "banana",
+            quantity: 1,
+            unit: "medium",
+            calories: 105,
+            protein: 1,
+            carbs: 27,
+            fat: 0,
+            fiber: 3,
+            sugar: 14,
+            sodium: 1,
+            notes: nil,
+            source_type: "USDA_FOUNDATION",
+            source_name: "USDA",
+            confidence_label: "High",
+            is_trusted: true,
+            catalog_food_id: "food-banana"
+        )
+        let body = MealAssistantRequest(
+            message: "one banana",
+            state: MealAssistantClientLogic.buildRequestState(assistantState: MealAssistantState(), currentMealItems: [item], incomingUserMessage: "one banana"),
+            context: nil,
+            conversationHistory: [MealAssistantTranscriptMessage(role: "user", text: "one banana")]
+        )
+
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any]
+        let state = try XCTUnwrap(json?["state"] as? [String: Any])
+        let items = try XCTUnwrap(state["currentMealItems"] as? [[String: Any]])
+        let encodedItem = try XCTUnwrap(items.first)
+
+        XCTAssertEqual(encodedItem["food_name"] as? String, "banana")
+        XCTAssertEqual(encodedItem["is_trusted"] as? Bool, true)
+        XCTAssertEqual(encodedItem["catalog_food_id"] as? String, "food-banana")
+    }
+
+    private static func item(_ name: String, quantity: Double = 1, unit: String = "serving") -> MealRequestItem {
+        MealRequestItem(food_name: name, quantity: quantity, unit: unit, calories: 100, protein: 10, carbs: 10, fat: 2, fiber: 0, sugar: 0, sodium: 0, notes: nil, source_type: nil, source_name: nil, confidence_label: nil)
+    }
+
+    private static func trustedItem(_ name: String) -> MealRequestItem {
+        MealRequestItem(food_name: name, quantity: 1, unit: "serving", calories: 100, protein: 10, carbs: 10, fat: 2, fiber: 0, sugar: 0, sodium: 0, notes: "Exact branded match", source_type: "BRANDED", source_name: "Nutrition catalog", confidence_label: "High", is_trusted: true, catalog_food_id: "brand-\(name.lowercased().replacingOccurrences(of: " ", with: "-"))")
     }
 }
 
@@ -268,11 +834,13 @@ final class NativeSessionStateTests: XCTestCase {
         XCTAssertEqual(NativeSessionState.fromError(BackendError.forbidden), .expired(message: BackendError.forbidden.localizedDescription))
     }
 
-    func testOnlyExpiredAndOfflineStatesBlockActions() {
+    func testSetupExpiredAndOfflineStatesBlockActions() {
         let response = SessionResponse(account: nil, user: SessionUser(id: "u1", name: nil, mode: "account"))
 
-        XCTAssertFalse(NativeSessionState.unknown.isActionBlocked)
-        XCTAssertFalse(NativeSessionState.loading.isActionBlocked)
+        XCTAssertTrue(NativeSessionState.unknown.isActionBlocked)
+        XCTAssertTrue(NativeSessionState.loading.isActionBlocked)
+        XCTAssertTrue(NativeSessionState.unknown.isPreparingSession)
+        XCTAssertTrue(NativeSessionState.loading.isPreparingSession)
         XCTAssertFalse(NativeSessionState.authenticated(response).isActionBlocked)
         XCTAssertFalse(NativeSessionState.unauthenticated(message: "Native sign-in is not available in this build yet.").isActionBlocked)
         XCTAssertTrue(NativeSessionState.expired(message: "Expired").isActionBlocked)

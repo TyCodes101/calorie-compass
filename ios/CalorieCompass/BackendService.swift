@@ -5,16 +5,107 @@
 //
 import Foundation
 
+struct MealAssistantTranscriptMessage: Codable, Equatable {
+    let role: String
+    let text: String
+}
+
+struct MealAssistantState: Codable, Equatable {
+    var currentMealItems: [MealRequestItem] = []
+    var pendingClarification: String? = nil
+    var lastAssistantQuestion: String? = nil
+    var userCorrections: [String] = []
+    var saved: Bool = false
+    var mealType: String = "snack"
+    var userName: String? = nil
+    var currentMealText: String? = nil
+    var confidenceScore: Double = 0.82
+    var sourceReusableMealId: String? = nil
+    var editingMealId: String? = nil
+    var lastAssistantReply: String? = nil
+    var activeTopic: String? = nil
+    var activeMode: String? = nil
+    var activeQuestion: String? = nil
+    var previousIntent: String? = nil
+    var previousUserMessage: String? = nil
+}
+
+struct MealAssistantContext: Codable, Equatable {
+    var favoriteMeals: [MealAssistantMemoryMeal] = []
+    var recentMeals: [MealAssistantMemoryMeal] = []
+    var nutritionPreferences: String? = nil
+    var proteinGoal: Double? = nil
+    var dailyCalorieGoal: Double? = nil
+    var todayProtein: Double? = nil
+    var todayCarbs: Double? = nil
+    var todayFat: Double? = nil
+    var todayCalories: Double? = nil
+    var remainingProtein: Double? = nil
+    var remainingCarbs: Double? = nil
+    var remainingFat: Double? = nil
+    var remainingCalories: Double? = nil
+    var todayMealCount: Double? = nil
+}
+
+struct MealAssistantMemoryMeal: Codable, Equatable {
+    var id: String
+    var title: String
+    var rawText: String?
+    var mealType: String
+    var totalCalories: Double
+    var confidenceScore: Double
+    var items: [MealRequestItem]
+}
+
 struct MealAssistantRequest: Codable {
-    let user_message: String
-    let current_state: String?
-    let conversation_history: [String]?
-    let macro_context: [String: Double]?
+    let message: String
+    let state: MealAssistantState
+    let context: MealAssistantContext?
+    let conversationHistory: [MealAssistantTranscriptMessage]
+}
+
+struct MealAssistantTotals: Codable, Equatable {
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let fiber: Double
+    let sugar: Double
+    let sodium: Double
+}
+
+struct MealAssistantMeal: Codable, Equatable {
+    let items: [MealRequestItem]
+    let totals: MealAssistantTotals
+    let confidence_score: Double
 }
 
 struct MealAssistantResponse: Codable {
-    let assistant_message: String
-    let next_state: String?
+    let assistant_reply: String
+    let meal: MealAssistantMeal
+    let next_state: MealAssistantState
+    let intent: String?
+    let should_save_meal: Bool?
+    let clarification_question: String?
+
+    enum CodingKeys: String, CodingKey {
+        case assistant_reply
+        case meal
+        case next_state
+        case intent
+        case should_save_meal
+        case clarification_question
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        assistant_reply = try container.decode(String.self, forKey: .assistant_reply)
+        meal = try container.decode(MealAssistantMeal.self, forKey: .meal)
+        next_state = try container.decode(MealAssistantState.self, forKey: .next_state)
+        intent = try container.decodeIfPresent(String.self, forKey: .intent)
+        should_save_meal = try container.decodeIfPresent(Bool.self, forKey: .should_save_meal)
+        clarification_question = try container.decodeIfPresent(String.self, forKey: .clarification_question)
+    }
 }
 
 struct MealRequestItem: Codable, Equatable, Identifiable {
@@ -33,6 +124,8 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
     var source_type: String?
     var source_name: String?
     var confidence_label: String?
+    var is_trusted: Bool?
+    var catalog_food_id: String?
 
     init(
         food_name: String,
@@ -48,7 +141,9 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         notes: String?,
         source_type: String?,
         source_name: String?,
-        confidence_label: String?
+        confidence_label: String?,
+        is_trusted: Bool? = nil,
+        catalog_food_id: String? = nil
     ) {
         self.food_name = food_name
         self.quantity = quantity
@@ -64,6 +159,8 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         self.source_type = source_type
         self.source_name = source_name
         self.confidence_label = confidence_label
+        self.is_trusted = is_trusted
+        self.catalog_food_id = catalog_food_id
     }
 
     enum CodingKeys: String, CodingKey {
@@ -81,6 +178,8 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         case source_type
         case source_name
         case confidence_label
+        case is_trusted
+        case catalog_food_id
     }
 
     init(from decoder: Decoder) throws {
@@ -99,6 +198,178 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         source_type = try container.decodeIfPresent(String.self, forKey: .source_type)
         source_name = try container.decodeIfPresent(String.self, forKey: .source_name)
         confidence_label = try container.decodeIfPresent(String.self, forKey: .confidence_label)
+        is_trusted = try container.decodeIfPresent(Bool.self, forKey: .is_trusted)
+        catalog_food_id = try container.decodeIfPresent(String.self, forKey: .catalog_food_id)
+    }
+}
+
+enum MealAssistantLocalCommand: Equatable {
+    case discard
+    case save
+    case removeItem(String)
+}
+
+enum MealAssistantQuantityResolution: Equatable {
+    case target(foodName: String)
+    case clarify
+}
+
+struct MealAssistantClientLogic {
+    static func applyingMealType(_ mealType: String, to state: MealAssistantState) -> MealAssistantState {
+        let normalized = mealType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let allowed = ["breakfast", "lunch", "dinner", "snack"]
+        guard allowed.contains(normalized) else { return state }
+        var next = state
+        next.mealType = normalized
+        return next
+    }
+
+    static func buildRequestState(
+        assistantState: MealAssistantState,
+        currentMealItems: [MealRequestItem],
+        incomingUserMessage: String,
+        fallbackMealType: String = "snack"
+    ) -> MealAssistantState {
+        var state = assistantState
+
+        if state.saved {
+            state.currentMealItems = []
+            state.saved = false
+            state.currentMealText = nil
+        } else {
+            state.currentMealItems = currentMealItems
+        }
+
+        if state.currentMealText == nil || state.currentMealText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            state.currentMealText = incomingUserMessage
+        }
+
+        if state.mealType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            state.mealType = fallbackMealType
+        }
+
+        state.previousUserMessage = incomingUserMessage
+        state.activeMode = state.activeMode ?? "logging_mode"
+        state.activeTopic = state.activeTopic ?? "meal"
+        return state
+    }
+
+    static func detectLocalCommand(_ message: String, hasActiveMeal: Bool) -> MealAssistantLocalCommand? {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+
+        if hasActiveMeal && ["discard", "discard that", "cancel", "clear", "clear meal", "clear everything", "reset", "reset meal", "start over", "start over please", "new meal", "delete this meal", "delete meal", "nevermind", "never mind"].contains(normalized) {
+            return .discard
+        }
+
+        if hasActiveMeal && ["save", "save it", "save meal", "save the meal", "okay now save the meal", "ok now save the meal", "log it", "log this", "log meal", "log the meal"].contains(normalized) {
+            return .save
+        }
+
+        if hasActiveMeal {
+            let patterns = ["remove ", "delete ", "take out ", "drop "]
+            for pattern in patterns where normalized.hasPrefix(pattern) {
+                let target = String(normalized.dropFirst(pattern.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !target.isEmpty && target != "that" && target != "it" {
+                    return .removeItem(target)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    static func quantityResolution(for message: String, items: [MealRequestItem]) -> MealAssistantQuantityResolution? {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        let looksLikeQuantityEdit = normalized.contains("make") || normalized.contains("double") || normalized.contains("half") || normalized.contains("large") || normalized.contains("ounces") || normalized.contains("oz")
+        guard looksLikeQuantityEdit else { return nil }
+
+        let messageTokens = significantTokens(in: normalized)
+        let namedMatches = items.filter { !messageTokens.isDisjoint(with: significantTokens(in: $0.food_name)) }
+        if let match = namedMatches.first {
+            return .target(foodName: match.food_name)
+        }
+
+        let pronounOnly = normalized.contains("that") || normalized.contains(" it ") || normalized.hasPrefix("it ") || normalized.hasSuffix(" it")
+        if pronounOnly, let lastItem = items.last {
+            return .target(foodName: lastItem.food_name)
+        }
+
+        return items.count == 1 ? items.first.map { .target(foodName: $0.food_name) } : .clarify
+    }
+
+    static func foodMatchWarning(for message: String, items: [MealRequestItem]) -> String? {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let itemNames = items.map { $0.food_name.lowercased() }
+
+        if normalized.contains("banana"), itemNames.contains(where: { $0.contains("powder") || $0.contains("dehydrated") }) {
+            return "That banana match looks off. Try choosing a plain banana result instead of powder or dehydrated banana."
+        }
+
+        if normalized.contains("sandwich"), normalized.contains("chips"), !itemNames.contains(where: { $0.contains("sandwich") }) {
+            return "I only found the side item. Please retry so I can include the sandwich too."
+        }
+
+        return nil
+    }
+
+    static func shouldPreserveActiveMeal(currentItems: [MealRequestItem], responseItems: [MealRequestItem], responseSaved: Bool, incomingUserMessage: String) -> Bool {
+        !currentItems.isEmpty && responseItems.isEmpty && !responseSaved && !looksLikeReplacementClarification(incomingUserMessage, currentItems: currentItems)
+    }
+
+    static func canAttemptSave(items: [MealRequestItem], isSaving: Bool) -> Bool {
+        !isSaving && !items.isEmpty
+    }
+
+    static func removingItems(matching target: String, from items: [MealRequestItem]) -> [MealRequestItem] {
+        let targetTokens = significantTokens(in: target)
+        guard !targetTokens.isEmpty else { return items }
+
+        return items.filter { item in
+            let itemTokens = significantTokens(in: item.food_name)
+            return targetTokens.isDisjoint(with: itemTokens)
+        }
+    }
+
+    private static func significantTokens(in text: String) -> Set<String> {
+        let ignored: Set<String> = ["a", "an", "the", "of", "with", "and", "to", "that", "it"]
+        let normalized = text.lowercased()
+        let rawParts = normalized.split { character in
+            !character.isLetter && !character.isNumber
+        }
+        let words = rawParts.map(String.init)
+        let singularized = words.map { token in
+            token.hasSuffix("s") && token.count > 3 ? String(token.dropLast()) : token
+        }
+        let filtered = singularized.filter { token in
+            token.count > 1 && !ignored.contains(token)
+        }
+        return Set(filtered)
+    }
+
+    private static func looksLikeReplacementClarification(_ message: String, currentItems: [MealRequestItem]) -> Bool {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let hasReplacementCue = normalized.hasPrefix("actually") ||
+            normalized.hasPrefix("no ") ||
+            normalized.hasPrefix("nah ") ||
+            normalized.contains("meant") ||
+            normalized.contains("instead") ||
+            normalized.contains("change it") ||
+            normalized.contains("change that") ||
+            normalized.contains("make that")
+        guard hasReplacementCue else { return false }
+
+        let ignored: Set<String> = ["actually", "meant", "instead", "change", "make", "pack", "packet", "package", "please"]
+        let foodCueTokens: Set<String> = ["skittle", "skittles", "snicker", "snickers", "quest", "bbq", "barbecue", "protein", "chip", "chips", "candy", "candies", "potato", "potatoes", "mms"]
+        let messageTokens = significantTokens(in: normalized).subtracting(ignored)
+        guard !messageTokens.isEmpty && !messageTokens.isDisjoint(with: foodCueTokens) else { return false }
+
+        let currentTokens = currentItems.reduce(into: Set<String>()) { partialResult, item in
+            partialResult.formUnion(significantTokens(in: item.food_name))
+        }
+
+        return !messageTokens.isSubset(of: currentTokens)
     }
 }
 
@@ -106,6 +377,7 @@ struct PostMealRequest: Codable, Equatable {
     var meal_type: String
     var confidence_score: Double
     var raw_text: String?
+    var source_reusable_meal_id: String? = nil
     var notes: String?
     var date: String?
     var items: [MealRequestItem]
@@ -167,6 +439,7 @@ struct DashboardResponse: Codable {
     let mealCount: Int?
     let remainingCalories: Double?
     let dailySummary: DailySummary?
+    let streaks: DashboardStreaks?
 
     var displayedCalories: Double { totals?.calories ?? calories ?? 0 }
     var displayedGoalCalories: Double { macroGoals?.calories ?? goalCalories ?? 1 }
@@ -192,6 +465,13 @@ struct DashboardResponse: Codable {
     )
 }
 
+struct DashboardStreaks: Codable, Equatable {
+    let currentStreakDays: Int
+    let mealsLoggedThisWeek: Int
+    let proteinGoalHitDaysThisWeek: Int
+    let summary: String?
+}
+
 struct DashboardTotals: Codable {
     let calories: Double?
     let protein: Double?
@@ -209,6 +489,214 @@ struct MacroGoals: Codable {
 struct DailySummary: Codable {
     let title: String?
     let description: String?
+}
+
+struct ReusableMealSummary: Codable, Equatable, Identifiable {
+    let id: String
+    let title: String
+    let rawText: String?
+    let mealType: String
+    let lastUsedAt: String?
+    let totalCalories: Double
+    let totalProtein: Double?
+    let itemCount: Int
+    let trustedCount: Int?
+    let confidenceScore: Double?
+    let items: [MealRequestItem]?
+}
+
+struct ReusableMealsResponse: Codable, Equatable {
+    let favoriteMeals: [ReusableMealSummary]
+    let recentMeals: [ReusableMealSummary]
+}
+
+struct FoodSearchResult: Codable, Equatable, Identifiable {
+    let id: String
+    let name: String
+    let brand: String?
+    let sourceLabel: String
+    let servingQuantity: Double
+    let servingUnit: String
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let barcode: String?
+    let mealType: String
+    let confidenceScore: Double
+    let sourceReusableMealId: String?
+    let items: [MealRequestItem]
+
+    var reviewItems: [MealRequestItem] { items }
+}
+
+struct FoodSearchResponse: Codable, Equatable {
+    let query: String
+    let results: [FoodSearchResult]
+}
+
+struct BarcodeLookupResponse: Codable, Equatable {
+    let barcode: String?
+    let found: Bool
+    let result: FoodSearchResult?
+    let error: String?
+}
+
+struct CustomFoodsResponse: Codable, Equatable {
+    let customFoods: [FoodSearchResult]
+}
+
+struct CustomFoodRequest: Codable {
+    let name: String
+    let brand: String?
+    let barcode: String?
+    let servingQuantity: Double
+    let servingUnit: String
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let fiber: Double
+    let sugar: Double
+    let sodium: Double
+}
+
+struct CustomFoodMutationResponse: Codable, Equatable {
+    let customFood: FoodSearchResult?
+    let ok: Bool?
+}
+
+enum ManualQuickAddBuilder {
+    static func build(calories: Double, protein: Double, carbs: Double, fat: Double, barcode: String?) -> MealRequestItem? {
+        guard calories >= 0, protein >= 0, carbs >= 0, fat >= 0, calories + protein + carbs + fat > 0 else {
+            return nil
+        }
+        let cleanedBarcode = barcode?.filter(\.isNumber)
+        let barcodeNote = cleanedBarcode?.isEmpty == false ? "Manual barcode: \(cleanedBarcode ?? "")" : "Manual nutrition entry"
+
+        return MealRequestItem(
+            food_name: "Manual Quick Add",
+            quantity: 1,
+            unit: "entry",
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: 0,
+            sugar: 0,
+            sodium: 0,
+            notes: barcodeNote,
+            source_type: "AI_ESTIMATE",
+            source_name: "Manual entry",
+            confidence_label: "Estimated",
+            is_trusted: false,
+            catalog_food_id: nil
+        )
+    }
+}
+
+struct FavoriteMealRequest: Codable {
+    let reusable_meal_id: String?
+    let meal_type: String
+    let confidence_score: Double
+    let raw_text: String?
+    let items: [MealRequestItem]
+}
+
+struct FavoriteMealMutationResponse: Codable, Equatable {
+    let favoriteMeal: ReusableMealSummary?
+}
+
+struct AnalyticsResponse: Codable, Equatable {
+    let analytics: NutritionAnalyticsSummary
+    let weightTrend: WeightTrendSummary
+}
+
+struct NutritionAnalyticsSummary: Codable, Equatable {
+    let sevenDayAverageCalories: Double
+    let sevenDayAverageProtein: Double
+    let thirtyDayAverageCalories: Double
+    let highestProteinDay: HighestProteinDay?
+    let macroConsistencySummary: String
+}
+
+struct HighestProteinDay: Codable, Equatable {
+    let date: String
+    let protein: Double
+}
+
+struct WeightEntry: Codable, Equatable, Identifiable {
+    let id: String
+    let date: String
+    let weightLbs: Double
+}
+
+struct WeightTrendSummary: Codable, Equatable {
+    let latestWeightLbs: Double?
+    let changeLbs: Double
+    let direction: String
+}
+
+struct WeightEntriesResponse: Codable, Equatable {
+    let entries: [WeightEntry]
+    let trend: WeightTrendSummary
+}
+
+struct CreateWeightEntryRequest: Codable {
+    let weightLbs: Double
+    let date: String?
+}
+
+enum ProteinPreference {
+    case moderate
+    case high
+}
+
+struct GoalTargets: Equatable {
+    let dailyCalorieGoal: Int
+    let proteinGoal: Int
+    let carbsGoal: Int
+    let fatGoal: Int
+}
+
+enum GoalSetupCalculator {
+    static func calculate(
+        weightLbs: Double,
+        goalWeightLbs: Double?,
+        goal: String,
+        activityLevel: String,
+        ratePerWeekLbs: Double,
+        proteinPreference: ProteinPreference
+    ) -> GoalTargets {
+        let activityMultiplier: Double
+        switch activityLevel {
+        case "LOW": activityMultiplier = 13
+        case "HIGH": activityMultiplier = 17
+        case "VERY_HIGH": activityMultiplier = 19
+        default: activityMultiplier = 15
+        }
+
+        let boundedRate = min(max(ratePerWeekLbs, 0), 2)
+        let maintenance = weightLbs * activityMultiplier
+        let targetDelta = goalWeightLbs.map { $0 - weightLbs }
+        let shouldAdjustForGoal = targetDelta == nil ||
+            (goal == "LOSE_WEIGHT" && (targetDelta ?? 0) < -0.5) ||
+            (goal == "GAIN_MUSCLE" && (targetDelta ?? 0) > 0.5)
+        let adjustment: Double
+        switch goal {
+        case "LOSE_WEIGHT": adjustment = shouldAdjustForGoal ? -boundedRate * 500 : 0
+        case "GAIN_MUSCLE": adjustment = shouldAdjustForGoal ? boundedRate * 325 : 0
+        default: adjustment = 0
+        }
+
+        let dailyCalories = max(1500, Int((maintenance + adjustment).rounded()))
+        let proteinPerPound = proteinPreference == .high || goal != "MAINTAIN" ? 0.9 : 0.75
+        let protein = Int((weightLbs * proteinPerPound).rounded())
+        let fat = max(45, Int(((Double(dailyCalories) * 0.25) / 9).rounded()))
+        let carbs = max(0, Int(((Double(dailyCalories) - Double(protein * 4) - Double(fat * 9)) / 4).rounded()))
+
+        return GoalTargets(dailyCalorieGoal: dailyCalories, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat)
+    }
 }
 
 struct NativeAppleAuthRequest: Encodable {
@@ -548,6 +1036,55 @@ class BackendService {
         perform(urlRequest, completion: completion)
     }
 
+    static func fetchReusableMeals(completion: @escaping (Result<ReusableMealsResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/reusable-meals", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func searchFoods(query: String, completion: @escaping (Result<FoodSearchResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/food-search", method: "GET", queryItems: [URLQueryItem(name: "q", value: query)]) else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func lookupBarcode(_ barcode: String, completion: @escaping (Result<BarcodeLookupResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/barcode-lookup", method: "GET", queryItems: [URLQueryItem(name: "barcode", value: barcode)]) else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func createCustomFood(request body: CustomFoodRequest, completion: @escaping (Result<FoodSearchResult, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/custom-foods", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        perform(urlRequest) { (result: Result<CustomFoodMutationResponse, Error>) in
+            switch result {
+            case .success(let response):
+                if let customFood = response.customFood {
+                    completion(.success(customFood))
+                } else {
+                    completion(.failure(BackendError.malformedResponse))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    static func saveFavoriteMeal(request body: FavoriteMealRequest, completion: @escaping (Result<FavoriteMealMutationResponse, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/reusable-meals", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        do { urlRequest.httpBody = try JSONEncoder().encode(body) } catch { completion(.failure(error)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func repeatReusableMeal(id: String, completion: @escaping (Result<PostMealResponse, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/reusable-meals/\(id)/repeat", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        urlRequest.httpBody = Data()
+        perform(urlRequest, completion: completion)
+    }
+
     static func fetchMeals(completion: @escaping (Result<[MealResponse], Error>) -> Void) {
         guard let urlRequest = request(path: "api/meals", method: "GET") else { completion(.failure(BackendError.badURL)); return }
         perform(urlRequest) { (result: Result<MealsListResponse, Error>) in
@@ -576,6 +1113,32 @@ class BackendService {
         perform(urlRequest, completion: completion)
     }
 
+    static func fetchAnalytics(completion: @escaping (Result<AnalyticsResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/analytics", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func fetchWeightEntries(completion: @escaping (Result<WeightEntriesResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/weight-entries", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func createWeightEntry(weightLbs: Double, date: String? = nil, completion: @escaping (Result<WeightEntry, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/weight-entries", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(CreateWeightEntryRequest(weightLbs: weightLbs, date: date))
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        perform(urlRequest) { (result: Result<CreateWeightEntryResponse, Error>) in
+            switch result {
+            case .success(let response): completion(.success(response.entry))
+            case .failure(let error): completion(.failure(error))
+            }
+        }
+    }
+
     static func fetchProfile(completion: @escaping (Result<ProfileData, Error>) -> Void) {
         guard let urlRequest = request(path: "api/profile", method: "GET") else { completion(.failure(BackendError.badURL)); return }
         perform(urlRequest, completion: completion)
@@ -586,6 +1149,10 @@ class BackendService {
         do { urlRequest.httpBody = try JSONEncoder().encode(profile) } catch { completion(.failure(error)); return }
         perform(urlRequest, completion: completion)
     }
+}
+
+private struct CreateWeightEntryResponse: Codable {
+    let entry: WeightEntry
 }
 
 private struct APIErrorResponse: Codable {

@@ -266,7 +266,7 @@ describe('lookupNutrition', () => {
       carbs: 33,
       fat: 20,
       source_type: 'OFFICIAL_RESTAURANT',
-      confidence_label: 'Verified',
+      confidence_label: 'Very High',
       matched_query: "McDonald's McDouble",
       provider_used: 'local-verified-catalog',
       used_ai_fallback: false,
@@ -278,7 +278,7 @@ describe('lookupNutrition', () => {
     const response = await lookupNutrition({ text: 'a mcdouble', mealType: 'lunch' });
 
     expect(response?.items[0]?.calories).toBe(390);
-    expect(response?.items[0]?.confidence_label).toBe('Verified');
+    expect(response?.items[0]?.confidence_label).toBe('Very High');
   });
 
   it('scales quantities for verified restaurant items', async () => {
@@ -476,9 +476,215 @@ describe('lookupNutrition', () => {
     expect(response.items[1]).toMatchObject({
       food_name: "McDonald's McDouble",
       provider_used: 'local-verified-catalog',
-      confidence_label: 'Verified',
+      confidence_label: 'Very High',
     });
     expect(response.totals.calories).toBe(730);
+  });
+
+
+  it('asks for clarification instead of using an unsupported restaurant or brand mismatch', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Chick-fil-A Chicken Sandwich',
+            brandOwner: 'Chick-fil-A',
+            dataType: 'Branded',
+            servingSize: 1,
+            servingSizeUnit: 'sandwich',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 420 },
+              { nutrientName: 'Protein', value: 29 },
+              { nutrientName: 'Carbohydrate, by difference', value: 41 },
+              { nutrientName: 'Total lipid (fat)', value: 18 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: "Wendy's Dave's Single", mealType: 'lunch' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response).toMatchObject({
+      needs_clarification: true,
+      items: [],
+    });
+    expect(response?.clarifying_question).toMatch(/Wendy's/i);
+  });
+
+  it('does not return generic chips for Quest BBQ protein chips when catalog data is available', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Northgate Gonzalez, Inc. CHIPS',
+            dataType: 'Branded',
+            servingSize: 28.35,
+            servingSizeUnit: 'oz',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 494 },
+              { nutrientName: 'Protein', value: 7 },
+              { nutrientName: 'Carbohydrate, by difference', value: 77 },
+              { nutrientName: 'Total lipid (fat)', value: 18 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'Quest BBQ protein chips', mealType: 'snack' });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response?.items[0]).toMatchObject({
+      food_name: 'Quest BBQ Protein Chips',
+      quantity: 1,
+      unit: 'bag',
+      calories: 140,
+      protein: 19,
+      provider_used: 'local-verified-catalog',
+      match_type: 'exact_branded',
+    });
+  });
+
+  it('cleans malformed USDA household serving units before display metadata reaches clients', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'CHIPS',
+            dataType: 'Branded',
+            servingSize: 28.35,
+            servingSizeUnit: 'g',
+            householdServingFullText: '1 onz',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 150 },
+              { nutrientName: 'Protein', value: 2 },
+              { nutrientName: 'Carbohydrate, by difference', value: 17 },
+              { nutrientName: 'Total lipid (fat)', value: 8 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'chips', mealType: 'snack' });
+
+    expect(response?.items[0]).toMatchObject({
+      quantity: 28.35,
+      unit: 'g',
+    });
+    expect(`${response?.items[0]?.quantity} ${response?.items[0]?.unit}`).not.toMatch(/onz|28\.35 1/i);
+  });
+
+  it('does not accept a Snickers USDA row for Skittles branded candy intent', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Candies, MARS SNACKFOOD US, SNICKERS Bar',
+            brandOwner: 'MARS SNACKFOOD US',
+            dataType: 'Branded',
+            servingSize: 100,
+            servingSizeUnit: 'g',
+            householdServingFullText: '100 g',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 491 },
+              { nutrientName: 'Protein', value: 7 },
+              { nutrientName: 'Carbohydrate, by difference', value: 61 },
+              { nutrientName: 'Total lipid (fat)', value: 23 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'a skittles pack', mealType: 'snack' });
+
+    expect(response).toMatchObject({
+      needs_clarification: true,
+      items: [],
+    });
+    expect(response?.clarifying_question).toMatch(/Skittles|exact item|serving/i);
+  });
+
+  it('asks clarification when supporting data conflicts with branded protein snack intent', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Quest BBQ Flavored Chips',
+            brandOwner: 'Quest',
+            dataType: 'Branded',
+            servingSize: 28.35,
+            servingSizeUnit: 'oz',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 494 },
+              { nutrientName: 'Protein', value: 7 },
+              { nutrientName: 'Carbohydrate, by difference', value: 77 },
+              { nutrientName: 'Total lipid (fat)', value: 18 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'Quest sour cream protein chips', mealType: 'snack' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response).toMatchObject({
+      needs_clarification: true,
+      items: [],
+    });
+    expect(response?.clarifying_question).toMatch(/serving|macros|exact item/i);
+  });
+
+  it('uses supporting USDA data only when it matches the requested brand intent', async () => {
+    vi.stubEnv('USDA_FDC_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        foods: [
+          {
+            description: 'Dunkin Cold Brew Coffee',
+            brandOwner: 'Dunkin',
+            dataType: 'Branded',
+            servingSize: 1,
+            servingSizeUnit: 'medium',
+            foodNutrients: [
+              { nutrientName: 'Energy', value: 5 },
+              { nutrientName: 'Protein', value: 0 },
+              { nutrientName: 'Carbohydrate, by difference', value: 1 },
+              { nutrientName: 'Total lipid (fat)', value: 0 },
+            ],
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await lookupNutrition({ text: 'Dunkin cold brew', mealType: 'snack' });
+
+    expect(response?.needs_clarification).toBe(false);
+    expect(response?.items[0]).toMatchObject({
+      food_name: 'Dunkin Dunkin Cold Brew Coffee',
+      provider_used: 'usda-fdc',
+    });
   });
 
   it('uses AI only after database providers fail, and not before', async () => {
@@ -521,7 +727,7 @@ describe('lookupNutrition', () => {
     const localMatch = await lookupNutrition({ text: 'mcdouble', mealType: 'lunch' }, { aiEstimateProvider: aiProvider });
     const fallback = await lookupNutrition({ text: 'mystery casserole surprise', mealType: 'dinner' }, { aiEstimateProvider: aiProvider });
 
-    expect(localMatch?.items[0]?.confidence_label).toBe('Verified');
+    expect(localMatch?.items[0]?.confidence_label).toBe('Very High');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(aiLookup).toHaveBeenCalledTimes(1);
     expect(fallback?.items[0]).toMatchObject({

@@ -22,6 +22,7 @@ function normalizeItem(item: Record<string, unknown>) {
       : item.confidenceLabel
         ? String(item.confidenceLabel)
         : null,
+    match_type: item.match_type ? String(item.match_type) : item.matchType ? String(item.matchType) : null,
     matched_query: item.matched_query ? String(item.matched_query) : item.matchedQuery ? String(item.matchedQuery) : null,
     original_user_text: item.original_user_text
       ? String(item.original_user_text)

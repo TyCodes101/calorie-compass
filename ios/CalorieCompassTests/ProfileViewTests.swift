@@ -91,6 +91,23 @@ final class ProfileViewTests: XCTestCase {
         XCTAssertTrue(AccountManagementContent.deleteConfirmationMessage.contains("not a claim of App Store compliance"))
     }
 
+    func testProfileOptionalCopyHelpersKeepGuestDefaultsPolished() {
+        let profile = ProfileData(
+            name: " ",
+            age: nil,
+            heightCm: nil,
+            weightLbs: nil,
+            goal: nil,
+            activityLevel: nil,
+            dailyCalorieGoal: nil,
+            proteinGoal: nil,
+            nutritionPreferences: " "
+        )
+
+        XCTAssertNil(profile.name.nilIfBlankForTesting)
+        XCTAssertNil(profile.nutritionPreferences?.nilIfBlankForTesting)
+    }
+
     func testMigrationResultSummarizesMovedAndSkippedCounts() throws {
         let data = """
         {

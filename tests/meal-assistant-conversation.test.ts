@@ -391,6 +391,47 @@ describe('meal assistant conversational coverage', () => {
     expectNoBadAssistantPatterns(response.assistant_reply);
   });
 
+
+  it('matches a large McDonald’s fry as fries, not a cheeseburger', async () => {
+    const [response] = await runConversation(['A large mcdonalds fry']);
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/fr(?:y|ies)/i);
+    expect(response.meal.items[0]?.food_name).not.toMatch(/cheeseburger/i);
+    expect(response.assistant_reply).toMatch(/fr/i);
+  });
+
+  it('keeps vague whole-bag prompts in clarification instead of showing stale nutrition', async () => {
+    const [response] = await runConversation(['A whole bag']);
+
+    expect(response.should_ask_clarification).toBe(true);
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.assistant_reply).toMatch(/what food|bag/i);
+  });
+
+  it('resolves a clarified DAVID ranch whole bag as sunflower seeds, not the whole sentence', async () => {
+    const responses = await runConversation(['A whole bag', 'Okay well it was DAVID, ranch flavor, and a whole bag']);
+    const clarified = responses[1];
+
+    expect(clarified?.should_ask_clarification).toBe(false);
+    expect(clarified?.meal.items).toHaveLength(1);
+    expect(clarified?.meal.items[0]?.food_name).toMatch(/david.*sunflower|sunflower.*seeds/i);
+    expect(clarified?.meal.items[0]?.food_name).not.toMatch(/okay well|whole sentence/i);
+    expect(clarified?.meal.items[0]?.used_ai_fallback).toBe(false);
+  });
+
+  it('replaces a Quest bar with the chocolate chip Quest cookie correction', async () => {
+    const responses = await runConversation(['Quest chocolate chip', 'No the chocolate chip quest cookie']);
+    const correction = responses[1];
+
+    expect(responses[0]?.meal.items[0]?.food_name).toMatch(/quest/i);
+    expect(correction?.meal.items).toHaveLength(1);
+    expect(correction?.meal.items[0]?.food_name).toMatch(/quest.*cookie|chocolate chip.*cookie/i);
+    expect(correction?.meal.items[0]?.food_name).not.toMatch(/bar/i);
+    expect(correction?.assistant_reply).toMatch(/swapped|replaced|cookie/i);
+  });
+
   it.each([
     'cottage cheese',
     '20 grams of cottage cheese low fat',
@@ -2830,4 +2871,50 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).not.toMatch(/source|verified|lookup/i);
     expectNoBadAssistantPatterns(response.assistant_reply);
   });
+  it('uses production correction semantics to replace Snickers with a Skittles pack', async () => {
+    const snickers = createItem({
+      food_name: 'Snickers Bar',
+      quantity: 1,
+      unit: 'bar',
+      calories: 250,
+      protein: 4,
+      carbs: 33,
+      fat: 12,
+      source_name: 'Snickers standard bar nutrition reference',
+    });
+
+    const response = await runMealAssistant({
+      message: 'A skittles pack i meant',
+      state: buildState({ currentMealItems: [snickers], currentMealText: 'A Snickers' }),
+      context: undefined,
+      conversationHistory: [
+        { role: 'user', text: 'A Snickers' },
+        { role: 'assistant', text: 'Added 1 Snickers Bar.' },
+      ],
+    });
+
+    expect(response.intent).toBe('correction');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/skittles/i);
+    expect(response.meal.items[0]?.unit).toBe('pack');
+    expect(response.next_state.currentMealItems[0]?.food_name).toMatch(/skittles/i);
+    expect(response.next_state.currentMealItems[0]?.food_name).not.toMatch(/snickers/i);
+    expect(response.should_ask_clarification).toBe(false);
+  });
+
+  it('keeps Snickers on a natural bar serving instead of a 100g provider serving', async () => {
+    const response = await runMealAssistant({
+      message: 'A Snickers',
+      state: buildState({ mealType: 'snack' }),
+      context: undefined,
+      conversationHistory: [],
+    });
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items[0]?.food_name).toMatch(/snickers/i);
+    expect(response.meal.items[0]?.quantity).toBe(1);
+    expect(response.meal.items[0]?.unit).toBe('bar');
+    expect(response.meal.items[0]?.normalizedGrams ?? 0).toBeLessThan(80);
+  });
+
 });

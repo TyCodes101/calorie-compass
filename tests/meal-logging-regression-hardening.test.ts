@@ -64,7 +64,7 @@ function expectQuantity(turn: AssistantQaTurn, matcher: RegExp, quantity: number
 
 function expectSaneNutritionMetadata(turn: AssistantQaTurn) {
   for (const item of turn.response.next_state.currentMealItems) {
-    expect(String(item.confidence_label ?? '')).toMatch(/estimated|confidence|verified|trusted|high/i);
+    expect(String(item.confidence_label ?? '')).toMatch(/estimated|confidence|verified|trusted|very high|high|medium|low/i);
     expect(item.source_name || item.notes).toBeTruthy();
     if (item.source_type === 'AI_ESTIMATE') {
       expect(`${item.confidence_label} ${item.notes}`).toMatch(/estimate|fallback|approx/i);

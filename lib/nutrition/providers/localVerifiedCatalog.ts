@@ -22,8 +22,17 @@ const officialRestaurantBrands = new Set([
   "Wendy's",
 ]);
 
-function getConfidenceLabel(sourceType: string | null | undefined) {
-  return sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : 'High confidence';
+function getConfidenceLabel(sourceType: string | null | undefined, branded = false) {
+  if (sourceType === 'OFFICIAL_RESTAURANT' || branded) return 'Very High';
+  if (sourceType === 'AI_ESTIMATE') return 'Low';
+  return 'High';
+}
+
+function getMatchType(sourceType: string | null | undefined, branded = false, exact = true) {
+  if (sourceType === 'OFFICIAL_RESTAURANT') return exact ? 'exact_restaurant' : 'fuzzy_restaurant';
+  if (branded) return exact ? 'exact_branded' : 'fuzzy_branded';
+  if (sourceType === 'AI_ESTIMATE') return 'ai_estimate';
+  return 'verified_database';
 }
 
 function buildLocalMatchNotes(foodName: string, sourceName: string | null, matchedQuery: string) {
@@ -54,7 +63,8 @@ function decorateTrustedCatalogResponse(text: string, response: ReturnType<typeo
     ...response,
     items: response.items.map((item) => ({
       ...item,
-      confidence_label: item.source_type === 'AI_ESTIMATE' ? 'Estimated' : getConfidenceLabel(item.source_type),
+      confidence_label: item.source_type === 'AI_ESTIMATE' ? 'Low' : getConfidenceLabel(item.source_type, Boolean(item.source_name && !/USDA|generic/i.test(item.source_name))),
+      match_type: item.match_type ?? getMatchType(item.source_type, Boolean(item.source_name && !/USDA|generic/i.test(item.source_name)), false),
       matched_query: normalized.matchedQuery,
       original_user_text: text,
       provider_used: item.source_type === 'AI_ESTIMATE' ? 'ai-estimate-fallback' : 'local-verified-catalog',
@@ -79,7 +89,8 @@ export const localVerifiedCatalogProvider: NutritionLookupProvider = {
             {
               ...item,
               notes: buildLocalMatchNotes(match.food.canonicalName, source.name ?? null, normalizedQuery.matchedQuery),
-              confidence_label: getConfidenceLabel(source.sourceType),
+              confidence_label: getConfidenceLabel(source.sourceType, Boolean(source.brand)),
+              match_type: getMatchType(source.sourceType, Boolean(source.brand), match.exactAlias || match.exactProduct),
               matched_query: normalizedQuery.matchedQuery,
               original_user_text: text,
               provider_used: 'local-verified-catalog',

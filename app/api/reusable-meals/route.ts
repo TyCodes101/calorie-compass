@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
-import { createFavoriteMealTemplate } from '@/lib/reusable-meals';
+import { buildReusableMealSummaryFromRecord, createFavoriteMealTemplate, getReusableMealLibrary } from '@/lib/reusable-meals';
 
 const parsedItemSchema = z.object({
   food_name: z.string().min(1),
@@ -19,7 +19,8 @@ const parsedItemSchema = z.object({
   is_trusted: z.boolean().optional(),
   source_type: z.enum(['OFFICIAL_RESTAURANT', 'GENERIC_REFERENCE', 'AI_ESTIMATE']).nullable().optional(),
   source_name: z.string().nullable().optional(),
-  confidence_label: z.enum(['Verified', 'High confidence', 'Estimated']).nullable().optional(),
+  confidence_label: z.enum(['Very High', 'High', 'Medium', 'Low', 'Verified', 'High confidence', 'Estimated']).nullable().optional(),
+  match_type: z.enum(['exact_branded', 'exact_restaurant', 'fuzzy_branded', 'fuzzy_restaurant', 'verified_database', 'generic_estimate', 'ai_estimate', 'unknown']).nullable().optional(),
   matched_query: z.string().nullable().optional(),
   original_user_text: z.string().nullable().optional(),
   provider_used: z.string().nullable().optional(),
@@ -35,11 +36,20 @@ const requestSchema = z.object({
   items: z.array(parsedItemSchema).min(1),
 });
 
+export async function GET() {
+  try {
+    return NextResponse.json(await getReusableMealLibrary());
+  } catch (error) {
+    logWriteFailure('favorite.route.get', error);
+    return NextResponse.json({ favoriteMeals: [], recentMeals: [] });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const payload = requestSchema.parse(body);
-    const favoriteMeal = await createFavoriteMealTemplate(payload);
+    const favoriteMeal = buildReusableMealSummaryFromRecord(await createFavoriteMealTemplate(payload));
 
     return NextResponse.json({ favoriteMeal });
   } catch (error) {

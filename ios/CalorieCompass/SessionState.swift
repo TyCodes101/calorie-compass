@@ -43,9 +43,18 @@ enum NativeSessionState: Equatable {
 
     var isActionBlocked: Bool {
         switch self {
-        case .expired, .offline:
+        case .unknown, .loading, .expired, .offline:
             return true
-        case .unknown, .loading, .guest, .authenticated, .unauthenticated:
+        case .guest, .authenticated, .unauthenticated:
+            return false
+        }
+    }
+
+    var isPreparingSession: Bool {
+        switch self {
+        case .unknown, .loading:
+            return true
+        case .guest, .authenticated, .unauthenticated, .expired, .offline:
             return false
         }
     }
@@ -87,9 +96,9 @@ enum NativeSessionState: Equatable {
     var banner: SessionBannerModel? {
         switch self {
         case .unknown, .loading:
-            return SessionBannerModel(title: "Checking session...", message: "We are confirming your Calorie Compass session.", systemImage: "hourglass", tint: .blue)
+            return SessionBannerModel(title: "Setting up MacroMesh", message: "One moment while we prepare your guest session.", systemImage: "hourglass", tint: .blue)
         case .guest(let response):
-            return SessionBannerModel(title: response.account?.title ?? "Guest mode", message: response.account?.description ?? "Meals may be tied to this device session. Native sign-in is not available in this build yet.", systemImage: "person.crop.circle.badge.questionmark", tint: .orange)
+            return SessionBannerModel(title: response.account?.title ?? "Guest mode", message: response.account?.description ?? "Saved to this device session.", systemImage: "person.crop.circle", tint: .orange)
         case .authenticated:
             return nil
         case .unauthenticated(let message):
@@ -207,25 +216,48 @@ final class SessionStore: ObservableObject {
 struct SessionBannerView: View {
     let model: SessionBannerModel
     let onRetry: (() -> Void)?
+    let onDismiss: (() -> Void)?
+
+    init(model: SessionBannerModel, onRetry: (() -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
+        self.model = model
+        self.onRetry = onRetry
+        self.onDismiss = onDismiss
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 8) {
             Image(systemName: model.systemImage)
                 .foregroundColor(model.tint)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(model.title).font(.subheadline).fontWeight(.semibold)
-                Text(model.message).font(.caption).foregroundColor(.secondary)
-                if let onRetry {
-                    Button("Retry session check", action: onRetry)
-                        .font(.caption)
-                }
+                .font(.caption)
+            Text(model.title)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+            Text(model.message)
+                .font(.caption2)
+                .foregroundColor(MacroMeshTheme.muted)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            if let onRetry {
+                Button("Retry", action: onRetry)
+                    .font(.caption2)
+                    .buttonStyle(.plain)
             }
-            Spacer()
+            if let onDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption2)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss session status")
+            }
         }
-        .padding(12)
-        .background(model.tint.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .padding(.horizontal)
-        .padding(.top, 8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.thinMaterial)
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+        .padding(.horizontal, 14)
     }
 }
