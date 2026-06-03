@@ -1,5 +1,6 @@
 // MealManagementTests.swift
 // Calorie Compass iOS — Phase 3C meal management coverage
+import AVFoundation
 import XCTest
 @testable import CalorieCompass
 
@@ -441,6 +442,62 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(item?.protein, 20)
         XCTAssertEqual(item?.notes, "Manual barcode: 012345678905")
         XCTAssertEqual(item?.confidence_label, "Estimated")
+    }
+
+    func testBarcodeCameraPermissionStateMapsDeniedAndUnavailable() {
+        XCTAssertEqual(BarcodeCameraPermissionState.from(status: .authorized, hasCamera: true), .authorized)
+        XCTAssertEqual(BarcodeCameraPermissionState.from(status: .denied, hasCamera: true), .denied)
+        XCTAssertEqual(BarcodeCameraPermissionState.from(status: .authorized, hasCamera: false), .unavailable)
+        XCTAssertFalse(BarcodeCameraPermissionState.denied.allowsScanning)
+        XCTAssertTrue(BarcodeCameraPermissionState.authorized.permissionCopy.contains("read barcodes"))
+    }
+
+    func testBarcodeFallbackModelKeepsReviewBeforeSaveOptions() {
+        let model = BarcodeLookupFallbackModel(barcode: " 01234-5678905 ")
+
+        XCTAssertEqual(model.normalizedBarcode, "012345678905")
+        XCTAssertTrue(model.canLookup)
+        XCTAssertEqual(model.aiDescriptionPrompt, "Barcode 012345678905: describe the food or package so MacroMesh can estimate it for review.")
+    }
+
+    func testNutritionLabelOCRTextNormalizesWithoutParsingMacros() {
+        let result = NutritionLabelOCRResult.fromRecognizedText([
+            "Nutrition Facts",
+            "Calories 150",
+            "Protein 10g",
+            "   "
+        ])
+
+        XCTAssertEqual(result.lines, ["Nutrition Facts", "Calories 150", "Protein 10g"])
+        XCTAssertEqual(result.rawText, "Nutrition Facts\nCalories 150\nProtein 10g")
+        XCTAssertTrue(result.hasUsableText)
+    }
+
+    func testNutritionLabelManualEntryRequiresUserConfirmedValues() {
+        let rejected = NutritionLabelManualEntryBuilder.build(foodName: " ", calories: 150, protein: 10, carbs: 12, fat: 3, extractedText: "Calories 150")
+        XCTAssertNil(rejected)
+
+        let item = NutritionLabelManualEntryBuilder.build(foodName: "Greek yogurt", calories: 150, protein: 10, carbs: 12, fat: 3, extractedText: "Calories 150")
+
+        XCTAssertEqual(item?.food_name, "Greek yogurt")
+        XCTAssertEqual(item?.unit, "label")
+        XCTAssertEqual(item?.calories, 150)
+        XCTAssertEqual(item?.source_type, "AI_ESTIMATE")
+        XCTAssertEqual(item?.source_name, "Nutrition label manual entry")
+        XCTAssertTrue(item?.notes?.contains("OCR text captured") == true)
+    }
+
+    func testMealPhotoDraftTracksLocalOnlyAttachmentStatus() {
+        let draft = MealPhotoDraft(
+            itemIdentifier: "local-asset-1",
+            filename: "IMG_0001.jpg",
+            createdAt: Date(timeIntervalSince1970: 0),
+            hasLocalPreview: true
+        )
+
+        XCTAssertEqual(draft.storageStatus, "Local draft only")
+        XCTAssertEqual(draft.accessibilityLabel, "Meal photo IMG_0001.jpg attached locally. Upload storage is deferred.")
+        XCTAssertTrue(draft.hasLocalPreview)
     }
 
     func testQuickMealTypeSelectionUpdatesAssistantState() {

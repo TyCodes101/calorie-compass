@@ -4,7 +4,153 @@
 //
 //  Native chat logger main view for Phase 2A
 //
+import AVFoundation
+import PhotosUI
 import SwiftUI
+import UIKit
+import Vision
+
+enum BarcodeCameraPermissionState: Equatable {
+    case notDetermined
+    case authorized
+    case denied
+    case restricted
+    case unavailable
+
+    static var current: BarcodeCameraPermissionState {
+        from(status: AVCaptureDevice.authorizationStatus(for: .video), hasCamera: BarcodeCameraAvailability.hasVideoCamera)
+    }
+
+    static func from(status: AVAuthorizationStatus, hasCamera: Bool) -> BarcodeCameraPermissionState {
+        guard hasCamera else { return .unavailable }
+        switch status {
+        case .notDetermined: return .notDetermined
+        case .authorized: return .authorized
+        case .denied: return .denied
+        case .restricted: return .restricted
+        @unknown default: return .restricted
+        }
+    }
+
+    var allowsScanning: Bool { self == .authorized }
+
+    var permissionCopy: String {
+        switch self {
+        case .notDetermined:
+            return "MacroMesh uses the camera only to read barcodes. No photo is saved from barcode scanning."
+        case .authorized:
+            return "MacroMesh uses the camera only to read barcodes. Point at a UPC or EAN code to look it up for review before saving."
+        case .denied:
+            return "Camera access is off. Enter the barcode manually, create a custom food, or describe the item."
+        case .restricted:
+            return "Camera access is restricted on this device. Manual barcode entry is still available."
+        case .unavailable:
+            return "Camera scanning is not available on this device. Manual barcode entry is still available."
+        }
+    }
+}
+
+enum BarcodeCameraAvailability {
+    static var hasVideoCamera: Bool {
+        AVCaptureDevice.default(for: .video) != nil
+    }
+}
+
+struct BarcodeLookupFallbackModel: Equatable {
+    let barcode: String
+
+    var normalizedBarcode: String {
+        barcode.filter(\.isNumber)
+    }
+
+    var canLookup: Bool {
+        (8...14).contains(normalizedBarcode.count)
+    }
+
+    var aiDescriptionPrompt: String {
+        if normalizedBarcode.isEmpty {
+            return "Describe the food or package so MacroMesh can estimate it for review."
+        }
+        return "Barcode \(normalizedBarcode): describe the food or package so MacroMesh can estimate it for review."
+    }
+}
+
+struct NutritionLabelOCRResult: Equatable {
+    let rawText: String
+    let lines: [String]
+
+    var hasUsableText: Bool { !lines.isEmpty }
+
+    static func fromRecognizedText(_ recognizedText: [String]) -> NutritionLabelOCRResult {
+        let lines = recognizedText
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression) }
+            .filter { !$0.isEmpty }
+        return NutritionLabelOCRResult(rawText: lines.joined(separator: "\n"), lines: lines)
+    }
+}
+
+enum NutritionLabelManualEntryBuilder {
+    static func build(foodName: String, calories: Double, protein: Double, carbs: Double, fat: Double, extractedText: String?) -> MealRequestItem? {
+        let cleanedName = foodName.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        guard !cleanedName.isEmpty,
+              calories >= 0,
+              protein >= 0,
+              carbs >= 0,
+              fat >= 0,
+              calories + protein + carbs + fat > 0 else {
+            return nil
+        }
+
+        let cleanedText = extractedText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note: String
+        if let cleanedText, !cleanedText.isEmpty {
+            note = "OCR text captured for manual verification: \(cleanedText)"
+        } else {
+            note = "Nutrition label values entered manually."
+        }
+
+        return MealRequestItem(
+            food_name: cleanedName,
+            quantity: 1,
+            unit: "label",
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: 0,
+            sugar: 0,
+            sodium: 0,
+            notes: note,
+            source_type: "AI_ESTIMATE",
+            source_name: "Nutrition label manual entry",
+            confidence_label: "User-entered",
+            is_trusted: false,
+            catalog_food_id: nil
+        )
+    }
+}
+
+struct MealPhotoDraft: Equatable, Identifiable {
+    let id: UUID
+    let itemIdentifier: String?
+    let filename: String
+    let createdAt: Date
+    let hasLocalPreview: Bool
+
+    init(id: UUID = UUID(), itemIdentifier: String?, filename: String, createdAt: Date = Date(), hasLocalPreview: Bool) {
+        self.id = id
+        self.itemIdentifier = itemIdentifier
+        self.filename = filename
+        self.createdAt = createdAt
+        self.hasLocalPreview = hasLocalPreview
+    }
+
+    var storageStatus: String { "Local draft only" }
+
+    var accessibilityLabel: String {
+        "Meal photo \(filename) attached locally. Upload storage is deferred."
+    }
+}
 
 enum LogActionSheet: Identifiable {
     case foodSearch
@@ -111,6 +257,10 @@ struct LogChatView: View {
                         activeSheet = .customFood(barcode: barcode)
                     } onQuickAdd: { barcode in
                         activeSheet = .quickAdd(barcode: barcode)
+                    } onDescribeWithAI: { barcode in
+                        inputText = BarcodeLookupFallbackModel(barcode: barcode).aiDescriptionPrompt
+                        mealInputFocused = true
+                        activeSheet = nil
                     }
                 case .quickAdd(let barcode):
                     QuickAddSheet(barcode: barcode) { item in
@@ -133,7 +283,16 @@ struct LogChatView: View {
                         activeSheet = .quickAdd(barcode: nil)
                     }
                 case .nutritionLabelFoundation:
-                    NutritionLabelFoundationSheet {
+                    NutritionLabelFoundationSheet { item in
+                        beginReview(
+                            items: [item],
+                            mealType: selectedMealType,
+                            confidenceScore: 0.72,
+                            rawText: "Nutrition label manual entry",
+                            sourceReusableMealId: nil,
+                            assistantText: "Nutrition label values are ready. Review them before saving."
+                        )
+                    } onQuickAdd: {
                         activeSheet = .quickAdd(barcode: nil)
                     }
                 }
@@ -174,7 +333,7 @@ struct LogChatView: View {
             LogActionButton(title: "Food Search", icon: "magnifyingglass") {
                 activeSheet = .foodSearch
             }
-            LogActionButton(title: "Enter Barcode", icon: "barcode.viewfinder") {
+            LogActionButton(title: "Scan Barcode", icon: "barcode.viewfinder") {
                 activeSheet = .barcode
             }
             LogActionButton(title: "Quick Add", icon: "plus.circle.fill") {
@@ -710,49 +869,124 @@ struct BarcodeLookupSheet: View {
     let onFound: (FoodSearchResult) -> Void
     let onCreateCustomFood: (String) -> Void
     let onQuickAdd: (String) -> Void
+    let onDescribeWithAI: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var barcode = ""
     @State private var isLoading = false
-    @State private var message = "Enter UPC/EAN digits manually. Camera scanner is coming later."
+    @State private var permissionState = BarcodeCameraPermissionState.current
+    @State private var isScannerVisible = false
+    @State private var message = "Scan a package barcode or enter UPC/EAN digits manually."
 
     var body: some View {
         NavigationView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(message)
-                    .font(.caption)
-                    .foregroundColor(MacroMeshTheme.muted)
-                TextField("Barcode digits", text: $barcode)
-                    .keyboardType(.numberPad)
-                    .textFieldStyle(MacroMeshTextFieldStyle())
-                    .accessibilityLabel("Barcode digits")
-                Button(action: lookup) {
-                    if isLoading { ProgressView().tint(.white) } else { Label("Look Up Barcode", systemImage: "barcode") }
-                }
-                .buttonStyle(PrimaryCTAButtonStyle())
-                .disabled(isLoading || barcode.filter(\.isNumber).count < 8)
-                HStack(spacing: 10) {
-                    Button("Create Custom") {
-                        onCreateCustomFood(barcode.filter(\.isNumber))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    scannerPermissionCard
+                    Text(message)
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                    TextField("Barcode digits", text: $barcode)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(MacroMeshTextFieldStyle())
+                        .accessibilityLabel("Barcode digits")
+                    Button(action: lookup) {
+                        if isLoading { ProgressView().tint(.white) } else { Label("Look Up Barcode", systemImage: "barcode") }
                     }
-                    .buttonStyle(SecondaryCTAButtonStyle())
-                    Button("Quick Add") {
-                        onQuickAdd(barcode.filter(\.isNumber))
+                    .buttonStyle(PrimaryCTAButtonStyle())
+                    .disabled(isLoading || !fallbackModel.canLookup)
+                    VStack(spacing: 10) {
+                        HStack(spacing: 10) {
+                            Button("Create Custom") {
+                                onCreateCustomFood(fallbackModel.normalizedBarcode)
+                            }
+                            .buttonStyle(SecondaryCTAButtonStyle())
+                            Button("Quick Add") {
+                                onQuickAdd(fallbackModel.normalizedBarcode)
+                            }
+                            .buttonStyle(SecondaryCTAButtonStyle())
+                        }
+                        Button("Describe with AI") {
+                            onDescribeWithAI(fallbackModel.normalizedBarcode)
+                        }
+                        .buttonStyle(SecondaryCTAButtonStyle())
+                        .accessibilityLabel("Describe barcode item with AI")
                     }
-                    .buttonStyle(SecondaryCTAButtonStyle())
                 }
-                Spacer()
+                .padding(18)
             }
-            .padding(18)
-            .navigationTitle("Enter Barcode")
+            .navigationTitle("Scan Barcode")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+            }
+            .onAppear {
+                permissionState = .current
             }
         }
     }
 
+    private var fallbackModel: BarcodeLookupFallbackModel {
+        BarcodeLookupFallbackModel(barcode: barcode)
+    }
+
+    @ViewBuilder
+    private var scannerPermissionCard: some View {
+        AppCard(padding: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: permissionState.allowsScanning ? "barcode.viewfinder" : "camera.fill")
+                        .font(.headline)
+                        .foregroundColor(MacroMeshTheme.primary)
+                        .frame(width: 34, height: 34)
+                        .background(MacroMeshTheme.cardSubtle)
+                        .clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Camera barcode scanner")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(MacroMeshTheme.text)
+                        Text(permissionState.permissionCopy)
+                            .font(.caption)
+                            .foregroundColor(MacroMeshTheme.muted)
+                    }
+                }
+                if permissionState.allowsScanning && isScannerVisible {
+                    BarcodeScannerPreview { scannedCode in
+                        barcode = scannedCode.filter(\.isNumber)
+                        isScannerVisible = false
+                        lookup()
+                    }
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .accessibilityLabel("Live barcode scanner")
+                }
+                Button(permissionState.allowsScanning ? (isScannerVisible ? "Hide Camera" : "Open Camera") : "Enable Camera Scanner") {
+                    handleCameraButton()
+                }
+                .buttonStyle(SecondaryCTAButtonStyle())
+                .disabled(permissionState == .denied || permissionState == .restricted || permissionState == .unavailable)
+            }
+        }
+    }
+
+    private func handleCameraButton() {
+        permissionState = .current
+        switch permissionState {
+        case .authorized:
+            isScannerVisible.toggle()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    permissionState = granted ? .authorized : .denied
+                    isScannerVisible = granted
+                }
+            }
+        case .denied, .restricted, .unavailable:
+            isScannerVisible = false
+        }
+    }
+
     private func lookup() {
-        let digits = barcode.filter(\.isNumber)
-        guard digits.count >= 8 else { return }
+        let digits = fallbackModel.normalizedBarcode
+        guard fallbackModel.canLookup else { return }
         isLoading = true
         BackendService.lookupBarcode(digits) { result in
             DispatchQueue.main.async {
@@ -763,12 +997,118 @@ struct BarcodeLookupSheet: View {
                         onFound(found)
                         dismiss()
                     } else {
-                        message = "No trusted barcode match yet. Create a custom food, quick add macros, or describe the food."
+                        message = "No trusted barcode match yet. Create a custom food, quick add macros, or describe the package with AI."
                     }
                 case .failure(let error):
                     message = RetryCopy.nonDestructiveFailure(action: "look up that barcode", error: error)
                 }
             }
+        }
+    }
+}
+
+struct BarcodeScannerPreview: UIViewControllerRepresentable {
+    let onCode: (String) -> Void
+
+    func makeUIViewController(context: Context) -> BarcodeScannerViewController {
+        BarcodeScannerViewController(onCode: onCode)
+    }
+
+    func updateUIViewController(_ uiViewController: BarcodeScannerViewController, context: Context) {}
+}
+
+final class BarcodeScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+    private let session = AVCaptureSession()
+    private let onCode: (String) -> Void
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private var didScan = false
+
+    init(onCode: @escaping (String) -> Void) {
+        self.onCode = onCode
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        return nil
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = UIColor.black
+        configureSession()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        if session.isRunning {
+            session.stopRunning()
+        }
+    }
+
+    private func configureSession() {
+        guard let device = AVCaptureDevice.default(for: .video),
+              let input = try? AVCaptureDeviceInput(device: device),
+              session.canAddInput(input) else {
+            addStatusLabel("Camera unavailable")
+            return
+        }
+
+        let output = AVCaptureMetadataOutput()
+        guard session.canAddOutput(output) else {
+            addStatusLabel("Barcode scanner unavailable")
+            return
+        }
+
+        session.beginConfiguration()
+        session.addInput(input)
+        session.addOutput(output)
+        let supportedTypes: [AVMetadataObject.ObjectType] = [.ean8, .ean13, .upce, .code39, .code93, .code128, .pdf417, .qr]
+        output.metadataObjectTypes = supportedTypes.filter { output.availableMetadataObjectTypes.contains($0) }
+        output.setMetadataObjectsDelegate(self, queue: DispatchQueue(label: "macromesh.barcode-scanner"))
+        session.commitConfiguration()
+
+        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+        previewLayer.videoGravity = .resizeAspectFill
+        previewLayer.frame = view.bounds
+        view.layer.insertSublayer(previewLayer, at: 0)
+        self.previewLayer = previewLayer
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.session.startRunning()
+        }
+    }
+
+    private func addStatusLabel(_ text: String) {
+        let label = UILabel()
+        label.text = text
+        label.textColor = .white
+        label.font = .preferredFont(forTextStyle: .headline)
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            label.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 16),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -16)
+        ])
+    }
+
+    func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+        guard !didScan,
+              let object = metadataObjects.compactMap({ $0 as? AVMetadataMachineReadableCodeObject }).first,
+              let value = object.stringValue,
+              !value.isEmpty else {
+            return
+        }
+        didScan = true
+        DispatchQueue.main.async {
+            self.onCode(value)
         }
     }
 }
@@ -952,56 +1292,279 @@ struct CustomFoodEditorSheet: View {
 struct PhotoAttachmentFoundationSheet: View {
     let onQuickAdd: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedItem: PhotosPickerItem?
+    @State private var previewImage: UIImage?
+    @State private var draft: MealPhotoDraft?
+    @State private var message = "Attach a meal photo locally as a draft note. Backend photo upload/storage is not enabled in this build."
 
     var body: some View {
         NavigationView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Meal photo attachments")
-                    .font(.title3.weight(.bold))
-                    .foregroundColor(MacroMeshTheme.text)
-                Text("Photo attachment storage is prepared as a draft-only foundation in this build. No image is uploaded, analyzed, or saved to the backend yet.")
-                    .font(.subheadline)
-                    .foregroundColor(MacroMeshTheme.muted)
-                Button("Add calories/macros manually") {
-                    onQuickAdd()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Meal photo attachments")
+                        .font(.title3.weight(.bold))
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundColor(MacroMeshTheme.muted)
+                    PhotosPicker(selection: $selectedItem, matching: .images, photoLibrary: .shared()) {
+                        Label("Choose Meal Photo", systemImage: "photo.on.rectangle")
+                    }
+                    .buttonStyle(PrimaryCTAButtonStyle())
+                    .accessibilityLabel("Choose meal photo")
+                    if let previewImage {
+                        Image(uiImage: previewImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 190)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .accessibilityLabel("Selected meal photo preview")
+                    }
+                    if let draft {
+                        AppCard(padding: 14) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(draft.filename)
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundColor(MacroMeshTheme.text)
+                                Text(draft.storageStatus)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(MacroMeshTheme.orange)
+                                Text("This photo is not uploaded or attached to saved meals yet. Use it as a visual reference while entering calories/macros.")
+                                    .font(.caption)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                            }
+                        }
+                        .accessibilityLabel(draft.accessibilityLabel)
+                    }
+                    Button("Add calories/macros manually") {
+                        onQuickAdd()
+                    }
+                    .buttonStyle(SecondaryCTAButtonStyle())
+                    Spacer(minLength: 20)
                 }
-                .buttonStyle(PrimaryCTAButtonStyle())
-                Spacer()
+                .padding(18)
             }
-            .padding(18)
+            .onChange(of: selectedItem) { _, item in
+                loadPhoto(item)
+            }
             .navigationTitle("Meal Photo")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             }
         }
     }
+
+    private func loadPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else {
+                    message = "That photo could not be loaded. Try another image or use Quick Add."
+                    return
+                }
+                previewImage = image
+                draft = MealPhotoDraft(
+                    itemIdentifier: item.itemIdentifier,
+                    filename: item.itemIdentifier ?? "Selected meal photo",
+                    hasLocalPreview: true
+                )
+                message = "Photo selected locally. Nothing is uploaded, analyzed, or saved until backend storage is added later."
+            } catch {
+                message = "That photo could not be loaded. Try another image or use Quick Add."
+            }
+        }
+    }
 }
 
 struct NutritionLabelFoundationSheet: View {
+    let onReview: (MealRequestItem) -> Void
     let onQuickAdd: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedItem: PhotosPickerItem?
+    @State private var previewImage: UIImage?
+    @State private var ocrResult: NutritionLabelOCRResult?
+    @State private var foodName = ""
+    @State private var calories = ""
+    @State private var protein = ""
+    @State private var carbs = ""
+    @State private var fat = ""
+    @State private var message = "Choose a nutrition label photo. MacroMesh extracts text only; you verify and enter the nutrition values."
+    @State private var isProcessing = false
 
     var body: some View {
         NavigationView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Nutrition label scan")
-                    .font(.title3.weight(.bold))
-                    .foregroundColor(MacroMeshTheme.text)
-                Text("OCR parsing is not automatic in this build. Use the label as a guide, enter values manually, and review before saving.")
-                    .font(.subheadline)
-                    .foregroundColor(MacroMeshTheme.muted)
-                Button("Enter label values") {
-                    onQuickAdd()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Nutrition label scan")
+                        .font(.title3.weight(.bold))
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundColor(MacroMeshTheme.muted)
+                    PhotosPicker(selection: $selectedItem, matching: .images, photoLibrary: .shared()) {
+                        Label("Choose Label Photo", systemImage: "doc.text.viewfinder")
+                    }
+                    .buttonStyle(PrimaryCTAButtonStyle())
+                    .accessibilityLabel("Choose nutrition label photo")
+                    if isProcessing {
+                        AssistantTypingCard()
+                    }
+                    if let previewImage {
+                        Image(uiImage: previewImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 160)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .accessibilityLabel("Selected nutrition label photo preview")
+                    }
+                    if let ocrResult, ocrResult.hasUsableText {
+                        AppCard(padding: 14) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Extracted text")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundColor(MacroMeshTheme.text)
+                                Text(ocrResult.rawText)
+                                    .font(.caption)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    }
+                    manualEntryFields
+                    HStack(spacing: 10) {
+                        Button("Manual Quick Add") {
+                            onQuickAdd()
+                        }
+                        .buttonStyle(SecondaryCTAButtonStyle())
+                        Button("Review") {
+                            reviewManualValues()
+                        }
+                        .buttonStyle(PrimaryCTAButtonStyle())
+                    }
+                    Spacer(minLength: 20)
                 }
-                .buttonStyle(PrimaryCTAButtonStyle())
-                Spacer()
+                .padding(18)
             }
-            .padding(18)
+            .onChange(of: selectedItem) { _, item in
+                loadLabelPhoto(item)
+            }
             .navigationTitle("Scan Label")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             }
         }
+    }
+
+    private var manualEntryFields: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Enter verified values")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(MacroMeshTheme.muted)
+            TextField("Food name", text: $foodName)
+                .textFieldStyle(MacroMeshTextFieldStyle())
+                .accessibilityLabel("Food name from nutrition label")
+            TextField("Calories", text: $calories)
+                .keyboardType(.decimalPad)
+                .textFieldStyle(MacroMeshTextFieldStyle())
+                .accessibilityLabel("Calories from nutrition label")
+            HStack(spacing: 8) {
+                TextField("Protein", text: $protein)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(MacroMeshTextFieldStyle())
+                    .accessibilityLabel("Protein from nutrition label")
+                TextField("Carbs", text: $carbs)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(MacroMeshTextFieldStyle())
+                    .accessibilityLabel("Carbs from nutrition label")
+                TextField("Fat", text: $fat)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(MacroMeshTextFieldStyle())
+                    .accessibilityLabel("Fat from nutrition label")
+            }
+        }
+    }
+
+    private func loadLabelPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        isProcessing = true
+        message = "Reading label text. Values will stay manual until you confirm them."
+        Task {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else {
+                    isProcessing = false
+                    message = "That image could not be loaded. Enter the label values manually."
+                    return
+                }
+                previewImage = image
+                recognizeText(in: image)
+            } catch {
+                isProcessing = false
+                message = "That image could not be loaded. Enter the label values manually."
+            }
+        }
+    }
+
+    private func recognizeText(in image: UIImage) {
+        guard let cgImage = image.cgImage else {
+            isProcessing = false
+            message = "That image could not be read. Enter the label values manually."
+            return
+        }
+
+        let request = VNRecognizeTextRequest { request, error in
+            let strings = (request.results as? [VNRecognizedTextObservation])?
+                .compactMap { $0.topCandidates(1).first?.string } ?? []
+            DispatchQueue.main.async {
+                isProcessing = false
+                ocrResult = NutritionLabelOCRResult.fromRecognizedText(strings)
+                message = ocrResult?.hasUsableText == true
+                    ? "Text extracted. Verify the label and enter calories/macros manually before review."
+                    : "No reliable text was found. Enter the label values manually."
+                if let firstFoodLine = ocrResult?.lines.first, foodName.isEmpty, !firstFoodLine.lowercased().contains("nutrition") {
+                    foodName = firstFoodLine
+                }
+                if error != nil && ocrResult?.hasUsableText != true {
+                    message = "OCR could not read this label. Enter the label values manually."
+                }
+            }
+        }
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request])
+            } catch {
+                DispatchQueue.main.async {
+                    isProcessing = false
+                    message = "OCR could not read this label. Enter the label values manually."
+                }
+            }
+        }
+    }
+
+    private func reviewManualValues() {
+        guard let caloriesValue = Double(calories.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            message = "Enter calories from the label before review."
+            return
+        }
+        guard let item = NutritionLabelManualEntryBuilder.build(
+            foodName: foodName,
+            calories: caloriesValue,
+            protein: Double(protein.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+            carbs: Double(carbs.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+            fat: Double(fat.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+            extractedText: ocrResult?.rawText
+        ) else {
+            message = "Enter a food name and non-negative label values before review."
+            return
+        }
+        onReview(item)
+        dismiss()
     }
 }
 
