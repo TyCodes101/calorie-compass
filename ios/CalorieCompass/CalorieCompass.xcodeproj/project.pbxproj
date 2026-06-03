@@ -34,6 +34,9 @@
 		100000000000000000000117 /* HistoryEmptyStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* HistoryEmptyStateCard.swift */; };
 		100000000000000000000118 /* HistoryDayHeaderCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000018 /* HistoryDayHeaderCard.swift */; };
 		100000000000000000000119 /* HistoryMealCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000019 /* HistoryMealCard.swift */; };
+		10000000000000000000011A /* ProfileDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001A /* ProfileDashboard.swift */; };
+		10000000000000000000011B /* ProfileSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001B /* ProfileSheets.swift */; };
+		100000000000000000000203 /* ProfileHistoryDashboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000023 /* ProfileHistoryDashboardTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +57,8 @@
 		100000000000000000000005 /* LogChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogChatView.swift; sourceTree = "<group>"; };
 		100000000000000000000006 /* BackendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendService.swift; sourceTree = "<group>"; };
 		100000000000000000000007 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		10000000000000000000001A /* ProfileDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileDashboard.swift; sourceTree = "<group>"; };
+		10000000000000000000001B /* ProfileSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSheets.swift; sourceTree = "<group>"; };
 		100000000000000000000008 /* MealReviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealReviewCard.swift; sourceTree = "<group>"; };
 		100000000000000000000009 /* MealManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealManagementView.swift; sourceTree = "<group>"; };
 		10000000000000000000000A /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -66,6 +71,7 @@
 		100000000000000000000011 /* MacroMeshDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacroMeshDesign.swift; sourceTree = "<group>"; };
 		100000000000000000000021 /* MealManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealManagementTests.swift; sourceTree = "<group>"; };
 		100000000000000000000022 /* ProfileViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewTests.swift; sourceTree = "<group>"; };
+		100000000000000000000023 /* ProfileHistoryDashboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileHistoryDashboardTests.swift; sourceTree = "<group>"; };
 		100000000000000000000601 /* CalorieCompass.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Calorie Compass.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000602 /* CalorieCompassTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CalorieCompassTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000012 /* ProfileV4CHeroCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileV4CHeroCard.swift; sourceTree = "<group>"; };
@@ -103,6 +109,8 @@
 				100000000000000000000005 /* LogChatView.swift */,
 				100000000000000000000006 /* BackendService.swift */,
 				100000000000000000000007 /* ProfileView.swift */,
+				10000000000000000000001A /* ProfileDashboard.swift */,
+				10000000000000000000001B /* ProfileSheets.swift */,
 				100000000000000000000008 /* MealReviewCard.swift */,
 				100000000000000000000009 /* MealManagementView.swift */,
 				10000000000000000000000A /* AppDelegate.swift */,
@@ -130,6 +138,7 @@
 			children = (
 				100000000000000000000021 /* MealManagementTests.swift */,
 				100000000000000000000022 /* ProfileViewTests.swift */,
+				100000000000000000000023 /* ProfileHistoryDashboardTests.swift */,
 			);
 			path = ../CalorieCompassTests;
 			sourceTree = "<group>";
@@ -212,8 +221,8 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		100000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000101, 100000000000000000000102, 100000000000000000000103, 100000000000000000000104, 100000000000000000000105, 100000000000000000000106, 100000000000000000000107, 100000000000000000000108, 100000000000000000000109, 10000000000000000000010A, 10000000000000000000010B, 10000000000000000000010D, 10000000000000000000010E, 10000000000000000000010F, 100000000000000000000110, 100000000000000000000111, 100000000000000000000112, 100000000000000000000113, 100000000000000000000114, 100000000000000000000115, 100000000000000000000116, 100000000000000000000117, 100000000000000000000118, 100000000000000000000119, ); runOnlyForDeploymentPostprocessing = 0; };
-		100000000000000000000902 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000201, 100000000000000000000202, ); runOnlyForDeploymentPostprocessing = 0; };
+		100000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000101, 100000000000000000000102, 100000000000000000000103, 100000000000000000000104, 100000000000000000000105, 100000000000000000000106, 100000000000000000000107, 10000000000000000000011A, 10000000000000000000011B, 100000000000000000000108, 100000000000000000000109, 10000000000000000000010A, 10000000000000000000010B, 10000000000000000000010D, 10000000000000000000010E, 10000000000000000000010F, 100000000000000000000110, 100000000000000000000111, 100000000000000000000112, 100000000000000000000113, 100000000000000000000114, 100000000000000000000115, 100000000000000000000116, 100000000000000000000117, 100000000000000000000118, 100000000000000000000119, ); runOnlyForDeploymentPostprocessing = 0; };
+		100000000000000000000902 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000201, 100000000000000000000202, 100000000000000000000203, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
