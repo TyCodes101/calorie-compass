@@ -32,6 +32,7 @@ struct ProfileView: View {
     @State private var showWeightSheet = false
     @State private var analytics: AnalyticsResponse?
     @State private var weightEntries: WeightEntriesResponse?
+    @State private var dashboard: DashboardResponse?
     @State private var profileActionMessage: String?
     @FocusState private var focusedProfileField: Bool
     private let stabilityReporter = ConsoleStabilityReporter()
@@ -53,7 +54,7 @@ struct ProfileView: View {
                 } else if let error = error {
                     ProfileFallbackView(message: profileFallbackMessage(error), retry: loadProfile)
                 } else if profile == nil {
-                    ProfileFallbackView(message: "Your guest profile will appear here once MacroMesh finishes setup.", retry: loadProfile)
+                    ProfileFallbackView(message: "Profile is still loading. If this takes more than a moment, try reloading — guest mode should work even when the backend is slow.", retry: loadProfile)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
@@ -73,10 +74,13 @@ struct ProfileView: View {
                                     }
                                 )
                             } else {
-                                ProfileSummaryCard(profile: profile, isGuest: sessionStore.state.authSession.isGuest)
+                                ProfileSummaryCard(profile: profile, macroGoals: dashboard?.macroGoals, isGuest: sessionStore.state.authSession.isGuest)
                                 GoalSetupCard(profile: profile, onLaunch: { showGoalWizard = true })
+                                WeeklyReportCard(dashboard: dashboard, analytics: analytics)
                                 AnalyticsSummaryCard(analytics: analytics)
                                 WeightTrackingCard(response: weightEntries, onLogWeight: { showWeightSheet = true })
+                                ReminderSettingsCard()
+                                CustomFoodsCard()
                                 if let profileActionMessage {
                                     Text(profileActionMessage)
                                         .font(.caption)
@@ -157,6 +161,13 @@ struct ProfileView: View {
     }
 
     private func loadGrowthData() {
+        BackendService.fetchDashboard { result in
+            DispatchQueue.main.async {
+                if case .success(let response) = result {
+                    dashboard = response
+                }
+            }
+        }
         BackendService.fetchAnalytics { result in
             DispatchQueue.main.async {
                 if case .success(let response) = result {
@@ -714,6 +725,7 @@ struct ProfileDecimalField: View {
 
 struct ProfileSummaryCard: View {
     let profile: ProfileData?
+    let macroGoals: MacroGoals?
     let isGuest: Bool
 
     var body: some View {
@@ -737,8 +749,10 @@ struct ProfileSummaryCard: View {
                     .clipShape(Capsule())
             }
             Divider()
-            ProfileInfoRow(label: "Daily calories", value: profile?.dailyCalorieGoal.map { "\($0) cal" } ?? "Add goal")
-            ProfileInfoRow(label: "Protein", value: profile?.proteinGoal.map { "\($0)g" } ?? "Add protein")
+            ProfileInfoRow(label: "Daily calories", value: summaryCalories)
+            ProfileInfoRow(label: "Protein", value: summaryProtein)
+            ProfileInfoRow(label: "Carbs", value: summaryCarbs)
+            ProfileInfoRow(label: "Fat", value: summaryFat)
             ProfileInfoRow(label: "Height", value: profile?.heightCm.map { "\($0) cm" } ?? "Add height")
             ProfileInfoRow(label: "Weight", value: profile?.weightLbs.map { "\(Int($0)) lbs" } ?? "Add weight")
             ProfileInfoRow(label: "Preferences", value: profile?.nutritionPreferences?.nilIfBlank ?? "Add preferences")
@@ -747,6 +761,34 @@ struct ProfileSummaryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(MacroMeshTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var summaryCalories: String {
+        if let calories = macroGoals?.calories {
+            return "\(Int(calories)) cal"
+        }
+        return profile?.dailyCalorieGoal.map { "\($0) cal" } ?? "Add goal"
+    }
+
+    private var summaryProtein: String {
+        if let protein = macroGoals?.protein {
+            return "\(Int(protein))g"
+        }
+        return profile?.proteinGoal.map { "\($0)g" } ?? "Add protein"
+    }
+
+    private var summaryCarbs: String {
+        if let carbs = macroGoals?.carbs {
+            return "\(Int(carbs))g"
+        }
+        return "Set in goals"
+    }
+
+    private var summaryFat: String {
+        if let fat = macroGoals?.fat {
+            return "\(Int(fat))g"
+        }
+        return "Set in goals"
     }
 }
 

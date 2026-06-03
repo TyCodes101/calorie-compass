@@ -552,6 +552,11 @@ struct CustomFoodMutationResponse: Codable, Equatable {
     let ok: Bool?
 }
 
+struct DeleteCustomFoodResponse: Codable, Equatable {
+    let ok: Bool?
+    let error: String?
+}
+
 enum ManualQuickAddBuilder {
     static func build(calories: Double, protein: Double, carbs: Double, fat: Double, barcode: String?) -> MealRequestItem? {
         guard calories >= 0, protein >= 0, carbs >= 0, fat >= 0, calories + protein + carbs + fat > 0 else {
@@ -1034,6 +1039,34 @@ class BackendService {
             case .success(let response):
                 if let customFood = response.customFood {
                     completion(.success(customFood))
+                } else {
+                    completion(.failure(BackendError.malformedResponse))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    static func fetchCustomFoods(completion: @escaping (Result<[FoodSearchResult], Error>) -> Void) {
+        guard let urlRequest = request(path: "api/custom-foods", method: "GET") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest) { (result: Result<CustomFoodsResponse, Error>) in
+            switch result {
+            case .success(let response): completion(.success(response.customFoods))
+            case .failure(let error): completion(.failure(error))
+            }
+        }
+    }
+
+    static func deleteCustomFood(id: String, completion: @escaping (Result<Bool, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/custom-foods/\(id)", method: "DELETE") else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest) { (result: Result<DeleteCustomFoodResponse, Error>) in
+            switch result {
+            case .success(let response):
+                if response.ok == true {
+                    completion(.success(true))
+                } else if let error = response.error {
+                    completion(.failure(BackendError.server(error)))
                 } else {
                     completion(.failure(BackendError.malformedResponse))
                 }
