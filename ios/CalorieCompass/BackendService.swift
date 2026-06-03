@@ -496,6 +496,91 @@ struct ReusableMealsResponse: Codable, Equatable {
     let recentMeals: [ReusableMealSummary]
 }
 
+struct FoodSearchResult: Codable, Equatable, Identifiable {
+    let id: String
+    let name: String
+    let brand: String?
+    let sourceLabel: String
+    let servingQuantity: Double
+    let servingUnit: String
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let barcode: String?
+    let mealType: String
+    let confidenceScore: Double
+    let sourceReusableMealId: String?
+    let items: [MealRequestItem]
+
+    var reviewItems: [MealRequestItem] { items }
+}
+
+struct FoodSearchResponse: Codable, Equatable {
+    let query: String
+    let results: [FoodSearchResult]
+}
+
+struct BarcodeLookupResponse: Codable, Equatable {
+    let barcode: String?
+    let found: Bool
+    let result: FoodSearchResult?
+    let error: String?
+}
+
+struct CustomFoodsResponse: Codable, Equatable {
+    let customFoods: [FoodSearchResult]
+}
+
+struct CustomFoodRequest: Codable {
+    let name: String
+    let brand: String?
+    let barcode: String?
+    let servingQuantity: Double
+    let servingUnit: String
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let fiber: Double
+    let sugar: Double
+    let sodium: Double
+}
+
+struct CustomFoodMutationResponse: Codable, Equatable {
+    let customFood: FoodSearchResult?
+    let ok: Bool?
+}
+
+enum ManualQuickAddBuilder {
+    static func build(calories: Double, protein: Double, carbs: Double, fat: Double, barcode: String?) -> MealRequestItem? {
+        guard calories >= 0, protein >= 0, carbs >= 0, fat >= 0, calories + protein + carbs + fat > 0 else {
+            return nil
+        }
+        let cleanedBarcode = barcode?.filter(\.isNumber)
+        let barcodeNote = cleanedBarcode?.isEmpty == false ? "Manual barcode: \(cleanedBarcode ?? "")" : "Manual nutrition entry"
+
+        return MealRequestItem(
+            food_name: "Manual Quick Add",
+            quantity: 1,
+            unit: "entry",
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: 0,
+            sugar: 0,
+            sodium: 0,
+            notes: barcodeNote,
+            source_type: "AI_ESTIMATE",
+            source_name: "Manual entry",
+            confidence_label: "Estimated",
+            is_trusted: false,
+            catalog_food_id: nil
+        )
+    }
+}
+
 struct FavoriteMealRequest: Codable {
     let reusable_meal_id: String?
     let meal_type: String
@@ -924,6 +1009,38 @@ class BackendService {
     static func fetchReusableMeals(completion: @escaping (Result<ReusableMealsResponse, Error>) -> Void) {
         guard let urlRequest = request(path: "api/reusable-meals", method: "GET") else { completion(.failure(BackendError.badURL)); return }
         perform(urlRequest, completion: completion)
+    }
+
+    static func searchFoods(query: String, completion: @escaping (Result<FoodSearchResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/food-search", method: "GET", queryItems: [URLQueryItem(name: "q", value: query)]) else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func lookupBarcode(_ barcode: String, completion: @escaping (Result<BarcodeLookupResponse, Error>) -> Void) {
+        guard let urlRequest = request(path: "api/barcode-lookup", method: "GET", queryItems: [URLQueryItem(name: "barcode", value: barcode)]) else { completion(.failure(BackendError.badURL)); return }
+        perform(urlRequest, completion: completion)
+    }
+
+    static func createCustomFood(request body: CustomFoodRequest, completion: @escaping (Result<FoodSearchResult, Error>) -> Void) {
+        guard var urlRequest = request(path: "api/custom-foods", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        perform(urlRequest) { (result: Result<CustomFoodMutationResponse, Error>) in
+            switch result {
+            case .success(let response):
+                if let customFood = response.customFood {
+                    completion(.success(customFood))
+                } else {
+                    completion(.failure(BackendError.malformedResponse))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
     }
 
     static func saveFavoriteMeal(request body: FavoriteMealRequest, completion: @escaping (Result<FavoriteMealMutationResponse, Error>) -> Void) {

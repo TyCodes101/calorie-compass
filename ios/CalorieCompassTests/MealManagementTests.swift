@@ -320,6 +320,129 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertLessThanOrEqual(MealReviewCard.reviewTitle.count, 16)
     }
 
+    func testMealItemServingScalingPreservesSourceMetadata() {
+        var item = MealItem(from: Self.trustedItem("Greek yogurt"))
+
+        item.applyServing(quantity: 2, unit: "servings")
+
+        XCTAssertEqual(item.quantity, 2)
+        XCTAssertEqual(item.unit, "serving")
+        XCTAssertEqual(item.calories, 200)
+        XCTAssertEqual(item.protein, 20)
+        XCTAssertEqual(item.source, "Nutrition catalog")
+        XCTAssertEqual(item.catalogFoodID, "brand-greek-yogurt")
+    }
+
+    func testServingUnitFormatterCleansMalformedUnits() {
+        XCTAssertEqual(ServingUnitFormatter.clean("28.4 1 onz"), "oz")
+        XCTAssertEqual(ServingUnitFormatter.clean("ounces"), "oz")
+        XCTAssertEqual(ServingUnitFormatter.clean("grams"), "g")
+    }
+
+    func testSearchAndBarcodeResponsesDecodeReviewItems() throws {
+        let data = """
+        {
+          "query": "egg",
+          "results": [
+            {
+              "id": "catalog:egg",
+              "name": "Large egg",
+              "brand": null,
+              "sourceLabel": "Verified",
+              "servingQuantity": 1,
+              "servingUnit": "egg",
+              "calories": 70,
+              "protein": 6,
+              "carbs": 0,
+              "fat": 5,
+              "barcode": null,
+              "mealType": "snack",
+              "confidenceScore": 1,
+              "sourceReusableMealId": null,
+              "items": [
+                {
+                  "food_name": "Large egg",
+                  "quantity": 1,
+                  "unit": "egg",
+                  "calories": 70,
+                  "protein": 6,
+                  "carbs": 0,
+                  "fat": 5,
+                  "fiber": 0,
+                  "sugar": 0,
+                  "sodium": 70,
+                  "source_type": "GENERIC_REFERENCE",
+                  "source_name": "Generic nutrition reference",
+                  "confidence_label": "High",
+                  "is_trusted": true,
+                  "catalog_food_id": "generic_large_egg"
+                }
+              ]
+            }
+          ]
+        }
+        """.data(using: .utf8)
+        let barcodeData = """
+        {
+          "barcode": "012345678905",
+          "found": true,
+          "result": {
+            "id": "custom-1",
+            "name": "Turkey Chili",
+            "brand": "Home",
+            "sourceLabel": "Custom",
+            "servingQuantity": 1,
+            "servingUnit": "bowl",
+            "calories": 410,
+            "protein": 36,
+            "carbs": 32,
+            "fat": 14,
+            "barcode": "012345678905",
+            "mealType": "snack",
+            "confidenceScore": 1,
+            "sourceReusableMealId": null,
+            "items": [
+              {
+                "food_name": "Turkey Chili",
+                "quantity": 1,
+                "unit": "bowl",
+                "calories": 410,
+                "protein": 36,
+                "carbs": 32,
+                "fat": 14,
+                "fiber": 8,
+                "sugar": 6,
+                "sodium": 720,
+                "source_type": "GENERIC_REFERENCE",
+                "source_name": "Custom food: Home",
+                "confidence_label": "Verified",
+                "is_trusted": true
+              }
+            ]
+          }
+        }
+        """.data(using: .utf8)
+
+        let search = try JSONDecoder().decode(FoodSearchResponse.self, from: try XCTUnwrap(data))
+        let barcode = try JSONDecoder().decode(BarcodeLookupResponse.self, from: try XCTUnwrap(barcodeData))
+
+        XCTAssertEqual(search.results.first?.reviewItems.first?.food_name, "Large egg")
+        XCTAssertEqual(barcode.result?.barcode, "012345678905")
+        XCTAssertEqual(barcode.result?.reviewItems.first?.food_name, "Turkey Chili")
+    }
+
+    func testManualQuickAddRejectsInvalidValuesAndBuildsReviewItem() {
+        XCTAssertNil(ManualQuickAddBuilder.build(calories: -1, protein: 0, carbs: 0, fat: 0, barcode: nil))
+
+        let item = ManualQuickAddBuilder.build(calories: 250, protein: 20, carbs: 25, fat: 7, barcode: "012345678905")
+
+        XCTAssertEqual(item?.food_name, "Manual Quick Add")
+        XCTAssertEqual(item?.calories, 250)
+        XCTAssertEqual(item?.protein, 20)
+        XCTAssertEqual(item?.notes, "Manual barcode: 012345678905")
+        XCTAssertEqual(item?.confidence_label, "Estimated")
+    }
+
     func testQuickMealTypeSelectionUpdatesAssistantState() {
         var state = MealAssistantState()
 

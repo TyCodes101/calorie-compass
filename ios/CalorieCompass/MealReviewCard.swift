@@ -27,7 +27,7 @@ struct MealItem: Identifiable, Codable, Equatable {
     init(from item: MealRequestItem) {
         name = item.food_name
         quantity = item.quantity
-        unit = item.unit
+        unit = ServingUnitFormatter.clean(item.unit)
         calories = item.calories
         protein = item.protein
         carbs = item.carbs
@@ -43,11 +43,26 @@ struct MealItem: Identifiable, Codable, Equatable {
         catalogFoodID = item.catalog_food_id
     }
 
+    mutating func applyServing(quantity nextQuantity: Double, unit nextUnit: String? = nil) {
+        let safeQuantity = max(0.01, nextQuantity)
+        let currentQuantity = max(0.01, quantity)
+        let factor = safeQuantity / currentQuantity
+        quantity = rounded(safeQuantity)
+        unit = ServingUnitFormatter.clean(nextUnit ?? unit)
+        calories = rounded(calories * factor)
+        protein = rounded(protein * factor)
+        carbs = rounded(carbs * factor)
+        fat = rounded(fat * factor)
+        fiber = rounded(fiber * factor)
+        sugar = rounded(sugar * factor)
+        sodium = rounded(sodium * factor)
+    }
+
     func asMealRequestItem() -> MealRequestItem {
         MealRequestItem(
             food_name: name,
             quantity: quantity,
-            unit: unit,
+            unit: ServingUnitFormatter.clean(unit),
             calories: calories,
             protein: protein,
             carbs: carbs,
@@ -62,6 +77,30 @@ struct MealItem: Identifiable, Codable, Equatable {
             is_trusted: isTrusted,
             catalog_food_id: catalogFoodID
         )
+    }
+
+    private func rounded(_ value: Double) -> Double {
+        (value * 100).rounded() / 100
+    }
+}
+
+enum ServingUnitFormatter {
+    static func clean(_ unit: String) -> String {
+        let cleaned = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        if cleaned.isEmpty { return "serving" }
+        if cleaned.range(of: #"^\d+(?:\.\d+)?\s+1\s+onz$"#, options: .regularExpression) != nil { return "oz" }
+        if cleaned.range(of: #"^\d+(?:\.\d+)?\s+g(?:ram|rams)?$"#, options: .regularExpression) != nil { return "g" }
+        switch cleaned {
+        case "ounces", "ounce", "onz", "1 onz": return "oz"
+        case "grams", "gram", "gms": return "g"
+        case "cups": return "cup"
+        case "servings": return "serving"
+        case "bars": return "bar"
+        case "bottles": return "bottle"
+        case "bowls": return "bowl"
+        case "packs", "packets": return "pack"
+        default: return cleaned
+        }
     }
 }
 
@@ -139,6 +178,7 @@ struct MealReviewCard: View {
                                             .foregroundColor(MacroMeshTheme.muted)
                                             .lineLimit(2)
                                     }
+                                    ServingAdjuster(item: $items[idx])
                                 }
                                 Spacer()
                                 Button(role: .destructive) {
@@ -191,8 +231,57 @@ struct MealReviewCard: View {
 
     private func servingText(for item: MealItem) -> String {
         let quantity = item.quantity == floor(item.quantity) ? String(Int(item.quantity)) : String(format: "%.1f", item.quantity)
-        let unit = item.unit.trimmingCharacters(in: .whitespacesAndNewlines)
+        let unit = ServingUnitFormatter.clean(item.unit)
         return unit.isEmpty ? "Serving: \(quantity)" : "Serving: \(quantity) \(unit)"
+    }
+}
+
+struct ServingAdjuster: View {
+    @Binding var item: MealItem
+    @State private var unitDraft: String = ""
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                item.applyServing(quantity: item.quantity - stepSize)
+            } label: {
+                Image(systemName: "minus.circle.fill")
+            }
+            .disabled(item.quantity <= stepSize)
+            .accessibilityLabel("Decrease \(item.name) serving")
+
+            Text(quantityLabel)
+                .font(.caption.weight(.semibold))
+                .frame(minWidth: 42)
+
+            Button {
+                item.applyServing(quantity: item.quantity + stepSize)
+            } label: {
+                Image(systemName: "plus.circle.fill")
+            }
+            .accessibilityLabel("Increase \(item.name) serving")
+
+            TextField("Unit", text: $unitDraft)
+                .font(.caption)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 92)
+                .onSubmit {
+                    item.applyServing(quantity: item.quantity, unit: unitDraft)
+                    unitDraft = item.unit
+                }
+                .onAppear {
+                    unitDraft = item.unit
+                }
+        }
+        .foregroundColor(MacroMeshTheme.primary)
+    }
+
+    private var stepSize: Double {
+        item.quantity < 1 ? 0.25 : 0.5
+    }
+
+    private var quantityLabel: String {
+        item.quantity == floor(item.quantity) ? String(Int(item.quantity)) : String(format: "%.2g", item.quantity)
     }
 }
 

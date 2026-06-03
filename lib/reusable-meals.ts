@@ -100,6 +100,10 @@ function toDraftMealType(mealType: string): MealTypeValue {
   return mealType.toLowerCase() as MealTypeValue;
 }
 
+function isCustomFoodReusableMeal(record: { rawText?: string | null }) {
+  return record.rawText?.trim().startsWith('Custom food:') ?? false;
+}
+
 function isReusableMealItemLike(item: StoredMealItemLike | StoredReusableMealItemLike): item is StoredReusableMealItemLike {
   return 'sourceType' in item || 'sourceName' in item || 'isTrusted' in item;
 }
@@ -504,6 +508,7 @@ export async function getFavoriteMeals(): Promise<FavoriteMealSummary[]> {
   });
 
   return favorites
+    .filter((favorite) => !isCustomFoodReusableMeal(favorite))
     .filter((favorite) => !isFixtureMealRecord({ rawText: `${favorite.title} ${favorite.rawText ?? ''}`, items: favorite.items }))
     .map(buildReusableMealSummaryFromRecord);
 }

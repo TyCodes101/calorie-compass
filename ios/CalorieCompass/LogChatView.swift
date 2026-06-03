@@ -6,6 +6,26 @@
 //
 import SwiftUI
 
+enum LogActionSheet: Identifiable {
+    case foodSearch
+    case barcode
+    case quickAdd(barcode: String?)
+    case customFood(barcode: String?)
+    case photoFoundation
+    case nutritionLabelFoundation
+
+    var id: String {
+        switch self {
+        case .foodSearch: return "food-search"
+        case .barcode: return "barcode"
+        case .quickAdd(let barcode): return "quick-add-\(barcode ?? "none")"
+        case .customFood(let barcode): return "custom-food-\(barcode ?? "none")"
+        case .photoFoundation: return "photo-foundation"
+        case .nutritionLabelFoundation: return "nutrition-label-foundation"
+        }
+    }
+}
+
 struct LogChatView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @State private var messages: [MealAssistantTranscriptMessage] = []
@@ -18,6 +38,7 @@ struct LogChatView: View {
     @State private var favoriteMeals: [ReusableMealSummary] = []
     @State private var recentMeals: [ReusableMealSummary] = []
     @State private var quickActionMessage: String?
+    @State private var activeSheet: LogActionSheet?
 
     @State private var reviewItems: [MealItem] = []
     @State private var showReviewCard = false
@@ -75,6 +96,48 @@ struct LogChatView: View {
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .onAppear(perform: loadReusableMeals)
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .foodSearch:
+                    FoodSearchSheet { result in
+                        reviewSearchResult(result, assistantText: "Found \(result.name). Review the serving before saving.")
+                    } onQuickAdd: {
+                        activeSheet = .quickAdd(barcode: nil)
+                    }
+                case .barcode:
+                    BarcodeLookupSheet { result in
+                        reviewSearchResult(result, assistantText: "Found \(result.name) from barcode lookup. Review before saving.")
+                    } onCreateCustomFood: { barcode in
+                        activeSheet = .customFood(barcode: barcode)
+                    } onQuickAdd: { barcode in
+                        activeSheet = .quickAdd(barcode: barcode)
+                    }
+                case .quickAdd(let barcode):
+                    QuickAddSheet(barcode: barcode) { item in
+                        beginReview(
+                            items: [item],
+                            mealType: selectedMealType,
+                            confidenceScore: 0.72,
+                            rawText: "Manual Quick Add",
+                            sourceReusableMealId: nil,
+                            assistantText: "Manual Quick Add is ready. Review it before saving."
+                        )
+                    }
+                case .customFood(let barcode):
+                    CustomFoodEditorSheet(initialBarcode: barcode) { result in
+                        reviewSearchResult(result, assistantText: "Custom food saved. Review it before adding to your log.")
+                        loadReusableMeals()
+                    }
+                case .photoFoundation:
+                    PhotoAttachmentFoundationSheet {
+                        activeSheet = .quickAdd(barcode: nil)
+                    }
+                case .nutritionLabelFoundation:
+                    NutritionLabelFoundationSheet {
+                        activeSheet = .quickAdd(barcode: nil)
+                    }
+                }
+            }
         }
     }
 
@@ -100,7 +163,28 @@ struct LogChatView: View {
                     PromptChip(text: "Chicken burrito bowl for lunch")
                     PromptChip(text: "Two eggs, toast, and coffee")
                 }
+                logActionGrid
                 quickRepeatSection
+            }
+        }
+    }
+
+    private var logActionGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            LogActionButton(title: "Food Search", icon: "magnifyingglass") {
+                activeSheet = .foodSearch
+            }
+            LogActionButton(title: "Enter Barcode", icon: "barcode.viewfinder") {
+                activeSheet = .barcode
+            }
+            LogActionButton(title: "Quick Add", icon: "plus.circle.fill") {
+                activeSheet = .quickAdd(barcode: nil)
+            }
+            LogActionButton(title: "Scan Label", icon: "doc.text.viewfinder") {
+                activeSheet = .nutritionLabelFoundation
+            }
+            LogActionButton(title: "Attach Photo", icon: "photo") {
+                activeSheet = .photoFoundation
             }
         }
     }
@@ -168,28 +252,24 @@ struct LogChatView: View {
     }
 
     private var quickRepeatSection: some View {
-        let favorites = Array(favoriteMeals.prefix(3))
-        let recents = Array(recentMeals.prefix(3))
+        let favorites = Array(favoriteMeals.prefix(4))
+        let recents = Array(recentMeals.prefix(4))
+        let frequent = Array(recentMeals.dropFirst(4).prefix(4))
 
         return VStack(alignment: .leading, spacing: 8) {
-            if !favorites.isEmpty || !recents.isEmpty {
-                Text("Quick repeat")
-                    .font(.caption.weight(.semibold))
+            if favorites.isEmpty && recents.isEmpty {
+                Text("Recent, frequent, and favorite foods will appear here after you log a few meals.")
+                    .font(.caption)
                     .foregroundColor(MacroMeshTheme.muted)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(favorites) { meal in
-                            QuickRepeatMealButton(meal: meal, label: "Favorite") {
-                                repeatFavoriteMeal(meal)
-                            }
-                        }
-                        ForEach(recents) { meal in
-                            QuickRepeatMealButton(meal: meal, label: "Recent") {
-                                repeatRecentMeal(meal)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 2)
+            } else {
+                QuickMealRail(title: "Recently logged", emptyText: "No recent meals yet.", meals: recents, label: "Recent") { meal in
+                    reviewReusableMeal(meal, label: "recent")
+                }
+                QuickMealRail(title: "Frequently logged", emptyText: "Frequent foods build as you log.", meals: frequent, label: "Frequent") { meal in
+                    reviewReusableMeal(meal, label: "frequent")
+                }
+                QuickMealRail(title: "Favorites", emptyText: "Save favorites from meal review.", meals: favorites, label: "Favorite") { meal in
+                    reviewReusableMeal(meal, label: "favorite")
                 }
             }
             if let quickActionMessage {
@@ -198,6 +278,58 @@ struct LogChatView: View {
                     .foregroundColor(MacroMeshTheme.primaryDark)
             }
         }
+    }
+
+    private func reviewSearchResult(_ result: FoodSearchResult, assistantText: String) {
+        beginReview(
+            items: result.reviewItems,
+            mealType: result.mealType,
+            confidenceScore: result.confidenceScore,
+            rawText: result.name,
+            sourceReusableMealId: result.sourceReusableMealId,
+            assistantText: assistantText
+        )
+    }
+
+    private func beginReview(
+        items: [MealRequestItem],
+        mealType: String,
+        confidenceScore: Double,
+        rawText: String,
+        sourceReusableMealId: String?,
+        assistantText: String
+    ) {
+        let normalizedMealType = ["breakfast", "lunch", "dinner", "snack"].contains(mealType) ? mealType : selectedMealType
+        selectedMealType = normalizedMealType
+        assistantState = MealAssistantState()
+        assistantState.mealType = normalizedMealType
+        assistantState.confidenceScore = min(max(confidenceScore, 0), 1)
+        assistantState.currentMealText = rawText
+        assistantState.sourceReusableMealId = sourceReusableMealId
+        reviewItems = items.map(MealItem.init(from:))
+        syncActiveMealItems(reviewItems)
+        showReviewCard = !reviewItems.isEmpty
+        saveError = nil
+        error = nil
+        quickActionMessage = "Ready for review."
+        messages.append(MealAssistantTranscriptMessage(role: "assistant", text: assistantText))
+        activeSheet = nil
+    }
+
+    private func reviewReusableMeal(_ meal: ReusableMealSummary, label: String) {
+        guard let items = meal.items, !items.isEmpty else {
+            quickActionMessage = "That \(label) item is missing details. Open History to review it first."
+            return
+        }
+
+        beginReview(
+            items: items,
+            mealType: meal.mealType,
+            confidenceScore: meal.confidenceScore ?? 0.82,
+            rawText: meal.rawText ?? meal.title,
+            sourceReusableMealId: label == "favorite" ? meal.id : nil,
+            assistantText: "Loaded \(meal.title). Review it before saving."
+        )
     }
 
     func sendMessage(retryText: String? = nil) {
@@ -303,54 +435,6 @@ struct LogChatView: View {
                 if case .success(let response) = result {
                     favoriteMeals = response.favoriteMeals
                     recentMeals = response.recentMeals
-                }
-            }
-        }
-    }
-
-    private func repeatFavoriteMeal(_ meal: ReusableMealSummary) {
-        quickActionMessage = "Repeating \(meal.title)..."
-        BackendService.repeatReusableMeal(id: meal.id) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success:
-                    quickActionMessage = "Repeated \(meal.title) for today."
-                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Repeated \(meal.title) and saved it for today."))
-                    NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
-                    loadReusableMeals()
-                case .failure(let error):
-                    quickActionMessage = RetryCopy.nonDestructiveFailure(action: "repeat that meal", error: error)
-                }
-            }
-        }
-    }
-
-    private func repeatRecentMeal(_ meal: ReusableMealSummary) {
-        guard let items = meal.items, !items.isEmpty else {
-            quickActionMessage = "That recent meal is missing item details. Open History to review it first."
-            return
-        }
-
-        quickActionMessage = "Repeating \(meal.title)..."
-        let request = PostMealRequest(
-            meal_type: meal.mealType,
-            confidence_score: meal.confidenceScore ?? 0.82,
-            raw_text: meal.rawText ?? meal.title,
-            source_reusable_meal_id: nil,
-            notes: "Repeated from recent meal",
-            date: nil,
-            items: items
-        )
-        BackendService.saveConfirmedMeal(request: request) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success:
-                    quickActionMessage = "Repeated \(meal.title) for today."
-                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Repeated \(meal.title) and saved it for today."))
-                    NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
-                    loadReusableMeals()
-                case .failure(let error):
-                    quickActionMessage = RetryCopy.nonDestructiveFailure(action: "repeat that meal", error: error)
                 }
             }
         }
@@ -469,6 +553,57 @@ struct PromptChip: View {
     }
 }
 
+struct LogActionButton: View {
+    let title: String
+    let icon: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(MacroMeshTheme.primaryDark)
+                .frame(maxWidth: .infinity, minHeight: 38)
+                .background(MacroMeshTheme.cardSubtle)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+}
+
+struct QuickMealRail: View {
+    let title: String
+    let emptyText: String
+    let meals: [ReusableMealSummary]
+    let label: String
+    let onSelect: (ReusableMealSummary) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(MacroMeshTheme.muted)
+            if meals.isEmpty {
+                Text(emptyText)
+                    .font(.caption2)
+                    .foregroundColor(MacroMeshTheme.muted)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(meals) { meal in
+                            QuickRepeatMealButton(meal: meal, label: label) {
+                                onSelect(meal)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+}
+
 struct QuickRepeatMealButton: View {
     let meal: ReusableMealSummary
     let label: String
@@ -495,7 +630,418 @@ struct QuickRepeatMealButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Repeat \(meal.title)")
+        .accessibilityLabel("Review \(meal.title)")
+    }
+}
+
+struct FoodSearchSheet: View {
+    let onSelect: (FoodSearchResult) -> Void
+    let onQuickAdd: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var results: [FoodSearchResult] = []
+    @State private var isLoading = false
+    @State private var message: String?
+
+    var body: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 14) {
+                TextField("Search foods", text: $query)
+                    .textFieldStyle(MacroMeshTextFieldStyle())
+                    .submitLabel(.search)
+                    .onSubmit(search)
+                    .accessibilityLabel("Search foods")
+                Button(action: search) {
+                    if isLoading { ProgressView().tint(.white) } else { Label("Search", systemImage: "magnifyingglass") }
+                }
+                .buttonStyle(PrimaryCTAButtonStyle())
+                .disabled(isLoading || query.trimmingCharacters(in: .whitespacesAndNewlines).count < 2)
+                if let message {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        ForEach(results) { result in
+                            FoodSearchResultRow(result: result) {
+                                onSelect(result)
+                                dismiss()
+                            }
+                        }
+                    }
+                }
+                if results.isEmpty && !isLoading {
+                    Button("Quick Add Calories/Macros") {
+                        onQuickAdd()
+                    }
+                    .buttonStyle(SecondaryCTAButtonStyle())
+                }
+            }
+            .padding(18)
+            .navigationTitle("Food Search")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+            }
+        }
+    }
+
+    private func search() {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2 else { return }
+        isLoading = true
+        message = nil
+        BackendService.searchFoods(query: trimmed) { result in
+            DispatchQueue.main.async {
+                isLoading = false
+                switch result {
+                case .success(let response):
+                    results = response.results
+                    message = response.results.isEmpty ? "No verified, custom, recent, or favorite match found. Try a manual Quick Add or describe the food." : nil
+                case .failure(let error):
+                    message = RetryCopy.nonDestructiveFailure(action: "search foods", error: error)
+                }
+            }
+        }
+    }
+}
+
+struct BarcodeLookupSheet: View {
+    let onFound: (FoodSearchResult) -> Void
+    let onCreateCustomFood: (String) -> Void
+    let onQuickAdd: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var barcode = ""
+    @State private var isLoading = false
+    @State private var message = "Enter UPC/EAN digits manually. Camera scanner is coming later."
+
+    var body: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(MacroMeshTheme.muted)
+                TextField("Barcode digits", text: $barcode)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(MacroMeshTextFieldStyle())
+                    .accessibilityLabel("Barcode digits")
+                Button(action: lookup) {
+                    if isLoading { ProgressView().tint(.white) } else { Label("Look Up Barcode", systemImage: "barcode") }
+                }
+                .buttonStyle(PrimaryCTAButtonStyle())
+                .disabled(isLoading || barcode.filter(\.isNumber).count < 8)
+                HStack(spacing: 10) {
+                    Button("Create Custom") {
+                        onCreateCustomFood(barcode.filter(\.isNumber))
+                    }
+                    .buttonStyle(SecondaryCTAButtonStyle())
+                    Button("Quick Add") {
+                        onQuickAdd(barcode.filter(\.isNumber))
+                    }
+                    .buttonStyle(SecondaryCTAButtonStyle())
+                }
+                Spacer()
+            }
+            .padding(18)
+            .navigationTitle("Enter Barcode")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+            }
+        }
+    }
+
+    private func lookup() {
+        let digits = barcode.filter(\.isNumber)
+        guard digits.count >= 8 else { return }
+        isLoading = true
+        BackendService.lookupBarcode(digits) { result in
+            DispatchQueue.main.async {
+                isLoading = false
+                switch result {
+                case .success(let response):
+                    if let found = response.result {
+                        onFound(found)
+                        dismiss()
+                    } else {
+                        message = "No trusted barcode match yet. Create a custom food, quick add macros, or describe the food."
+                    }
+                case .failure(let error):
+                    message = RetryCopy.nonDestructiveFailure(action: "look up that barcode", error: error)
+                }
+            }
+        }
+    }
+}
+
+struct QuickAddSheet: View {
+    let barcode: String?
+    let onCreate: (MealRequestItem) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var calories = ""
+    @State private var protein = ""
+    @State private var carbs = ""
+    @State private var fat = ""
+    @State private var error: String?
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Calories and macros") {
+                    TextField("Calories required", text: $calories)
+                        .keyboardType(.decimalPad)
+                    TextField("Protein optional", text: $protein)
+                        .keyboardType(.decimalPad)
+                    TextField("Carbs optional", text: $carbs)
+                        .keyboardType(.decimalPad)
+                    TextField("Fat optional", text: $fat)
+                        .keyboardType(.decimalPad)
+                }
+                if let barcode, !barcode.isEmpty {
+                    Section("Barcode") {
+                        Text(barcode)
+                            .font(.caption)
+                            .foregroundColor(MacroMeshTheme.muted)
+                    }
+                }
+                if let error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+            }
+            .navigationTitle("Quick Add")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Review") {
+                        guard let item = buildItem() else {
+                            error = "Enter non-negative numbers and at least calories."
+                            return
+                        }
+                        onCreate(item)
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func buildItem() -> MealRequestItem? {
+        guard let caloriesValue = Double(calories.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return nil
+        }
+        return ManualQuickAddBuilder.build(
+            calories: caloriesValue,
+            protein: Double(protein.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+            carbs: Double(carbs.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+            fat: Double(fat.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+            barcode: barcode
+        )
+    }
+}
+
+struct CustomFoodEditorSheet: View {
+    let initialBarcode: String?
+    let onCreate: (FoodSearchResult) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var brand = ""
+    @State private var barcode = ""
+    @State private var servingQuantity = "1"
+    @State private var servingUnit = "serving"
+    @State private var calories = ""
+    @State private var protein = ""
+    @State private var carbs = ""
+    @State private var fat = ""
+    @State private var error: String?
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Food") {
+                    TextField("Name", text: $name)
+                    TextField("Brand optional", text: $brand)
+                    TextField("Barcode optional", text: $barcode)
+                        .keyboardType(.numberPad)
+                    TextField("Serving quantity", text: $servingQuantity)
+                        .keyboardType(.decimalPad)
+                    TextField("Serving unit", text: $servingUnit)
+                }
+                Section("Macros") {
+                    TextField("Calories", text: $calories)
+                        .keyboardType(.decimalPad)
+                    TextField("Protein", text: $protein)
+                        .keyboardType(.decimalPad)
+                    TextField("Carbs", text: $carbs)
+                        .keyboardType(.decimalPad)
+                    TextField("Fat", text: $fat)
+                        .keyboardType(.decimalPad)
+                }
+                if let error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+            }
+            .navigationTitle("Custom Food")
+            .onAppear {
+                if barcode.isEmpty {
+                    barcode = initialBarcode ?? ""
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        save()
+                    }
+                }
+            }
+        }
+    }
+
+    private func save() {
+        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedName.isEmpty,
+              let servingQuantityValue = Double(servingQuantity),
+              let caloriesValue = Double(calories),
+              let proteinValue = Double(protein),
+              let carbsValue = Double(carbs),
+              let fatValue = Double(fat),
+              servingQuantityValue > 0,
+              caloriesValue >= 0,
+              proteinValue >= 0,
+              carbsValue >= 0,
+              fatValue >= 0 else {
+            error = "Enter a name, serving, and non-negative macro values."
+            return
+        }
+
+        let cleanedBrand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedBarcode = barcode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedServingUnit = ServingUnitFormatter.clean(servingUnit)
+
+        let request = CustomFoodRequest(
+            name: cleanedName,
+            brand: cleanedBrand.isEmpty ? nil : cleanedBrand,
+            barcode: cleanedBarcode.isEmpty ? nil : cleanedBarcode,
+            servingQuantity: servingQuantityValue,
+            servingUnit: cleanedServingUnit,
+            calories: caloriesValue,
+            protein: proteinValue,
+            carbs: carbsValue,
+            fat: fatValue,
+            fiber: 0,
+            sugar: 0,
+            sodium: 0
+        )
+        BackendService.createCustomFood(request: request) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let customFood):
+                    onCreate(customFood)
+                    dismiss()
+                case .failure(let failure):
+                    error = RetryCopy.nonDestructiveFailure(action: "save that custom food", error: failure)
+                }
+            }
+        }
+    }
+}
+
+struct PhotoAttachmentFoundationSheet: View {
+    let onQuickAdd: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Meal photo attachments")
+                    .font(.title3.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.text)
+                Text("Photo attachment storage is prepared as a draft-only foundation in this build. No image is uploaded, analyzed, or saved to the backend yet.")
+                    .font(.subheadline)
+                    .foregroundColor(MacroMeshTheme.muted)
+                Button("Add calories/macros manually") {
+                    onQuickAdd()
+                }
+                .buttonStyle(PrimaryCTAButtonStyle())
+                Spacer()
+            }
+            .padding(18)
+            .navigationTitle("Meal Photo")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+            }
+        }
+    }
+}
+
+struct NutritionLabelFoundationSheet: View {
+    let onQuickAdd: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Nutrition label scan")
+                    .font(.title3.weight(.bold))
+                    .foregroundColor(MacroMeshTheme.text)
+                Text("OCR parsing is not automatic in this build. Use the label as a guide, enter values manually, and review before saving.")
+                    .font(.subheadline)
+                    .foregroundColor(MacroMeshTheme.muted)
+                Button("Enter label values") {
+                    onQuickAdd()
+                }
+                .buttonStyle(PrimaryCTAButtonStyle())
+                Spacer()
+            }
+            .padding(18)
+            .navigationTitle("Scan Label")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+            }
+        }
+    }
+}
+
+struct FoodSearchResultRow: View {
+    let result: FoodSearchResult
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                FoodAvatar(name: result.name)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(result.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.text)
+                        .lineLimit(2)
+                    Text("\(Int(result.calories)) cal | \(Int(result.protein))g protein | \(result.servingQuantity.cleanServingQuantity) \(result.servingUnit)")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                    Text(result.sourceLabel)
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(MacroMeshTheme.primary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(MacroMeshTheme.muted)
+            }
+            .padding(12)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(MacroMeshTheme.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Review \(result.name)")
+    }
+}
+
+extension Double {
+    var cleanServingQuantity: String {
+        self == floor(self) ? String(Int(self)) : String(format: "%.1f", self)
     }
 }
 
