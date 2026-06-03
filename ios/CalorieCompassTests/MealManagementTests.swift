@@ -460,6 +460,13 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(model.aiDescriptionPrompt, "Barcode 012345678905: describe the food or package so MacroMesh can estimate it for review.")
     }
 
+    func testLogToolCatalogShowsMFPAndCameraFoundationActionsTogether() {
+        XCTAssertEqual(LogToolCatalog.foodToolTitles, ["Food Search", "Enter Barcode", "Quick Add", "Custom Food"])
+        XCTAssertEqual(LogToolCatalog.cameraToolTitles, ["Scan Barcode", "Scan Label", "Attach Photo"])
+        XCTAssertTrue(LogToolCatalog.allTitles.contains("Food Search"))
+        XCTAssertTrue(LogToolCatalog.allTitles.contains("Scan Barcode"))
+    }
+
     func testNutritionLabelOCRTextNormalizesWithoutParsingMacros() {
         let result = NutritionLabelOCRResult.fromRecognizedText([
             "Nutrition Facts",

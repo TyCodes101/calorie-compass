@@ -154,7 +154,7 @@ struct MealPhotoDraft: Equatable, Identifiable {
 
 enum LogActionSheet: Identifiable {
     case foodSearch
-    case barcode
+    case barcode(prefersCamera: Bool)
     case quickAdd(barcode: String?)
     case customFood(barcode: String?)
     case photoFoundation
@@ -163,13 +163,19 @@ enum LogActionSheet: Identifiable {
     var id: String {
         switch self {
         case .foodSearch: return "food-search"
-        case .barcode: return "barcode"
+        case .barcode(let prefersCamera): return prefersCamera ? "barcode-camera" : "barcode-manual"
         case .quickAdd(let barcode): return "quick-add-\(barcode ?? "none")"
         case .customFood(let barcode): return "custom-food-\(barcode ?? "none")"
         case .photoFoundation: return "photo-foundation"
         case .nutritionLabelFoundation: return "nutrition-label-foundation"
         }
     }
+}
+
+enum LogToolCatalog {
+    static let foodToolTitles = ["Food Search", "Enter Barcode", "Quick Add", "Custom Food"]
+    static let cameraToolTitles = ["Scan Barcode", "Scan Label", "Attach Photo"]
+    static var allTitles: [String] { foodToolTitles + cameraToolTitles }
 }
 
 struct LogChatView: View {
@@ -250,8 +256,8 @@ struct LogChatView: View {
                     } onQuickAdd: {
                         activeSheet = .quickAdd(barcode: nil)
                     }
-                case .barcode:
-                    BarcodeLookupSheet { result in
+                case .barcode(let prefersCamera):
+                    BarcodeLookupSheet(prefersCamera: prefersCamera) { result in
                         reviewSearchResult(result, assistantText: "Found \(result.name) from barcode lookup. Review before saving.")
                     } onCreateCustomFood: { barcode in
                         activeSheet = .customFood(barcode: barcode)
@@ -329,21 +335,34 @@ struct LogChatView: View {
     }
 
     private var logActionGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            LogActionButton(title: "Food Search", icon: "magnifyingglass") {
-                activeSheet = .foodSearch
+        VStack(alignment: .leading, spacing: 8) {
+            LogActionSectionHeader(title: "Food tools")
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                LogActionButton(title: LogToolCatalog.foodToolTitles[0], icon: "magnifyingglass") {
+                    activeSheet = .foodSearch
+                }
+                LogActionButton(title: LogToolCatalog.foodToolTitles[1], icon: "barcode") {
+                    activeSheet = .barcode(prefersCamera: false)
+                }
+                LogActionButton(title: LogToolCatalog.foodToolTitles[2], icon: "plus.circle.fill") {
+                    activeSheet = .quickAdd(barcode: nil)
+                }
+                LogActionButton(title: LogToolCatalog.foodToolTitles[3], icon: "fork.knife.circle.fill") {
+                    activeSheet = .customFood(barcode: nil)
+                }
             }
-            LogActionButton(title: "Scan Barcode", icon: "barcode.viewfinder") {
-                activeSheet = .barcode
-            }
-            LogActionButton(title: "Quick Add", icon: "plus.circle.fill") {
-                activeSheet = .quickAdd(barcode: nil)
-            }
-            LogActionButton(title: "Scan Label", icon: "doc.text.viewfinder") {
-                activeSheet = .nutritionLabelFoundation
-            }
-            LogActionButton(title: "Attach Photo", icon: "photo") {
-                activeSheet = .photoFoundation
+            LogActionSectionHeader(title: "Camera tools")
+                .padding(.top, 4)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                LogActionButton(title: LogToolCatalog.cameraToolTitles[0], icon: "barcode.viewfinder") {
+                    activeSheet = .barcode(prefersCamera: true)
+                }
+                LogActionButton(title: LogToolCatalog.cameraToolTitles[1], icon: "doc.text.viewfinder") {
+                    activeSheet = .nutritionLabelFoundation
+                }
+                LogActionButton(title: LogToolCatalog.cameraToolTitles[2], icon: "photo") {
+                    activeSheet = .photoFoundation
+                }
             }
         }
     }
@@ -731,6 +750,18 @@ struct LogActionButton: View {
     }
 }
 
+struct LogActionSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundColor(MacroMeshTheme.muted)
+            .textCase(.uppercase)
+            .tracking(0.8)
+    }
+}
+
 struct QuickMealRail: View {
     let title: String
     let emptyText: String
@@ -866,6 +897,7 @@ struct FoodSearchSheet: View {
 }
 
 struct BarcodeLookupSheet: View {
+    let prefersCamera: Bool
     let onFound: (FoodSearchResult) -> Void
     let onCreateCustomFood: (String) -> Void
     let onQuickAdd: (String) -> Void
@@ -914,12 +946,15 @@ struct BarcodeLookupSheet: View {
                 }
                 .padding(18)
             }
-            .navigationTitle("Scan Barcode")
+            .navigationTitle(prefersCamera ? "Scan Barcode" : "Enter Barcode")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             }
             .onAppear {
                 permissionState = .current
+                if prefersCamera && permissionState == .authorized {
+                    isScannerVisible = true
+                }
             }
         }
     }
