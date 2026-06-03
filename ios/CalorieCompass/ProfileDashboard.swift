@@ -382,7 +382,7 @@ private struct ActionRow: View {
 
 // QuickActionTile replaced by ActionRow inside card sections.
 
-private struct SnapshotMetric: View {
+struct SnapshotMetric: View {
     let title: String
     let value: String
 

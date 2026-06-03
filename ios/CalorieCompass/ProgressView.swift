@@ -286,9 +286,9 @@ private struct WeightTrendChartCard: View {
 
     private var yDomain: ClosedRange<Double> {
         let values = points.map(\.weightLbs)
-        guard let min = values.min(), let max = values.max() else { return 0...1 }
-        let padding = max((max - min) * 0.12, 1)
-        return (min - padding)...(max + padding)
+        guard let minValue = values.min(), let maxValue = values.max() else { return 0...1 }
+        let padding = max((maxValue - minValue) * 0.12, 1)
+        return (minValue - padding)...(maxValue + padding)
     }
 }
 
