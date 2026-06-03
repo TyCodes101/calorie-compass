@@ -111,14 +111,16 @@ struct ProfileDashboardView: View {
             NutritionSnapshotCard(model: model)
             WeeklyMomentumCard(model: model)
 
-            QuickActionsGrid(
+            ProfileActionsCard(
                 onUpdateGoals: onUpdateGoals,
                 onLogWeight: onLogWeight,
-                onWeeklyReport: onWeeklyReport,
-                onCustomFoods: onCustomFoods,
-                onReminders: onReminders,
-                onPrivacyAbout: onPrivacyAbout
+                onWeeklyReport: onWeeklyReport
             )
+            PreferencesCard(
+                onCustomFoods: onCustomFoods,
+                onReminders: onReminders
+            )
+            PrivacyCard(onPrivacyAbout: onPrivacyAbout)
         }
     }
 }
@@ -277,61 +279,90 @@ private struct WeeklyMomentumCard: View {
     }
 }
 
-private struct QuickActionsGrid: View {
+private struct ProfileActionsCard: View {
     let onUpdateGoals: () -> Void
     let onLogWeight: () -> Void
     let onWeeklyReport: () -> Void
-    let onCustomFoods: () -> Void
-    let onReminders: () -> Void
-    let onPrivacyAbout: () -> Void
-
-    private let columns: [GridItem] = [
-        GridItem(.adaptive(minimum: 150), spacing: 12)
-    ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Quick actions")
-                .font(.headline)
-                .foregroundColor(MacroMeshTheme.text)
-
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                QuickActionTile(title: "Update goals", systemImage: "target", action: onUpdateGoals)
-                QuickActionTile(title: "Log weight", systemImage: "scalemass", action: onLogWeight)
-                QuickActionTile(title: "Weekly report", systemImage: "chart.line.uptrend.xyaxis", action: onWeeklyReport)
-                QuickActionTile(title: "Custom foods", systemImage: "square.and.pencil", action: onCustomFoods)
-                QuickActionTile(title: "Reminders", systemImage: "bell", action: onReminders)
-                QuickActionTile(title: "Privacy & About", systemImage: "hand.raised", action: onPrivacyAbout)
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Actions", subtitle: "Do the next helpful thing.")
+                VStack(spacing: 10) {
+                    ActionRow(title: "Update goals", subtitle: "Adjust targets and protein preference", systemImage: "target", action: onUpdateGoals)
+                    ActionRow(title: "Log weight", subtitle: "One entry — trend will follow", systemImage: "scalemass", action: onLogWeight)
+                    ActionRow(title: "Weekly report", subtitle: "A quick scan of your last 7 days", systemImage: "chart.line.uptrend.xyaxis", action: onWeeklyReport)
+                }
             }
         }
-        .padding(.top, 4)
     }
 }
 
-private struct QuickActionTile: View {
+private struct PreferencesCard: View {
+    let onCustomFoods: () -> Void
+    let onReminders: () -> Void
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Preferences", subtitle: "Make MacroMesh feel like yours.")
+                VStack(spacing: 10) {
+                    ActionRow(title: "Custom foods", subtitle: "Create and reuse your staples", systemImage: "square.and.pencil", action: onCustomFoods)
+                    ActionRow(title: "Reminders", subtitle: "Turn notifications on or off", systemImage: "bell", action: onReminders)
+                }
+            }
+        }
+    }
+}
+
+private struct PrivacyCard: View {
+    let onPrivacyAbout: () -> Void
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Privacy", subtitle: "Export, delete, and learn more.")
+                ActionRow(title: "Privacy & About", subtitle: "Data, version, and app basics", systemImage: "hand.raised", action: onPrivacyAbout)
+            }
+        }
+    }
+}
+
+private struct ActionRow: View {
     let title: String
+    let subtitle: String
     let systemImage: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            AppCard(padding: 14) {
-                HStack(spacing: 10) {
-                    Image(systemName: systemImage)
-                        .font(.headline)
-                        .foregroundColor(MacroMeshTheme.primary)
-                        .frame(width: 28)
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(MacroMeshTheme.text)
-                    Spacer(minLength: 0)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
                 }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
             }
+            .padding(12)
+            .background(MacroMeshTheme.cardSubtle.opacity(0.7))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
     }
 }
+
+// QuickActionTile replaced by ActionRow inside card sections.
 
 private struct SnapshotMetric: View {
     let title: String
