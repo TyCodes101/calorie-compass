@@ -1,5 +1,7 @@
 import OpenAI from 'openai';
 
+import { MACROMESH_SYSTEM_PROMPT } from './prompt';
+
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -7,8 +9,6 @@ const client = new OpenAI({
 const MAX_BATCH_SIZE = 15;
 
 const model = process.env.OPENAI_FOOD_MATCH_MODEL ?? 'gpt-4.1-mini';
-
-const MACROMESH_SYSTEM_PROMPT = `[paste your full system prompt here]`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
