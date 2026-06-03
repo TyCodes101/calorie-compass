@@ -1,10 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from 'openai';
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 const MAX_BATCH_SIZE = 15;
+
+const model = process.env.OPENAI_FOOD_MATCH_MODEL ?? 'gpt-4.1-mini';
 
 const MACROMESH_SYSTEM_PROMPT = `[paste your full system prompt here]`;
 
@@ -101,29 +103,28 @@ async function runMatch(payload: unknown): Promise<MatchResult | BatchResponse> 
   let rawOutput = "";
 
   try {
-    const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1000,
+    if (!process.env.OPENAI_API_KEY) {
+      return buildSafeNoMatch('Missing OPENAI_API_KEY');
+    }
+
+    const completion = await client.chat.completions.create({
+      model,
       temperature: 0,
-      system: [
-        {
-          type: "text",
-          text: MACROMESH_SYSTEM_PROMPT,
-          cache_control: { type: "ephemeral" },
-        },
-      ],
+      max_tokens: 1000,
+      response_format: { type: 'json_object' },
       messages: [
         {
-          role: "user",
+          role: 'system',
+          content: MACROMESH_SYSTEM_PROMPT,
+        },
+        {
+          role: 'user',
           content: JSON.stringify(payload),
         },
       ],
     });
 
-    rawOutput = response.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("");
+    rawOutput = completion.choices[0]?.message?.content ?? '';
 
     const cleaned = rawOutput
       .replace(/^```(?:json)?\n?/i, "")
@@ -190,4 +191,3 @@ export async function POST(req: Request): Promise<Response> {
     });
   }
 }
-

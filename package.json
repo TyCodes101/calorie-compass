@@ -16,7 +16,6 @@
     "benchmark:nutrition": "vitest run tests/nutrition-accuracy-baseline.test.ts --pool=forks --maxWorkers=1 --no-file-parallelism"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
     "@prisma/client": "^6.19.3",
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",
