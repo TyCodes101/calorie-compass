@@ -28,22 +28,22 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             MacroMeshScreen {
                 TabView(selection: $selectedTab) {
-    DashboardView()
-        .tabItem { Label("Today", systemImage: "house") }
-        .tag(MainTab.today)
-    LogChatView()
-        .tabItem { Label("Log", systemImage: "plus.bubble") }
-        .tag(MainTab.log)
-    HistoryView()
-        .tabItem { Label("History", systemImage: "clock") }
-        .tag(MainTab.history)
-    ProgressScreenView()
-        .tabItem { Label("Progress", systemImage: "chart.bar") }
-        .tag(MainTab.progress)
-    ProfileView()
-        .tabItem { Label("Profile", systemImage: "person") }
-        .tag(MainTab.profile)
-}
+                    DashboardView()
+                        .tabItem { Label("Today", systemImage: "house") }
+                        .tag(MainTab.today)
+                    LogChatView()
+                        .tabItem { Label("Log", systemImage: "plus.bubble") }
+                        .tag(MainTab.log)
+                    HistoryView()
+                        .tabItem { Label("History", systemImage: "clock") }
+                        .tag(MainTab.history)
+                    ProgressScreenView()
+                        .tabItem { Label("Progress", systemImage: "chart.bar") }
+                        .tag(MainTab.progress)
+                    ProfileView()
+                        .tabItem { Label("Profile", systemImage: "person") }
+                        .tag(MainTab.profile)
+                }
                 .tint(MacroMeshTheme.primary)
             }
 

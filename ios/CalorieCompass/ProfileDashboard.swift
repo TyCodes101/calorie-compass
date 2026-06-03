@@ -196,19 +196,60 @@ private struct NutritionSnapshotCard: View {
     var body: some View {
         AppCard(padding: 16) {
             VStack(alignment: .leading, spacing: 12) {
-                SectionHeader("Nutrition snapshot", subtitle: "Today vs your goals")
+                SectionHeader("Nutrition targets", subtitle: "A quick 2×2 view of your daily goals.")
 
-                HStack(spacing: 12) {
-                    SnapshotMetric(title: "Calories", value: model.todayCaloriesText)
-                    SnapshotMetric(title: "Adherence", value: model.adherenceText)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    TargetTile(title: "Calories", value: model.calorieGoalText, subtitle: "Daily Target", icon: "flame.fill", tint: MacroMeshTheme.orange)
+                    TargetTile(title: "Protein", value: model.proteinGoalText, subtitle: "Muscle Support", icon: "bolt.heart.fill", tint: MacroMeshTheme.primary)
+                    TargetTile(title: "Carbs", value: model.carbsGoalText, subtitle: "Energy", icon: "leaf", tint: MacroMeshTheme.blue)
+                    TargetTile(title: "Fat", value: model.fatGoalText, subtitle: "Hormonal Health", icon: "drop.fill", tint: MacroMeshTheme.purple)
                 }
 
+                HStack(spacing: 12) {
+                    SnapshotMetric(title: "Today", value: model.todayCaloriesText)
+                    SnapshotMetric(title: "Adherence", value: model.adherenceText)
+                }
                 Text(model.todayMacrosText)
                     .font(.caption)
                     .foregroundColor(MacroMeshTheme.muted)
                     .accessibilityLabel("Macros today. \(model.todayMacrosText)")
             }
         }
+    }
+}
+
+private struct TargetTile: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(tint)
+                Spacer()
+            }
+            Text(value)
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundColor(MacroMeshTheme.text)
+                .minimumScaleFactor(0.75)
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundColor(MacroMeshTheme.muted)
+                .textCase(.uppercase)
+                .tracking(0.8)
+            Text(subtitle)
+                .font(.caption)
+                .foregroundColor(MacroMeshTheme.muted)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .leading)
+        .background(MacroMeshTheme.cardSubtle.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 

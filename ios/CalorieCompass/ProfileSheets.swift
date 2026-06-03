@@ -135,21 +135,51 @@ struct PrivacyAboutSheet: View {
                                 Text("Privacy & About")
                                     .font(.title2.weight(.bold))
                                     .foregroundColor(MacroMeshTheme.text)
-                                Text(isGuest ? "You’re in guest mode — your data stays local unless you sign in." : "Your account data is synced securely with your session.")
+                                Text(isGuest ? "Guest mode is always available. You can sign in when you want." : "You’re signed in. Your data is associated with your account.")
                                     .font(.subheadline)
                                     .foregroundColor(MacroMeshTheme.muted)
                             }
                         }
 
-                        SessionAndPrivacyNote()
-                            .padding(.top, 4)
+                        AppCard(padding: 16) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                SectionHeader("Privacy & Data", subtitle: "Simple promises — no hidden surprises.")
+                                PrivacyBulletRow(systemImage: "hand.raised.fill", text: "Your nutrition data belongs to you.")
+                                PrivacyBulletRow(systemImage: "square.and.arrow.up", text: "Export is available from Profile.")
+                                PrivacyBulletRow(systemImage: "trash.fill", text: "Account deletion is available from Profile.")
+                                PrivacyBulletRow(systemImage: "applelogo", text: "Sign in with Apple is supported (optional).")
+                                PrivacyBulletRow(systemImage: "lock.fill", text: "Data stays private — nothing logs until you review it.")
+                            }
+                        }
 
                         AppCard(padding: 16) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                SectionHeader("About MacroMesh")
-                                Text("MacroMesh helps you log meals with review-before-save, so you stay in control.")
+                            VStack(alignment: .leading, spacing: 10) {
+                                SectionHeader("About MacroMesh", subtitle: "A calmer way to stay consistent.")
+                                Text("MacroMesh helps you log meals naturally, review every estimate before saving, and track calories + macros over time.")
+                                    .font(.subheadline)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                                Text("Consistency beats perfection — one saved meal at a time.")
                                     .font(.caption)
                                     .foregroundColor(MacroMeshTheme.muted)
+                            }
+                        }
+
+                        AppCard(padding: 16) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                SectionHeader("Version")
+                                HStack {
+                                    Text("MacroMesh")
+                                        .font(.headline)
+                                        .foregroundColor(MacroMeshTheme.text)
+                                    Spacer()
+                                    if isTestFlight {
+                                        Badge("TestFlight Beta", color: MacroMeshTheme.orange)
+                                    }
+                                }
+                                Text("Version \(appVersion) (\(buildNumber))")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(MacroMeshTheme.text)
+                                    .accessibilityLabel("App version \(appVersion), build \(buildNumber)")
                             }
                         }
                     }
@@ -165,5 +195,35 @@ struct PrivacyAboutSheet: View {
                 }
             }
         }
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
+    private var buildNumber: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+    }
+
+    private var isTestFlight: Bool {
+        (Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt")
+    }
+}
+
+private struct PrivacyBulletRow: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundColor(MacroMeshTheme.primary)
+                .frame(width: 20)
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(MacroMeshTheme.text)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
     }
 }

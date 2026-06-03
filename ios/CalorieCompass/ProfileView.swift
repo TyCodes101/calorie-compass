@@ -2,6 +2,7 @@
 // Calorie Compass iOS - Phase 5 native profile and account status
 // Native Profile with backend fetch/edit/confirm, robust states
 import AuthenticationServices
+import Charts
 import Foundation
 import SwiftUI
 
@@ -140,7 +141,7 @@ struct ProfileView: View {
                 }
             }
             .sheet(isPresented: $showWeightSheet) {
-                WeightEntrySheet(latestWeight: weightEntries?.trend.latestWeightLbs ?? profile?.weightLbs) { weight in
+                WeightEntrySheet(weightEntries: weightEntries, latestWeight: weightEntries?.trend.latestWeightLbs ?? profile?.weightLbs) { weight in
                     logWeight(weight)
                 }
             }
@@ -442,59 +443,338 @@ struct GoalSetupWizardSheet: View {
 
     var body: some View {
         NavigationView {
-            Form {
-                Section("Basics") {
-                    TextField("Name", text: $name)
-                    TextField("Current weight", text: $weightText)
-                        .keyboardType(.decimalPad)
-                    TextField("Goal weight optional", text: $goalWeightText)
-                        .keyboardType(.decimalPad)
-                }
-                Section("Goal") {
-                    Picker("Goal", selection: $goal) {
-                        Text("Lose").tag("LOSE_WEIGHT")
-                        Text("Maintain").tag("MAINTAIN")
-                        Text("Gain").tag("GAIN_MUSCLE")
+            MacroMeshScreen {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        AppCard(padding: 18) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Goal setup")
+                                    .font(.title2.weight(.bold))
+                                    .foregroundColor(MacroMeshTheme.text)
+                                Text("Set targets that feel motivating — then adjust as you learn what works.")
+                                    .font(.subheadline)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                            }
+                        }
+
+                        goalSummaryCard
+                        basicsCard
+                        goalTypeCard
+                        activityCard
+                        rateCard
+                        proteinForwardCard
+                        targetsCard
+
+                        Button {
+                            onSave(GoalSetupResult(name: name, weightLbs: weight, goalWeightLbs: goalWeight, goal: goal, activityLevel: activityLevel, targets: targets))
+                            dismiss()
+                        } label: {
+                            Label("Save goals", systemImage: "checkmark.circle.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(PrimaryCTAButtonStyle())
+                        .padding(.top, 4)
                     }
-                    Picker("Activity", selection: $activityLevel) {
-                        Text("Low").tag("LOW")
-                        Text("Moderate").tag("MODERATE")
-                        Text("High").tag("HIGH")
-                        Text("Very high").tag("VERY_HIGH")
-                    }
-                    Stepper("Rate \(ratePerWeek, specifier: "%.1f") lb/week", value: $ratePerWeek, in: 0...2, step: 0.5)
-                    Toggle("Protein forward", isOn: $highProtein)
-                }
-                Section("Suggested targets") {
-                    LabeledContent("Calories", value: "\(targets.dailyCalorieGoal) cal")
-                    LabeledContent("Protein", value: "\(targets.proteinGoal)g")
-                    LabeledContent("Carbs", value: "\(targets.carbsGoal)g")
-                    LabeledContent("Fat", value: "\(targets.fatGoal)g")
+                    .padding(.horizontal, 18)
+                    .padding(.top, 12)
+                    .padding(.bottom, 28)
                 }
             }
             .navigationTitle("Goal setup")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        onSave(GoalSetupResult(name: name, weightLbs: weight, goalWeightLbs: goalWeight, goal: goal, activityLevel: activityLevel, targets: targets))
-                        dismiss()
+            }
+        }
+    }
+
+    private var goalSummaryCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Goal summary", subtitle: "A quick snapshot before you choose targets.")
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    GoalSummaryTile(title: "Current", value: String(format: "%.0f lb", weight), icon: "scalemass", tint: MacroMeshTheme.primary)
+                    GoalSummaryTile(title: "Goal", value: goalWeight.map { String(format: "%.0f lb", $0) } ?? "Optional", icon: "target", tint: MacroMeshTheme.orange)
+                }
+
+                if let goalWeight {
+                    Text(String(format: "%.0f lb remaining", max(weight - goalWeight, 0)))
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.muted)
+                } else {
+                    Text("Add a goal weight if you want an estimated remaining amount.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+            }
+        }
+    }
+
+    private var basicsCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Basics", subtitle: "Used to personalize your targets.")
+                TextField("Name", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Current weight (lbs)", text: $weightText)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Goal weight (optional)", text: $goalWeightText)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+            }
+        }
+    }
+
+    private var goalTypeCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Goal type", subtitle: "Choose one — you can change it anytime.")
+                LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
+                    SelectableCard(title: "Lose Weight", subtitle: "Cut calories while keeping protein high.", icon: "arrow.down", selected: goal == "LOSE_WEIGHT") {
+                        goal = "LOSE_WEIGHT"
                     }
+                    SelectableCard(title: "Maintain", subtitle: "Hold steady and build consistency.", icon: "equal", selected: goal == "MAINTAIN") {
+                        goal = "MAINTAIN"
+                    }
+                    SelectableCard(title: "Gain Weight", subtitle: "Add calories with protein support.", icon: "arrow.up", selected: goal == "GAIN_MUSCLE") {
+                        goal = "GAIN_MUSCLE"
+                    }
+                }
+            }
+        }
+    }
+
+    private var activityCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Activity", subtitle: "Pick what matches your typical week.")
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ActivityCardOption(title: "Sedentary", subtitle: "Desk-heavy days", selected: activityLevel == "LOW") { activityLevel = "LOW" }
+                    ActivityCardOption(title: "Light", subtitle: "Walks + some training", selected: activityLevel == "MODERATE") { activityLevel = "MODERATE" }
+                    ActivityCardOption(title: "High", subtitle: "Hard training most days", selected: activityLevel == "HIGH") { activityLevel = "HIGH" }
+                    ActivityCardOption(title: "Very High", subtitle: "Athletic workload", selected: activityLevel == "VERY_HIGH") { activityLevel = "VERY_HIGH" }
+                }
+            }
+        }
+    }
+
+    private var rateCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Weight change rate", subtitle: "Choose a weekly pace.")
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    RateOption(title: "0.5 lb/week", selected: ratePerWeek == 0.5) { ratePerWeek = 0.5 }
+                    RateOption(title: "1.0 lb/week", selected: ratePerWeek == 1.0) { ratePerWeek = 1.0 }
+                    RateOption(title: "1.5 lb/week", selected: ratePerWeek == 1.5) { ratePerWeek = 1.5 }
+                    RateOption(title: "2.0 lb/week", selected: ratePerWeek == 2.0) { ratePerWeek = 2.0 }
+                }
+            }
+        }
+    }
+
+    private var proteinForwardCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Protein forward", subtitle: "Higher protein supports satiety and muscle retention.")
+                Toggle(isOn: $highProtein) {
+                    Text("Prioritize protein")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.text)
+                }
+                .toggleStyle(SwitchToggleStyle(tint: MacroMeshTheme.primary))
+                Text("This nudges your protein target up while keeping calories appropriate for your goal.")
+                    .font(.caption)
+                    .foregroundColor(MacroMeshTheme.muted)
+            }
+        }
+    }
+
+    private var targetsCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Macro targets", subtitle: "A 2×2 dashboard view of your daily targets.")
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    MacroTargetTile(title: "Calories", value: "\(targets.dailyCalorieGoal)", subtitle: "Daily Target", icon: "flame.fill", tint: MacroMeshTheme.orange)
+                    MacroTargetTile(title: "Protein", value: "\(targets.proteinGoal)g", subtitle: "Muscle Support", icon: "bolt.heart.fill", tint: MacroMeshTheme.primary)
+                    MacroTargetTile(title: "Carbs", value: "\(targets.carbsGoal)g", subtitle: "Energy", icon: "leaf", tint: MacroMeshTheme.blue)
+                    MacroTargetTile(title: "Fat", value: "\(targets.fatGoal)g", subtitle: "Hormonal Health", icon: "drop.fill", tint: MacroMeshTheme.purple)
                 }
             }
         }
     }
 }
 
+private struct SelectableCard: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let selected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .foregroundColor(selected ? .white : MacroMeshTheme.primary)
+                    .frame(width: 32, height: 32)
+                    .background((selected ? MacroMeshTheme.primary : MacroMeshTheme.cardSubtle))
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(MacroMeshTheme.primary)
+                }
+            }
+            .padding(14)
+            .background(selected ? MacroMeshTheme.primary.opacity(0.08) : MacroMeshTheme.cardSubtle.opacity(0.7))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(selected ? "\(title), selected" : title)
+    }
+}
+
+private struct ActivityCardOption: View {
+    let title: String
+    let subtitle: String
+    let selected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.text)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(MacroMeshTheme.muted)
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .background(selected ? MacroMeshTheme.primary.opacity(0.10) : MacroMeshTheme.cardSubtle.opacity(0.7))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(selected ? MacroMeshTheme.primary.opacity(0.45) : Color.clear, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(selected ? "\(title), selected" : title)
+    }
+}
+
+private struct RateOption: View {
+    let title: String
+    let selected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.text)
+                Spacer()
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundColor(selected ? MacroMeshTheme.primary : MacroMeshTheme.muted)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(selected ? MacroMeshTheme.primary.opacity(0.10) : MacroMeshTheme.cardSubtle.opacity(0.7))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(selected ? "\(title), selected" : title)
+    }
+}
+
+private struct MacroTargetTile: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(tint)
+                Spacer()
+            }
+            Text(value)
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundColor(MacroMeshTheme.text)
+                .minimumScaleFactor(0.75)
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundColor(MacroMeshTheme.muted)
+                .textCase(.uppercase)
+                .tracking(0.8)
+            Text(subtitle)
+                .font(.caption)
+                .foregroundColor(MacroMeshTheme.muted)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .leading)
+        .background(MacroMeshTheme.cardSubtle.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct GoalSummaryTile: View {
+    let title: String
+    let value: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(tint)
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
+                Spacer()
+            }
+            Text(value)
+                .font(.title3.weight(.bold))
+                .foregroundColor(MacroMeshTheme.text)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+        .background(MacroMeshTheme.cardSubtle.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct WeightEntrySheet: View {
+    let weightEntries: WeightEntriesResponse?
     let latestWeight: Double?
     let onSave: (Double) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var weightText: String
 
-    init(latestWeight: Double?, onSave: @escaping (Double) -> Void) {
+    init(weightEntries: WeightEntriesResponse?, latestWeight: Double?, onSave: @escaping (Double) -> Void) {
+        self.weightEntries = weightEntries
         self.latestWeight = latestWeight
         self.onSave = onSave
         _weightText = State(initialValue: latestWeight.map { String(Int($0)) } ?? "")
@@ -502,26 +782,154 @@ struct WeightEntrySheet: View {
 
     var body: some View {
         NavigationView {
-            Form {
-                Section("Weight") {
-                    TextField("Weight in lbs", text: $weightText)
-                        .keyboardType(.decimalPad)
+            MacroMeshScreen {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        AppCard(padding: 18) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Weight")
+                                    .font(.title2.weight(.bold))
+                                    .foregroundColor(MacroMeshTheme.text)
+                                Text("Log consistently — trend is what matters.")
+                                    .font(.subheadline)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                            }
+                        }
+
+                        currentWeightCard
+                        trendCard
+
+                        AppCard(padding: 16) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                SectionHeader("Quick save", subtitle: "Enter your weight — then save with one tap.")
+                                TextField("Weight in lbs", text: $weightText)
+                                    .keyboardType(.decimalPad)
+                                    .font(.title3.weight(.semibold))
+                                    .padding(14)
+                                    .background(MacroMeshTheme.cardSubtle)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    .accessibilityLabel("Weight in pounds")
+
+                                Button {
+                                    save()
+                                } label: {
+                                    Label("Save weigh-in", systemImage: "checkmark.circle.fill")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(PrimaryCTAButtonStyle())
+                                .accessibilityHint("Saves this weight entry.")
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 12)
+                    .padding(.bottom, 28)
                 }
             }
             .navigationTitle("Log weight")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        if let weight = Double(weightText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-                            onSave(weight)
-                            dismiss()
-                        }
-                    }
+                    Button("Done") { dismiss() }
                 }
             }
+        }
+    }
+
+    private var currentWeightCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader("Current weight", subtitle: latestDateText)
+                HStack(alignment: .lastTextBaseline, spacing: 8) {
+                    Text(latestWeight.map { String(format: "%.1f", $0) } ?? "—")
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text("lbs")
+                        .font(.headline)
+                        .foregroundColor(MacroMeshTheme.muted)
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private var trendCard: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Weight trend", subtitle: "Compared to your previous entry")
+
+                HStack(spacing: 12) {
+                    SnapshotMetric(title: "Previous", value: previousWeightText)
+                    SnapshotMetric(title: "Change", value: changeText)
+                }
+
+                if sparklinePoints.count >= 3 {
+                    Chart(sparklinePoints) {
+                        LineMark(
+                            x: .value("Date", $0.date),
+                            y: .value("Weight", $0.weight)
+                        )
+                        .foregroundStyle(MacroMeshTheme.primary)
+                        .interpolationMethod(.catmullRom)
+                    }
+                    .chartXAxis(.hidden)
+                    .chartYAxis(.hidden)
+                    .frame(height: 70)
+                    .accessibilityLabel("Weight sparkline")
+                    .animation(.easeInOut(duration: 0.25), value: sparklinePoints)
+                } else {
+                    Text("Log a couple more weigh-ins to unlock a sparkline trend.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+            }
+        }
+    }
+
+    private var latestDateText: String {
+        guard let raw = weightEntries?.entries.first?.date,
+              let date = DateParser.parseMealDate(raw) else {
+            return "Most recent entry"
+        }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return "Updated \(formatter.string(from: date))"
+    }
+
+    private var previousWeightText: String {
+        guard let prev = sortedEntries.dropFirst().first?.weightLbs else { return "Not enough data" }
+        return String(format: "%.1f lbs", prev)
+    }
+
+    private var changeText: String {
+        guard let latest = sortedEntries.first?.weightLbs,
+              let prev = sortedEntries.dropFirst().first?.weightLbs else { return "Not enough data" }
+        return String(format: "%+.1f lbs", latest - prev)
+    }
+
+    private var sortedEntries: [WeightEntry] {
+        (weightEntries?.entries ?? []).sorted { ($0.date) > ($1.date) }
+    }
+
+    private struct SparkPoint: Identifiable, Equatable {
+        let id = UUID()
+        let date: Date
+        let weight: Double
+    }
+
+    private var sparklinePoints: [SparkPoint] {
+        let parsed = (weightEntries?.entries ?? []).compactMap { entry -> SparkPoint? in
+            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
+            return SparkPoint(date: date, weight: entry.weightLbs)
+        }
+        return Array(parsed.sorted { $0.date < $1.date }.suffix(14))
+    }
+
+    private func save() {
+        if let weight = Double(weightText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            onSave(weight)
+            dismiss()
         }
     }
 }
@@ -1019,11 +1427,11 @@ struct AccountSignInEntryPoint: View {
 
 struct SessionAndPrivacyNote: View {
     var body: some View {
-        Text("Apple sign-in uses backend token verification and server-issued sessions. Account migration, export, and deletion endpoints are wired here for QA, but TestFlight readiness and App Store compliance are not claimed.")
+        Text("Your nutrition data belongs to you. MacroMesh supports Sign in with Apple, export, and account deletion — and nothing is saved until you review it.")
             .font(.footnote)
             .foregroundColor(MacroMeshTheme.muted)
             .padding(.top, 8)
-            .accessibilityLabel("Apple sign-in uses backend verification and server-issued sessions. Account tools are wired for QA, but TestFlight readiness and App Store compliance are not claimed.")
+            .accessibilityLabel("Your nutrition data belongs to you. MacroMesh supports Apple sign in, export, and account deletion.")
     }
 }
 
@@ -1054,19 +1462,19 @@ struct AccountManagementVisibility: Equatable {
 
 enum AccountManagementContent {
     static let deleteConfirmationTitle = "Delete account data?"
-    static let deleteConfirmationMessage = "This deletes only the signed-in account data handled by the backend endpoint and revokes active native sessions. Guest data that was not migrated is not deleted. This is not a claim of App Store compliance until real-device QA and final support/privacy flows are complete."
+    static let deleteConfirmationMessage = "This deletes your signed-in MacroMesh account data. Guest data that was not migrated will remain on this device."
 
     static func visibility(for session: AuthSession) -> AccountManagementVisibility {
         if session.isSignedIn {
             return AccountManagementVisibility(
                 canUseAccountActions: true,
-                message: "Signed in with a backend-issued MacroMesh session. You can migrate guest data, request an account export, delete account data, or sign out."
+                message: "You’re signed in. You can migrate guest data, export your account, delete account data, or sign out."
             )
         }
 
         return AccountManagementVisibility(
             canUseAccountActions: false,
-            message: "You can keep logging meals as a guest. Sign in with Apple to use migration, export, and delete account actions; sign-in remains optional."
+            message: "You can keep logging meals as a guest. Sign in with Apple to enable account export and deletion (optional)."
         )
     }
 
