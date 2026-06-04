@@ -252,6 +252,21 @@ describe('normalizeFoodQuery', () => {
       quantityUnit: 'piece',
     });
   });
+
+  it('preserves meaningful add-ons instead of stripping them as filler', () => {
+    expect(normalizeFoodQuery('a baked potato with butter')).toMatchObject({
+      // keep the add-on so downstream logic can decide whether to split into separate items
+      searchText: 'baked potato butter',
+    });
+
+    expect(normalizeFoodQuery('coffee with cream')).toMatchObject({
+      searchText: 'coffee cream',
+    });
+
+    expect(normalizeFoodQuery('toast with jelly')).toMatchObject({
+      searchText: 'toast jelly',
+    });
+  });
 });
 
 describe('lookupNutrition', () => {

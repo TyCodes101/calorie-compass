@@ -564,6 +564,12 @@ struct LogChatView: View {
             return
         }
 
+        // If a draft meal is still active but the user typed a fresh food entry,
+        // reset the draft so the backend doesn't treat it like a correction.
+        if !reviewItems.isEmpty && MealAssistantClientLogic.shouldStartNewMealDraft(message: userMessage, activeItems: reviewItems.map { $0.asMealRequestItem() }) {
+            discardActiveMeal()
+        }
+
         isLoading = true
         error = nil
         retryMessage = nil

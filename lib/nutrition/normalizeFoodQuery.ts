@@ -41,7 +41,9 @@ const brandHints = [
   { pattern: /\bmms?\b|\bm and ms?\b/, brand: "M&M's" },
 ];
 
-const fillerRegex = /\b(?:which|that|are|is|were|was|they|them|the|a|an|my|had|ate|drank|with|and|for|of|about|around|roughly|like|plain|cooked|butter|oil|or|did|have|i|it|no|not|actually|sorry|correction|meant|just|each|cal|cals|calorie|calories)\b/g;
+// Note: keep ingredient words (ex: butter, oil, cream, jelly, ranch) out of this list,
+// otherwise we can accidentally drop meaningful add-ons like "baked potato with butter".
+const fillerRegex = /\b(?:which|that|are|is|were|was|they|them|the|a|an|my|had|ate|drank|with|and|for|of|about|around|roughly|like|plain|cooked|or|did|have|i|it|no|not|actually|sorry|correction|meant|just|each|cal|cals|calorie|calories)\b/g;
 
 const compoundFoodDefinitions = [
   { pattern: /\bcottage cheese\b/, baseSearch: 'cottage cheese', matched: 'Cottage Cheese', unitHint: null },

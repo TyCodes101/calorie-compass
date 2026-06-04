@@ -254,6 +254,27 @@ struct MealAssistantClientLogic {
         return state
     }
 
+    static func shouldStartNewMealDraft(message: String, activeItems: [MealRequestItem]) -> Bool {
+        guard !activeItems.isEmpty else { return false }
+
+        // Local commands/corrections should keep the active draft.
+        if detectLocalCommand(message, hasActiveMeal: true) != nil { return false }
+        if quantityResolution(for: message, items: activeItems) != nil { return false }
+
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.isEmpty { return false }
+
+        // If user explicitly signals modification, keep the draft.
+        let modificationSignals = ["actually", "change", "make it", "remove", "delete", "take out", "drop ", "instead", "swap", "replace", "add"]
+        if modificationSignals.contains(where: { normalized.contains($0) }) { return false }
+
+        // Pronoun-only messages are likely edits.
+        if normalized.contains(" that") || normalized.contains(" it") || normalized.hasPrefix("it ") || normalized.hasPrefix("that ") { return false }
+
+        // Otherwise, treat as a brand-new entry (prevents state leakage).
+        return true
+    }
+
     static func detectLocalCommand(_ message: String, hasActiveMeal: Bool) -> MealAssistantLocalCommand? {
         let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
