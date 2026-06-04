@@ -23,6 +23,15 @@ struct ProgressScreenView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         heroCard
 
+                        AppCard(padding: 12) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Range")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(MacroMeshTheme.muted)
+                                ProgressRangePicker(range: $range)
+                            }
+                        }
+
                         if loading, weightEntries == nil {
                             AppCard(padding: 18) {
                                 HStack(spacing: 12) {
@@ -61,15 +70,12 @@ struct ProgressScreenView: View {
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 12)
-                    .padding(.bottom, 88)
+                    .padding(.bottom, 118)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .navigationTitle("Progress")
+            .navigationTitle("")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    ProgressRangePicker(range: $range)
-                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: load) {
                         Image(systemName: "arrow.clockwise")
@@ -90,7 +96,7 @@ struct ProgressScreenView: View {
         AppCard(padding: 18) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Your progress")
+                    Text("Progress")
                         .font(.title2.weight(.bold))
                         .foregroundColor(MacroMeshTheme.text)
                     Spacer()

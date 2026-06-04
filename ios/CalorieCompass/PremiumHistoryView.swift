@@ -76,7 +76,7 @@ struct PremiumHistoryView: View {
                         }
                         .padding(.horizontal, 18)
                         .padding(.top, 14)
-                        .padding(.bottom, 90)
+                        .padding(.bottom, 118)
                     }
                     .refreshable { refreshMeals() }
                 }
