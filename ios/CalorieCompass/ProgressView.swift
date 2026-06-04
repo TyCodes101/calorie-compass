@@ -264,62 +264,17 @@ private struct WeightTrendChartCard: View {
 
     @State private var selectedPoint: WeightChartPoint? = nil
 
+    private var latestPoint: WeightChartPoint? {
+        points.max(by: { $0.date < $1.date })
+    }
+
     var body: some View {
         AppCard(padding: 16) {
             VStack(alignment: .leading, spacing: 14) {
                 chartHeader
 
                 Chart {
-                    ForEach(Array(segments.enumerated()), id: \.offset) { segmentIndex, segment in
-                        ForEach(segment) { point in
-                            LineMark(
-                                x: .value("Day", point.date),
-                                y: .value("Weight", point.weightLbs),
-                                series: .value("Segment", segmentIndex)
-                            )
-                            .foregroundStyle(MacroMeshTheme.primary)
-                            .lineStyle(StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
-                        }
-
-                        ForEach(segment) { point in
-                            AreaMark(
-                                x: .value("Day", point.date),
-                                y: .value("Weight", point.weightLbs),
-                                series: .value("Segment", segmentIndex)
-                            )
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [MacroMeshTheme.primary.opacity(0.16), MacroMeshTheme.primary.opacity(0.04), .clear],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                        }
-                    }
-
-                    if let latestPoint {
-                        PointMark(
-                            x: .value("Day", latestPoint.date),
-                            y: .value("Weight", latestPoint.weightLbs)
-                        )
-                        .symbolSize(90)
-                        .foregroundStyle(MacroMeshTheme.primary)
-                    }
-
-                    ForEach(outlierPoints) { point in
-                        PointMark(
-                            x: .value("Day", point.date),
-                            y: .value("Weight", point.weightLbs)
-                        )
-                        .symbolSize(46)
-                        .foregroundStyle(MacroMeshTheme.orange)
-                    }
-
-                    if let selectedPoint {
-                        RuleMark(x: .value("Selected", selectedPoint.date))
-                            .foregroundStyle(MacroMeshTheme.border)
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    }
+                    chartContent
                 }
                 .chartYScale(domain: yDomain)
                 .chartXAxis(.hidden)
@@ -370,6 +325,90 @@ private struct WeightTrendChartCard: View {
                 }
             }
         }
+    }
+
+    @ChartContentBuilder
+    private var chartContent: some ChartContent {
+        ForEach(Array(segments.enumerated()), id: \.offset) { segmentIndex, segment in
+            ForEach(segment) { point in
+                chartLineMark(point: point, segmentIndex: segmentIndex)
+            }
+
+            ForEach(segment) { point in
+                chartAreaMark(point: point, segmentIndex: segmentIndex)
+            }
+        }
+
+        if let latestPoint {
+            chartLatestPointMark(point: latestPoint)
+        }
+
+        ForEach(outlierPoints) { point in
+            chartOutlierPointMark(point: point)
+        }
+
+        if let selectedPoint {
+            RuleMark(x: .value("Selected", selectedPoint.date))
+                .foregroundStyle(MacroMeshTheme.border)
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+        }
+    }
+
+    @ChartContentBuilder
+    private func chartLineMark(point: WeightChartPoint, segmentIndex: Int) -> some ChartContent {
+        let xDate = point.date
+        let yWeight = point.weightLbs
+        let series = segmentIndex
+        LineMark(
+            x: .value("Day", xDate),
+            y: .value("Weight", yWeight),
+            series: .value("Segment", series)
+        )
+        .foregroundStyle(MacroMeshTheme.primary)
+        .lineStyle(StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
+    }
+
+    @ChartContentBuilder
+    private func chartAreaMark(point: WeightChartPoint, segmentIndex: Int) -> some ChartContent {
+        let xDate = point.date
+        let yWeight = point.weightLbs
+        let series = segmentIndex
+        AreaMark(
+            x: .value("Day", xDate),
+            y: .value("Weight", yWeight),
+            series: .value("Segment", series)
+        )
+        .foregroundStyle(
+            LinearGradient(
+                colors: [MacroMeshTheme.primary.opacity(0.16), MacroMeshTheme.primary.opacity(0.04), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    @ChartContentBuilder
+    private func chartLatestPointMark(point: WeightChartPoint) -> some ChartContent {
+        let xDate = point.date
+        let yWeight = point.weightLbs
+        PointMark(
+            x: .value("Day", xDate),
+            y: .value("Weight", yWeight)
+        )
+        .symbolSize(90)
+        .foregroundStyle(MacroMeshTheme.primary)
+    }
+
+    @ChartContentBuilder
+    private func chartOutlierPointMark(point: WeightChartPoint) -> some ChartContent {
+        let xDate = point.date
+        let yWeight = point.weightLbs
+        PointMark(
+            x: .value("Day", xDate),
+            y: .value("Weight", yWeight)
+        )
+        .symbolSize(46)
+        .foregroundStyle(MacroMeshTheme.orange)
     }
 
     private var chartHeader: some View {
