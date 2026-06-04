@@ -5,31 +5,34 @@ struct HistoryMealCardModel: Equatable {
     let title: String
     let caloriesText: String
     let subtitleText: String
-    let macroLineText: String
-    let confidenceText: String
+    let macroLineText: String?
+    let trustBadgeText: String
+
+    let isZeroCalorie: Bool
 
     static func build(meal: MealResponse) -> HistoryMealCardModel {
         let title = meal.displayTitle
-        let caloriesText = "\(Int(meal.safeTotalCalories))"
+        let caloriesValue = Int(meal.safeTotalCalories)
+        let caloriesText = "\(caloriesValue)"
 
         let subtitleText = "\(meal.displayMealType) • \(meal.displayDate)"
-        let macroLineText = "P \(Int(meal.safeTotalProtein))g  •  C \(Int(meal.safeTotalCarbs))g  •  F \(Int(meal.safeTotalFat))g"
 
-        let confidence = meal.confidenceScore.map { Int($0 * 100) } ?? 0
-        let coverage = meal.coverageSummary?.nilIfBlank
-        let confidenceBits = [
-            confidence > 0 ? "\(confidence)%" : nil,
-            coverage
-        ].compactMap { $0 }
+        let macros = (Int(meal.safeTotalProtein), Int(meal.safeTotalCarbs), Int(meal.safeTotalFat))
+        let macroLineText: String? = {
+            guard caloriesValue > 0 || macros.0 > 0 || macros.1 > 0 || macros.2 > 0 else { return nil }
+            return "P \(macros.0)g  •  C \(macros.1)g  •  F \(macros.2)g"
+        }()
 
-        let confidenceText = confidenceBits.isEmpty ? "Estimated" : "Estimated • \(confidenceBits.joined(separator: " • "))"
+        let trustBadgeText = MealTrustBadgeBuilder.badgeText(meal: meal)
+        let isZero = caloriesValue == 0 && (macros.0 + macros.1 + macros.2) == 0
 
         return HistoryMealCardModel(
             title: title,
             caloriesText: caloriesText,
             subtitleText: subtitleText,
             macroLineText: macroLineText,
-            confidenceText: confidenceText
+            trustBadgeText: trustBadgeText,
+            isZeroCalorie: isZero
         )
     }
 }
@@ -50,7 +53,8 @@ struct HistoryMealCard: View {
                     Text(model.title)
                         .font(.headline.weight(.semibold))
                         .foregroundColor(MacroMeshTheme.text)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
 
                     Spacer(minLength: 10)
 
@@ -64,15 +68,24 @@ struct HistoryMealCard: View {
                     .font(.caption)
                     .foregroundColor(MacroMeshTheme.muted)
 
-                Text(model.macroLineText)
-                    .font(.caption)
-                    .foregroundColor(MacroMeshTheme.muted)
+                if let macroLineText = model.macroLineText {
+                    Text(macroLineText)
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                } else {
+                    Text("This meal is missing nutrition details.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
 
                 HStack(alignment: .center, spacing: 8) {
-                    Text(model.confidenceText)
-                        .font(.caption2)
-                        .foregroundColor(MacroMeshTheme.muted)
-                        .lineLimit(1)
+                    Badge(model.trustBadgeText, color: MacroMeshTheme.primary)
+                        .accessibilityLabel("Trust level \(model.trustBadgeText)")
+
+                    if model.isZeroCalorie {
+                        Badge("Needs review", color: MacroMeshTheme.orange)
+                            .accessibilityLabel("Missing nutrition details")
+                    }
 
                     Spacer(minLength: 0)
 
@@ -103,6 +116,17 @@ struct HistoryMealCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityHint("Double tap for details. Use actions menu for favorites and repeat.")
+    }
+}
+
+private enum MealTrustBadgeBuilder {
+    static func badgeText(meal: MealResponse) -> String {
+        let types = (meal.items ?? []).compactMap { $0.source_type?.uppercased() }
+        if types.contains(where: { $0.contains("OFFICIAL_RESTAURANT") }) { return "Restaurant" }
+        if types.contains(where: { $0.contains("USDA") }) { return "USDA" }
+        if types.contains(where: { $0.contains("BRAND") }) { return "Brand" }
+        if types.contains(where: { $0.contains("AI") }) { return "Estimated" }
+        return "Verified"
     }
 }
 

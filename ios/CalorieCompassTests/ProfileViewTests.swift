@@ -82,13 +82,15 @@ final class ProfileViewTests: XCTestCase {
         let accountContent = AccountManagementContent.visibility(for: accountSession)
 
         XCTAssertTrue(accountContent.canUseAccountActions)
-        XCTAssertTrue(accountContent.message.contains("backend-issued"))
+        XCTAssertTrue(accountContent.message.lowercased().contains("signed in"))
+        XCTAssertTrue(accountContent.message.lowercased().contains("migrate guest data"))
+        XCTAssertTrue(accountContent.message.lowercased().contains("delete account data"))
     }
 
     func testDeleteConfirmationCopyIsExplicitAndScoped() {
-        XCTAssertTrue(AccountManagementContent.deleteConfirmationTitle.contains("Delete account"))
-        XCTAssertTrue(AccountManagementContent.deleteConfirmationMessage.contains("signed-in account"))
-        XCTAssertTrue(AccountManagementContent.deleteConfirmationMessage.contains("not a claim of App Store compliance"))
+        XCTAssertTrue(AccountManagementContent.deleteConfirmationTitle.contains("Delete account data"))
+        XCTAssertTrue(AccountManagementContent.deleteConfirmationMessage.contains("signed-in MacroMesh account data"))
+        XCTAssertTrue(AccountManagementContent.deleteConfirmationMessage.contains("Guest data that was not migrated"))
     }
 
     func testProfileOptionalCopyHelpersKeepGuestDefaultsPolished() {

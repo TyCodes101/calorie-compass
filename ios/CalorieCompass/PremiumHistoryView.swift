@@ -38,6 +38,17 @@ struct PremiumHistoryView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 18) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("History")
+                                    .font(.title2.weight(.bold))
+                                    .foregroundColor(MacroMeshTheme.text)
+                                Text("Your saved meals, grouped by day.")
+                                    .font(.caption)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                            }
+
+                            HistoryWeeklySummaryCard(summary: weeklySummary)
+
                             if let actionMessage {
                                 AppCard(padding: 12) {
                                     Text(actionMessage)
@@ -46,12 +57,12 @@ struct PremiumHistoryView: View {
                                 }
                             }
 
-                            ForEach(groupedMealDates, id: \.self) { date in
+                            ForEach(dayGroups) { group in
                                 VStack(alignment: .leading, spacing: 10) {
-                                    HistoryDayHeaderCard(date: date, meals: mealsByDate[date] ?? [])
+                                    HistoryDayHeaderCard(date: HistoryDateFormatter.dayHeader.string(from: group.day), meals: group.meals)
 
                                     VStack(spacing: 10) {
-                                        ForEach(mealsByDate[date] ?? []) { meal in
+                                        ForEach(group.meals) { meal in
                                             HistoryMealCard(
                                                 meal: meal,
                                                 onFavorite: { favoriteMeal(meal) },
@@ -65,12 +76,13 @@ struct PremiumHistoryView: View {
                         }
                         .padding(.horizontal, 18)
                         .padding(.top, 14)
-                        .padding(.bottom, 90)
+                        .padding(.bottom, 118)
                     }
                     .refreshable { refreshMeals() }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: refreshMeals) {
@@ -158,23 +170,109 @@ struct PremiumHistoryView: View {
         actionMessage = "Ready to log \(meal.displayTitle) again. Review it before saving."
     }
 
-    private var groupedMealDates: [String] {
-        let formatter = DateFormatter.mealDisplay
-        let dates: Set<String> = Set(meals.compactMap { meal -> String? in
-            guard let date = DateParser.parseMealDate(meal.date ?? meal.createdAt) else { return nil }
-            return formatter.string(from: date)
-        })
-        return dates.sorted().reversed()
+    private var dayGroups: [HistorySorting.DayGroup] {
+        HistorySorting.groupMealsByDay(meals)
     }
 
-    private var mealsByDate: [String: [MealResponse]] {
-        let formatter = DateFormatter.mealDisplay
-        var dict = [String: [MealResponse]]()
-        for meal in meals {
-            guard let date = DateParser.parseMealDate(meal.date ?? meal.createdAt) else { continue }
-            let dateString = formatter.string(from: date)
-            dict[dateString, default: []].append(meal)
+    private var weeklySummary: HistoryWeeklySummary {
+        HistoryWeeklySummary.build(meals: meals)
+    }
+}
+
+private enum HistoryDateFormatter {
+    static let dayHeader: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        formatter.timeStyle = .none
+        return formatter
+    }()
+}
+
+private struct HistoryWeeklySummary: Equatable {
+    let mealsThisWeek: Int
+    let averageCalories: Int?
+    let bestProteinDayText: String?
+
+    static func build(meals: [MealResponse]) -> HistoryWeeklySummary {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date().addingTimeInterval(-7 * 86400)
+        let calendar = Calendar.current
+        let recent: [(MealResponse, Date)] = meals.compactMap { meal in
+            guard let date = DateParser.parseMealDate(meal.date ?? meal.createdAt) else { return nil }
+            guard date >= cutoff else { return nil }
+            return (meal, date)
         }
-        return dict
+
+        let count = recent.count
+        let avg: Int? = {
+            guard count > 0 else { return nil }
+            let total = recent.reduce(0.0) { $0 + $1.0.safeTotalCalories }
+            let perMeal = total / Double(count)
+            return perMeal > 0 ? Int(perMeal.rounded()) : nil
+        }()
+
+        let proteinByDay = Dictionary(grouping: recent) { (_, date) in
+            calendar.startOfDay(for: date)
+        }.mapValues { items in
+            items.reduce(0.0) { $0 + $1.0.safeTotalProtein }
+        }
+
+        let bestProteinDay = proteinByDay.max(by: { $0.value < $1.value })
+        let bestProteinDayText: String? = {
+            guard let bestProteinDay, bestProteinDay.value > 0 else { return nil }
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            return "Best protein day: \(formatter.string(from: bestProteinDay.key)) (\(Int(bestProteinDay.value))g)"
+        }()
+
+        return HistoryWeeklySummary(mealsThisWeek: count, averageCalories: avg, bestProteinDayText: bestProteinDayText)
+    }
+}
+
+private struct HistoryWeeklySummaryCard: View {
+    let summary: HistoryWeeklySummary
+
+    var body: some View {
+        AppCard(padding: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader("This week", subtitle: "A quick snapshot of the last 7 days.")
+
+                HStack(spacing: 12) {
+                    HistorySummaryPill(label: "Meals", value: "\(summary.mealsThisWeek)")
+                    HistorySummaryPill(label: "Avg calories", value: summary.averageCalories.map { "\($0)" } ?? "—")
+                }
+
+                if let best = summary.bestProteinDayText {
+                    Text(best)
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                        .lineLimit(2)
+                } else {
+                    Text("Log a few meals to unlock a richer weekly summary.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
+            }
+        }
+    }
+}
+
+private struct HistorySummaryPill: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundColor(MacroMeshTheme.muted)
+            Text(value)
+                .font(.headline.weight(.bold))
+                .foregroundColor(MacroMeshTheme.text)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MacroMeshTheme.cardSubtle.opacity(0.85))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }

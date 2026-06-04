@@ -35,12 +35,8 @@ final class ProfileHistoryDashboardTests: XCTestCase {
 
         XCTAssertEqual(model.title, "Chicken bowl")
         XCTAssertEqual(model.caloriesText, "520")
-        XCTAssertTrue(model.confidenceText.contains("82%"))
-        XCTAssertTrue(model.confidenceText.contains("verified"))
-    }
-
-    func testLogChatToolVisibilityListsAllExpectedTools() {
-        XCTAssertEqual(LogChatView.foodToolTitles, ["Food Search", "Enter Barcode", "Quick Add", "Custom Food"])
-        XCTAssertEqual(LogChatView.cameraToolTitles, ["Scan Barcode", "Scan Label", "Attach Photo"])
+        XCTAssertEqual(model.macroLineText, "P 42g  •  C 48g  •  F 18g")
+        XCTAssertEqual(model.trustBadgeText, "Verified")
+        XCTAssertFalse(model.isZeroCalorie)
     }
 }

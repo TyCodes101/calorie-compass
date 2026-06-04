@@ -23,6 +23,15 @@ struct ProgressScreenView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         heroCard
 
+                        AppCard(padding: 12) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Range")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(MacroMeshTheme.muted)
+                                ProgressRangePicker(range: $range)
+                            }
+                        }
+
                         if loading, weightEntries == nil {
                             AppCard(padding: 18) {
                                 HStack(spacing: 12) {
@@ -43,7 +52,7 @@ struct ProgressScreenView: View {
                                 InlineRecoveryCard(message: error, retry: load)
                             }
 
-                            if let chartPoints = chartPoints, chartPoints.isEmpty {
+                            if let chartPoints = chartPoints, chartPoints.count < 2 {
                                 ProgressEmptyStateView(onLog: openLog)
                             } else if let chartPoints {
                                 WeightTrendChartCard(points: chartPoints, range: range)
@@ -61,15 +70,12 @@ struct ProgressScreenView: View {
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 12)
-                    .padding(.bottom, 88)
+                    .padding(.bottom, 118)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .navigationTitle("Progress")
+            .navigationTitle("")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    ProgressRangePicker(range: $range)
-                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: load) {
                         Image(systemName: "arrow.clockwise")
@@ -90,7 +96,7 @@ struct ProgressScreenView: View {
         AppCard(padding: 18) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Your progress")
+                    Text("Progress")
                         .font(.title2.weight(.bold))
                         .foregroundColor(MacroMeshTheme.text)
                     Spacer()
@@ -119,11 +125,40 @@ struct ProgressScreenView: View {
 
     private var chartPoints: [WeightChartPoint]? {
         guard let entries = weightEntries?.entries else { return weightEntries == nil ? nil : [] }
-        let parsed = entries.compactMap { entry -> WeightChartPoint? in
+
+        let now = Date()
+        let calendar = Calendar.current
+
+        // 1) Parse dates
+        // 2) Filter invalid/placeholder weights
+        // 3) Drop future-ish timestamps
+        // 4) Sort chronologically
+        // 5) De-dupe by day (prevents vertical edge artifacts when multiple entries share the same timestamp)
+        let parsed: [(Date, Double)] = entries.compactMap { entry in
             guard let date = DateParser.parseMealDate(entry.date) else { return nil }
-            return WeightChartPoint(date: date, weightLbs: entry.weightLbs)
+            let weight = entry.weightLbs
+            guard weight.isFinite, weight >= 60, weight <= 600 else { return nil }
+            guard date <= now.addingTimeInterval(6 * 3600) else { return nil }
+            return (date, weight)
         }
-        .sorted { $0.date < $1.date }
+        .sorted { $0.0 < $1.0 }
+
+        var latestByDay: [Date: (Date, Double)] = [:]
+        for (date, weight) in parsed {
+            let day = calendar.startOfDay(for: date)
+            // Keep the latest entry for that day.
+            if let existing = latestByDay[day] {
+                if date > existing.0 {
+                    latestByDay[day] = (date, weight)
+                }
+            } else {
+                latestByDay[day] = (date, weight)
+            }
+        }
+
+        let deduped = latestByDay.values
+            .sorted { $0.0 < $1.0 }
+            .map { WeightChartPoint(date: $0.0, weightLbs: $0.1) }
 
         let cutoff: Date?
         switch range {
@@ -136,8 +171,8 @@ struct ProgressScreenView: View {
         case .all:
             cutoff = nil
         }
-        guard let cutoff else { return parsed }
-        return parsed.filter { $0.date >= cutoff }
+        guard let cutoff else { return deduped }
+        return deduped.filter { $0.date >= cutoff }
     }
 
     private var weightDeltaLast7Days: Double? {
@@ -207,9 +242,13 @@ struct ProgressScreenView: View {
 
 private enum WeightHistoryTimelineViewBuilder {
     static func build(weightEntries: WeightEntriesResponse?) -> [WeightHistoryTimelineView.Row] {
+        let now = Date()
         let parsed = (weightEntries?.entries ?? []).compactMap { entry -> (Date, Double, String)? in
             guard let date = DateParser.parseMealDate(entry.date) else { return nil }
-            return (date, entry.weightLbs, entry.id)
+            let weight = entry.weightLbs
+            guard weight.isFinite, weight >= 60, weight <= 600 else { return nil }
+            guard date <= now.addingTimeInterval(6 * 3600) else { return nil }
+            return (date, weight, entry.id)
         }
         .sorted { $0.0 > $1.0 }
 
