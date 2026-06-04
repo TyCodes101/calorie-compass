@@ -298,7 +298,8 @@ private struct WeightTrendChartCard: View {
                                         // Don’t steal vertical scrolling inside the parent ScrollView.
                                         // Only treat the gesture as a chart interaction when it’s primarily horizontal.
                                         guard abs(value.translation.width) >= abs(value.translation.height) else { return }
-                                        let origin = geometry[proxy.plotFrame].origin
+                                        guard let plotFrame = proxy.plotFrame else { return }
+                                        let origin = geometry[plotFrame].origin
                                         let location = CGPoint(x: value.location.x - origin.x, y: value.location.y - origin.y)
                                         guard let date: Date = proxy.value(atX: location.x) else { return }
                                         selectedPoint = nearestPoint(to: date)
@@ -506,7 +507,7 @@ private struct WeightTrendChartCard: View {
     }
 
     private var summaryDeltaText: String {
-        guard let latestPoint else { return "Log a weigh-in to start." }
+        guard latestPoint != nil else { return "Log a weigh-in to start." }
 
         if let weekDelta = deltaLast7Days {
             return deltaCopy(delta: weekDelta, suffix: "this week")
