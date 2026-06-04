@@ -88,6 +88,7 @@ struct DashboardView: View {
                             dashboardQuickActionsCard
                             macroSection
                             dailyInsightsCard
+                            ActivityStepsCard()
                             streaksCard
                             Button(action: openLog) {
                                 Label(hasLoggedMeal ? "Log another meal" : "Log first meal", systemImage: "plus.circle.fill")
