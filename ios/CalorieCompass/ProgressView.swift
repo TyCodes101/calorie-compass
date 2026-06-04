@@ -343,7 +343,7 @@ private struct WeightTrendChartCard: View {
                                         // Don’t steal vertical scrolling inside the parent ScrollView.
                                         // Only treat the gesture as a chart interaction when it’s primarily horizontal.
                                         guard abs(value.translation.width) >= abs(value.translation.height) else { return }
-                                        let origin = geometry[proxy.plotAreaFrame].origin
+                                        let origin = geometry[proxy.plotFrame].origin
                                         let location = CGPoint(x: value.location.x - origin.x, y: value.location.y - origin.y)
                                         guard let date: Date = proxy.value(atX: location.x) else { return }
                                         selectedPoint = nearestPoint(to: date)
@@ -460,9 +460,6 @@ private struct WeightTrendChartCard: View {
         return (minValue - padding)...(maxValue + padding)
     }
 
-    private var latestPoint: WeightChartPoint? {
-        points.max(by: { $0.date < $1.date })
-    }
 
     private var latestWeightText: String {
         guard let latestPoint else { return "—" }
@@ -512,17 +509,20 @@ private struct WeightTrendChartCard: View {
         return points.min(by: { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) })
     }
 
-    @ViewBuilder
-    private func chartTooltip(point: WeightChartPoint) -> some View {
+    private static let tooltipDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
+        return formatter
+    }()
 
+    @ViewBuilder
+    private func chartTooltip(point: WeightChartPoint) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(String(format: "%.1f lbs", point.weightLbs))
                 .font(.caption.weight(.bold))
                 .foregroundColor(MacroMeshTheme.text)
-            Text(formatter.string(from: point.date))
+            Text(Self.tooltipDateFormatter.string(from: point.date))
                 .font(.caption2)
                 .foregroundColor(MacroMeshTheme.muted)
         }
