@@ -236,6 +236,14 @@ async function resolveFromOpenFoodFacts(barcode: string, mealType: MealTypeValue
 }
 
 export async function resolveNutritionEstimate({ text, mealType, nutritionLabel = null, barcode = null }: NutritionResolverInput) {
+  // If the user includes add-ons/modifiers ("with butter", "with ranch", etc.), avoid returning a
+  // single-item deterministic estimate that can silently drop the modifier. Let the LLM parse
+  // the components and then hydrate each one.
+  const normalizedText = normalizeLookupText(text);
+  if (/\bwith\b/.test(normalizedText) && /\b(butter|oil|cream|ranch|jelly|peanut butter|dressing|sauce|salsa|mayo)\b/.test(normalizedText)) {
+    return null;
+  }
+
   if (nutritionLabel) {
     return lookupNutrition({ text, mealType, nutritionLabel, barcode });
   }

@@ -124,13 +124,13 @@ struct MealReviewCard: View {
         if !showCard {
             EmptyView()
         } else {
-            AppCard(padding: 18) {
-                VStack(alignment: .leading, spacing: 16) {
+            AppCard(padding: 14) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .top, spacing: 14) {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(.title2)
+                            .font(.headline)
                             .foregroundColor(MacroMeshTheme.primary)
-                            .frame(width: 42, height: 42)
+                            .frame(width: 36, height: 36)
                             .background(MacroMeshTheme.primary.opacity(0.12))
                             .clipShape(Circle())
                         VStack(alignment: .leading, spacing: 4) {
@@ -172,12 +172,7 @@ struct MealReviewCard: View {
                                             .font(.caption.weight(.semibold))
                                             .foregroundColor(MacroMeshTheme.primaryDark)
                                     }
-                                    if let source = items[idx].source?.trimmingCharacters(in: .whitespacesAndNewlines), !source.isEmpty {
-                                        Text("Source: \(source)")
-                                            .font(.caption2)
-                                            .foregroundColor(MacroMeshTheme.muted)
-                                            .lineLimit(2)
-                                    }
+                                    SourceBadge(sourceType: items[idx].sourceType, sourceName: items[idx].source)
                                     ServingAdjuster(item: $items[idx])
                                 }
                                 Spacer()
@@ -188,7 +183,7 @@ struct MealReviewCard: View {
                                 }
                                 .accessibilityLabel("Remove \(items[idx].name)")
                             }
-                            .padding(12)
+                            .padding(10)
                             .background(Color.white.opacity(0.86))
                             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             .overlay(
@@ -232,6 +227,9 @@ struct MealReviewCard: View {
     private func servingText(for item: MealItem) -> String {
         let quantity = item.quantity == floor(item.quantity) ? String(Int(item.quantity)) : String(format: "%.1f", item.quantity)
         let unit = ServingUnitFormatter.clean(item.unit)
+        if unit == "serving", item.quantity >= 50 {
+            return "Serving: \(quantity) g"
+        }
         return unit.isEmpty ? "Serving: \(quantity)" : "Serving: \(quantity) \(unit)"
     }
 }
@@ -270,7 +268,11 @@ struct ServingAdjuster: View {
                     unitDraft = item.unit
                 }
                 .onAppear {
-                    unitDraft = item.unit
+                    if ServingUnitFormatter.clean(item.unit) == "serving", item.quantity >= 50 {
+                        unitDraft = "g"
+                    } else {
+                        unitDraft = item.unit
+                    }
                 }
         }
         .foregroundColor(MacroMeshTheme.primary)
@@ -282,6 +284,38 @@ struct ServingAdjuster: View {
 
     private var quantityLabel: String {
         item.quantity == floor(item.quantity) ? String(Int(item.quantity)) : String(format: "%.2g", item.quantity)
+    }
+}
+
+struct SourceBadge: View {
+    let sourceType: String?
+    let sourceName: String?
+
+    var body: some View {
+        if let label = displayLabel {
+            Text(label)
+                .font(.caption2.weight(.bold))
+                .foregroundColor(MacroMeshTheme.primaryDark)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(MacroMeshTheme.cardSubtle)
+                .clipShape(Capsule())
+        }
+    }
+
+    private var displayLabel: String? {
+        let normalizedType = sourceType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+        if normalizedType.contains("USDA") { return "USDA Verified" }
+        if normalizedType.contains("OFFICIAL_RESTAURANT") { return "Restaurant Verified" }
+        if normalizedType.contains("BRAND") { return "Brand Verified" }
+        if normalizedType.contains("AI") { return "Estimated" }
+
+        if let name = sourceName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            if name.localizedCaseInsensitiveContains("FoodData Central") { return "USDA Verified" }
+            return name
+        }
+
+        return nil
     }
 }
 
