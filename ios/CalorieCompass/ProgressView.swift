@@ -6,7 +6,8 @@ import SwiftUI
 struct ProgressScreenView: View {
     @EnvironmentObject private var sessionStore: SessionStore
 
-    @State private var range: ProgressRange = .days7
+    // Range was previously used for charting. Progress no longer shows a chart,
+    // so we keep the screen simple and avoid a misleading "range" control.
     @State private var loading = false
     @State private var error: String?
 
@@ -22,15 +23,6 @@ struct ProgressScreenView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         heroCard
-
-                        AppCard(padding: 12) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Range")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundColor(MacroMeshTheme.muted)
-                                ProgressRangePicker(range: $range)
-                            }
-                        }
 
                         if loading, weightEntries == nil {
                             AppCard(padding: 18) {
@@ -52,17 +44,13 @@ struct ProgressScreenView: View {
                                 InlineRecoveryCard(message: error, retry: load)
                             }
 
-                            if let chartPoints = chartPoints, chartPoints.count < 2 {
-                                ProgressEmptyStateView(onLog: openLog)
-                            } else if let chartPoints {
-                                WeightTrendChartCard(
-                                    points: chartPoints,
-                                    range: range,
-                                    excludedCount: excludedTrendCount,
-                                    trustedDeltaLast7Days: trustedWeightDeltaLast7Days
-                                )
-                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                            }
+                            WeightTrendSummaryCard(
+                                currentWeight: currentWeight,
+                                trendDeltaLast7Days: trustedWeightDeltaLast7Days,
+                                hasTrend: hasTrustedTrend,
+                                excludedCount: excludedTrendCount
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
 
                             WeightHistoryTimelineView(
                                 rows: WeightHistoryTimelineViewBuilder.build(weightEntries: weightEntries)
@@ -138,11 +126,21 @@ struct ProgressScreenView: View {
 
     private var trendModel: WeightTrendModel? {
         guard let entries = weightEntries?.entries else { return nil }
-        return WeightTrendModel.build(entries: entries, range: range)
+        return WeightTrendModel.build(entries: entries, range: .days30)
     }
 
     private var excludedTrendCount: Int {
         trendModel?.excludedCount ?? 0
+    }
+
+    private var hasTrustedTrend: Bool {
+        (trendModel?.trustedPoints.count ?? 0) >= 3
+    }
+
+    private var currentWeight: Double? {
+        // Use the latest sanitized + de-duped weigh-in as the "current" weight,
+        // even if it’s excluded from trend math.
+        trendModel?.rawPoints.max(by: { $0.date < $1.date })?.weightLbs
     }
 
     private var trustedWeightDeltaLast7Days: Double? {
@@ -220,6 +218,83 @@ private enum WeightHistoryTimelineViewBuilder {
             let delta = next.map { item.weight - $0.weight }
             return WeightHistoryTimelineView.Row(id: item.id, date: item.date, weightLbs: item.weight, deltaLbs: delta)
         }
+    }
+}
+
+private struct WeightTrendSummaryCard: View {
+    let currentWeight: Double?
+    let trendDeltaLast7Days: Double?
+    let hasTrend: Bool
+    let excludedCount: Int
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Weight trend", subtitle: "Reliable trend from consistent weigh-ins")
+
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Current weight")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(MacroMeshTheme.muted)
+                        Text(currentWeightText)
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundColor(MacroMeshTheme.text)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Text(statusText)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(statusTint.opacity(0.14))
+                        .foregroundColor(statusTint)
+                        .clipShape(Capsule())
+                }
+
+                Text(detailText)
+                    .font(.subheadline)
+                    .foregroundColor(MacroMeshTheme.muted)
+
+                if excludedCount > 0 {
+                    Text("Some weigh-ins look unusual and are excluded from trends.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.orange)
+                }
+            }
+        }
+    }
+
+    private var currentWeightText: String {
+        guard let currentWeight else { return "—" }
+        return String(format: "%.1f lbs", currentWeight)
+    }
+
+    private var statusText: String {
+        guard hasTrend else { return "Trend building" }
+        guard let delta = trendDeltaLast7Days else { return "Stable" }
+        if abs(delta) < 0.2 { return "Stable" }
+        return delta < 0 ? "Trending down" : "Trending up"
+    }
+
+    private var statusTint: Color {
+        switch statusText {
+        case "Trending down": return MacroMeshTheme.primary
+        case "Trending up": return MacroMeshTheme.orange
+        case "Stable": return MacroMeshTheme.muted
+        default: return MacroMeshTheme.muted
+        }
+    }
+
+    private var detailText: String {
+        guard hasTrend else { return "We’ll calculate your trend after a few consistent weigh-ins." }
+        guard let delta = trendDeltaLast7Days else { return "Log 2–3 consistent weigh-ins to calculate a reliable trend." }
+        if abs(delta) < 0.2 {
+            return "Stable recently. Keep logging to see clearer trends."
+        }
+        let direction = delta < 0 ? "Down" : "Up"
+        return "\(direction) \(String(format: "%.1f", abs(delta))) lbs over 7 days"
     }
 }
 
