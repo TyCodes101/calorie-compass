@@ -225,45 +225,45 @@ struct LogChatView: View {
     var body: some View {
         NavigationView {
             MacroMeshScreen {
-                VStack(spacing: 0) {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 14) {
-                                introCard
-                                ForEach(Array(messages.enumerated()), id: \.offset) { _, msg in
-                                    ChatBubble(role: msg.role, text: msg.text)
-                                }
-                                if isLoading {
-                                    AssistantTypingCard()
-                                }
-                                if showReviewCard {
-                                    MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
-                                        .onChange(of: reviewItems) { _, nextItems in
-                                            syncActiveMealItems(nextItems)
-                                        }
-                                    if let saveError {
-                                        Text(saveError)
-                                            .font(.caption)
-                                            .foregroundColor(.red)
-                                    }
-                                }
-                                if let error {
-                                    InlineRecoveryCard(message: error, retry: retryFailedMessage)
-                                }
-                                Color.clear
-                                    .frame(height: 1)
-                                    .id(bottomAnchorID)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            introCard
+                            ForEach(Array(messages.enumerated()), id: \.offset) { _, msg in
+                                ChatBubble(role: msg.role, text: msg.text)
                             }
-                            .padding(.horizontal, 18)
-                            .padding(.top, 12)
-                            .padding(.bottom, 16)
+                            if isLoading {
+                                AssistantTypingCard()
+                            }
+                            if showReviewCard {
+                                MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
+                                    .onChange(of: reviewItems) { _, nextItems in
+                                        syncActiveMealItems(nextItems)
+                                    }
+                                if let saveError {
+                                    Text(saveError)
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                            }
+                            if let error {
+                                InlineRecoveryCard(message: error, retry: retryFailedMessage)
+                            }
+                            Color.clear
+                                .frame(height: 1)
+                                .id(bottomAnchorID)
                         }
-                        .onChange(of: messages.count) { _, _ in scrollToBottom(proxy) }
-                        .onChange(of: isLoading) { _, _ in scrollToBottom(proxy) }
-                        .onChange(of: showReviewCard) { _, _ in scrollToBottom(proxy) }
-                        .onChange(of: reviewItems.count) { _, _ in scrollToBottom(proxy) }
+                        .padding(.horizontal, 18)
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
                     }
-                    composer
+                    .onChange(of: messages.count) { _, _ in scrollToBottom(proxy) }
+                    .onChange(of: isLoading) { _, _ in scrollToBottom(proxy) }
+                    .onChange(of: showReviewCard) { _, _ in scrollToBottom(proxy) }
+                    .onChange(of: reviewItems.count) { _, _ in scrollToBottom(proxy) }
+                    .safeAreaInset(edge: .bottom) {
+                        composer
+                    }
                 }
             }
             .navigationTitle("Log")

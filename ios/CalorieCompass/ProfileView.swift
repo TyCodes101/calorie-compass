@@ -126,8 +126,9 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal, 20)
                         .padding(.top, 16)
-                        .padding(.bottom, 96)
+                        .padding(.bottom, 16)
                     }
+                    .macroMeshTabBarSpacer()
                 }
             }
             .navigationTitle("Profile")
@@ -871,7 +872,6 @@ struct WeightEntrySheet: View {
                             y: .value("Weight", $0.weight)
                         )
                         .foregroundStyle(MacroMeshTheme.primary)
-                        .interpolationMethod(.catmullRom)
                     }
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
@@ -910,7 +910,10 @@ struct WeightEntrySheet: View {
     }
 
     private var sortedEntries: [WeightEntry] {
-        (weightEntries?.entries ?? []).sorted { ($0.date) > ($1.date) }
+        let sanitized = WeightChartSanitizer.sanitize(entries: weightEntries?.entries ?? [])
+        let deduped = WeightChartSanitizer.dedupeLatestPerDay(sanitized)
+            .sorted { $0.date > $1.date }
+        return deduped.map { WeightEntry(id: $0.id, date: ISO8601DateFormatter().string(from: $0.date), weightLbs: $0.weight) }
     }
 
     private struct SparkPoint: Identifiable, Equatable {
@@ -920,11 +923,12 @@ struct WeightEntrySheet: View {
     }
 
     private var sparklinePoints: [SparkPoint] {
-        let parsed = (weightEntries?.entries ?? []).compactMap { entry -> SparkPoint? in
-            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
-            return SparkPoint(date: date, weight: entry.weightLbs)
-        }
-        return Array(parsed.sorted { $0.date < $1.date }.suffix(14))
+        let sanitized = WeightChartSanitizer.sanitize(entries: weightEntries?.entries ?? [])
+        let deduped = WeightChartSanitizer.dedupeLatestPerDay(sanitized)
+        let points = deduped
+            .sorted { $0.date < $1.date }
+            .map { SparkPoint(date: $0.date, weight: $0.weight) }
+        return Array(points.suffix(14))
     }
 
     private func save() {

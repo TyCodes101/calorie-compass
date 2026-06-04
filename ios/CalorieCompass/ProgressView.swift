@@ -6,7 +6,8 @@ import SwiftUI
 struct ProgressScreenView: View {
     @EnvironmentObject private var sessionStore: SessionStore
 
-    @State private var range: ProgressRange = .days7
+    // Range was previously used for charting. Progress no longer shows a chart,
+    // so we keep the screen simple and avoid a misleading "range" control.
     @State private var loading = false
     @State private var error: String?
 
@@ -22,15 +23,6 @@ struct ProgressScreenView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         heroCard
-
-                        AppCard(padding: 12) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Range")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundColor(MacroMeshTheme.muted)
-                                ProgressRangePicker(range: $range)
-                            }
-                        }
 
                         if loading, weightEntries == nil {
                             AppCard(padding: 18) {
@@ -52,27 +44,29 @@ struct ProgressScreenView: View {
                                 InlineRecoveryCard(message: error, retry: load)
                             }
 
-                            if let chartPoints = chartPoints, chartPoints.count < 2 {
-                                ProgressEmptyStateView(onLog: openLog)
-                            } else if let chartPoints {
-                                WeightTrendChartCard(points: chartPoints, range: range)
-                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                            }
+                            WeightTrendSummaryCard(
+                                currentWeight: currentWeight,
+                                trendDeltaLast7Days: trustedWeightDeltaLast7Days,
+                                hasTrend: hasTrustedTrend,
+                                excludedCount: excludedTrendCount
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
 
                             WeightHistoryTimelineView(
                                 rows: WeightHistoryTimelineViewBuilder.build(weightEntries: weightEntries)
                             )
 
                             GoalProgressCard(profile: profile, latestWeight: latestWeight)
-                            WeeklySummaryCard(analytics: analytics, weightDeltaLast7Days: weightDeltaLast7Days)
-                            MilestonesCard()
+                            WeeklySummaryCard(analytics: analytics, weightDeltaLast7Days: trustedWeightDeltaLast7Days)
+                            MilestonesCard(milestones: milestones)
                         }
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 12)
-                    .padding(.bottom, 118)
+                    .padding(.bottom, 16)
                 }
             }
+            .macroMeshTabBarSpacer()
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle("")
             .toolbar {
@@ -124,68 +118,40 @@ struct ProgressScreenView: View {
     }
 
     private var chartPoints: [WeightChartPoint]? {
-        guard let entries = weightEntries?.entries else { return weightEntries == nil ? nil : [] }
-
-        let now = Date()
-        let calendar = Calendar.current
-
-        // 1) Parse dates
-        // 2) Filter invalid/placeholder weights
-        // 3) Drop future-ish timestamps
-        // 4) Sort chronologically
-        // 5) De-dupe by day (prevents vertical edge artifacts when multiple entries share the same timestamp)
-        let parsed: [(Date, Double)] = entries.compactMap { entry in
-            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
-            let weight = entry.weightLbs
-            guard weight.isFinite, weight >= 60, weight <= 600 else { return nil }
-            guard date <= now.addingTimeInterval(6 * 3600) else { return nil }
-            return (date, weight)
-        }
-        .sorted { $0.0 < $1.0 }
-
-        var latestByDay: [Date: (Date, Double)] = [:]
-        for (date, weight) in parsed {
-            let day = calendar.startOfDay(for: date)
-            // Keep the latest entry for that day.
-            if let existing = latestByDay[day] {
-                if date > existing.0 {
-                    latestByDay[day] = (date, weight)
-                }
-            } else {
-                latestByDay[day] = (date, weight)
-            }
-        }
-
-        let deduped = latestByDay.values
-            .sorted { $0.0 < $1.0 }
-            .map { WeightChartPoint(date: $0.0, weightLbs: $0.1) }
-
-        let cutoff: Date?
-        switch range {
-        case .days7:
-            cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date())
-        case .days30:
-            cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date())
-        case .days90:
-            cutoff = Calendar.current.date(byAdding: .day, value: -90, to: Date())
-        case .all:
-            cutoff = nil
-        }
-        guard let cutoff else { return deduped }
-        return deduped.filter { $0.date >= cutoff }
+        // IMPORTANT: the chart uses only trusted points (filtered for unusual day-to-day jumps)
+        // so we never render misleading “crash” trends.
+        guard let model = trendModel else { return weightEntries == nil ? nil : [] }
+        return model.trustedPoints
     }
 
-    private var weightDeltaLast7Days: Double? {
+    private var trendModel: WeightTrendModel? {
         guard let entries = weightEntries?.entries else { return nil }
-        let parsed = entries.compactMap { entry -> (Date, Double)? in
-            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
-            return (date, entry.weightLbs)
-        }
-        .sorted { $0.0 < $1.0 }
-        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date().addingTimeInterval(-7 * 86400)
-        let window = parsed.filter { $0.0 >= cutoff }
-        guard let first = window.first?.1, let last = window.last?.1, window.count >= 2 else { return nil }
-        return last - first
+        return WeightTrendModel.build(entries: entries, range: .days30)
+    }
+
+    private var excludedTrendCount: Int {
+        trendModel?.excludedCount ?? 0
+    }
+
+    private var hasTrustedTrend: Bool {
+        (trendModel?.trustedPoints.count ?? 0) >= 3
+    }
+
+    private var currentWeight: Double? {
+        // Use the latest sanitized + de-duped weigh-in as the "current" weight,
+        // even if it’s excluded from trend math.
+        trendModel?.rawPoints.max(by: { $0.date < $1.date })?.weightLbs
+    }
+
+    private var trustedWeightDeltaLast7Days: Double? {
+        guard let model = trendModel else { return nil }
+        return model.trustedDeltaLast7Days
+    }
+
+    private var milestones: [ProgressMilestone] {
+        let trustedPairs: [(date: Date, weight: Double)] = (trendModel?.trustedPoints ?? [])
+            .map { (date: $0.date, weight: $0.weightLbs) }
+        return ProgressMilestoneBuilder.build(weightEntries: weightEntries, analytics: analytics, trustedTrendPoints: trustedPairs)
     }
 
     private func openLog() {
@@ -242,21 +208,93 @@ struct ProgressScreenView: View {
 
 private enum WeightHistoryTimelineViewBuilder {
     static func build(weightEntries: WeightEntriesResponse?) -> [WeightHistoryTimelineView.Row] {
-        let now = Date()
-        let parsed = (weightEntries?.entries ?? []).compactMap { entry -> (Date, Double, String)? in
-            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
-            let weight = entry.weightLbs
-            guard weight.isFinite, weight >= 60, weight <= 600 else { return nil }
-            guard date <= now.addingTimeInterval(6 * 3600) else { return nil }
-            return (date, weight, entry.id)
-        }
-        .sorted { $0.0 > $1.0 }
+        let raw = weightEntries?.entries ?? []
+        let sanitized = WeightChartSanitizer.sanitize(entries: raw)
+        let deduped = WeightChartSanitizer.dedupeLatestPerDay(sanitized)
+            .sorted { $0.date > $1.date }
 
-        return parsed.enumerated().map { index, item in
-            let next = parsed.dropFirst(index + 1).first
-            let delta = next.map { item.1 - $0.1 }
-            return WeightHistoryTimelineView.Row(id: item.2, date: item.0, weightLbs: item.1, deltaLbs: delta)
+        return deduped.enumerated().map { index, item in
+            let next = deduped.dropFirst(index + 1).first
+            let delta = next.map { item.weight - $0.weight }
+            return WeightHistoryTimelineView.Row(id: item.id, date: item.date, weightLbs: item.weight, deltaLbs: delta)
         }
+    }
+}
+
+private struct WeightTrendSummaryCard: View {
+    let currentWeight: Double?
+    let trendDeltaLast7Days: Double?
+    let hasTrend: Bool
+    let excludedCount: Int
+
+    var body: some View {
+        AppCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Weight trend", subtitle: "Reliable trend from consistent weigh-ins")
+
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Current weight")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(MacroMeshTheme.muted)
+                        Text(currentWeightText)
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundColor(MacroMeshTheme.text)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Text(statusText)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(statusTint.opacity(0.14))
+                        .foregroundColor(statusTint)
+                        .clipShape(Capsule())
+                }
+
+                Text(detailText)
+                    .font(.subheadline)
+                    .foregroundColor(MacroMeshTheme.muted)
+
+                if excludedCount > 0 {
+                    Text("Some weigh-ins look unusual and are excluded from trends.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.orange)
+                }
+            }
+        }
+    }
+
+    private var currentWeightText: String {
+        guard let currentWeight else { return "—" }
+        return String(format: "%.1f lbs", currentWeight)
+    }
+
+    private var statusText: String {
+        guard hasTrend else { return "Trend building" }
+        guard let delta = trendDeltaLast7Days else { return "Stable" }
+        if abs(delta) < 0.2 { return "Stable" }
+        return delta < 0 ? "Trending down" : "Trending up"
+    }
+
+    private var statusTint: Color {
+        switch statusText {
+        case "Trending down": return MacroMeshTheme.primary
+        case "Trending up": return MacroMeshTheme.orange
+        case "Stable": return MacroMeshTheme.muted
+        default: return MacroMeshTheme.muted
+        }
+    }
+
+    private var detailText: String {
+        guard hasTrend else { return "We’ll calculate your trend after a few consistent weigh-ins." }
+        guard let delta = trendDeltaLast7Days else { return "Log 2–3 consistent weigh-ins to calculate a reliable trend." }
+        if abs(delta) < 0.2 {
+            return "Stable recently. Keep logging to see clearer trends."
+        }
+        let direction = delta < 0 ? "Down" : "Up"
+        return "\(direction) \(String(format: "%.1f", abs(delta))) lbs over 7 days"
     }
 }
 
@@ -290,37 +328,298 @@ struct WeightChartPoint: Identifiable, Equatable {
     let weightLbs: Double
 }
 
+private struct WeightTrendModel: Equatable {
+    let rawPoints: [WeightChartPoint]
+    let trustedPoints: [WeightChartPoint]
+    let excludedCount: Int
+
+    let trustedDeltaLast7Days: Double?
+
+    // MARK: - Tuning
+    private static let maxNormalDailyDelta: Double = 5
+    private static let maxNormalWeeklyDelta: Double = 10
+
+    static func build(entries: [WeightEntry], range: ProgressRange) -> WeightTrendModel {
+        // 1) sanitize invalid/future points
+        // 2) de-dupe same-day points (keep latest)
+        // 3) apply range filter
+        let sanitized = WeightChartSanitizer.sanitize(entries: entries)
+        let deduped = WeightChartSanitizer.dedupeLatestPerDay(sanitized)
+            .sorted { $0.date < $1.date }
+            .map { WeightChartPoint(date: $0.date, weightLbs: $0.weight) }
+
+        let cutoff: Date?
+        switch range {
+        case .days7:
+            cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date())
+        case .days30:
+            cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date())
+        case .days90:
+            cutoff = Calendar.current.date(byAdding: .day, value: -90, to: Date())
+        case .all:
+            cutoff = nil
+        }
+
+        let raw: [WeightChartPoint]
+        if let cutoff {
+            raw = deduped.filter { $0.date >= cutoff }
+        } else {
+            raw = deduped
+        }
+
+        let trusted = buildTrustedTrendPoints(raw)
+        let excludedCount = max(raw.count - trusted.count, 0)
+
+        let delta7 = computeTrustedDeltaLast7Days(trusted)
+
+        return WeightTrendModel(
+            rawPoints: raw,
+            trustedPoints: trusted,
+            excludedCount: excludedCount,
+            trustedDeltaLast7Days: delta7
+        )
+    }
+
+    private static func buildTrustedTrendPoints(_ points: [WeightChartPoint]) -> [WeightChartPoint] {
+        let sorted = points.sorted { $0.date < $1.date }
+        guard sorted.count >= 2 else { return sorted }
+
+        var trusted: [WeightChartPoint] = [sorted[0]]
+
+        for next in sorted.dropFirst() {
+            guard let prev = trusted.last else { break }
+
+            let days = max(Calendar.current.dateComponents([.day], from: prev.date, to: next.date).day ?? 1, 1)
+            let perDay = abs(next.weightLbs - prev.weightLbs) / Double(days)
+
+            guard perDay <= maxNormalDailyDelta else {
+                continue
+            }
+
+            trusted.append(next)
+        }
+
+        return trusted
+    }
+
+    private static func computeTrustedDeltaLast7Days(_ points: [WeightChartPoint]) -> Double? {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date().addingTimeInterval(-7 * 86400)
+        let window = points.filter { $0.date >= cutoff }.sorted { $0.date < $1.date }
+        guard let first = window.first?.weightLbs, let last = window.last?.weightLbs, window.count >= 2 else { return nil }
+        let delta = last - first
+        // Don’t report massive weekly changes if the remaining "trusted" window is still unstable.
+        guard abs(delta) <= maxNormalWeeklyDelta else { return nil }
+        return delta
+    }
+}
+
 private struct WeightTrendChartCard: View {
     let points: [WeightChartPoint]
     let range: ProgressRange
+    let excludedCount: Int
+    let trustedDeltaLast7Days: Double?
+
+    @State private var selectedPoint: WeightChartPoint? = nil
+
+    private var latestPoint: WeightChartPoint? {
+        points.max(by: { $0.date < $1.date })
+    }
 
     var body: some View {
         AppCard(padding: 16) {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader("Weight trend", subtitle: chartSubtitle)
-                Chart(points) {
-                    LineMark(
-                        x: .value("Day", $0.date),
-                        y: .value("Weight", $0.weightLbs)
-                    )
-                    .foregroundStyle(MacroMeshTheme.primary)
-                    .interpolationMethod(.catmullRom)
-                    AreaMark(
-                        x: .value("Day", $0.date),
-                        y: .value("Weight", $0.weightLbs)
-                    )
-                    .foregroundStyle(LinearGradient(colors: [MacroMeshTheme.primary.opacity(0.22), .clear], startPoint: .top, endPoint: .bottom))
+            VStack(alignment: .leading, spacing: 14) {
+                chartHeader
+
+                Chart {
+                    chartContent
                 }
                 .chartYScale(domain: yDomain)
-                .frame(height: 220)
+                .chartXScale(domain: xDomain)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 5)) { value in
+                        AxisGridLine().foregroundStyle(.clear)
+                        AxisTick().foregroundStyle(.clear)
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(Self.axisDateFormatter.string(from: date))
+                                    .font(.caption2)
+                                    .foregroundColor(MacroMeshTheme.muted)
+                            }
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                        AxisGridLine()
+                            .foregroundStyle(MacroMeshTheme.border.opacity(0.7))
+                        AxisTick().foregroundStyle(.clear)
+                        AxisValueLabel().foregroundStyle(.clear)
+                    }
+                }
+                .frame(height: 240)
                 .animation(.easeInOut(duration: 0.25), value: points)
                 .accessibilityLabel("Weight trend chart")
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        // Don’t steal vertical scrolling inside the parent ScrollView.
+                                        // Only treat the gesture as a chart interaction when it’s primarily horizontal.
+                                        guard abs(value.translation.width) >= abs(value.translation.height) else { return }
+                                        guard let plotFrame = proxy.plotFrame else { return }
+                                        let origin = geometry[plotFrame].origin
+                                        let location = CGPoint(x: value.location.x - origin.x, y: value.location.y - origin.y)
+                                        guard let date: Date = proxy.value(atX: location.x) else { return }
+                                        selectedPoint = nearestPoint(to: date)
+                                    }
+                                    .onEnded { _ in
+                                        // Keep the last selection; it acts like a lightweight tooltip.
+                                    }
+                            )
+                    }
+                }
+                .overlay(alignment: .topLeading) {
+                    if let selectedPoint {
+                        chartTooltip(point: selectedPoint)
+                            .padding(.top, 8)
+                            .padding(.leading, 8)
+                            .transition(.opacity)
+                    }
+                }
+
+                if excludedCount > 0 {
+                    Text("Some weigh-ins look unusual and are excluded from your trend.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
             }
         }
     }
 
+    @ChartContentBuilder
+    private var chartContent: some ChartContent {
+        ForEach(Array(segments.enumerated()), id: \.offset) { segmentIndex, segment in
+            ForEach(segment) { point in
+                chartLineMark(point: point, segmentIndex: segmentIndex)
+            }
+
+            ForEach(segment) { point in
+                chartAreaMark(point: point, segmentIndex: segmentIndex)
+            }
+        }
+
+        if let latestPoint {
+            chartLatestPointMark(point: latestPoint)
+        }
+
+        if let selectedPoint {
+            RuleMark(x: .value("Selected", selectedPoint.date))
+                .foregroundStyle(MacroMeshTheme.border)
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+        }
+    }
+
+    @ChartContentBuilder
+    private func chartLineMark(point: WeightChartPoint, segmentIndex: Int) -> some ChartContent {
+        let xDate = point.date
+        let yWeight = point.weightLbs
+        let series = segmentIndex
+        LineMark(
+            x: .value("Day", xDate),
+            y: .value("Weight", yWeight),
+            series: .value("Segment", series)
+        )
+        .foregroundStyle(MacroMeshTheme.primary)
+        .lineStyle(StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
+    }
+
+    @ChartContentBuilder
+    private func chartAreaMark(point: WeightChartPoint, segmentIndex: Int) -> some ChartContent {
+        let xDate = point.date
+        let yWeight = point.weightLbs
+        let series = segmentIndex
+        AreaMark(
+            x: .value("Day", xDate),
+            y: .value("Weight", yWeight),
+            series: .value("Segment", series)
+        )
+        .foregroundStyle(
+            LinearGradient(
+                colors: [MacroMeshTheme.primary.opacity(0.16), MacroMeshTheme.primary.opacity(0.04), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    @ChartContentBuilder
+    private func chartLatestPointMark(point: WeightChartPoint) -> some ChartContent {
+        let xDate = point.date
+        let yWeight = point.weightLbs
+        PointMark(
+            x: .value("Day", xDate),
+            y: .value("Weight", yWeight)
+        )
+        .symbolSize(90)
+        .foregroundStyle(MacroMeshTheme.primary)
+    }
+
+    private var xDomain: ClosedRange<Date> {
+        let sorted = points.sorted { $0.date < $1.date }
+        guard let first = sorted.first?.date, let last = sorted.last?.date else {
+            let now = Date()
+            return now...now
+        }
+
+        // Add a small pad so the latest point isn't clipped against the edge.
+        let start = Calendar.current.date(byAdding: .day, value: -1, to: first) ?? first
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: last) ?? last
+        return start...end
+    }
+
+    private static let axisDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d"
+        return formatter
+    }()
+
+    private var chartHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Current Weight")
+                .font(.caption.weight(.bold))
+                .foregroundColor(MacroMeshTheme.muted)
+                .textCase(.uppercase)
+                .tracking(1.1)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(latestWeightText)
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundColor(MacroMeshTheme.text)
+                Text("lbs")
+                    .font(.headline.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
+                Spacer(minLength: 0)
+            }
+
+            Text(summaryDeltaText)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(summaryDeltaTint)
+
+            Text(chartSubtitle)
+                .font(.caption)
+                .foregroundColor(MacroMeshTheme.muted)
+        }
+    }
+
+    private var segments: [[WeightChartPoint]] {
+        let sorted = points.sorted { $0.date < $1.date }
+        return sorted.count >= 2 ? [sorted] : []
+    }
+
     private var chartSubtitle: String {
-        points.count < 2 ? "Log a few weigh-ins to see a clearer trend." : "Showing \(range.rawValue.lowercased()) trend from your weigh-ins."
+        points.count < 2 ? "Log a few weigh-ins to start tracking trends." : "Showing \(range.rawValue.lowercased()) trend from your weigh-ins."
     }
 
     private var yDomain: ClosedRange<Double> {
@@ -328,6 +627,84 @@ private struct WeightTrendChartCard: View {
         guard let minValue = values.min(), let maxValue = values.max() else { return 0...1 }
         let padding = max((maxValue - minValue) * 0.12, 1)
         return (minValue - padding)...(maxValue + padding)
+    }
+
+
+    private var latestWeightText: String {
+        guard let latestPoint else { return "—" }
+        return String(format: "%.1f", latestPoint.weightLbs)
+    }
+
+    private var summaryDeltaText: String {
+        guard latestPoint != nil else { return "Trend building" }
+
+        if let weekDelta = trustedDeltaLast7Days {
+            if abs(weekDelta) < 0.2 {
+                return "Stable recently"
+            }
+            return deltaCopy(delta: weekDelta, suffix: "over 7 days")
+        }
+
+        if let sinceStart = deltaSinceStart, abs(sinceStart) <= 15 {
+            return deltaCopy(delta: sinceStart, suffix: "since start")
+        }
+
+        return "Trend building"
+    }
+
+    private var summaryDeltaTint: Color {
+        if let weekDelta = trustedDeltaLast7Days {
+            if abs(weekDelta) < 0.2 { return MacroMeshTheme.muted }
+            return weekDelta < 0 ? MacroMeshTheme.primary : MacroMeshTheme.orange
+        }
+        if let sinceStart = deltaSinceStart, abs(sinceStart) <= 15 {
+            if abs(sinceStart) < 0.01 { return MacroMeshTheme.muted }
+            return sinceStart < 0 ? MacroMeshTheme.primary : MacroMeshTheme.orange
+        }
+        return MacroMeshTheme.muted
+    }
+
+    private var deltaSinceStart: Double? {
+        let sorted = points.sorted { $0.date < $1.date }
+        guard let first = sorted.first?.weightLbs, let last = sorted.last?.weightLbs, sorted.count >= 2 else { return nil }
+        return last - first
+    }
+
+    private func deltaCopy(delta: Double, suffix: String) -> String {
+        let arrow = delta < -0.01 ? "↓" : (delta > 0.01 ? "↑" : "→")
+        return "\(arrow) \(String(format: "%.1f", abs(delta))) lbs \(suffix)"
+    }
+
+    private func nearestPoint(to date: Date) -> WeightChartPoint? {
+        guard !points.isEmpty else { return nil }
+        return points.min(by: { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) })
+    }
+
+    private static let tooltipDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    @ViewBuilder
+    private func chartTooltip(point: WeightChartPoint) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(String(format: "%.1f lbs", point.weightLbs))
+                .font(.caption.weight(.bold))
+                .foregroundColor(MacroMeshTheme.text)
+            Text(Self.tooltipDateFormatter.string(from: point.date))
+                .font(.caption2)
+                .foregroundColor(MacroMeshTheme.muted)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(MacroMeshTheme.border, lineWidth: 1)
+        )
     }
 }
 
@@ -481,17 +858,87 @@ private struct SummaryTile: View {
 }
 
 private struct MilestonesCard: View {
+    let milestones: [ProgressMilestone]
+
     var body: some View {
         AppCard(padding: 16) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 SectionHeader("Milestones", subtitle: "Small wins that compound.")
-                Text("Milestones coming soon")
+
+                if milestones.isEmpty {
+                    Text("Keep logging to unlock milestones.")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.text)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(milestones) { milestone in
+                            MilestoneRow(milestone: milestone)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct MilestoneRow: View {
+    let milestone: ProgressMilestone
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                Circle().fill(MacroMeshTheme.cardSubtle)
+                Image(systemName: milestone.systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(iconTint)
+            }
+            .frame(width: 34, height: 34)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(milestone.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(MacroMeshTheme.text)
-                Text("We’ll surface streaks, weight milestones, and protein consistency as you log.")
+                    .lineLimit(1)
+
+                Text(detailText)
                     .font(.caption)
                     .foregroundColor(MacroMeshTheme.muted)
+                    .lineLimit(2)
             }
+
+            Spacer(minLength: 0)
+
+            switch milestone.status {
+            case .completed:
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundColor(MacroMeshTheme.primary)
+            case .inProgress(let progress, _):
+                ProgressBar(progress: progress, color: MacroMeshTheme.primary)
+                    .frame(width: 84, height: 10)
+            case .locked:
+                Image(systemName: "lock.fill")
+                    .foregroundColor(MacroMeshTheme.muted)
+            }
+        }
+        .padding(12)
+        .background(MacroMeshTheme.cardSubtle.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMedium, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var iconTint: Color {
+        switch milestone.status {
+        case .completed: return MacroMeshTheme.primary
+        case .inProgress: return MacroMeshTheme.primary
+        case .locked: return MacroMeshTheme.muted
+        }
+    }
+
+    private var detailText: String {
+        switch milestone.status {
+        case .completed(let detail): return detail
+        case .inProgress(_, let detail): return detail
+        case .locked(let detail): return detail
         }
     }
 }
@@ -502,12 +949,12 @@ struct ProgressEmptyStateView: View {
     var body: some View {
         EmptyStateCard(
             icon: "chart.line.uptrend.xyaxis",
-            title: "Not enough data yet",
-            message: "Log a weigh-in (and a few meals) to unlock weight trends and weekly summaries.",
+            title: "Trend building",
+            message: "Log 2–3 consistent weigh-ins to start seeing your trend.",
             buttonTitle: "Log a meal",
             action: onLog
         )
-        .accessibilityLabel("Not enough data yet. Log a meal to begin.")
+        .accessibilityLabel("Trend building. Log a meal to begin.")
     }
 }
 

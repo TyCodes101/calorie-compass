@@ -9,6 +9,21 @@ public enum DesignTokens {
     public static let radiusSmall: CGFloat = 12
     public static let spacing: CGFloat = 16
     public static let elevation: CGFloat = 8
+
+    // Tab bar clearance: prevents scroll content + bottom CTAs from being obscured by the iOS tab bar.
+    // Includes a little extra breathing room so the last card never feels cramped.
+    public static let tabBarClearance: CGFloat = 120
+}
+
+public extension View {
+    /// Ensures scroll content never lands under the iOS Tab Bar.
+    func macroMeshTabBarSpacer() -> some View {
+        safeAreaInset(edge: .bottom) {
+            Color.clear
+                .frame(height: DesignTokens.tabBarClearance)
+                .accessibilityHidden(true)
+        }
+    }
 }
 
 // Progress Bar
