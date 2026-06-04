@@ -70,9 +70,10 @@ struct ProgressScreenView: View {
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 12)
-                    .padding(.bottom, 118)
+                    .padding(.bottom, 16)
                 }
             }
+            .macroMeshTabBarSpacer()
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle("")
             .toolbar {
@@ -126,39 +127,11 @@ struct ProgressScreenView: View {
     private var chartPoints: [WeightChartPoint]? {
         guard let entries = weightEntries?.entries else { return weightEntries == nil ? nil : [] }
 
-        let now = Date()
-        let calendar = Calendar.current
-
-        // 1) Parse dates
-        // 2) Filter invalid/placeholder weights
-        // 3) Drop future-ish timestamps
-        // 4) Sort chronologically
-        // 5) De-dupe by day (prevents vertical edge artifacts when multiple entries share the same timestamp)
-        let parsed: [(Date, Double)] = entries.compactMap { entry in
-            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
-            let weight = entry.weightLbs
-            guard weight.isFinite, weight >= 60, weight <= 600 else { return nil }
-            guard date <= now.addingTimeInterval(6 * 3600) else { return nil }
-            return (date, weight)
-        }
-        .sorted { $0.0 < $1.0 }
-
-        var latestByDay: [Date: (Date, Double)] = [:]
-        for (date, weight) in parsed {
-            let day = calendar.startOfDay(for: date)
-            // Keep the latest entry for that day.
-            if let existing = latestByDay[day] {
-                if date > existing.0 {
-                    latestByDay[day] = (date, weight)
-                }
-            } else {
-                latestByDay[day] = (date, weight)
-            }
-        }
-
-        let deduped = latestByDay.values
-            .sorted { $0.0 < $1.0 }
-            .map { WeightChartPoint(date: $0.0, weightLbs: $0.1) }
+        // Filter invalid/future weigh-ins and de-dupe multiple same-day entries before charting.
+        let sanitized = WeightChartSanitizer.sanitize(entries: entries)
+        let deduped = WeightChartSanitizer.dedupeLatestPerDay(sanitized)
+            .sorted { $0.date < $1.date }
+            .map { WeightChartPoint(date: $0.date, weightLbs: $0.weight) }
 
         let cutoff: Date?
         switch range {
@@ -242,20 +215,15 @@ struct ProgressScreenView: View {
 
 private enum WeightHistoryTimelineViewBuilder {
     static func build(weightEntries: WeightEntriesResponse?) -> [WeightHistoryTimelineView.Row] {
-        let now = Date()
-        let parsed = (weightEntries?.entries ?? []).compactMap { entry -> (Date, Double, String)? in
-            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
-            let weight = entry.weightLbs
-            guard weight.isFinite, weight >= 60, weight <= 600 else { return nil }
-            guard date <= now.addingTimeInterval(6 * 3600) else { return nil }
-            return (date, weight, entry.id)
-        }
-        .sorted { $0.0 > $1.0 }
+        let raw = weightEntries?.entries ?? []
+        let sanitized = WeightChartSanitizer.sanitize(entries: raw)
+        let deduped = WeightChartSanitizer.dedupeLatestPerDay(sanitized)
+            .sorted { $0.date > $1.date }
 
-        return parsed.enumerated().map { index, item in
-            let next = parsed.dropFirst(index + 1).first
-            let delta = next.map { item.1 - $0.1 }
-            return WeightHistoryTimelineView.Row(id: item.2, date: item.0, weightLbs: item.1, deltaLbs: delta)
+        return deduped.enumerated().map { index, item in
+            let next = deduped.dropFirst(index + 1).first
+            let delta = next.map { item.weight - $0.weight }
+            return WeightHistoryTimelineView.Row(id: item.id, date: item.date, weightLbs: item.weight, deltaLbs: delta)
         }
     }
 }
@@ -298,25 +266,103 @@ private struct WeightTrendChartCard: View {
         AppCard(padding: 16) {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader("Weight trend", subtitle: chartSubtitle)
-                Chart(points) {
-                    LineMark(
-                        x: .value("Day", $0.date),
-                        y: .value("Weight", $0.weightLbs)
-                    )
-                    .foregroundStyle(MacroMeshTheme.primary)
-                    .interpolationMethod(.catmullRom)
-                    AreaMark(
-                        x: .value("Day", $0.date),
-                        y: .value("Weight", $0.weightLbs)
-                    )
-                    .foregroundStyle(LinearGradient(colors: [MacroMeshTheme.primary.opacity(0.22), .clear], startPoint: .top, endPoint: .bottom))
+                Chart {
+                    ForEach(Array(segments.enumerated()), id: \.offset) { segmentIndex, segment in
+                        ForEach(segment) { point in
+                            LineMark(
+                                x: .value("Day", point.date),
+                                y: .value("Weight", point.weightLbs),
+                                series: .value("Segment", segmentIndex)
+                            )
+                            .foregroundStyle(MacroMeshTheme.primary)
+                        }
+
+                        ForEach(segment) { point in
+                            AreaMark(
+                                x: .value("Day", point.date),
+                                y: .value("Weight", point.weightLbs),
+                                series: .value("Segment", segmentIndex)
+                            )
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [MacroMeshTheme.primary.opacity(0.20), .clear],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                        }
+                    }
+
+                    ForEach(outlierPoints) { point in
+                        PointMark(
+                            x: .value("Day", point.date),
+                            y: .value("Weight", point.weightLbs)
+                        )
+                        .symbolSize(42)
+                        .foregroundStyle(MacroMeshTheme.orange)
+                    }
                 }
                 .chartYScale(domain: yDomain)
                 .frame(height: 220)
                 .animation(.easeInOut(duration: 0.25), value: points)
                 .accessibilityLabel("Weight trend chart")
+
+                if hasOutliers {
+                    Text("Large day-to-day swings are marked and excluded from the trend line.")
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                }
             }
         }
+    }
+
+    /// Treat very large day-to-day changes as unusual so we don’t draw a smooth curve through likely bad/duplicate data.
+    private let maxNormalDailyDelta: Double = 10
+
+    private var hasOutliers: Bool { !outlierPoints.isEmpty }
+
+    private var segments: [[WeightChartPoint]] {
+        let sorted = points.sorted { $0.date < $1.date }
+        guard sorted.count >= 2 else { return sorted.isEmpty ? [] : [sorted] }
+
+        var result: [[WeightChartPoint]] = []
+        var current: [WeightChartPoint] = [sorted[0]]
+
+        for pairIndex in 1..<sorted.count {
+            let prev = sorted[pairIndex - 1]
+            let next = sorted[pairIndex]
+            let delta = next.weightLbs - prev.weightLbs
+
+            if abs(delta) >= maxNormalDailyDelta {
+                result.append(current)
+                current = [next]
+            } else {
+                current.append(next)
+            }
+        }
+
+        if !current.isEmpty {
+            result.append(current)
+        }
+
+        // Drop one-point segments so Charts doesn't imply a line when we intentionally broke it.
+        let filtered = result.filter { $0.count >= 2 }
+        return filtered.isEmpty ? (sorted.count >= 2 ? [sorted] : []) : filtered
+    }
+
+    private var outlierPoints: [WeightChartPoint] {
+        let sorted = points.sorted { $0.date < $1.date }
+        guard sorted.count >= 2 else { return [] }
+
+        var outliers: [WeightChartPoint] = []
+        for idx in 1..<sorted.count {
+            let prev = sorted[idx - 1]
+            let next = sorted[idx]
+            if abs(next.weightLbs - prev.weightLbs) >= maxNormalDailyDelta {
+                outliers.append(next)
+            }
+        }
+        return outliers
     }
 
     private var chartSubtitle: String {

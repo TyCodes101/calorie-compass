@@ -98,9 +98,10 @@ struct DashboardView: View {
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 12)
-                    .padding(.bottom, 88)
+                    .padding(.bottom, 16)
                     .refreshable { refreshDashboard() }
                 }
+                .macroMeshTabBarSpacer()
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

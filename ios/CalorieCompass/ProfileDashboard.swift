@@ -129,16 +129,15 @@ struct ProfileDashboardView: View {
 
 private enum WeightHistoryTimelineProfileBuilder {
     static func build(weightEntries: WeightEntriesResponse?) -> [WeightHistoryTimelineView.Row] {
-        let parsed = (weightEntries?.entries ?? []).compactMap { entry -> (Date, Double, String)? in
-            guard let date = DateParser.parseMealDate(entry.date) else { return nil }
-            return (date, entry.weightLbs, entry.id)
-        }
-        .sorted { $0.0 > $1.0 }
+        let raw = weightEntries?.entries ?? []
+        let sanitized = WeightChartSanitizer.sanitize(entries: raw)
+        let deduped = WeightChartSanitizer.dedupeLatestPerDay(sanitized)
+            .sorted { $0.date > $1.date }
 
-        return parsed.enumerated().map { index, item in
-            let next = parsed.dropFirst(index + 1).first
-            let delta = next.map { item.1 - $0.1 }
-            return WeightHistoryTimelineView.Row(id: item.2, date: item.0, weightLbs: item.1, deltaLbs: delta)
+        return deduped.enumerated().map { index, item in
+            let next = deduped.dropFirst(index + 1).first
+            let delta = next.map { item.weight - $0.weight }
+            return WeightHistoryTimelineView.Row(id: item.id, date: item.date, weightLbs: item.weight, deltaLbs: delta)
         }
     }
 }

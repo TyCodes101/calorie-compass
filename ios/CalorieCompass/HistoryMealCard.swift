@@ -79,8 +79,10 @@ struct HistoryMealCard: View {
                 }
 
                 HStack(alignment: .center, spacing: 8) {
-                    Badge(model.trustBadgeText, color: MacroMeshTheme.primary)
-                        .accessibilityLabel("Trust level \(model.trustBadgeText)")
+                    if !(model.isZeroCalorie && model.trustBadgeText == "Verified") {
+                        Badge(model.trustBadgeText, color: MacroMeshTheme.primary)
+                            .accessibilityLabel("Trust level \(model.trustBadgeText)")
+                    }
 
                     if model.isZeroCalorie {
                         Badge("Needs review", color: MacroMeshTheme.orange)

@@ -225,19 +225,22 @@ struct SessionBannerView: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: model.systemImage)
                 .foregroundColor(model.tint)
-                .font(.caption)
-            Text(model.title)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-            Text(model.message)
-                .font(.caption2)
-                .foregroundColor(MacroMeshTheme.muted)
-                .lineLimit(1)
-            Spacer(minLength: 6)
+                .font(.caption.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Text(model.message)
+                    .font(.caption2)
+                    .foregroundColor(MacroMeshTheme.muted)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
             if let onRetry {
                 Button("Retry", action: onRetry)
                     .font(.caption2)
@@ -256,8 +259,8 @@ struct SessionBannerView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(.thinMaterial)
-        .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
         .padding(.horizontal, 14)
     }
 }
