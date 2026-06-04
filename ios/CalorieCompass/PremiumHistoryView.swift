@@ -59,7 +59,7 @@ struct PremiumHistoryView: View {
 
                             ForEach(dayGroups) { group in
                                 VStack(alignment: .leading, spacing: 10) {
-                                    HistoryDayHeaderCard(date: group.displayDate, meals: group.meals)
+                                    HistoryDayHeaderCard(date: HistoryDateFormatter.dayHeader.string(from: group.day), meals: group.meals)
 
                                     VStack(spacing: 10) {
                                         ForEach(group.meals) { meal in
@@ -170,27 +170,8 @@ struct PremiumHistoryView: View {
         actionMessage = "Ready to log \(meal.displayTitle) again. Review it before saving."
     }
 
-    private var dayGroups: [HistoryDayGroup] {
-        let calendar = Calendar.current
-        let now = Date()
-        let mealsWithDates: [(MealResponse, Date)] = meals.compactMap { meal in
-            guard let date = DateParser.parseMealDate(meal.date ?? meal.createdAt) else { return nil }
-            // Drop wildly future timestamps (timezone/parse artifacts).
-            guard date <= now.addingTimeInterval(6 * 3600) else { return nil }
-            return (meal, date)
-        }
-
-        let grouped = Dictionary(grouping: mealsWithDates) { (_, date) in
-            calendar.startOfDay(for: date)
-        }
-
-        let sortedDays = grouped.keys.sorted(by: >)
-        return sortedDays.map { day in
-            let dayMeals = (grouped[day] ?? [])
-                .sorted { $0.1 > $1.1 }
-                .map { $0.0 }
-            return HistoryDayGroup(day: day, meals: dayMeals)
-        }
+    private var dayGroups: [HistorySorting.DayGroup] {
+        HistorySorting.groupMealsByDay(meals)
     }
 
     private var weeklySummary: HistoryWeeklySummary {
@@ -198,23 +179,13 @@ struct PremiumHistoryView: View {
     }
 }
 
-private struct HistoryDayGroup: Identifiable {
-    let id: Date
-    let day: Date
-    let meals: [MealResponse]
-
-    init(day: Date, meals: [MealResponse]) {
-        self.id = day
-        self.day = day
-        self.meals = meals
-    }
-
-    var displayDate: String {
+private enum HistoryDateFormatter {
+    static let dayHeader: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .full
         formatter.timeStyle = .none
-        return formatter.string(from: day)
-    }
+        return formatter
+    }()
 }
 
 private struct HistoryWeeklySummary: Equatable {
