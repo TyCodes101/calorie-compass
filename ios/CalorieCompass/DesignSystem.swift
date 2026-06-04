@@ -144,8 +144,9 @@ private struct WeightHistoryRow: View {
             if let delta = row.deltaLbs {
                 let isUp = delta > 0.0001
                 let isDown = delta < -0.0001
-                let tint: Color = isUp ? MacroMeshTheme.orange : (isDown ? MacroMeshTheme.blue : MacroMeshTheme.muted)
-                let icon = isUp ? "arrow.up" : (isDown ? "arrow.down" : "minus")
+                let isUnusual = abs(delta) >= 10
+                let tint: Color = isUnusual ? .red : (isUp ? MacroMeshTheme.orange : (isDown ? MacroMeshTheme.blue : MacroMeshTheme.muted))
+                let icon = isUnusual ? "exclamationmark.triangle.fill" : (isUp ? "arrow.up" : (isDown ? "arrow.down" : "minus"))
                 HStack(spacing: 6) {
                     Image(systemName: icon)
                         .font(.caption.weight(.bold))
