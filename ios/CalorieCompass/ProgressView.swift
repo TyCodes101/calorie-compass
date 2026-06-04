@@ -340,6 +340,9 @@ private struct WeightTrendChartCard: View {
                             .gesture(
                                 DragGesture(minimumDistance: 0)
                                     .onChanged { value in
+                                        // Don’t steal vertical scrolling inside the parent ScrollView.
+                                        // Only treat the gesture as a chart interaction when it’s primarily horizontal.
+                                        guard abs(value.translation.width) >= abs(value.translation.height) else { return }
                                         let origin = geometry[proxy.plotAreaFrame].origin
                                         let location = CGPoint(x: value.location.x - origin.x, y: value.location.y - origin.y)
                                         guard let date: Date = proxy.value(atX: location.x) else { return }
