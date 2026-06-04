@@ -44,11 +44,10 @@ struct ProfileDashboardModel: Equatable {
         let latestWeight = weightEntries?.trend.latestWeightLbs ?? analytics?.weightTrend.latestWeightLbs ?? profile?.weightLbs
         let currentWeightText = latestWeight.map { String(format: "%.1f lbs", $0) } ?? "Add weight"
 
-        let change = weightEntries?.trend.changeLbs ?? analytics?.weightTrend.changeLbs ?? 0
-        let direction = (weightEntries?.trend.direction ?? analytics?.weightTrend.direction)?.lowercased() ?? ""
-        let deltaText = latestWeight == nil ? "No trend yet" : String(format: "%+.1f lbs", change)
-        let weeklyTrendText = latestWeight == nil ? "Log 2–3 weigh-ins to see trend" : "\(deltaText) • \(direction.capitalized)"
-        let weightDeltaText = latestWeight == nil ? "" : deltaText
+        // Profile should not show potentially misleading deltas (e.g., outlier weigh-ins).
+        // Keep copy safe and let Progress handle deeper trend analysis.
+        let weeklyTrendText = latestWeight == nil ? "Trend updates after a few consistent weigh-ins." : "Trend updates after a few consistent weigh-ins."
+        let weightDeltaText = ""
 
         let todayCalories = Int(dashboard?.displayedCalories ?? 0)
         let goalCalories = max(Int(dashboard?.displayedGoalCalories ?? 0), 1)
@@ -109,9 +108,7 @@ struct ProfileDashboardView: View {
             ProfileIdentityHeader(model: model)
 
             FitnessSnapshotCard(model: model, onLogWeight: onLogWeight)
-            WeightHistoryTimelineView(rows: WeightHistoryTimelineProfileBuilder.build(weightEntries: weightEntries))
             NutritionSnapshotCard(model: model)
-            WeeklyMomentumCard(model: model)
 
             ProfileActionsCard(
                 onUpdateGoals: onUpdateGoals,
@@ -123,21 +120,6 @@ struct ProfileDashboardView: View {
                 onReminders: onReminders
             )
             PrivacyCard(onPrivacyAbout: onPrivacyAbout)
-        }
-    }
-}
-
-private enum WeightHistoryTimelineProfileBuilder {
-    static func build(weightEntries: WeightEntriesResponse?) -> [WeightHistoryTimelineView.Row] {
-        let raw = weightEntries?.entries ?? []
-        let sanitized = WeightChartSanitizer.sanitize(entries: raw)
-        let deduped = WeightChartSanitizer.dedupeLatestPerDay(sanitized)
-            .sorted { $0.date > $1.date }
-
-        return deduped.enumerated().map { index, item in
-            let next = deduped.dropFirst(index + 1).first
-            let delta = next.map { item.weight - $0.weight }
-            return WeightHistoryTimelineView.Row(id: item.id, date: item.date, weightLbs: item.weight, deltaLbs: delta)
         }
     }
 }
@@ -207,10 +189,10 @@ private struct FitnessSnapshotCard: View {
 
                 HStack(spacing: 12) {
                     SnapshotMetric(title: "Current", value: model.currentWeightText)
-                    SnapshotMetric(title: "Weekly", value: model.weeklyTrendText)
+                    SnapshotMetric(title: "Trend", value: "Building")
                 }
 
-                MacroMeshFootnote("Estimated trend improves after 2–3 weigh-ins.")
+                MacroMeshFootnote(model.weeklyTrendText)
             }
         }
     }
@@ -279,22 +261,7 @@ private struct TargetTile: View {
     }
 }
 
-private struct WeeklyMomentumCard: View {
-    let model: ProfileDashboardModel
-
-    var body: some View {
-        AppCard(padding: 16) {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionHeader("Weekly momentum", subtitle: model.momentumSummaryText)
-
-                HStack(spacing: 12) {
-                    SnapshotMetric(title: "Streak", value: model.streakText)
-                    SnapshotMetric(title: "Volume", value: model.mealsThisWeekText)
-                }
-            }
-        }
-    }
-}
+// WeeklyMomentumCard removed: Profile should stay focused on identity, goals, preferences, and account/actions.
 
 private struct ProfileActionsCard: View {
     let onUpdateGoals: () -> Void
