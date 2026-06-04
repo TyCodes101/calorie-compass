@@ -262,10 +262,13 @@ private struct WeightTrendChartCard: View {
     let points: [WeightChartPoint]
     let range: ProgressRange
 
+    @State private var selectedPoint: WeightChartPoint? = nil
+
     var body: some View {
         AppCard(padding: 16) {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader("Weight trend", subtitle: chartSubtitle)
+            VStack(alignment: .leading, spacing: 14) {
+                chartHeader
+
                 Chart {
                     ForEach(Array(segments.enumerated()), id: \.offset) { segmentIndex, segment in
                         ForEach(segment) { point in
@@ -275,6 +278,7 @@ private struct WeightTrendChartCard: View {
                                 series: .value("Segment", segmentIndex)
                             )
                             .foregroundStyle(MacroMeshTheme.primary)
+                            .lineStyle(StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
                         }
 
                         ForEach(segment) { point in
@@ -285,7 +289,7 @@ private struct WeightTrendChartCard: View {
                             )
                             .foregroundStyle(
                                 LinearGradient(
-                                    colors: [MacroMeshTheme.primary.opacity(0.20), .clear],
+                                    colors: [MacroMeshTheme.primary.opacity(0.16), MacroMeshTheme.primary.opacity(0.04), .clear],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 )
@@ -293,26 +297,103 @@ private struct WeightTrendChartCard: View {
                         }
                     }
 
+                    if let latestPoint {
+                        PointMark(
+                            x: .value("Day", latestPoint.date),
+                            y: .value("Weight", latestPoint.weightLbs)
+                        )
+                        .symbolSize(90)
+                        .foregroundStyle(MacroMeshTheme.primary)
+                    }
+
                     ForEach(outlierPoints) { point in
                         PointMark(
                             x: .value("Day", point.date),
                             y: .value("Weight", point.weightLbs)
                         )
-                        .symbolSize(42)
+                        .symbolSize(46)
                         .foregroundStyle(MacroMeshTheme.orange)
+                    }
+
+                    if let selectedPoint {
+                        RuleMark(x: .value("Selected", selectedPoint.date))
+                            .foregroundStyle(MacroMeshTheme.border)
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     }
                 }
                 .chartYScale(domain: yDomain)
-                .frame(height: 220)
+                .chartXAxis(.hidden)
+                .chartYAxis {
+                    AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                        AxisGridLine()
+                            .foregroundStyle(MacroMeshTheme.border.opacity(0.7))
+                        AxisTick().foregroundStyle(.clear)
+                        AxisValueLabel().foregroundStyle(.clear)
+                    }
+                }
+                .frame(height: 240)
                 .animation(.easeInOut(duration: 0.25), value: points)
                 .accessibilityLabel("Weight trend chart")
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        let origin = geometry[proxy.plotAreaFrame].origin
+                                        let location = CGPoint(x: value.location.x - origin.x, y: value.location.y - origin.y)
+                                        guard let date: Date = proxy.value(atX: location.x) else { return }
+                                        selectedPoint = nearestPoint(to: date)
+                                    }
+                                    .onEnded { _ in
+                                        // Keep the last selection; it acts like a lightweight tooltip.
+                                    }
+                            )
+                    }
+                }
+                .overlay(alignment: .topLeading) {
+                    if let selectedPoint {
+                        chartTooltip(point: selectedPoint)
+                            .padding(.top, 8)
+                            .padding(.leading, 8)
+                            .transition(.opacity)
+                    }
+                }
 
                 if hasOutliers {
-                    Text("Large day-to-day swings are marked and excluded from the trend line.")
+                    Text("Unusual weigh-ins are marked and excluded from the trend line.")
                         .font(.caption)
                         .foregroundColor(MacroMeshTheme.muted)
                 }
             }
+        }
+    }
+
+    private var chartHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Current Weight")
+                .font(.caption.weight(.bold))
+                .foregroundColor(MacroMeshTheme.muted)
+                .textCase(.uppercase)
+                .tracking(1.1)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(latestWeightText)
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundColor(MacroMeshTheme.text)
+                Text("lbs")
+                    .font(.headline.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.muted)
+                Spacer(minLength: 0)
+            }
+
+            Text(summaryDeltaText)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(summaryDeltaTint)
+
+            Text(chartSubtitle)
+                .font(.caption)
+                .foregroundColor(MacroMeshTheme.muted)
         }
     }
 
@@ -366,7 +447,7 @@ private struct WeightTrendChartCard: View {
     }
 
     private var chartSubtitle: String {
-        points.count < 2 ? "Log a few weigh-ins to see a clearer trend." : "Showing \(range.rawValue.lowercased()) trend from your weigh-ins."
+        points.count < 2 ? "Log a few weigh-ins to start tracking trends." : "Showing \(range.rawValue.lowercased()) trend from your weigh-ins."
     }
 
     private var yDomain: ClosedRange<Double> {
@@ -374,6 +455,82 @@ private struct WeightTrendChartCard: View {
         guard let minValue = values.min(), let maxValue = values.max() else { return 0...1 }
         let padding = max((maxValue - minValue) * 0.12, 1)
         return (minValue - padding)...(maxValue + padding)
+    }
+
+    private var latestPoint: WeightChartPoint? {
+        points.max(by: { $0.date < $1.date })
+    }
+
+    private var latestWeightText: String {
+        guard let latestPoint else { return "—" }
+        return String(format: "%.1f", latestPoint.weightLbs)
+    }
+
+    private var summaryDeltaText: String {
+        guard let latestPoint else { return "Log a weigh-in to start." }
+
+        if let weekDelta = deltaLast7Days {
+            return deltaCopy(delta: weekDelta, suffix: "this week")
+        }
+        if let sinceStart = deltaSinceStart {
+            return deltaCopy(delta: sinceStart, suffix: "since start")
+        }
+        return "Log a few more weigh-ins for progress stats."
+    }
+
+    private var summaryDeltaTint: Color {
+        let delta = deltaLast7Days ?? deltaSinceStart
+        guard let delta else { return MacroMeshTheme.muted }
+        if abs(delta) < 0.01 { return MacroMeshTheme.muted }
+        // For weight loss, negative delta is typically “good” — use green.
+        return delta < 0 ? MacroMeshTheme.primary : MacroMeshTheme.orange
+    }
+
+    private var deltaSinceStart: Double? {
+        let sorted = points.sorted { $0.date < $1.date }
+        guard let first = sorted.first?.weightLbs, let last = sorted.last?.weightLbs, sorted.count >= 2 else { return nil }
+        return last - first
+    }
+
+    private var deltaLast7Days: Double? {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date().addingTimeInterval(-7 * 86400)
+        let window = points.filter { $0.date >= cutoff }.sorted { $0.date < $1.date }
+        guard let first = window.first?.weightLbs, let last = window.last?.weightLbs, window.count >= 2 else { return nil }
+        return last - first
+    }
+
+    private func deltaCopy(delta: Double, suffix: String) -> String {
+        let arrow = delta < -0.01 ? "↓" : (delta > 0.01 ? "↑" : "→")
+        return "\(arrow) \(String(format: "%.1f", abs(delta))) lbs \(suffix)"
+    }
+
+    private func nearestPoint(to date: Date) -> WeightChartPoint? {
+        guard !points.isEmpty else { return nil }
+        return points.min(by: { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) })
+    }
+
+    @ViewBuilder
+    private func chartTooltip(point: WeightChartPoint) -> some View {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+
+        VStack(alignment: .leading, spacing: 2) {
+            Text(String(format: "%.1f lbs", point.weightLbs))
+                .font(.caption.weight(.bold))
+                .foregroundColor(MacroMeshTheme.text)
+            Text(formatter.string(from: point.date))
+                .font(.caption2)
+                .foregroundColor(MacroMeshTheme.muted)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(MacroMeshTheme.border, lineWidth: 1)
+        )
     }
 }
 
