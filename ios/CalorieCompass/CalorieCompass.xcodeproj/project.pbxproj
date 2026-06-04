@@ -39,6 +39,10 @@
 		10000000000000000000011C /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001C /* DesignSystem.swift */; };
 		10000000000000000000011D /* ProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001D /* ProgressView.swift */; };
 		100000000000000000000203 /* ProfileHistoryDashboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000023 /* ProfileHistoryDashboardTests.swift */; };
+		2A9100000000000000000001 /* HistorySorting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9000000000000000000001 /* HistorySorting.swift */; };
+		2A9100000000000000000002 /* WeightChartSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9000000000000000000002 /* WeightChartSanitizer.swift */; };
+		2A9100000000000000000003 /* HistorySortingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9000000000000000000003 /* HistorySortingTests.swift */; };
+		2A9100000000000000000004 /* WeightChartSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9000000000000000000004 /* WeightChartSanitizerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +90,10 @@
 		100000000000000000000019 /* HistoryMealCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryMealCard.swift; sourceTree = "<group>"; };
 		10000000000000000000001C /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		10000000000000000000001D /* ProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressView.swift; sourceTree = "<group>"; };
+		2A9000000000000000000001 /* HistorySorting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySorting.swift; sourceTree = "<group>"; };
+		2A9000000000000000000002 /* WeightChartSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeightChartSanitizer.swift; sourceTree = "<group>"; };
+		2A9000000000000000000003 /* HistorySortingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySortingTests.swift; sourceTree = "<group>"; };
+		2A9000000000000000000004 /* WeightChartSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeightChartSanitizerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +114,8 @@
 		100000000000000000000802 /* CalorieCompass */ = {
 			isa = PBXGroup;
 			children = (
+				2A9000000000000000000001 /* HistorySorting.swift */,
+				2A9000000000000000000002 /* WeightChartSanitizer.swift */,
 				100000000000000000000001 /* CalorieCompassApp.swift */,
 				100000000000000000000002 /* ContentView.swift */,
 				100000000000000000000003 /* DashboardView.swift */,
@@ -142,6 +152,8 @@
 		100000000000000000000803 /* CalorieCompassTests */ = {
 			isa = PBXGroup;
 			children = (
+				2A9000000000000000000003 /* HistorySortingTests.swift */,
+				2A9000000000000000000004 /* WeightChartSanitizerTests.swift */,
 				100000000000000000000021 /* MealManagementTests.swift */,
 				100000000000000000000022 /* ProfileViewTests.swift */,
 				100000000000000000000023 /* ProfileHistoryDashboardTests.swift */,
@@ -227,8 +239,8 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		100000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000101, 100000000000000000000102, 100000000000000000000103, 100000000000000000000104, 100000000000000000000105, 100000000000000000000106, 100000000000000000000107, 10000000000000000000011A, 10000000000000000000011B, 10000000000000000000011C, 10000000000000000000011D, 100000000000000000000108, 100000000000000000000109, 10000000000000000000010A, 10000000000000000000010B, 10000000000000000000010D, 10000000000000000000010E, 10000000000000000000010F, 100000000000000000000110, 100000000000000000000111, 100000000000000000000112, 100000000000000000000113, 100000000000000000000114, 100000000000000000000115, 100000000000000000000116, 100000000000000000000117, 100000000000000000000118, 100000000000000000000119, ); runOnlyForDeploymentPostprocessing = 0; };
-		100000000000000000000902 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000201, 100000000000000000000202, 100000000000000000000203, ); runOnlyForDeploymentPostprocessing = 0; };
+		100000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000101, 100000000000000000000102, 100000000000000000000103, 100000000000000000000104, 100000000000000000000105, 100000000000000000000106, 100000000000000000000107, 10000000000000000000011A, 10000000000000000000011B, 10000000000000000000011C, 10000000000000000000011D, 100000000000000000000108, 100000000000000000000109, 10000000000000000000010A, 10000000000000000000010B, 10000000000000000000010D, 10000000000000000000010E, 10000000000000000000010F, 100000000000000000000110, 100000000000000000000111, 100000000000000000000112, 100000000000000000000113, 100000000000000000000114, 100000000000000000000115, 100000000000000000000116, 100000000000000000000117, 100000000000000000000118, 100000000000000000000119, 2A9100000000000000000001, 2A9100000000000000000002, ); runOnlyForDeploymentPostprocessing = 0; };
+		100000000000000000000902 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000201, 100000000000000000000202, 100000000000000000000203, 2A9100000000000000000003, 2A9100000000000000000004, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
