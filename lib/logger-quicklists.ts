@@ -145,9 +145,10 @@ export function loadQuickListsFromStorage(storage: Pick<Storage, 'getItem'>): Qu
   const parsed = safeParseJson(raw);
   if (!parsed || typeof parsed !== 'object') return defaultQuickListsState();
 
-  const favorites = Array.isArray((parsed as any).favorites) ? (parsed as any).favorites : [];
-  const recents = Array.isArray((parsed as any).recents) ? (parsed as any).recents : [];
-  const templates = Array.isArray((parsed as any).templates) ? (parsed as any).templates : [];
+  const record = parsed as Record<string, unknown>;
+  const favorites = Array.isArray(record.favorites) ? record.favorites : [];
+  const recents = Array.isArray(record.recents) ? record.recents : [];
+  const templates = Array.isArray(record.templates) ? record.templates : [];
 
   return {
     favorites: favorites as QuickFood[],
@@ -159,4 +160,3 @@ export function loadQuickListsFromStorage(storage: Pick<Storage, 'getItem'>): Qu
 export function saveQuickListsToStorage(storage: Pick<Storage, 'setItem'>, state: QuickListsState) {
   storage.setItem(quickListsStorageKey, JSON.stringify(state));
 }
-
