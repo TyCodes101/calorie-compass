@@ -63,7 +63,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
       badgeLabel: explicitConfidence ?? 'Estimated',
       badgeTone: 'estimated',
       sourceLabel,
-      confidenceLabel: 'Estimated, please review',
+      confidenceLabel: explicitConfidence ?? 'Estimated',
       helperText: 'Estimated from the best available details. Review only if the portion or product was different.',
       trusted: false,
     };
@@ -78,7 +78,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
       badgeLabel: 'Verified',
       badgeTone: 'verified',
       sourceLabel,
-      confidenceLabel: explicitConfidence ?? 'Verified match',
+      confidenceLabel: explicitConfidence ?? 'Verified',
       helperText: 'Matched to structured nutrition data. Adjust only if your serving or product version differed.',
       trusted: true,
     };
@@ -89,7 +89,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
       badgeLabel: 'USDA',
       badgeTone: 'generic',
       sourceLabel,
-      confidenceLabel: explicitConfidence ?? 'High confidence database match',
+      confidenceLabel: explicitConfidence ?? 'Matched',
       helperText: 'This came from USDA FoodData Central. Adjust if your portion differed.',
       trusted: true,
     };
@@ -100,7 +100,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
       badgeLabel: 'Branded database',
       badgeTone: 'branded',
       sourceLabel,
-      confidenceLabel: explicitConfidence ?? 'High confidence database match',
+      confidenceLabel: explicitConfidence ?? 'Matched',
       helperText: 'This came from a branded food database match. Adjust if your product version differs.',
       trusted: true,
     };
@@ -114,7 +114,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
       badgeLabel: 'Branded database',
       badgeTone: 'branded',
       sourceLabel,
-      confidenceLabel: explicitConfidence ?? 'High confidence match',
+      confidenceLabel: explicitConfidence ?? 'Matched',
       helperText: 'Closest structured product match. You can adjust it if your exact version differs.',
       trusted: true,
     };
@@ -124,7 +124,7 @@ export function getItemTrustPresentation(item: TrustItemLike): ItemTrustPresenta
     badgeLabel: explicitConfidence ?? 'Verified',
     badgeTone: 'generic',
     sourceLabel,
-    confidenceLabel: explicitConfidence ?? 'High confidence match',
+    confidenceLabel: explicitConfidence ?? 'Matched',
     helperText: 'Structured reference match. Portion and recipe differences can still change totals.',
     trusted: true,
   };
@@ -170,7 +170,7 @@ export function summarizeStoredItems(
 export function getConfidenceCopy(score: number) {
   if (score >= 0.85) {
     return {
-      title: 'High confidence meal analysis',
+      title: 'Verified meal review',
       description: 'Specific details and trusted matches made this meal easier to verify quickly.',
     };
   }

@@ -3,6 +3,14 @@ import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
 import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
 import { usdaProvider } from '@/lib/nutrition/providers/usda';
+import {
+  buildAccuracyClarificationQuestion,
+  buildNutritionIntent,
+  isAuthoritativeNutritionResult,
+  resolveBestNutritionCandidate,
+  shouldClarifyBeforeLookup,
+  withVerificationLabels,
+} from '@/lib/nutrition/accuracyEngine';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
 import type { NutritionLookupInput, NutritionLookupProvider } from '@/lib/nutrition/types';
 
@@ -32,7 +40,7 @@ function makeLabelResponse(input: NutritionLookupInput) {
         is_trusted: true,
         source_type: 'GENERIC_REFERENCE',
         source_name: 'User-provided nutrition label',
-        confidence_label: 'Very High',
+        confidence_label: 'Verified',
         match_type: 'verified_database',
         matched_query: input.nutritionLabel.name?.trim() || 'Nutrition label entry',
         original_user_text: input.text,
@@ -89,6 +97,7 @@ function decorateLookupItems(items: ParsedFoodItem[], originalUserText: string) 
     matched_query: item.matched_query ?? originalUserText,
     provider_used: item.provider_used ?? inferProviderUsed(item),
     match_type: item.match_type ?? (item.source_type === 'OFFICIAL_RESTAURANT' ? 'exact_restaurant' : item.source_type === 'AI_ESTIMATE' ? 'ai_estimate' : item.is_trusted ? 'verified_database' : 'unknown'),
+    confidence_label: item.confidence_label ?? (item.source_type === 'AI_ESTIMATE' ? 'Estimated' : item.source_type === 'OFFICIAL_RESTAURANT' ? 'Verified' : 'Matched'),
     used_ai_fallback: item.used_ai_fallback ?? item.source_type === 'AI_ESTIMATE',
   }));
 }
@@ -99,7 +108,7 @@ function decorateEstimatedItem(item: ParsedFoodItem, originalUserText: string): 
     notes: item.notes ?? 'No verified match found, estimated with AI.',
     source_type: 'AI_ESTIMATE',
     source_name: item.source_name ?? 'AI estimate',
-    confidence_label: 'Low',
+    confidence_label: 'Estimated',
     match_type: 'ai_estimate',
     matched_query: item.matched_query ?? originalUserText,
     original_user_text: originalUserText,
@@ -242,6 +251,12 @@ export async function lookupNutrition(
   }
 
   const normalizedQuery = normalizeFoodQuery(input.text);
+  const intent = buildNutritionIntent(input, normalizedQuery);
+
+  if (shouldClarifyBeforeLookup(intent)) {
+    return makeClarificationResponse(input, buildAccuracyClarificationQuestion(intent));
+  }
+
   const context = {
     text: input.text,
     mealType: input.mealType,
@@ -254,18 +269,27 @@ export async function lookupNutrition(
   const primaryResult = primaryProvider ? await primaryProvider.lookup(context) : null;
 
   if (primaryResult) {
-    return primaryResult;
+    if (primaryResult.needs_clarification) {
+      return primaryResult;
+    }
+
+    if (isAuthoritativeNutritionResult(primaryResult, intent, primaryProvider.id)) {
+      return withVerificationLabels(primaryResult);
+    }
   }
 
   const shouldProtectBrandIntent = usingDefaultProviders
     && shouldClarifyUnresolvedBrand(normalizedQuery.brandHint, normalizedQuery.searchText);
-  const intent = extractLookupIntent(input, normalizedQuery.searchText, normalizedQuery.brandHint);
+  const lookupIntent = extractLookupIntent(input, normalizedQuery.searchText, normalizedQuery.brandHint);
+  const candidates = primaryResult ? [{ providerId: primaryProvider?.id ?? 'primary', response: primaryResult }] : [];
 
   for (const provider of supportingProviders) {
     const result = await provider.lookup(context);
     if (!result) {
       continue;
     }
+
+    candidates.push({ providerId: provider.id, response: result });
 
     if (shouldProtectBrandIntent && !responseMatchesBrand(result, normalizedQuery.brandHint)) {
       return makeClarificationResponse(
@@ -281,14 +305,21 @@ export async function lookupNutrition(
       );
     }
 
-    if (!responseMatchesPlausibility(result, intent)) {
+    if (!responseMatchesPlausibility(result, lookupIntent)) {
       return makeClarificationResponse(
         input,
         'I found possible nutrition data, but the serving or macros do not look right for what you described. Which exact item or serving should I use?',
       );
     }
+  }
 
-    return result;
+  const rankedResult = resolveBestNutritionCandidate(intent, candidates);
+  if (rankedResult.response) {
+    return rankedResult.response;
+  }
+
+  if (rankedResult.clarificationQuestion) {
+    return makeClarificationResponse(input, rankedResult.clarificationQuestion);
   }
 
   if (shouldProtectBrandIntent) {
@@ -299,7 +330,8 @@ export async function lookupNutrition(
   }
 
   if (options?.aiEstimateProvider) {
-    return options.aiEstimateProvider.lookup(context);
+    const aiResponse = await options.aiEstimateProvider.lookup(context);
+    return aiResponse ? withVerificationLabels(aiResponse) : aiResponse;
   }
 
   return null;

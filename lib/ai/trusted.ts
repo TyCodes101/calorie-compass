@@ -62,9 +62,9 @@ type KnownPackagedBrand =
   | null;
 
 function defaultConfidenceLabel(item: ParsedFoodItem): ParsedFoodItem['confidence_label'] {
-  if (item.source_type === 'OFFICIAL_RESTAURANT') return 'Very High';
-  if (item.source_type === 'AI_ESTIMATE') return 'Low';
-  return 'High';
+  if (item.source_type === 'OFFICIAL_RESTAURANT') return 'Verified';
+  if (item.source_type === 'AI_ESTIMATE') return 'Estimated';
+  return 'Matched';
 }
 
 function defaultMatchType(item: ParsedFoodItem): ParsedFoodItem['match_type'] {
@@ -240,7 +240,7 @@ function matchStarbucksSegment(segment: string, factor: number): ParsedFoodItem[
       'grande',
       { calories: 140, protein: 1, carbs: 28, fat: 2.5, fiber: 0, sugar: 25, sodium: 65 },
       'Structured restaurant estimate for Starbucks Grande Pink Drink.'
-    )].map((item) => ({ ...item, is_trusted: true, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Starbucks nutrition reference', confidence_label: 'High', provider_used: 'local-verified-catalog', used_ai_fallback: false, match_type: 'fuzzy_restaurant' }));
+    )].map((item) => ({ ...item, is_trusted: true, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Starbucks nutrition reference', confidence_label: 'Matched', provider_used: 'local-verified-catalog', used_ai_fallback: false, match_type: 'fuzzy_restaurant' }));
   }
 
   if (segment.includes('latte')) {
@@ -320,7 +320,7 @@ function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[
 
 function matchRestaurantAlias(segment: string, brand: Exclude<KnownRestaurantBrand, null>, factor: number) {
   if (brand === 'Taco Bell' && segment.includes('crunch') && segment.includes('wrap')) {
-    return [makeEstimatedItem('Taco Bell Crunchwrap Supreme', 1, 'item', { calories: 540, protein: 16, carbs: 71, fat: 21, fiber: 6, sugar: 6, sodium: 1210 }, 'Structured restaurant estimate for Taco Bell Crunchwrap Supreme.')].map((item) => ({ ...item, is_trusted: true, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Taco Bell nutrition reference', confidence_label: 'High', provider_used: 'local-verified-catalog', used_ai_fallback: false, match_type: 'fuzzy_restaurant' }));
+    return [makeEstimatedItem('Taco Bell Crunchwrap Supreme', 1, 'item', { calories: 540, protein: 16, carbs: 71, fat: 21, fiber: 6, sugar: 6, sodium: 1210 }, 'Structured restaurant estimate for Taco Bell Crunchwrap Supreme.')].map((item) => ({ ...item, is_trusted: true, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Taco Bell nutrition reference', confidence_label: 'Matched', provider_used: 'local-verified-catalog', used_ai_fallback: false, match_type: 'fuzzy_restaurant' }));
   }
 
   const food = findCatalogFoodByBestMatch(segment, brand);
@@ -451,7 +451,7 @@ function matchPackagedSegment(segment: string): ParsedFoodItem[] {
       source_name: match.exactProduct || match.exactAlias
         ? `${scaled.source_name ?? 'Branded nutrition reference'} · high-confidence product match`
         : scaled.source_name,
-      confidence_label: match.exactProduct || match.exactAlias ? 'Very High' : 'High',
+      confidence_label: match.exactProduct || match.exactAlias ? 'Verified' : 'Matched',
       match_type: match.exactProduct || match.exactAlias ? 'exact_branded' : 'fuzzy_branded',
       matched_query: food.canonicalName,
       used_ai_fallback: false,

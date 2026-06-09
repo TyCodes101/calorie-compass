@@ -43,7 +43,7 @@ interface MatchResult {
   match_id: string | null;
   match_name: string | null;
   confidence: number;
-  confidence_label: "Verified" | "Estimated" | "Low Confidence";
+  confidence_label: "Verified" | "Matched" | "Estimated" | "Needs Review";
   source_type: "usda" | "branded" | "user" | "llm_confirmed" | "parse_error";
   serving_used: string | null;
   serving_grams: number | null;
@@ -73,7 +73,7 @@ function buildSafeNoMatch(reason: string, rawOutput?: string): MatchResult {
     match_id: null,
     match_name: null,
     confidence: 0,
-    confidence_label: "Low Confidence",
+    confidence_label: "Needs Review",
     source_type: "parse_error",
     serving_used: null,
     serving_grams: null,

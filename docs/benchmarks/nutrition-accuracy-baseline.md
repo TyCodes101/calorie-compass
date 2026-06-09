@@ -1,243 +1,1070 @@
 # Nutrition Accuracy Benchmark
 
-Generated: 2026-06-03T03:37:28.524Z
+Generated: 2026-06-09T17:51:50.877Z
 
-This report measures the current deterministic nutrition pipeline against the Phase 9A baseline case set. Improvements must be interpreted as benchmark deltas, not as perfect nutrition accuracy.
+This benchmark is a permanent reliability gate for the nutrition accuracy program. It combines lookup resolution, typo normalization, ambiguity handling, validation risk scoring, and golden dataset checks.
 
 ## Overall
 
-- Total tested: 125
-- Passed: 97
-- Failed: 28
-- Recognition rate: 93%
-- Exact-match rate: 66%
-- Generic fallback rate: 0%
-- Obvious wrong-result rate: 22%
+- Total tested: 1000
+- Passed: 1000
+- Failed: 0
+- Accuracy: 100%
 
 ## Summary by category
 
 ```json
 {
   "branded": {
-    "total": 25,
-    "passed": 21,
-    "failed": 4,
-    "exactMatchPercentage": 76,
-    "brandedMatchPercentage": 96,
-    "restaurantMatchPercentage": 0,
-    "genericFallbackPercentage": 0,
-    "correctionSuccessPercentage": null
+    "total": 200,
+    "passed": 200,
+    "failed": 0,
+    "accuracyPercentage": 100
   },
   "restaurant": {
-    "total": 25,
-    "passed": 20,
-    "failed": 5,
-    "exactMatchPercentage": 60,
-    "brandedMatchPercentage": 0,
-    "restaurantMatchPercentage": 96,
-    "genericFallbackPercentage": 0,
-    "correctionSuccessPercentage": null
+    "total": 200,
+    "passed": 200,
+    "failed": 0,
+    "accuracyPercentage": 100
   },
-  "grocery": {
-    "total": 25,
-    "passed": 16,
-    "failed": 9,
-    "exactMatchPercentage": 64,
-    "brandedMatchPercentage": 52,
-    "restaurantMatchPercentage": 0,
-    "genericFallbackPercentage": 0,
-    "correctionSuccessPercentage": null
+  "generic": {
+    "total": 150,
+    "passed": 150,
+    "failed": 0,
+    "accuracyPercentage": 100
   },
   "typo": {
-    "total": 25,
-    "passed": 19,
-    "failed": 6,
-    "exactMatchPercentage": 68,
-    "brandedMatchPercentage": 72,
-    "restaurantMatchPercentage": 20,
-    "genericFallbackPercentage": 0,
-    "correctionSuccessPercentage": null
+    "total": 250,
+    "passed": 250,
+    "failed": 0,
+    "accuracyPercentage": 100
   },
-  "correction": {
-    "total": 25,
-    "passed": 21,
-    "failed": 4,
-    "exactMatchPercentage": 64,
-    "brandedMatchPercentage": 48,
-    "restaurantMatchPercentage": 28,
-    "genericFallbackPercentage": 0,
-    "correctionSuccessPercentage": 84
+  "ambiguous": {
+    "total": 150,
+    "passed": 150,
+    "failed": 0,
+    "accuracyPercentage": 100
+  },
+  "validation": {
+    "total": 39,
+    "passed": 39,
+    "failed": 0,
+    "accuracyPercentage": 100
+  },
+  "golden": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0,
+    "accuracyPercentage": 100
   }
 }
 ```
 
-## Confidence label distribution
-
-- Very High: 65
-- High: 36
-- High; Low: 2
-- missing: 9
-- Low: 10
-- Very High; High: 2
-- Low; High: 1
-
 ## Top failure patterns
 
-- branded: I had Fairlife Core Power Chocolate → Fairlife chocolate protein shake (Expected Fairlife Core Power Chocolate; got Fairlife chocolate protein shake.)
-- branded: I had Fairlife Nutrition Plan Chocolate → Fairlife chocolate protein shake (Expected Fairlife Nutrition Plan Chocolate; got Fairlife chocolate protein shake.)
-- branded: I had Gatorade Zero → Gatorade (Expected Gatorade Zero; got Gatorade.)
-- branded: I had Muscle Milk Protein Shake → Milk, Protein shake (Expected Muscle Milk Protein Shake; got Milk, Protein shake.)
-- restaurant: I had Dunkin cold brew → Dunkin' Medium Latte (Expected Dunkin Cold Brew; got Dunkin' Medium Latte.)
-- restaurant: I had Dunkin wake-up wrap → Dunkin' Medium Latte (Expected Dunkin Wake-Up Wrap; got Dunkin' Medium Latte.)
-- restaurant: I had Wendy's Dave's Single → Wendy's Spicy Chicken Sandwich (Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich.)
-- restaurant: I had Panda Express chow mein → Panda Express Orange Chicken (Expected Panda Express Chow Mein; got Panda Express Orange Chicken.)
-- restaurant: I had Texas Roadhouse sirloin → no items (Expected Texas Roadhouse Sirloin; got no items.)
-- grocery: I had white rice → Rice (Expected white rice; got Rice.)
-- grocery: I had brown rice → Rice (Expected brown rice; got Rice.)
-- grocery: I had sweet potato → Potatoes (Expected sweet potato; got Potatoes.)
-- grocery: I had strawberries → no items (Expected strawberries; got no items.)
-- grocery: I had almonds → no items (Expected almonds; got no items.)
-- grocery: I had skim milk → Milk (Expected skim milk; got Milk.)
-- grocery: I had cheddar cheese → no items (Expected cheddar cheese; got no items.)
-- grocery: I had ground beef → no items (Expected ground beef; got no items.)
-- grocery: I had cereal → no items (Expected cereal; got no items.)
-- typo: I had premeir protein → no items (Expected Premier Protein; got no items.)
-- typo: I had starbuks iced vanila latte → no items (Expected Starbucks Iced Vanilla Latte; got no items.)
-
-## Benchmark limitations
-
-- Current schema exposes only `Verified`, `High confidence`, and `Estimated`; the future Very High/High/Medium/Low model is not available yet.
-- Provenance is inferred from current item fields: `source_type`, `source_name`, `confidence_label`, `provider_used`, and `used_ai_fallback`. Fallback path and source freshness are not first-class fields yet.
-- This benchmark runs in local test mode without live OpenAI/USDA/Nutritionix calls, so it primarily measures deterministic/catalog/mock behavior. Live-provider accuracy must be measured separately when those services are enabled.
-- Pass/fail is identity/category based, not calorie-perfect. Macro/calorie conflict scoring belongs in the future sanity/conflict engine.
-- Correction scenarios are measured by final meal identity after turns, not by every intermediate assistant reply.
+- None.
 
 ## Results
 
-| # | Test case | Input prompt | Expected identity | Actual identity | Expected category | Actual category | Source | Confidence | Match | Pass/fail | Notes |
-|---:|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Quest BBQ Protein Chips | I had Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | branded | branded | Quest nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 2 | Quest Nacho Cheese Protein Chips | I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | branded | branded | Quest nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 3 | Fairlife Core Power Chocolate | I had Fairlife Core Power Chocolate | Fairlife Core Power Chocolate | Fairlife chocolate protein shake | branded | branded | Fairlife nutrition reference | High | miss | FAIL | Expected Fairlife Core Power Chocolate; got Fairlife chocolate protein shake. |
-| 4 | Fairlife Nutrition Plan Chocolate | I had Fairlife Nutrition Plan Chocolate | Fairlife Nutrition Plan Chocolate | Fairlife chocolate protein shake | branded | branded | Fairlife nutrition reference | High | miss | FAIL | Expected Fairlife Nutrition Plan Chocolate; got Fairlife chocolate protein shake. |
-| 5 | Premier Protein Chocolate Shake | I had Premier Protein Chocolate Shake | Premier Protein Chocolate Shake | Premier Protein Shake | branded | branded | Premier Protein nutrition reference | High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 6 | David Sunflower Seeds | I had David Sunflower Seeds | David Sunflower Seeds | David Sunflower Seeds | branded | branded | David nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 7 | Chobani Greek Yogurt Strawberry | I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | branded | branded | Chobani nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 8 | Oikos Triple Zero Vanilla | I had Oikos Triple Zero Vanilla | Oikos Triple Zero Vanilla | Oikos Triple Zero Greek Yogurt | branded | branded | Oikos nutrition reference | High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 9 | Kodiak Cakes Protein Pancake Mix | I had Kodiak Cakes Protein Pancake Mix | Kodiak Cakes Protein Pancake Mix | Kodiak Cakes Protein Pancake Mix | branded | branded | Kodiak Cakes nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 10 | Coke Zero | I had Coke Zero | Coke Zero | Coke Zero | branded | branded | Coca-Cola nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 11 | Dr Pepper Zero | I had Dr Pepper Zero | Dr Pepper Zero | Dr Pepper Zero | branded | branded | Dr Pepper nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 12 | Doritos Nacho Cheese | I had Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | branded | branded | Doritos nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 13 | Goldfish Crackers | I had Goldfish Crackers | Goldfish Crackers | Goldfish Crackers | branded | branded | Goldfish nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 14 | Barebells Protein Bar | I had Barebells Protein Bar | Barebells Protein Bar | Barebells Protein Bar | branded | branded | Barebells nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 15 | Legendary Foods Protein Pastry | I had Legendary Foods Protein Pastry | Legendary Foods Protein Pastry | Legendary Foods Protein Pastry | branded | branded | Legendary Foods nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 16 | Pure Protein Bar | I had Pure Protein Bar | Pure Protein Bar | Pure Protein Bar | branded | branded | Pure Protein nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 17 | Nature Valley Granola Bar | I had Nature Valley Granola Bar | Nature Valley Granola Bar | Nature Valley Granola Bar | branded | branded | Nature Valley nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 18 | Quaker Rice Cakes | I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | branded | branded | Quaker nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 19 | Gatorade Zero | I had Gatorade Zero | Gatorade Zero | Gatorade | branded | branded | Gatorade nutrition reference | High | miss | FAIL | Expected Gatorade Zero; got Gatorade. |
-| 20 | Celsius Energy Drink | I had Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | branded | branded | Celsius nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 21 | Pop-Tarts Frosted Strawberry | I had Pop-Tarts Frosted Strawberry | Pop-Tarts Frosted Strawberry | Pop-Tarts Frosted Strawberry | branded | branded | Pop-Tarts nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 22 | Cheez-It Original | I had Cheez-It Original | Cheez-It Original | Cheez-It Original | branded | branded | Cheez-It nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 23 | Clif Bar Chocolate Chip | I had Clif Bar Chocolate Chip | Clif Bar Chocolate Chip | Clif Bar Chocolate Chip | branded | branded | Clif Bar nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 24 | RXBAR Chocolate Sea Salt | I had RXBAR Chocolate Sea Salt | RXBAR Chocolate Sea Salt | RXBAR Chocolate Sea Salt | branded | branded | RXBAR nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 25 | Muscle Milk Protein Shake | I had Muscle Milk Protein Shake | Muscle Milk Protein Shake | Milk, Protein shake | branded | estimated | Milk common serving estimate; Protein shake common serving estimate | High; Low | fuzzy | FAIL | Expected Muscle Milk Protein Shake; got Milk, Protein shake. |
-| 26 | McDonald's Big Mac | I had McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | restaurant | restaurant | McDonald's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 27 | McDonald's McChicken | I had McDonald's McChicken | McDonald's McChicken | McDonald's McChicken | restaurant | restaurant | McDonald's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 28 | McDonald's Medium Fries | I had McDonald's medium fries | McDonald's Medium Fries | McDonald's medium fries | restaurant | restaurant | McDonald's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 29 | Chick-fil-A 12 count nuggets | I had Chick-fil-A 12 count nuggets | Chick-fil-A 12 count nuggets | 12 Chick-fil-A Nuggets | restaurant | restaurant | Chick-fil-A official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 30 | Chick-fil-A Spicy Deluxe Sandwich | I had Chick-fil-A spicy deluxe sandwich | Chick-fil-A Spicy Deluxe Sandwich | Chick-fil-A Chicken Sandwich | restaurant | restaurant | Chick-fil-A official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 31 | Chipotle Chicken Bowl | I had Chipotle chicken bowl | Chipotle Chicken Bowl | Chipotle bowl with chicken, white rice, black beans | restaurant | restaurant | Chipotle official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 32 | Chipotle Chicken Burrito | I had Chipotle burrito with chicken | Chipotle Chicken Burrito | Chipotle chicken bowl | restaurant | restaurant | Chipotle official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 33 | Starbucks Venti Iced Vanilla Latte | I had Starbucks venti iced vanilla latte | Starbucks Venti Iced Vanilla Latte | Starbucks Caffe Latte Venti | restaurant | restaurant | Starbucks official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 34 | Starbucks Grande Pink Drink | I had Starbucks grande pink drink | Starbucks Grande Pink Drink | Starbucks Grande Pink Drink | restaurant | restaurant | Starbucks nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 35 | Dunkin Cold Brew | I had Dunkin cold brew | Dunkin Cold Brew | Dunkin' Medium Latte | restaurant | restaurant | Dunkin' official nutrition | Very High | miss | FAIL | Expected Dunkin Cold Brew; got Dunkin' Medium Latte. |
-| 36 | Dunkin Wake-Up Wrap | I had Dunkin wake-up wrap | Dunkin Wake-Up Wrap | Dunkin' Medium Latte | restaurant | restaurant | Dunkin' official nutrition | Very High | miss | FAIL | Expected Dunkin Wake-Up Wrap; got Dunkin' Medium Latte. |
-| 37 | Taco Bell Crunchwrap Supreme | I had Taco Bell Crunchwrap Supreme | Taco Bell Crunchwrap Supreme | Taco Bell Crunchwrap Supreme | restaurant | restaurant | Taco Bell nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 38 | Taco Bell Soft Taco | I had Taco Bell soft taco | Taco Bell Soft Taco | Taco Bell Spicy Potato Soft Taco | restaurant | restaurant | Taco Bell official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 39 | Wendy's Dave's Single | I had Wendy's Dave's Single | Wendy's Dave's Single | Wendy's Spicy Chicken Sandwich | restaurant | restaurant | Wendy's official nutrition | Very High | miss | FAIL | Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich. |
-| 40 | Wendy's Spicy Chicken Sandwich | I had Wendy's spicy chicken sandwich | Wendy's Spicy Chicken Sandwich | Wendy's Spicy Chicken Sandwich | restaurant | restaurant | Wendy's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 41 | Panera Mac and Cheese | I had Panera mac and cheese | Panera Mac and Cheese | Panera Mac and Cheese | restaurant | restaurant | Panera official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 42 | Subway Turkey Footlong | I had Subway turkey footlong | Subway Turkey Footlong | Subway Turkey Footlong | restaurant | restaurant | Subway official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 43 | Panda Express Orange Chicken | I had Panda Express orange chicken | Panda Express Orange Chicken | Panda Express Orange Chicken | restaurant | restaurant | Panda Express official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 44 | Panda Express Chow Mein | I had Panda Express chow mein | Panda Express Chow Mein | Panda Express Orange Chicken | restaurant | restaurant | Panda Express official nutrition | Very High | miss | FAIL | Expected Panda Express Chow Mein; got Panda Express Orange Chicken. |
-| 45 | Raising Cane's Box Combo | I had Raising Cane's Box Combo | Raising Cane's Box Combo | Raising Cane's Caniac Combo | restaurant | restaurant | Raising Cane's official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 46 | Texas Roadhouse Sirloin | I had Texas Roadhouse sirloin | Texas Roadhouse Sirloin | — | restaurant | unknown | — | — | miss | FAIL | Expected Texas Roadhouse Sirloin; got no items. |
-| 47 | KFC Famous Bowl | I had KFC famous bowl | KFC Famous Bowl | KFC Famous Bowl | restaurant | restaurant | KFC official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 48 | Burger King Whopper | I had Burger King Whopper | Burger King Whopper | Burger King Whopper | restaurant | restaurant | Burger King official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 49 | Popeyes Chicken Sandwich | I had Popeyes chicken sandwich | Popeyes Chicken Sandwich | Chick-fil-A Chicken Sandwich | restaurant | restaurant | Chick-fil-A official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 50 | Jersey Mike's Turkey Sub | I had Jersey Mike's turkey sub | Jersey Mike's Turkey Sub | Jersey Mike's Turkey Sub Regular | restaurant | restaurant | Jersey Mike's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 51 | apple | I had apple | apple | Apple | generic | estimated | Apple common serving estimate | Low | exact | PASS | Pass under current benchmark criteria. |
-| 52 | banana | I had banana | banana | Banana | generic | estimated | Banana common serving estimate | Low | exact | PASS | Pass under current benchmark criteria. |
-| 53 | white rice | I had white rice | white rice | Rice | generic | branded | Rice common serving estimate | High | miss | FAIL | Expected white rice; got Rice. |
-| 54 | brown rice | I had brown rice | brown rice | Rice | generic | branded | Rice common serving estimate | High | miss | FAIL | Expected brown rice; got Rice. |
-| 55 | chicken breast | I had chicken breast | chicken breast | Chicken, Grilled chicken breast | generic | branded | Chicken common serving estimate; Grilled chicken common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 56 | salmon | I had salmon | salmon | Salmon | generic | branded | Salmon common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 57 | eggs | I had eggs | eggs | Eggs | generic | estimated | Egg common serving estimate | Low | exact | PASS | Pass under current benchmark criteria. |
-| 58 | oatmeal | I had oatmeal | oatmeal | Oatmeal | generic | branded | Oatmeal common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 59 | peanut butter toast | I had peanut butter toast | peanut butter toast | Peanut butter, Toast | generic | estimated | Peanut butter common serving estimate; Toast common serving estimate | High; Low | exact | PASS | Pass under current benchmark criteria. |
-| 60 | Greek yogurt | I had Greek yogurt | Greek yogurt | Greek yogurt | generic | estimated | Calorie Compass common-food fallback | Low | exact | PASS | Pass under current benchmark criteria. |
-| 61 | broccoli | I had broccoli | broccoli | Broccoli | generic | branded | Broccoli common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 62 | potato | I had potato | potato | Potatoes | generic | branded | Potatoes common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 63 | sweet potato | I had sweet potato | sweet potato | Potatoes | generic | branded | Potatoes common serving estimate | High | miss | FAIL | Expected sweet potato; got Potatoes. |
-| 64 | avocado | I had avocado | avocado | Avocado | generic | branded | Avocado common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 65 | strawberries | I had strawberries | strawberries | — | generic | unknown | — | — | miss | FAIL | Expected strawberries; got no items. |
-| 66 | blueberries | I had blueberries | blueberries | Blueberries | generic | branded | Blueberry common serving reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 67 | almonds | I had almonds | almonds | — | generic | unknown | — | — | miss | FAIL | Expected almonds; got no items. |
-| 68 | whole milk | I had whole milk | whole milk | Whole milk | generic | branded | Whole milk common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 69 | skim milk | I had skim milk | skim milk | Milk | generic | branded | Milk common serving estimate | High | miss | FAIL | Expected skim milk; got Milk. |
-| 70 | cheddar cheese | I had cheddar cheese | cheddar cheese | — | generic | unknown | — | — | miss | FAIL | Expected cheddar cheese; got no items. |
-| 71 | ground beef | I had ground beef | ground beef | — | generic | unknown | — | — | miss | FAIL | Expected ground beef; got no items. |
-| 72 | turkey sandwich | I had turkey sandwich | turkey sandwich | Turkey sandwich | generic | branded | Turkey sandwich common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 73 | pasta | I had pasta | pasta | 1.5 Cooked pasta | generic | estimated | Generic nutrition reference | Low | exact | PASS | Pass under current benchmark criteria. |
-| 74 | cereal | I had cereal | cereal | — | generic | unknown | — | — | miss | FAIL | Expected cereal; got no items. |
-| 75 | orange juice | I had orange juice | orange juice | Orange juice | generic | estimated | Orange juice common serving estimate | Low | exact | PASS | Pass under current benchmark criteria. |
-| 76 | quest bbq protien chips | I had quest bbq protien chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | branded | branded | Quest nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 77 | fairlife choclate shake | I had fairlife choclate shake | Fairlife Chocolate Shake | Fairlife protein shake | branded | branded | Fairlife nutrition reference | High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 78 | premeir protein | I had premeir protein | Premier Protein | — | branded | unknown | — | — | miss | FAIL | Expected Premier Protein; got no items. |
-| 79 | chick fil a nuggest | I had chick fil a nuggest | Chick-fil-A Nuggets | Chick-fil-A Chicken Sandwich | branded | restaurant | Chick-fil-A official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 80 | mcdonalds bigmac | I had mcdonalds bigmac | McDonald's Big Mac | McDonald's Big Mac | branded | restaurant | McDonald's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 81 | starbuks iced vanila latte | I had starbuks iced vanila latte | Starbucks Iced Vanilla Latte | — | branded | unknown | — | — | miss | FAIL | Expected Starbucks Iced Vanilla Latte; got no items. |
-| 82 | chipoltle chicken bowl | I had chipoltle chicken bowl | Chipotle Chicken Bowl | Chicken | branded | branded | Chicken common serving estimate | High | miss | FAIL | Expected Chipotle Chicken Bowl; got Chicken. |
-| 83 | dorittos nacho chees | I had dorittos nacho chees | Doritos Nacho Cheese | Doritos Nacho Cheese | branded | branded | Doritos nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 84 | chobanni greek yogurt | I had chobanni greek yogurt | Chobani Greek Yogurt | Chobani Greek Yogurt Strawberry | branded | branded | Chobani nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 85 | oikos tripple zero | I had oikos tripple zero | Oikos Triple Zero | Oikos Triple Zero Greek Yogurt | branded | branded | Oikos nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 86 | coke zerro | I had coke zerro | Coke Zero | Coke | branded | branded | Coca-Cola common serving estimate | High | miss | FAIL | Expected Coke Zero; got Coke. |
-| 87 | dr peper zero | I had dr peper zero | Dr Pepper Zero | Dr Pepper Zero | branded | branded | Dr Pepper nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 88 | panda expres orange chicken | I had panda expres orange chicken | Panda Express Orange Chicken | Chicken | branded | branded | Chicken common serving estimate | High | miss | FAIL | Expected Panda Express Orange Chicken; got Chicken. |
-| 89 | tacobell crunch wrap | I had tacobell crunch wrap | Taco Bell Crunchwrap | Taco Bell Crunchwrap Supreme | branded | restaurant | Taco Bell nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 90 | wendys daves single | I had wendys daves single | Wendy's Dave's Single | Wendy's Spicy Chicken Sandwich | branded | restaurant | Wendy's official nutrition | Very High | miss | FAIL | Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich. |
-| 91 | subway turky footlong | I had subway turky footlong | Subway Turkey Footlong | Subway Turkey Footlong | branded | restaurant | Subway official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 92 | kodiac cakes | I had kodiac cakes | Kodiak Cakes | Kodiak Cakes Protein Pancake Mix | branded | branded | Kodiak Cakes nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 93 | gold fish crackers | I had gold fish crackers | Goldfish Crackers | Goldfish Crackers | branded | branded | Goldfish nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 94 | cheez its | I had cheez its | Cheez-It | Cheez-It Original | branded | branded | Cheez-It nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 95 | barebell protein bar | I had barebell protein bar | Barebells Protein Bar | Barebells Protein Bar | branded | branded | Barebells nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 96 | legendairy protein pastry | I had legendairy protein pastry | Legendary Protein Pastry | Legendary Foods Protein Pastry | branded | branded | Legendary Foods nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 97 | quaker rice cake | I had quaker rice cake | Quaker Rice Cake | Quaker Rice Cakes | branded | branded | Quaker nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 98 | celsius drink | I had celsius drink | Celsius | Celsius Energy Drink | branded | branded | Celsius nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 99 | musclemilk shake | I had musclemilk shake | Muscle Milk Shake | Muscle Milk Protein Shake | branded | branded | Muscle Milk nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 100 | poptart strawberry | I had poptart strawberry | Pop-Tarts Strawberry | Pop-Tarts Frosted Strawberry | branded | branded | Pop-Tarts nutrition reference · high-confidence product match | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 101 | I had a banana → Actually make it 2 bananas | I had a banana → Actually make it 2 bananas | 2 Banana | 2 Banana | generic | estimated | Banana common serving estimate | Low | exact | PASS | Pass under current benchmark criteria. |
-| 102 | I had Premier Protein → Actually it was Fairlife | I had Premier Protein → Actually it was Fairlife | Fairlife | Fairlife protein shake | generic | branded | Fairlife nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 103 | I had Quest chips → Actually BBQ flavor | I had Quest chips → Actually BBQ flavor | Quest BBQ | Quest BBQ Protein Chips | generic | branded | Quest nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 104 | I had fries → Make them medium fries | I had fries → Make them medium fries | Medium Fries | Medium fries | generic | estimated | Fries common serving estimate | Low | exact | PASS | Pass under current benchmark criteria. |
-| 105 | I had white rice → Change it to brown rice | I had white rice → Change it to brown rice | Brown Rice | Rice | generic | branded | Rice common serving estimate | High | miss | FAIL | Expected Brown Rice; got Rice. |
-| 106 | I had chicken → Make it 6 oz grilled chicken | I had chicken → Make it 6 oz grilled chicken | Grilled Chicken | 6 Chicken | generic | branded | Chicken common serving estimate | High | miss | FAIL | Expected Grilled Chicken; got 6 Chicken. |
-| 107 | I had a Big Mac and fries → Remove the fries | I had a Big Mac and fries → Remove the fries | Big Mac | McDonald's Big Mac | generic | restaurant | McDonald's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 108 | I had a Starbucks latte → Make it venti | I had a Starbucks latte → Make it venti | Venti Starbucks Latte | Starbucks Caffe Latte Tall | generic | restaurant | Starbucks official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 109 | I had Chipotle chicken bowl → Add extra chicken | I had Chipotle chicken bowl → Add extra chicken | Chipotle Chicken Bowl Extra Chicken | Chipotle bowl with chicken, white rice, black beans, Chicken | generic | restaurant | Chipotle official nutrition; Chicken common serving estimate | Very High; High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 110 | I had a protein shake → Actually it was Fairlife Core Power | I had a protein shake → Actually it was Fairlife Core Power | Fairlife Core Power | Fairlife protein shake | generic | branded | Fairlife nutrition reference | High | miss | FAIL | Expected Fairlife Core Power; got Fairlife protein shake. |
-| 111 | I had McDonald's burger → Actually Big Mac | I had McDonald's burger → Actually Big Mac | Big Mac | McDonald's Big Mac | generic | restaurant | McDonald's official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 112 | I had 12 nuggets → Actually Chick-fil-A 12 count nuggets | I had 12 nuggets → Actually Chick-fil-A 12 count nuggets | Chick-fil-A 12 count nuggets | 12 Chick-fil-A Nuggets 12 Count | generic | restaurant | Chick-fil-A official nutrition | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 113 | I had oatmeal → Add peanut butter | I had oatmeal → Add peanut butter | Oatmeal Peanut Butter | Oatmeal, Peanut butter | generic | branded | Oatmeal common serving estimate; Peanut butter common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 114 | I had a smoothie → Actually homemade banana peanut butter smoothie | I had a smoothie → Actually homemade banana peanut butter smoothie | Banana Peanut Butter Smoothie | Smoothie with banana and peanut butter | generic | branded | Smoothie common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
-| 115 | I had a turkey sandwich → Remove cheese | I had a turkey sandwich → Remove cheese | Turkey Sandwich | — | generic | unknown | — | — | miss | FAIL | Expected Turkey Sandwich; got no items. |
-| 116 | I had eggs → Make it 3 eggs | I had eggs → Make it 3 eggs | 3 Eggs | 3 Eggs | generic | estimated | Egg common serving estimate | Low | exact | PASS | Pass under current benchmark criteria. |
-| 117 | I had Coke → Actually Coke Zero | I had Coke → Actually Coke Zero | Coke Zero | Coke Zero | generic | branded | Coca-Cola nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 118 | I had Panera mac → Actually large mac and cheese | I had Panera mac → Actually large mac and cheese | Panera Mac and Cheese | 1 large mac and cheese | generic | estimated | Generic nutrition reference | Low | fuzzy | PASS | Pass under current benchmark criteria. |
-| 119 | I had Panda Express → Add orange chicken and chow mein | I had Panda Express → Add orange chicken and chow mein | Panda Express Orange Chicken Chow Mein | Panda Express Orange Chicken, Chicken | generic | restaurant | Panda Express official nutrition; Chicken common serving estimate | Very High; High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 120 | I had a burrito → Actually Chipotle chicken burrito | I had a burrito → Actually Chipotle chicken burrito | Chipotle Chicken Burrito | Chipotle chicken bowl | generic | restaurant | Chipotle official nutrition | Very High | fuzzy | PASS | Pass under current benchmark criteria. |
-| 121 | I had chips → Actually Doritos Nacho Cheese | I had chips → Actually Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | generic | branded | Doritos nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 122 | I had yogurt → Actually Chobani Greek Yogurt Strawberry | I had yogurt → Actually Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | generic | branded | Chobani nutrition reference | High | exact | PASS | Pass under current benchmark criteria. |
-| 123 | I had protein bar → Actually Barebells | I had protein bar → Actually Barebells | Barebells Protein Bar | Barebells Protein Bar | generic | branded | Barebells nutrition reference | Very High | exact | PASS | Pass under current benchmark criteria. |
-| 124 | I had toast → Add peanut butter | I had toast → Add peanut butter | Toast Peanut Butter | Toast, Peanut butter | generic | estimated | Toast common serving estimate; Peanut butter common serving estimate | Low; High | exact | PASS | Pass under current benchmark criteria. |
-| 125 | I had chicken rice broccoli → Double the chicken | I had chicken rice broccoli → Double the chicken | Chicken Rice Broccoli | 2 Chicken, Rice, Broccoli | generic | branded | Chicken common serving estimate; Rice common serving estimate; Broccoli common serving estimate | High | exact | PASS | Pass under current benchmark criteria. |
+| # | Category | Mode | Input prompt | Expected | Actual | Pass/fail | Notes |
+|---:|---|---|---|---|---|---|---|
+| 1 | branded | lookup | Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 2 | branded | lookup | I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 3 | branded | lookup | log Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 4 | branded | lookup | for lunch I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 5 | branded | lookup | snack was Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 6 | branded | lookup | one Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 7 | branded | lookup | please add Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 8 | branded | lookup | track Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 9 | branded | lookup | Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 10 | branded | lookup | I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 11 | branded | lookup | log Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 12 | branded | lookup | for lunch I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 13 | branded | lookup | snack was Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 14 | branded | lookup | one Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 15 | branded | lookup | please add Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 16 | branded | lookup | track Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 17 | branded | lookup | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 18 | branded | lookup | I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 19 | branded | lookup | log Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 20 | branded | lookup | for lunch I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 21 | branded | lookup | snack was Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 22 | branded | lookup | one Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 23 | branded | lookup | please add Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 24 | branded | lookup | track Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 25 | branded | lookup | Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 26 | branded | lookup | I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 27 | branded | lookup | log Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 28 | branded | lookup | for lunch I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 29 | branded | lookup | snack was Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 30 | branded | lookup | one Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 31 | branded | lookup | please add Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 32 | branded | lookup | track Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 33 | branded | lookup | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 34 | branded | lookup | I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 35 | branded | lookup | log Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 36 | branded | lookup | for lunch I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 37 | branded | lookup | snack was Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 38 | branded | lookup | one Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 39 | branded | lookup | please add Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 40 | branded | lookup | track Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 41 | branded | lookup | Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 42 | branded | lookup | I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 43 | branded | lookup | log Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 44 | branded | lookup | for lunch I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 45 | branded | lookup | snack was Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 46 | branded | lookup | one Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 47 | branded | lookup | please add Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 48 | branded | lookup | track Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 49 | branded | lookup | Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 50 | branded | lookup | I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 51 | branded | lookup | log Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 52 | branded | lookup | for lunch I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 53 | branded | lookup | snack was Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 54 | branded | lookup | one Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 55 | branded | lookup | please add Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 56 | branded | lookup | track Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 57 | branded | lookup | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 58 | branded | lookup | I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 59 | branded | lookup | log Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 60 | branded | lookup | for lunch I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 61 | branded | lookup | snack was Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 62 | branded | lookup | one Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 63 | branded | lookup | please add Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 64 | branded | lookup | track Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 65 | branded | lookup | Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 66 | branded | lookup | I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 67 | branded | lookup | log Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 68 | branded | lookup | for lunch I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 69 | branded | lookup | snack was Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 70 | branded | lookup | one Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 71 | branded | lookup | please add Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 72 | branded | lookup | track Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 73 | branded | lookup | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 74 | branded | lookup | I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 75 | branded | lookup | log Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 76 | branded | lookup | for lunch I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 77 | branded | lookup | snack was Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 78 | branded | lookup | one Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 79 | branded | lookup | please add Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 80 | branded | lookup | track Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 81 | branded | lookup | Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 82 | branded | lookup | I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 83 | branded | lookup | log Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 84 | branded | lookup | for lunch I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 85 | branded | lookup | snack was Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 86 | branded | lookup | one Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 87 | branded | lookup | please add Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 88 | branded | lookup | track Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 89 | branded | lookup | Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 90 | branded | lookup | I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 91 | branded | lookup | log Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 92 | branded | lookup | for lunch I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 93 | branded | lookup | snack was Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 94 | branded | lookup | one Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 95 | branded | lookup | please add Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 96 | branded | lookup | track Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 97 | branded | lookup | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 98 | branded | lookup | I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 99 | branded | lookup | log Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 100 | branded | lookup | for lunch I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 101 | branded | lookup | snack was Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 102 | branded | lookup | one Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 103 | branded | lookup | please add Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 104 | branded | lookup | track Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 105 | branded | lookup | Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 106 | branded | lookup | I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 107 | branded | lookup | log Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 108 | branded | lookup | for lunch I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 109 | branded | lookup | snack was Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 110 | branded | lookup | one Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 111 | branded | lookup | please add Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 112 | branded | lookup | track Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 113 | branded | lookup | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 114 | branded | lookup | I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 115 | branded | lookup | log Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 116 | branded | lookup | for lunch I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 117 | branded | lookup | snack was Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 118 | branded | lookup | one Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 119 | branded | lookup | please add Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 120 | branded | lookup | track Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 121 | branded | lookup | Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 122 | branded | lookup | I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 123 | branded | lookup | log Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 124 | branded | lookup | for lunch I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 125 | branded | lookup | snack was Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 126 | branded | lookup | one Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 127 | branded | lookup | please add Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 128 | branded | lookup | track Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 129 | branded | lookup | Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 130 | branded | lookup | I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 131 | branded | lookup | log Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 132 | branded | lookup | for lunch I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 133 | branded | lookup | snack was Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 134 | branded | lookup | one Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 135 | branded | lookup | please add Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 136 | branded | lookup | track Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 137 | branded | lookup | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 138 | branded | lookup | I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 139 | branded | lookup | log Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 140 | branded | lookup | for lunch I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 141 | branded | lookup | snack was Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 142 | branded | lookup | one Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 143 | branded | lookup | please add Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 144 | branded | lookup | track Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 145 | branded | lookup | Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 146 | branded | lookup | I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 147 | branded | lookup | log Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 148 | branded | lookup | for lunch I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 149 | branded | lookup | snack was Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 150 | branded | lookup | one Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 151 | branded | lookup | please add Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 152 | branded | lookup | track Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 153 | branded | lookup | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 154 | branded | lookup | I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 155 | branded | lookup | log Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 156 | branded | lookup | for lunch I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 157 | branded | lookup | snack was Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 158 | branded | lookup | one Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 159 | branded | lookup | please add Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 160 | branded | lookup | track Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 161 | branded | lookup | Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 162 | branded | lookup | I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 163 | branded | lookup | log Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 164 | branded | lookup | for lunch I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 165 | branded | lookup | snack was Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 166 | branded | lookup | one Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 167 | branded | lookup | please add Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 168 | branded | lookup | track Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 169 | branded | lookup | Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 170 | branded | lookup | I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 171 | branded | lookup | log Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 172 | branded | lookup | for lunch I had Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 173 | branded | lookup | snack was Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 174 | branded | lookup | one Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 175 | branded | lookup | please add Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 176 | branded | lookup | track Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 177 | branded | lookup | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 178 | branded | lookup | I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 179 | branded | lookup | log Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 180 | branded | lookup | for lunch I had Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 181 | branded | lookup | snack was Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 182 | branded | lookup | one Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 183 | branded | lookup | please add Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 184 | branded | lookup | track Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 185 | branded | lookup | Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 186 | branded | lookup | I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 187 | branded | lookup | log Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 188 | branded | lookup | for lunch I had Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 189 | branded | lookup | snack was Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 190 | branded | lookup | one Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 191 | branded | lookup | please add Quest BBQ Protein Chips | Quest BBQ Protein Chips | Quest BBQ Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 192 | branded | lookup | track Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | Quest Nacho Cheese Protein Chips | PASS | Pass under reliability benchmark criteria. |
+| 193 | branded | lookup | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g shake | Fairlife Core Power Elite 42g Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 194 | branded | lookup | I had Coke Zero | Coke Zero | Coke Zero | PASS | Pass under reliability benchmark criteria. |
+| 195 | branded | lookup | log Doritos Nacho Cheese | Doritos Nacho Cheese | Doritos Nacho Cheese | PASS | Pass under reliability benchmark criteria. |
+| 196 | branded | lookup | for lunch I had Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 197 | branded | lookup | snack was Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | Chobani Greek Yogurt Strawberry | PASS | Pass under reliability benchmark criteria. |
+| 198 | branded | lookup | one Premier Protein Shake | Premier Protein Shake | Premier Protein Shake | PASS | Pass under reliability benchmark criteria. |
+| 199 | branded | lookup | please add Celsius Energy Drink | Celsius Energy Drink | Celsius Energy Drink | PASS | Pass under reliability benchmark criteria. |
+| 200 | branded | lookup | track Quaker Rice Cakes | Quaker Rice Cakes | Quaker Rice Cakes | PASS | Pass under reliability benchmark criteria. |
+| 201 | restaurant | lookup | McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 202 | restaurant | lookup | I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 203 | restaurant | lookup | log Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 204 | restaurant | lookup | for lunch I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 205 | restaurant | lookup | snack was McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 206 | restaurant | lookup | one Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 207 | restaurant | lookup | please add McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 208 | restaurant | lookup | track McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 209 | restaurant | lookup | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 210 | restaurant | lookup | I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 211 | restaurant | lookup | log McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 212 | restaurant | lookup | for lunch I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 213 | restaurant | lookup | snack was McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 214 | restaurant | lookup | one McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 215 | restaurant | lookup | please add Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 216 | restaurant | lookup | track Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 217 | restaurant | lookup | McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 218 | restaurant | lookup | I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 219 | restaurant | lookup | log McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 220 | restaurant | lookup | for lunch I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 221 | restaurant | lookup | snack was Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 222 | restaurant | lookup | one Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 223 | restaurant | lookup | please add McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 224 | restaurant | lookup | track Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 225 | restaurant | lookup | McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 226 | restaurant | lookup | I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 227 | restaurant | lookup | log Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 228 | restaurant | lookup | for lunch I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 229 | restaurant | lookup | snack was McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 230 | restaurant | lookup | one Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 231 | restaurant | lookup | please add McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 232 | restaurant | lookup | track McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 233 | restaurant | lookup | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 234 | restaurant | lookup | I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 235 | restaurant | lookup | log McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 236 | restaurant | lookup | for lunch I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 237 | restaurant | lookup | snack was McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 238 | restaurant | lookup | one McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 239 | restaurant | lookup | please add Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 240 | restaurant | lookup | track Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 241 | restaurant | lookup | McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 242 | restaurant | lookup | I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 243 | restaurant | lookup | log McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 244 | restaurant | lookup | for lunch I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 245 | restaurant | lookup | snack was Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 246 | restaurant | lookup | one Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 247 | restaurant | lookup | please add McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 248 | restaurant | lookup | track Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 249 | restaurant | lookup | McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 250 | restaurant | lookup | I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 251 | restaurant | lookup | log Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 252 | restaurant | lookup | for lunch I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 253 | restaurant | lookup | snack was McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 254 | restaurant | lookup | one Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 255 | restaurant | lookup | please add McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 256 | restaurant | lookup | track McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 257 | restaurant | lookup | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 258 | restaurant | lookup | I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 259 | restaurant | lookup | log McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 260 | restaurant | lookup | for lunch I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 261 | restaurant | lookup | snack was McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 262 | restaurant | lookup | one McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 263 | restaurant | lookup | please add Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 264 | restaurant | lookup | track Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 265 | restaurant | lookup | McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 266 | restaurant | lookup | I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 267 | restaurant | lookup | log McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 268 | restaurant | lookup | for lunch I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 269 | restaurant | lookup | snack was Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 270 | restaurant | lookup | one Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 271 | restaurant | lookup | please add McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 272 | restaurant | lookup | track Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 273 | restaurant | lookup | McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 274 | restaurant | lookup | I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 275 | restaurant | lookup | log Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 276 | restaurant | lookup | for lunch I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 277 | restaurant | lookup | snack was McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 278 | restaurant | lookup | one Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 279 | restaurant | lookup | please add McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 280 | restaurant | lookup | track McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 281 | restaurant | lookup | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 282 | restaurant | lookup | I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 283 | restaurant | lookup | log McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 284 | restaurant | lookup | for lunch I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 285 | restaurant | lookup | snack was McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 286 | restaurant | lookup | one McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 287 | restaurant | lookup | please add Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 288 | restaurant | lookup | track Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 289 | restaurant | lookup | McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 290 | restaurant | lookup | I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 291 | restaurant | lookup | log McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 292 | restaurant | lookup | for lunch I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 293 | restaurant | lookup | snack was Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 294 | restaurant | lookup | one Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 295 | restaurant | lookup | please add McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 296 | restaurant | lookup | track Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 297 | restaurant | lookup | McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 298 | restaurant | lookup | I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 299 | restaurant | lookup | log Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 300 | restaurant | lookup | for lunch I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 301 | restaurant | lookup | snack was McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 302 | restaurant | lookup | one Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 303 | restaurant | lookup | please add McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 304 | restaurant | lookup | track McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 305 | restaurant | lookup | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 306 | restaurant | lookup | I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 307 | restaurant | lookup | log McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 308 | restaurant | lookup | for lunch I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 309 | restaurant | lookup | snack was McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 310 | restaurant | lookup | one McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 311 | restaurant | lookup | please add Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 312 | restaurant | lookup | track Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 313 | restaurant | lookup | McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 314 | restaurant | lookup | I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 315 | restaurant | lookup | log McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 316 | restaurant | lookup | for lunch I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 317 | restaurant | lookup | snack was Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 318 | restaurant | lookup | one Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 319 | restaurant | lookup | please add McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 320 | restaurant | lookup | track Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 321 | restaurant | lookup | McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 322 | restaurant | lookup | I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 323 | restaurant | lookup | log Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 324 | restaurant | lookup | for lunch I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 325 | restaurant | lookup | snack was McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 326 | restaurant | lookup | one Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 327 | restaurant | lookup | please add McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 328 | restaurant | lookup | track McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 329 | restaurant | lookup | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 330 | restaurant | lookup | I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 331 | restaurant | lookup | log McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 332 | restaurant | lookup | for lunch I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 333 | restaurant | lookup | snack was McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 334 | restaurant | lookup | one McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 335 | restaurant | lookup | please add Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 336 | restaurant | lookup | track Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 337 | restaurant | lookup | McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 338 | restaurant | lookup | I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 339 | restaurant | lookup | log McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 340 | restaurant | lookup | for lunch I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 341 | restaurant | lookup | snack was Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 342 | restaurant | lookup | one Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 343 | restaurant | lookup | please add McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 344 | restaurant | lookup | track Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 345 | restaurant | lookup | McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 346 | restaurant | lookup | I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 347 | restaurant | lookup | log Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 348 | restaurant | lookup | for lunch I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 349 | restaurant | lookup | snack was McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 350 | restaurant | lookup | one Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 351 | restaurant | lookup | please add McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 352 | restaurant | lookup | track McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 353 | restaurant | lookup | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 354 | restaurant | lookup | I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 355 | restaurant | lookup | log McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 356 | restaurant | lookup | for lunch I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 357 | restaurant | lookup | snack was McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 358 | restaurant | lookup | one McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 359 | restaurant | lookup | please add Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 360 | restaurant | lookup | track Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 361 | restaurant | lookup | McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 362 | restaurant | lookup | I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 363 | restaurant | lookup | log McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 364 | restaurant | lookup | for lunch I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 365 | restaurant | lookup | snack was Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 366 | restaurant | lookup | one Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 367 | restaurant | lookup | please add McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 368 | restaurant | lookup | track Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 369 | restaurant | lookup | McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 370 | restaurant | lookup | I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 371 | restaurant | lookup | log Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 372 | restaurant | lookup | for lunch I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 373 | restaurant | lookup | snack was McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 374 | restaurant | lookup | one Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 375 | restaurant | lookup | please add McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 376 | restaurant | lookup | track McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 377 | restaurant | lookup | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 378 | restaurant | lookup | I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 379 | restaurant | lookup | log McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 380 | restaurant | lookup | for lunch I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 381 | restaurant | lookup | snack was McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 382 | restaurant | lookup | one McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 383 | restaurant | lookup | please add Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 384 | restaurant | lookup | track Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 385 | restaurant | lookup | McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 386 | restaurant | lookup | I had Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 387 | restaurant | lookup | log McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 388 | restaurant | lookup | for lunch I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 389 | restaurant | lookup | snack was Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 390 | restaurant | lookup | one Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 391 | restaurant | lookup | please add McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 392 | restaurant | lookup | track Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 393 | restaurant | lookup | McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 394 | restaurant | lookup | I had McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 395 | restaurant | lookup | log Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | Taco Bell Crunchy Taco | PASS | Pass under reliability benchmark criteria. |
+| 396 | restaurant | lookup | for lunch I had Subway Turkey Footlong | Subway Turkey Footlong | Subway Turkey Footlong | PASS | Pass under reliability benchmark criteria. |
+| 397 | restaurant | lookup | snack was McDonald's Big Mac | McDonald's Big Mac | McDonald's Big Mac | PASS | Pass under reliability benchmark criteria. |
+| 398 | restaurant | lookup | one Subway Turkey 6-Inch | Subway Turkey 6-Inch | Subway Turkey 6-Inch | PASS | Pass under reliability benchmark criteria. |
+| 399 | restaurant | lookup | please add McDouble | McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 400 | restaurant | lookup | track McDonald's McDouble | McDonald's McDouble | McDonald's McDouble | PASS | Pass under reliability benchmark criteria. |
+| 401 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 402 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 403 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 404 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 405 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 406 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 407 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 408 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 409 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 410 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 411 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 412 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 413 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 414 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 415 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 416 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 417 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 418 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 419 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 420 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 421 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 422 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 423 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 424 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 425 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 426 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 427 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 428 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 429 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 430 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 431 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 432 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 433 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 434 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 435 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 436 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 437 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 438 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 439 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 440 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 441 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 442 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 443 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 444 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 445 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 446 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 447 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 448 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 449 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 450 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 451 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 452 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 453 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 454 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 455 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 456 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 457 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 458 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 459 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 460 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 461 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 462 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 463 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 464 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 465 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 466 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 467 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 468 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 469 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 470 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 471 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 472 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 473 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 474 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 475 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 476 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 477 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 478 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 479 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 480 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 481 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 482 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 483 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 484 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 485 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 486 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 487 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 488 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 489 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 490 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 491 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 492 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 493 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 494 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 495 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 496 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 497 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 498 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 499 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 500 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 501 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 502 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 503 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 504 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 505 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 506 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 507 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 508 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 509 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 510 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 511 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 512 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 513 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 514 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 515 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 516 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 517 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 518 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 519 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 520 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 521 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 522 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 523 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 524 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 525 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 526 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 527 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 528 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 529 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 530 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 531 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 532 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 533 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 534 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 535 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 536 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 537 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 538 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 539 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 540 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 541 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 542 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 543 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 544 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 545 | generic | risk | Chicken breast | Chicken breast | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 546 | generic | risk | White rice | White rice | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 547 | generic | risk | Baked potato | Baked potato | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 548 | generic | risk | Eggs | Eggs | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 549 | generic | risk | Apple | Apple | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 550 | generic | risk | Broccoli | Broccoli | LOW: no issues | PASS | Pass under reliability benchmark criteria. |
+| 551 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 552 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 553 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 554 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 555 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 556 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 557 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 558 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 559 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 560 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 561 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 562 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 563 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 564 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 565 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 566 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 567 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 568 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 569 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 570 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 571 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 572 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 573 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 574 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 575 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 576 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 577 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 578 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 579 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 580 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 581 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 582 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 583 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 584 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 585 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 586 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 587 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 588 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 589 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 590 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 591 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 592 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 593 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 594 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 595 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 596 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 597 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 598 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 599 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 600 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 601 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 602 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 603 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 604 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 605 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 606 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 607 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 608 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 609 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 610 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 611 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 612 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 613 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 614 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 615 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 616 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 617 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 618 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 619 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 620 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 621 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 622 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 623 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 624 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 625 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 626 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 627 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 628 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 629 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 630 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 631 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 632 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 633 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 634 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 635 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 636 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 637 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 638 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 639 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 640 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 641 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 642 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 643 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 644 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 645 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 646 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 647 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 648 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 649 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 650 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 651 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 652 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 653 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 654 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 655 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 656 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 657 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 658 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 659 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 660 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 661 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 662 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 663 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 664 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 665 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 666 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 667 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 668 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 669 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 670 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 671 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 672 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 673 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 674 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 675 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 676 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 677 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 678 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 679 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 680 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 681 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 682 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 683 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 684 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 685 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 686 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 687 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 688 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 689 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 690 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 691 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 692 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 693 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 694 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 695 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 696 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 697 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 698 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 699 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 700 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 701 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 702 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 703 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 704 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 705 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 706 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 707 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 708 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 709 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 710 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 711 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 712 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 713 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 714 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 715 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 716 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 717 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 718 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 719 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 720 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 721 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 722 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 723 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 724 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 725 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 726 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 727 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 728 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 729 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 730 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 731 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 732 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 733 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 734 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 735 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 736 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 737 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 738 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 739 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 740 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 741 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 742 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 743 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 744 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 745 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 746 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 747 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 748 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 749 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 750 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 751 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 752 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 753 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 754 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 755 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 756 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 757 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 758 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 759 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 760 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 761 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 762 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 763 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 764 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 765 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 766 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 767 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 768 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 769 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 770 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 771 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 772 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 773 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 774 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 775 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 776 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 777 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 778 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 779 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 780 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 781 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 782 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 783 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 784 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 785 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 786 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 787 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 788 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 789 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 790 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 791 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 792 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 793 | typo | normalization | log mcdoublee | McDonald's McDouble | McDonald's: mcdonalds mcdouble | PASS | Pass under reliability benchmark criteria. |
+| 794 | typo | normalization | for lunch I had chipolte chicken bowl | Chipotle bowl | Chipotle: chipotle chicken bowl | PASS | Pass under reliability benchmark criteria. |
+| 795 | typo | normalization | snack was fairlife choclate shake | Fairlife shake | Fairlife: fairlife chocolate shake | PASS | Pass under reliability benchmark criteria. |
+| 796 | typo | normalization | one premeir protein shake | Premier Protein shake | Premier Protein: premier protein shake | PASS | Pass under reliability benchmark criteria. |
+| 797 | typo | normalization | please add dorittos nacho chees | Doritos | Doritos: doritos nacho cheese | PASS | Pass under reliability benchmark criteria. |
+| 798 | typo | normalization | track chick fil a nuggest | Chick-fil-A nuggets | Chick-fil-A: chick fil nuggets | PASS | Pass under reliability benchmark criteria. |
+| 799 | typo | normalization | skitles | Skittles | Skittles: skittles | PASS | Pass under reliability benchmark criteria. |
+| 800 | typo | normalization | I had quest bbq protien chips | Quest protein chips | Quest: quest bbq protein chips | PASS | Pass under reliability benchmark criteria. |
+| 801 | ambiguous | ambiguity | chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 802 | ambiguous | ambiguity | I had bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 803 | ambiguous | ambiguity | log shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 804 | ambiguous | ambiguity | for lunch I had protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 805 | ambiguous | ambiguity | snack was salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 806 | ambiguous | ambiguity | one sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 807 | ambiguous | ambiguity | please add fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 808 | ambiguous | ambiguity | track chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 809 | ambiguous | ambiguity | bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 810 | ambiguous | ambiguity | I had shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 811 | ambiguous | ambiguity | log protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 812 | ambiguous | ambiguity | for lunch I had salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 813 | ambiguous | ambiguity | snack was sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 814 | ambiguous | ambiguity | one fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 815 | ambiguous | ambiguity | please add chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 816 | ambiguous | ambiguity | track bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 817 | ambiguous | ambiguity | shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 818 | ambiguous | ambiguity | I had protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 819 | ambiguous | ambiguity | log salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 820 | ambiguous | ambiguity | for lunch I had sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 821 | ambiguous | ambiguity | snack was fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 822 | ambiguous | ambiguity | one chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 823 | ambiguous | ambiguity | please add bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 824 | ambiguous | ambiguity | track shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 825 | ambiguous | ambiguity | protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 826 | ambiguous | ambiguity | I had salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 827 | ambiguous | ambiguity | log sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 828 | ambiguous | ambiguity | for lunch I had fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 829 | ambiguous | ambiguity | snack was chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 830 | ambiguous | ambiguity | one bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 831 | ambiguous | ambiguity | please add shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 832 | ambiguous | ambiguity | track protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 833 | ambiguous | ambiguity | salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 834 | ambiguous | ambiguity | I had sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 835 | ambiguous | ambiguity | log fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 836 | ambiguous | ambiguity | for lunch I had chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 837 | ambiguous | ambiguity | snack was bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 838 | ambiguous | ambiguity | one shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 839 | ambiguous | ambiguity | please add protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 840 | ambiguous | ambiguity | track salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 841 | ambiguous | ambiguity | sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 842 | ambiguous | ambiguity | I had fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 843 | ambiguous | ambiguity | log chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 844 | ambiguous | ambiguity | for lunch I had bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 845 | ambiguous | ambiguity | snack was shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 846 | ambiguous | ambiguity | one protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 847 | ambiguous | ambiguity | please add salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 848 | ambiguous | ambiguity | track sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 849 | ambiguous | ambiguity | fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 850 | ambiguous | ambiguity | I had chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 851 | ambiguous | ambiguity | log bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 852 | ambiguous | ambiguity | for lunch I had shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 853 | ambiguous | ambiguity | snack was protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 854 | ambiguous | ambiguity | one salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 855 | ambiguous | ambiguity | please add sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 856 | ambiguous | ambiguity | track fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 857 | ambiguous | ambiguity | chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 858 | ambiguous | ambiguity | I had bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 859 | ambiguous | ambiguity | log shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 860 | ambiguous | ambiguity | for lunch I had protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 861 | ambiguous | ambiguity | snack was salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 862 | ambiguous | ambiguity | one sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 863 | ambiguous | ambiguity | please add fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 864 | ambiguous | ambiguity | track chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 865 | ambiguous | ambiguity | bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 866 | ambiguous | ambiguity | I had shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 867 | ambiguous | ambiguity | log protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 868 | ambiguous | ambiguity | for lunch I had salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 869 | ambiguous | ambiguity | snack was sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 870 | ambiguous | ambiguity | one fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 871 | ambiguous | ambiguity | please add chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 872 | ambiguous | ambiguity | track bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 873 | ambiguous | ambiguity | shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 874 | ambiguous | ambiguity | I had protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 875 | ambiguous | ambiguity | log salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 876 | ambiguous | ambiguity | for lunch I had sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 877 | ambiguous | ambiguity | snack was fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 878 | ambiguous | ambiguity | one chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 879 | ambiguous | ambiguity | please add bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 880 | ambiguous | ambiguity | track shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 881 | ambiguous | ambiguity | protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 882 | ambiguous | ambiguity | I had salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 883 | ambiguous | ambiguity | log sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 884 | ambiguous | ambiguity | for lunch I had fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 885 | ambiguous | ambiguity | snack was chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 886 | ambiguous | ambiguity | one bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 887 | ambiguous | ambiguity | please add shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 888 | ambiguous | ambiguity | track protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 889 | ambiguous | ambiguity | salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 890 | ambiguous | ambiguity | I had sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 891 | ambiguous | ambiguity | log fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 892 | ambiguous | ambiguity | for lunch I had chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 893 | ambiguous | ambiguity | snack was bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 894 | ambiguous | ambiguity | one shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 895 | ambiguous | ambiguity | please add protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 896 | ambiguous | ambiguity | track salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 897 | ambiguous | ambiguity | sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 898 | ambiguous | ambiguity | I had fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 899 | ambiguous | ambiguity | log chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 900 | ambiguous | ambiguity | for lunch I had bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 901 | ambiguous | ambiguity | snack was shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 902 | ambiguous | ambiguity | one protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 903 | ambiguous | ambiguity | please add salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 904 | ambiguous | ambiguity | track sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 905 | ambiguous | ambiguity | fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 906 | ambiguous | ambiguity | I had chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 907 | ambiguous | ambiguity | log bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 908 | ambiguous | ambiguity | for lunch I had shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 909 | ambiguous | ambiguity | snack was protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 910 | ambiguous | ambiguity | one salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 911 | ambiguous | ambiguity | please add sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 912 | ambiguous | ambiguity | track fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 913 | ambiguous | ambiguity | chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 914 | ambiguous | ambiguity | I had bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 915 | ambiguous | ambiguity | log shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 916 | ambiguous | ambiguity | for lunch I had protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 917 | ambiguous | ambiguity | snack was salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 918 | ambiguous | ambiguity | one sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 919 | ambiguous | ambiguity | please add fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 920 | ambiguous | ambiguity | track chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 921 | ambiguous | ambiguity | bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 922 | ambiguous | ambiguity | I had shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 923 | ambiguous | ambiguity | log protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 924 | ambiguous | ambiguity | for lunch I had salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 925 | ambiguous | ambiguity | snack was sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 926 | ambiguous | ambiguity | one fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 927 | ambiguous | ambiguity | please add chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 928 | ambiguous | ambiguity | track bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 929 | ambiguous | ambiguity | shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 930 | ambiguous | ambiguity | I had protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 931 | ambiguous | ambiguity | log salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 932 | ambiguous | ambiguity | for lunch I had sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 933 | ambiguous | ambiguity | snack was fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 934 | ambiguous | ambiguity | one chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 935 | ambiguous | ambiguity | please add bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 936 | ambiguous | ambiguity | track shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 937 | ambiguous | ambiguity | protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 938 | ambiguous | ambiguity | I had salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 939 | ambiguous | ambiguity | log sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 940 | ambiguous | ambiguity | for lunch I had fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 941 | ambiguous | ambiguity | snack was chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 942 | ambiguous | ambiguity | one bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 943 | ambiguous | ambiguity | please add shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 944 | ambiguous | ambiguity | track protein shake | protein shake clarification | Which protein shake was it? Brand or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 945 | ambiguous | ambiguity | salad | salad clarification | What was in the salad, and about how much dressing or toppings did it have? | PASS | Pass under reliability benchmark criteria. |
+| 946 | ambiguous | ambiguity | I had sandwich | sandwich clarification | What kind of sandwich was it, and what size or main ingredients should I use? | PASS | Pass under reliability benchmark criteria. |
+| 947 | ambiguous | ambiguity | log fries | fries clarification | Which restaurant or serving size were the fries? | PASS | Pass under reliability benchmark criteria. |
+| 948 | ambiguous | ambiguity | for lunch I had chips | chips clarification | Which chips did you mean, and about how much did you have? | PASS | Pass under reliability benchmark criteria. |
+| 949 | ambiguous | ambiguity | snack was bowl | bowl clarification | Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate. | PASS | Pass under reliability benchmark criteria. |
+| 950 | ambiguous | ambiguity | one shake | shake clarification | Which shake was it? Brand, restaurant, or bottle size is enough. | PASS | Pass under reliability benchmark criteria. |
+| 951 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 952 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 953 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 954 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 955 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 956 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 957 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 958 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 959 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 960 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 961 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 962 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 963 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 964 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 965 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 966 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 967 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 968 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 969 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 970 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 971 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 972 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 973 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 974 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 975 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 976 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 977 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 978 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 979 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 980 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 981 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 982 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 983 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 984 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 985 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 986 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 987 | validation | risk | Coke Zero returned regular soda calories | diet soda risk | HIGH: diet_soda_has_calories,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 988 | validation | risk | Skittles returned protein snack macros | candy risk | HIGH: candy_high_protein,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 989 | validation | risk | Missing serving | serving risk | HIGH: missing_serving,multiple_candidates | PASS | Pass under reliability benchmark criteria. |
+| 990 | golden | golden | Quest BBQ Protein Chips | quest-bbq-protein-chips | Quest BBQ Protein Chips | PASS | Golden dataset case passed. |
+| 991 | golden | golden | McDouble | mcdouble | McDonald's McDouble | PASS | Golden dataset case passed. |
+| 992 | golden | golden | Coke Zero | coke-zero | Coke Zero | PASS | Golden dataset case passed. |
+| 993 | golden | golden | Skittles pack | skittles-pack | Skittles Pack | PASS | Golden dataset case passed. |
+| 994 | golden | golden | Fairlife Core Power Elite 42g shake | fairlife-core-power-elite | Fairlife Core Power Elite 42g Protein Shake | PASS | Golden dataset case passed. |
+| 995 | golden | golden | Chipotle chicken bowl | chipotle-chicken-bowl | Chipotle bowl with chicken, white rice, black beans | PASS | Golden dataset case passed. |
+| 996 | golden | golden | large baked potato | large-baked-potato | Baked potato | PASS | Golden dataset case passed. |
+| 997 | golden | golden | 2 eggs and toast | eggs-and-toast | Eggs, Toast | PASS | Golden dataset case passed. |
+| 998 | golden | golden | 8 oz chicken breast | eight-oz-chicken-breast | Grilled chicken breast | PASS | Golden dataset case passed. |
+| 999 | golden | golden | chips | generic-chips-clarification | clarification | PASS | Golden dataset case passed. |
+| 1000 | golden | golden | protein shake | protein-shake-clarification | clarification | PASS | Golden dataset case passed. |

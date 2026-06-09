@@ -17,7 +17,7 @@ describe('serving scaling helpers', () => {
       sodium: 80,
       source_type: 'GENERIC_REFERENCE',
       source_name: 'Generic nutrition reference',
-      confidence_label: 'High',
+      confidence_label: 'Matched',
       is_trusted: true,
       catalog_food_id: 'generic-yogurt',
     }, 1.5, 'cups');

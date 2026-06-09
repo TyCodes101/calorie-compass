@@ -14,7 +14,7 @@ export type NutritionLabelInput = {
   sodium?: number | null;
 };
 
-export type NutritionConfidenceLabel = 'Very High' | 'High' | 'Medium' | 'Low' | 'Verified' | 'High confidence' | 'Estimated';
+export type NutritionConfidenceLabel = 'Verified' | 'Matched' | 'Estimated' | 'Needs Review';
 export type NutritionMatchType = 'exact_branded' | 'exact_restaurant' | 'fuzzy_branded' | 'fuzzy_restaurant' | 'verified_database' | 'generic_estimate' | 'ai_estimate' | 'unknown';
 
 export type NormalizedFoodQuery = {

@@ -35,28 +35,28 @@ describe('clarification quality', () => {
     expect(result.question).toBeNull();
   });
 
-  it('estimates vague salad instead of forcing a dressing question first', () => {
+  it('asks for details before estimating a vague salad', () => {
     const analysis = analyzeMealText('I had a salad');
     const result = buildClarificationDecision(analysis);
 
-    expect(result.needsClarification).toBe(false);
-    expect(result.question).toBeNull();
+    expect(result.needsClarification).toBe(true);
+    expect(result.question).toMatch(/salad|dressing|toppings/i);
   });
 
-  it('estimates vague sandwich input instead of blocking review', () => {
+  it('asks for details before estimating a vague sandwich', () => {
     const analysis = analyzeMealText('I had a sandwich');
     const result = buildClarificationDecision(analysis);
 
-    expect(result.needsClarification).toBe(false);
-    expect(result.question).toBeNull();
+    expect(result.needsClarification).toBe(true);
+    expect(result.question).toMatch(/sandwich|bread|filling/i);
   });
 
-  it('estimates a plain protein shake when a reasonable default exists', () => {
+  it('asks for brand or size before estimating a plain protein shake', () => {
     const analysis = analyzeMealText('protein shake');
     const result = buildClarificationDecision(analysis);
 
-    expect(result.needsClarification).toBe(false);
-    expect(result.question).toBeNull();
+    expect(result.needsClarification).toBe(true);
+    expect(result.question).toMatch(/protein shake|brand|bottle/i);
   });
 
   it('does not mistake branded rice cakes for generic rice', () => {

@@ -95,14 +95,15 @@ Behavior:
 
 Risk: the score is mostly recognition-text based, not source-quality-path based. It knows trusted vs estimated counts, but it does not distinguish exact branded match vs exact restaurant match vs USDA generic vs close branded vs user-provided label. It can make the meal look confident because the text was specific, even when a nutrition source is weaker.
 
-### Item-level confidence
+### Item-level verification
 
 Current item labels are limited by schema to:
 - `Verified`
-- `High confidence`
 - `Estimated`
+- `Matched`
+- `Needs Review`
 
-There is no canonical `Very High`, `High`, `Medium`, `Low` enum yet. The requested confidence taxonomy does not currently exist.
+The canonical item labels are verification states, not user-facing confidence bands. Numeric confidence remains internal for ranking and diagnostics.
 
 ### Display copy
 
@@ -249,13 +250,13 @@ Gaps:
 2. Meal-level score can reach high values with all trusted items, but “trusted” includes generic references and USDA; it does not distinguish exact vs close match.
 3. Saved corrections boost to at least 0.9 when prior item had non-AI source type.
 4. Manual nutrition label gets 0.98 and `Verified`; this is appropriate if user copied a label correctly, but should be labeled “User-provided” rather than verified database truth.
-5. Local catalog branded items use `High confidence`, but no per-item match score or exact/close distinction is exposed.
+5. Local catalog branded items now use `Verified` or `Matched`, but exact/close distinction still depends on match metadata quality.
 
 ## Places where nutrition is guessed unnecessarily
 
 1. If local catalog misses a branded product and USDA/Nutritionix are unavailable or fail, AI/model/hard-coded fallback estimates can be used rather than asking for barcode/label.
 2. Some restaurant segments fall to estimated fries/chips/cookies when catalog aliases miss.
-3. `parseMealText()` estimates common vague meals rather than asking, by design. Good UX, but needs clearer low-confidence labeling when portions/brands are ambiguous.
+3. `parseMealText()` now clarifies common vague meals such as chips, protein shakes, salads, bowls, sandwiches, and fries before returning nutrition.
 
 ## Places where sources are lost or weakened
 
@@ -295,7 +296,7 @@ The current pipeline is directionally correct but not yet best-in-class. It has 
 Most important work before expanding food catalogs:
 1. Introduce a formal source ranking/result object that carries candidate type, source quality, exactness, match score, serving certainty, freshness, and fallback path.
 2. Reorder/reshape providers so exact branded and exact restaurant matches always beat generic database matches.
-3. Expand confidence labels to Very High / High / Medium / Low with explainable reasons.
+3. Keep verification labels first-class and preserve the internal score only for ranking and diagnostics.
 4. Add a sanity/conflict engine before any item reaches review.
 5. Preserve provenance in first-class fields, not just notes.
 6. Build the baseline benchmark before claiming improvements.

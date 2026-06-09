@@ -238,7 +238,7 @@ export function OnboardingForm({ initial }: { initial?: OnboardingInitial }) {
               half a Chipotle bowl and a Fairlife shake
             </div>
             <div className="max-w-[92%] rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 shadow-sm">
-              Got it. I’ll keep the partial serving and branded shake separate, then show calories, macros, confidence, and sources before saving.
+              Got it. I’ll keep the partial serving and branded shake separate, then show calories, macros, verification, and sources before saving.
             </div>
             <p className="text-xs uppercase tracking-[0.18em] text-slate-400">calm, conversational, daily-use ready</p>
           </div>

@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
 import { buildReusableMealSummaryFromRecord, createFavoriteMealTemplate, getReusableMealLibrary } from '@/lib/reusable-meals';
+import { normalizeNutritionVerificationLabel, nutritionVerificationLabels } from '@/lib/nutrition/verification';
 
 const parsedItemSchema = z.object({
   food_name: z.string().min(1),
@@ -19,7 +20,7 @@ const parsedItemSchema = z.object({
   is_trusted: z.boolean().optional(),
   source_type: z.enum(['OFFICIAL_RESTAURANT', 'GENERIC_REFERENCE', 'AI_ESTIMATE']).nullable().optional(),
   source_name: z.string().nullable().optional(),
-  confidence_label: z.enum(['Very High', 'High', 'Medium', 'Low', 'Verified', 'High confidence', 'Estimated']).nullable().optional(),
+  confidence_label: z.preprocess((value) => (value == null ? value : normalizeNutritionVerificationLabel(value)), z.enum(nutritionVerificationLabels).nullable()).optional(),
   match_type: z.enum(['exact_branded', 'exact_restaurant', 'fuzzy_branded', 'fuzzy_restaurant', 'verified_database', 'generic_estimate', 'ai_estimate', 'unknown']).nullable().optional(),
   matched_query: z.string().nullable().optional(),
   original_user_text: z.string().nullable().optional(),

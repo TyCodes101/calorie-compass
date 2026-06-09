@@ -42,7 +42,7 @@ describe('nutrition candidate ranking', () => {
     expect(items[0]).toMatchObject({
       food_name: 'Quest BBQ Protein Chips',
       match_type: 'exact_branded',
-      confidence_label: 'Very High',
+      confidence_label: 'Verified',
       used_ai_fallback: false,
     });
     expect(itemNames(items)).not.toContain('quest protein bar');

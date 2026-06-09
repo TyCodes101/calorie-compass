@@ -10,10 +10,12 @@
     "test": "vitest run",
     "qa:assistant": "vitest run tests/assistant-qa.test.ts tests/assistant-real-user-gauntlet.test.ts tests/meal-assistant-conversation.test.ts tests/meal-assistant-runner.test.ts tests/meal-logger-client.test.tsx --pool=forks --maxWorkers=1 --no-file-parallelism",
     "test:assistant": "vitest run tests/assistant-qa.test.ts",
-    "predeploy:check": "vitest run && eslint && next build && npm run qa:assistant",
+    "predeploy:check": "vitest run && eslint && next build && npm run qa:assistant && npm run reliability:nutrition",
     "catalog:sync": "node scripts/sync-nutrition-catalog.js",
     "postinstall": "prisma generate",
-    "benchmark:nutrition": "vitest run tests/nutrition-accuracy-baseline.test.ts --pool=forks --maxWorkers=1 --no-file-parallelism"
+    "benchmark:nutrition": "vitest run tests/nutrition-accuracy-baseline.test.ts --pool=forks --maxWorkers=1 --no-file-parallelism",
+    "golden:nutrition": "vitest run tests/nutrition-golden-dataset.test.ts --pool=forks --maxWorkers=1 --no-file-parallelism",
+    "reliability:nutrition": "npm run benchmark:nutrition && npm run golden:nutrition"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

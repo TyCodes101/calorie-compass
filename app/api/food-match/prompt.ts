@@ -51,7 +51,7 @@ Existing Trust System:
 Every food item in Calorie Compass carries:
 - source_name
 - source_type
-- confidence_label (Verified / Estimated / Low Confidence)
+- confidence_label (Verified / Matched / Estimated / Needs Review)
 - matched_query
 This must be preserved and extended, never removed or simplified.
 
@@ -86,7 +86,7 @@ The system already handles quantity corrections. Matching logic must not conflic
 ## PRODUCT VISION — ALWAYS OPTIMIZE FOR THIS
 
 Calorie Compass must feel:
-- Easier than MyFitnessPal
+- Easier than legacy food trackers
 - Smarter than Lose It
 - More trustworthy than AI calorie apps
 - Simpler than Cronometer
@@ -213,11 +213,11 @@ Below 0.45 — match_id must be null, flag NO_MATCH
 
 ## CONFIDENCE SCORING REFERENCE
 
-0.95–1.00 — Exact match, same prep, brand confirmed — Trust: Verified — iOS: Auto-log silently
-0.85–0.94 — Strong match, minor variation resolved — Trust: Verified — iOS: Auto-log silently
+0.95–1.00 — Exact match, same prep, brand confirmed — Verification: Verified — iOS: Present for review before save
+0.85–0.94 — Strong match, minor variation resolved — Verification: Verified — iOS: Present for review before save
 0.72–0.84 — Good match, minor assumption — Trust: Estimated — iOS: Show "Did you mean?" chip
 0.65–0.71 — Weak match, significant assumption — Trust: Estimated — iOS: Show confirmation modal
-0.45–0.64 — Poor match — Trust: Low Confidence — iOS: Queue for review
+0.45–0.64 — Poor match — Verification: Needs Review — iOS: Queue for review
 0.00–0.44 — No acceptable match — iOS: Prompt manual entry
 
 ## OUTPUT FORMAT — RETURN ONLY VALID JSON, ZERO EXCEPTIONS
@@ -229,7 +229,7 @@ Single query output:
  "match_id": "<fdc_id or null>",
  "match_name": "<canonical name or null>",
  "confidence": 0.00,
- "confidence_label": "<Verified|Estimated|Low Confidence>",
+ "confidence_label": "<Verified|Matched|Estimated|Needs Review>",
  "source_type": "<usda|branded|user|llm_confirmed>",
  "serving_used": "<serving size label or null>",
  "serving_grams": 0.0,
@@ -304,7 +304,7 @@ Run this internally before returning any output. Never surface it to the caller.
 
 match_id exists in candidate list or is explicitly null
 confidence is consistent with all rules applied
-confidence_label matches the confidence score range
+confidence_label follows the verification label rules
 source_type is accurate and not fabricated
 flag is set if confidence is below 0.65
 flag is NO_MATCH and match_id is null if confidence is below 0.45

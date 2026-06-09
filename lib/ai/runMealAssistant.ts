@@ -2072,7 +2072,7 @@ function makeGenericEstimate(spec: GenericEstimateSpec, originalText: string): P
     is_trusted: isTrusted,
     source_type: sourceType,
     source_name: spec.sourceName ?? 'Calorie Compass common-food fallback',
-    confidence_label: sourceType === 'OFFICIAL_RESTAURANT' ? 'Very High' : sourceType === 'GENERIC_REFERENCE' ? 'High' : 'Low',
+    confidence_label: sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : sourceType === 'GENERIC_REFERENCE' ? 'Matched' : 'Estimated',
     match_type: spec.matchType ?? (sourceType === 'OFFICIAL_RESTAURANT' ? 'exact_restaurant' : sourceType === 'GENERIC_REFERENCE' ? 'generic_estimate' : 'ai_estimate'),
     matched_query: spec.key,
     original_user_text: originalText,
@@ -2690,7 +2690,7 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (/\bchicken\b/.test(normalized) && !/\b(?:chipotle|wendy|sandwich|nuggets?|fried|grilled|tacos?|tenders?)\b/.test(normalized)) {
+  if (/\bchicken\b/.test(normalized) && !/\b(?:chipotle|wendy|sandwich|nuggets?|fried|grilled|chicken breast|tacos?|tenders?)\b/.test(normalized)) {
     items.push(
       makeGenericEstimate(
         {
@@ -3470,20 +3470,22 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   }
 
   if (/\bbaked (?:potato|potatoes)\b/.test(normalized)) {
+    const isLarge = /\blarge\b/.test(normalized);
+    const multiplier = isLarge ? 1.75 : 1;
     items.push(
       makeGenericEstimate(
         {
           key: 'baked potato',
           label: 'Baked potato',
           quantity: 1,
-          unit: 'potato',
-          calories: 160,
-          protein: 4,
-          carbs: 37,
-          fat: 0.2,
-          fiber: 4,
-          sugar: 2,
-          sodium: 20,
+          unit: isLarge ? 'large potato' : 'potato',
+          calories: 160 * multiplier,
+          protein: 4 * multiplier,
+          carbs: 37 * multiplier,
+          fat: 0.2 * multiplier,
+          fiber: 4 * multiplier,
+          sugar: 2 * multiplier,
+          sodium: 20 * multiplier,
           sourceName: 'Baked potato common serving estimate',
           sourceType: 'GENERIC_REFERENCE',
         },
@@ -5118,6 +5120,18 @@ function buildInitialClarificationQuestion(message: string) {
 
   if (/^(?:i had |had |ate )?(?:a |one )?(?:whole |entire )?bag$/.test(normalized)) {
     return 'What food was in the bag, and what size or ounces was the bag if you know it?';
+  }
+
+  if (/^(?:i had |had |ate )?(?:some )?chips$/.test(normalized)) {
+    return 'Which chips did you mean, and about how much did you have?';
+  }
+
+  if (/^(?:i had |had |drank )?(?:a |one )?protein shake$/.test(normalized)) {
+    return 'Which protein shake was it? Brand or bottle size is enough.';
+  }
+
+  if (/^(?:i had |had |ate )?(?:some )?fries$/.test(normalized)) {
+    return 'Which restaurant or serving size were the fries?';
   }
 
   if (bareSandwich) {
@@ -8168,12 +8182,17 @@ function applyRemovedItems(currentItems: ParsedFoodItem[], itemsToRemove: MealAs
   return { nextItems, removedTargets };
 }
 
-async function resolveAssistantItems(
+type ResolveAssistantItemsResult = {
+  items: ParsedFoodItem[];
+  clarificationQuestion: string | null;
+};
+
+async function resolveAssistantItemsWithClarification(
   items: MealAssistantItem[],
   mealType: MealAssistantState['mealType'],
   resolveItemNutrition: NutritionResolver,
   message = '',
-) {
+): Promise<ResolveAssistantItemsResult> {
   const resolved: ParsedFoodItem[] = [];
   const safeItems = isNonFoodDialogueMessage(message)
     ? []
@@ -8183,10 +8202,13 @@ async function resolveAssistantItems(
     ? getTrustedCatalogEstimate(message, mealType)
     : null;
   if (trustedMessageResponse?.items.length && hasHighPriorityBrandedCatalogMatch(trustedMessageResponse.items)) {
-    return hardenResolvedItems({
-      message,
-      resolvedItems: trustedMessageResponse.items,
-    });
+    return {
+      items: hardenResolvedItems({
+        message,
+        resolvedItems: trustedMessageResponse.items,
+      }),
+      clarificationQuestion: null,
+    };
   }
 
   for (const item of safeItems) {
@@ -8195,15 +8217,34 @@ async function resolveAssistantItems(
       ? getTrustedCatalogEstimate(lookupText || message, mealType)
       : null;
     const response = trustedResponse?.items.length ? trustedResponse : await resolveItemNutrition({ item, mealType });
+    if (response?.needs_clarification) {
+      return {
+        items: [],
+        clarificationQuestion: response.clarifying_question ?? 'Which exact item and serving size should I use?',
+      };
+    }
+
     if (response?.items.length) {
       resolved.push(...response.items.map((resolvedItem) => repairResolvedNutritionItem(item, resolvedItem)));
     }
   }
 
-  return hardenResolvedItems({
-    message,
-    resolvedItems: resolved,
-  });
+  return {
+    items: hardenResolvedItems({
+      message,
+      resolvedItems: resolved,
+    }),
+    clarificationQuestion: null,
+  };
+}
+
+async function resolveAssistantItems(
+  items: MealAssistantItem[],
+  mealType: MealAssistantState['mealType'],
+  resolveItemNutrition: NutritionResolver,
+  message = '',
+) {
+  return (await resolveAssistantItemsWithClarification(items, mealType, resolveItemNutrition, message)).items;
 }
 
 function buildReplyFromItems(args: {
@@ -8912,7 +8953,11 @@ export async function runMealAssistant(
       sourceReusableMealId: null,
       editingMealId: null,
     };
-  } else if ((decision.intent === 'save_meal' || decision.should_save_meal) && !hasCompoundOperations) {
+  } else if (
+    (decision.intent === 'save_meal' || decision.should_save_meal) &&
+    !hasCompoundOperations &&
+    !(decision.items.length && decision.should_lookup_nutrition)
+  ) {
     if (nextState.currentMealItems.length) {
       await saveMeal({ state: nextState, items: nextState.currentMealItems });
       nextState.saved = true;
@@ -9027,11 +9072,21 @@ export async function runMealAssistant(
       nextState.confidenceScore = getConfidenceScore(nextState.currentMealItems);
       resolvedItems = nextState.currentMealItems;
     } else {
-      const lookedUpItems = shouldLookupNutritionForDecision(decision, workingInput.message)
-        ? await resolveAssistantItems(decision.items, nextState.mealType, resolveItemNutrition, workingInput.message)
-        : [];
+      const lookupResult = shouldLookupNutritionForDecision(decision, workingInput.message)
+        ? await resolveAssistantItemsWithClarification(decision.items, nextState.mealType, resolveItemNutrition, workingInput.message)
+        : { items: [], clarificationQuestion: null };
+      const lookedUpItems = lookupResult.items;
 
-      if (decision.intent === 'correction' || decision.intent === 'clarification_answer') {
+      if (lookupResult.clarificationQuestion) {
+        clarificationQuestion = lookupResult.clarificationQuestion;
+        nextState.pendingClarification = lookupResult.clarificationQuestion;
+        nextState.lastAssistantQuestion = lookupResult.clarificationQuestion;
+        nextState.saved = false;
+        nextState.currentMealItems = [];
+        nextState.currentMealText = null;
+        nextState.confidenceScore = 0.82;
+        resolvedItems = [];
+      } else if (decision.intent === 'correction' || decision.intent === 'clarification_answer') {
         nextState.userCorrections.push(input.message);
         if (lookedUpItems.length) {
           nextState.currentMealItems = lookedUpItems;
@@ -9044,12 +9099,14 @@ export async function runMealAssistant(
         nextState.currentMealItems = lookedUpItems.length ? lookedUpItems : nextState.currentMealItems;
       }
 
-      nextState.pendingClarification = null;
-      nextState.lastAssistantQuestion = null;
-      nextState.saved = false;
-      nextState.currentMealText = buildMealTextFromItems(nextState.currentMealItems);
-      nextState.confidenceScore = getConfidenceScore(nextState.currentMealItems);
-      resolvedItems = nextState.currentMealItems;
+      if (!lookupResult.clarificationQuestion) {
+        nextState.pendingClarification = null;
+        nextState.lastAssistantQuestion = null;
+        nextState.saved = false;
+        nextState.currentMealText = buildMealTextFromItems(nextState.currentMealItems);
+        nextState.confidenceScore = getConfidenceScore(nextState.currentMealItems);
+        resolvedItems = nextState.currentMealItems;
+      }
     }
   }
 

@@ -263,7 +263,7 @@ export const usdaProvider: NutritionLookupProvider = {
       is_trusted: true,
       source_type: 'GENERIC_REFERENCE' as const,
       source_name: 'USDA FoodData Central',
-      confidence_label: 'High confidence' as const,
+      confidence_label: 'Matched' as const,
       matched_query: normalizedQuery.matchedQuery,
       original_user_text: normalizedQuery.rawText,
       provider_used: 'usda-fdc',

@@ -63,7 +63,7 @@ describe('trust ui helpers', () => {
     });
 
     expect(presentation.badgeLabel).toBe('Branded database');
-    expect(presentation.confidenceLabel).toBe('High confidence match');
+    expect(presentation.confidenceLabel).toBe('Matched');
   });
 
   it('summarizes verified versus estimated coverage in calm language', () => {
