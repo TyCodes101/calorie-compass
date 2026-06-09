@@ -33,6 +33,35 @@ function groupMealsByDay(meals: MealMetric[]) {
   return days;
 }
 
+function computeLongestStreakFromDays(days: string[]) {
+  const sorted = Array.from(new Set(days)).sort();
+  let best = 0;
+  let current = 0;
+  let last: string | null = null;
+
+  for (const day of sorted) {
+    if (!last) {
+      current = 1;
+      best = Math.max(best, current);
+      last = day;
+      continue;
+    }
+
+    const lastDate = new Date(`${last}T00:00:00.000Z`).getTime();
+    const dayDate = new Date(`${day}T00:00:00.000Z`).getTime();
+    if (dayDate - lastDate === 86400000) {
+      current += 1;
+    } else {
+      current = 1;
+    }
+
+    best = Math.max(best, current);
+    last = day;
+  }
+
+  return best;
+}
+
 function daysInWindow(currentDate: Date | string, length: number) {
   const start = addDaysUtc(currentDate, -(length - 1));
   return Array.from({ length }, (_, index) => isoDay(addDaysUtc(start, index)));
@@ -58,9 +87,11 @@ export function buildDashboardStreaks({
 
   const mealsLoggedThisWeek = week.reduce((sum, day) => sum + (byDay.get(day)?.meals ?? 0), 0);
   const proteinGoalHitDaysThisWeek = week.filter((day) => (byDay.get(day)?.protein ?? 0) >= proteinGoal * 0.85).length;
+  const longestStreakDays = computeLongestStreakFromDays(Array.from(byDay.keys()));
 
   return {
     currentStreakDays,
+    longestStreakDays,
     mealsLoggedThisWeek,
     proteinGoalHitDaysThisWeek,
     summary: currentStreakDays > 0 ? `${currentStreakDays} day streak` : 'Start a logging streak today',

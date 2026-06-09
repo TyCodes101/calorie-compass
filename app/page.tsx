@@ -7,6 +7,7 @@ import { MacroProgress } from '@/components/macro-progress';
 import { TrustBadge } from '@/components/trust-badge';
 import { TrendChartPanel } from '@/components/trend-chart-panel';
 import { getDashboardData } from '@/lib/dashboard';
+import { CopyYesterdayButton } from '@/components/copy-yesterday-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <Link href="/logger" className="app-button-primary inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold sm:w-auto">
                 Log a meal
                 <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <CopyYesterdayButton disabled={dashboard.mealCount > 0} />
+              <Link href="/logger" className="app-button-secondary inline-flex items-center justify-center px-4 py-2 text-sm font-medium hover:border-teal-200 hover:text-teal-700">
+                Open logger
               </Link>
             </div>
 
@@ -159,6 +167,46 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 trackClass="bg-amber-100/90"
                 pillClass="border-amber-100 bg-amber-50 text-amber-700"
               />
+            </div>
+          </div>
+
+          <div className="app-card min-w-0 rounded-[32px] p-6 md:p-7">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div>
+                <p className="app-section-label">Consistency</p>
+                <h3 className="mt-3 text-[1.45rem] font-semibold tracking-[-0.03em] text-slate-950">Streak & weekly insights</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-500">Small wins, tracked quietly.</p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Current streak</p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">{dashboard.streaks.currentStreakDays} days</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Longest: {dashboard.streaks.longestStreakDays} days</p>
+              </div>
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">This week</p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">{dashboard.weeklyInsights.daysLogged} / 7 days logged</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Avg {dashboard.weeklyInsights.averageCalories} cal, {dashboard.weeklyInsights.averageProtein}g protein</p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Best protein day</p>
+                <p className="mt-2 text-sm font-semibold text-slate-950">
+                  {dashboard.weeklyInsights.bestProteinDay ? `${dashboard.weeklyInsights.bestProteinDay.protein}g` : '—'}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{dashboard.weeklyInsights.bestProteinDay?.date ?? 'Log a day to unlock'}</p>
+              </div>
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Highest calorie day</p>
+                <p className="mt-2 text-sm font-semibold text-slate-950">
+                  {dashboard.weeklyInsights.highestCalorieDay ? `${dashboard.weeklyInsights.highestCalorieDay.calories} cal` : '—'}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{dashboard.weeklyInsights.highestCalorieDay?.date ?? 'Log a day to unlock'}</p>
+              </div>
             </div>
           </div>
 

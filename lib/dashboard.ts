@@ -8,6 +8,7 @@ import { summarizeStoredItems } from '@/lib/trust';
 import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/current-user';
 import { formatMealTitleForDisplay, isFixtureMealRecord } from '@/lib/meal-display';
 import { buildDashboardStreaks } from '@/lib/growth-metrics';
+import { buildWeeklyInsights } from '@/lib/weekly-insights';
 
 type DashboardWriteClient = PrismaClient | Prisma.TransactionClient;
 
@@ -113,6 +114,7 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
       recentMeals: [],
       weeklyTrend: buildWeeklyTrendFromMeals([], date, profile.dailyCalorieGoal),
       streaks: buildDashboardStreaks({ currentDate: date, meals: [], proteinGoal: profile.proteinGoal }),
+      weeklyInsights: buildWeeklyInsights({ currentDate: date, meals: [] }),
       disclaimer: 'Nutrition estimates are approximate and are not medical or dietary advice.',
     };
   }
@@ -158,6 +160,14 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
   })).filter((meal) => !isFixtureMealRecord({ rawText: meal.rawText, items: meal.items }));
 
   const weeklyTrend = buildWeeklyTrendFromMeals(weeklyMeals, date, profile.dailyCalorieGoal);
+  const weeklyInsights = buildWeeklyInsights({
+    currentDate: date,
+    meals: weeklyMeals.map((meal) => ({
+      date: meal.date,
+      totalCalories: meal.totalCalories,
+      totalProtein: meal.totalProtein,
+    })),
+  });
   const carbGoal = Math.round((profile.dailyCalorieGoal * 0.4) / 4);
   const fatGoal = Math.round((profile.dailyCalorieGoal * 0.3) / 9);
   const todayItems = todayMeals.flatMap((meal) => meal.items);
@@ -255,6 +265,7 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
         totalFat: meal.totalFat,
       })),
     }),
+    weeklyInsights,
     disclaimer: 'Nutrition estimates are approximate and are not medical or dietary advice.',
   };
 }
