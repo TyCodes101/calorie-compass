@@ -34,6 +34,11 @@ enum NutritionSourceType {
   AI_ESTIMATE
 }
 
+enum CachedNutritionProvider {
+  OPEN_FOOD_FACTS
+  USDA_FDC
+}
+
 model User {
   id            String         @id @default(cuid())
   name          String
@@ -277,4 +282,30 @@ model CatalogAlias {
   @@index([foodId])
   @@index([normalizedAlias])
   @@unique([foodId, normalizedAlias])
+}
+
+model CachedNutritionFood {
+  id              String                 @id @default(cuid())
+  provider        CachedNutritionProvider
+  providerId      String
+  barcode         String?
+  normalizedQuery String?
+  name            String
+  brand           String?
+  servingQuantity Float                  @default(1)
+  servingUnit     String                 @default("serving")
+  calories        Float                  @default(0)
+  protein         Float                  @default(0)
+  carbs           Float                  @default(0)
+  fat             Float                  @default(0)
+  fiber           Float                  @default(0)
+  sugar           Float                  @default(0)
+  sodium          Float                  @default(0)
+  rawPayload      Json?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@unique([provider, providerId])
+  @@index([barcode])
+  @@index([normalizedQuery])
 }
