@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -199,7 +199,9 @@ describe('profile settings client flows', () => {
     });
 
     vi.stubGlobal('fetch', fetchMock);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(() => {
+      throw new Error('native confirm should not be used');
+    });
 
     render(
       <AccountSettingsForm
@@ -222,9 +224,11 @@ describe('profile settings client flows', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset meal history' }));
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Reset meal history and favorites? Your profile, goals, and nutrition preferences will stay in place.',
-    );
+    expect(confirmSpy).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('dialog', { name: /reset meal history/i });
+    expect(within(dialog).getByText(/your profile, goals, and nutrition preferences will stay in place/i)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /reset history/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/profile/reset', { method: 'POST' });

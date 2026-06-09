@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildQuickFoodFromParsedItem,
+  buildQuickListsExport,
   defaultQuickListsState,
   toggleFavorite,
   upsertRecentFood,
   createTemplate,
+  filterMealTemplates,
+  filterQuickFoods,
+  importQuickListsJson,
   renameTemplate,
   deleteTemplate,
+  validateTemplateName,
 } from '@/lib/logger-quicklists';
 
 import type { ParsedFoodItem } from '@/lib/ai/types';
@@ -60,5 +65,62 @@ describe('logger quicklists', () => {
     expect(renamed[0]!.name).toBe('New name');
     const deleted = deleteTemplate(renamed, renamed[0]!.id);
     expect(deleted).toHaveLength(0);
+  });
+
+  it('filters favorites and recents by food name or brand without mutating order', () => {
+    const fairlife = buildQuickFoodFromParsedItem({ item: baseItem, sourceLabel: 'Verified', brand: 'Fairlife' });
+    const quest = buildQuickFoodFromParsedItem({
+      item: { ...baseItem, food_name: 'BBQ Protein Chips', calories: 140, protein: 19, carbs: 5, fat: 4 },
+      sourceLabel: 'Verified',
+      brand: 'Quest',
+    });
+    const foods = [fairlife, quest];
+
+    expect(filterQuickFoods(foods, 'quest')).toEqual([quest]);
+    expect(filterQuickFoods(foods, 'core power')).toEqual([fairlife]);
+    expect(filterQuickFoods(foods, '')).toEqual(foods);
+  });
+
+  it('filters meal templates by template name', () => {
+    const food = buildQuickFoodFromParsedItem({ item: baseItem, sourceLabel: 'Matched' });
+    const templates = [
+      createTemplate([], { name: 'Weekday breakfast', foods: [food] })[0]!,
+      createTemplate([], { name: 'Post-lift shake', foods: [food] })[0]!,
+    ];
+
+    expect(filterMealTemplates(templates, 'lift').map((template) => template.name)).toEqual(['Post-lift shake']);
+    expect(filterMealTemplates(templates, 'weekday').map((template) => template.name)).toEqual(['Weekday breakfast']);
+  });
+
+  it('validates required and duplicate template names', () => {
+    const food = buildQuickFoodFromParsedItem({ item: baseItem, sourceLabel: 'Matched' });
+    const templates = createTemplate([], { name: 'Weekday Breakfast', foods: [food] });
+
+    expect(validateTemplateName(templates, '   ')).toBe('Template name is required.');
+    expect(validateTemplateName(templates, 'weekday breakfast')).toBe('A template with that name already exists.');
+    expect(validateTemplateName(templates, 'weekday breakfast', templates[0]!.id)).toBeNull();
+  });
+
+  it('exports quicklist JSON with stable metadata and imports valid favorites', () => {
+    const food = buildQuickFoodFromParsedItem({ item: baseItem, sourceLabel: 'Verified', brand: 'Fairlife' });
+    const exported = buildQuickListsExport('favorites', [food], '2026-06-09T12:00:00.000Z');
+    const parsed = JSON.parse(exported);
+
+    expect(parsed).toMatchObject({
+      version: 1,
+      kind: 'favorites',
+      exportedAt: '2026-06-09T12:00:00.000Z',
+    });
+    expect(parsed.items).toHaveLength(1);
+
+    const imported = importQuickListsJson('favorites', exported);
+    expect(imported.ok).toBe(true);
+    expect(imported.ok ? imported.items[0]?.name : null).toBe('Fairlife Core Power');
+  });
+
+  it('rejects invalid quicklist import JSON without returning partial data', () => {
+    expect(importQuickListsJson('favorites', '{not-json').ok).toBe(false);
+    expect(importQuickListsJson('templates', JSON.stringify({ version: 1, kind: 'favorites', items: [] })).ok).toBe(false);
+    expect(importQuickListsJson('templates', JSON.stringify({ version: 1, kind: 'templates', items: [{ name: '' }] })).ok).toBe(false);
   });
 });

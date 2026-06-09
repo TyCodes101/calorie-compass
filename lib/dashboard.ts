@@ -137,7 +137,7 @@ export async function getDashboardData(inputDate: Date | string = new Date()) {
     where: {
       userId: user.id,
       date: {
-        gte: addDaysUtc(date, -6),
+        gte: addDaysUtc(date, -13),
         lt: nextDay,
       },
     },

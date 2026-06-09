@@ -7,6 +7,7 @@ import { assistantMemoryStorageKey } from '@/lib/assistant-memory';
 import type { MealAssistantResponse } from '@/lib/ai/mealAssistantSchema';
 import type { ParsedFoodItem } from '@/lib/ai/types';
 import type { RecentMealQuickLog } from '@/lib/history';
+import { quickListsStorageKey } from '@/lib/logger-quicklists';
 
 function buildItem(overrides?: Partial<ParsedFoodItem>): ParsedFoodItem {
   return {
@@ -730,5 +731,59 @@ describe('meal logger client', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/ai/parse-meal', expect.anything());
+  });
+
+  it('renames templates with an in-app modal and duplicate-name validation', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => {
+      throw new Error('native prompt should not be used');
+    });
+    const parsedItem = buildItem({ food_name: 'Fairlife Core Power' });
+    const quickFood = {
+      id: 'food-1',
+      name: 'Fairlife Core Power',
+      brand: 'Fairlife',
+      servingQuantity: 1,
+      servingUnit: 'bottle',
+      calories: 230,
+      protein: 42,
+      carbs: 8,
+      fat: 3,
+      sourceLabel: 'Verified',
+      createdAt: '2026-06-09T00:00:00.000Z',
+      lastUsedAt: '2026-06-09T00:00:00.000Z',
+      parsedItem,
+    };
+    window.localStorage.setItem(
+      quickListsStorageKey,
+      JSON.stringify({
+        favorites: [],
+        recents: [],
+        templates: [
+          { id: 'tpl-1', name: 'Weekday breakfast', foods: [quickFood], createdAt: '2026-06-09T00:00:00.000Z', lastUsedAt: '2026-06-09T00:00:00.000Z' },
+          { id: 'tpl-2', name: 'Post-lift shake', foods: [quickFood], createdAt: '2026-06-08T00:00:00.000Z', lastUsedAt: '2026-06-08T00:00:00.000Z' },
+        ],
+      }),
+    );
+
+    render(<MealLoggerClient favoriteMeals={[]} recentMeals={[]} />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /rename/i })[0]!);
+
+    expect(promptSpy).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('dialog', { name: /rename template/i });
+    const input = within(dialog).getByLabelText(/template name/i);
+
+    fireEvent.change(input, { target: { value: 'Post-lift shake' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^save$/i }));
+
+    expect(await within(dialog).findByText(/already exists/i)).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: 'Breakfast base' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => {
+      const state = JSON.parse(window.localStorage.getItem(quickListsStorageKey) ?? '{}');
+      expect(state.templates[0].name).toBe('Breakfast base');
+    });
   });
 });

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { type ReactNode, useMemo, useState } from 'react';
 import { ArrowLeft, BellRing, CheckCircle2, ChevronRight, LoaderCircle, MoonStar, Sparkles } from 'lucide-react';
 
+import { AppModal } from '@/components/app-modal';
 import type { AccountFoundationSnapshot } from '@/lib/auth-session';
 import type { ProfileSettingsSnapshot } from '@/lib/profile-settings';
 
@@ -594,6 +595,7 @@ export function AccountSettingsForm({ initial, account }: { initial: ProfileSett
   const [saved, setSaved] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [dataActionNotice, setDataActionNotice] = useState<string | null>(null);
 
   async function save() {
@@ -640,10 +642,6 @@ export function AccountSettingsForm({ initial, account }: { initial: ProfileSett
   }
 
   async function resetMealHistory() {
-    if (!window.confirm('Reset meal history and favorites? Your profile, goals, and nutrition preferences will stay in place.')) {
-      return;
-    }
-
     setResetting(true);
     setDataActionNotice(null);
 
@@ -656,6 +654,7 @@ export function AccountSettingsForm({ initial, account }: { initial: ProfileSett
       }
 
       setDataActionNotice('Meal history reset. Your profile stayed intact, and the app is ready for a clean logging pass.');
+      setResetConfirmOpen(false);
       router.refresh();
     } catch {
       setDataActionNotice('We couldn’t reset your meal history right now. Please try again.');
@@ -747,7 +746,7 @@ export function AccountSettingsForm({ initial, account }: { initial: ProfileSett
             <button type="button" onClick={exportData} disabled={exporting || resetting} className="app-button-secondary inline-flex items-center justify-center gap-2 rounded-[20px] px-4 py-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">
               {exporting ? 'Preparing export...' : 'Export meal history'}
             </button>
-            <button type="button" onClick={resetMealHistory} disabled={resetting || exporting} className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-4 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="button" onClick={() => setResetConfirmOpen(true)} disabled={resetting || exporting} className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-4 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60">
               {resetting ? 'Resetting...' : 'Reset meal history'}
             </button>
           </div>
@@ -759,6 +758,28 @@ export function AccountSettingsForm({ initial, account }: { initial: ProfileSett
           ) : null}
         </div>
       </section>
+      <AppModal
+        open={resetConfirmOpen}
+        title="Reset meal history"
+        description="This clears logged meals and favorites from your account data. Your profile, goals, and nutrition preferences will stay in place."
+        onClose={() => {
+          if (!resetting) setResetConfirmOpen(false);
+        }}
+        footer={
+          <>
+            <button type="button" onClick={() => setResetConfirmOpen(false)} disabled={resetting} className="app-button-secondary px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-70">
+              Cancel
+            </button>
+            <button type="button" onClick={resetMealHistory} disabled={resetting} className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-70">
+              {resetting ? 'Resetting...' : 'Reset history'}
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-[20px] border border-rose-100 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800">
+          Reset is permanent for saved meal history. Export first if you want a JSON backup.
+        </div>
+      </AppModal>
     </SectionLayout>
   );
 }
