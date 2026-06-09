@@ -51,6 +51,20 @@ function countOverlap(left: string[], right: string[]) {
   return left.reduce((count, token) => count + (rightSet.has(token) ? 1 : 0), 0);
 }
 
+function brandMatches(foodBrand: string | null | undefined, requestedBrand: string | null | undefined, searchText = '') {
+  if (!requestedBrand) return true;
+  const normalizedFoodBrand = normalizeSearchText(foodBrand ?? '');
+  const normalizedRequestedBrand = normalizeSearchText(requestedBrand);
+  if (normalizedFoodBrand === normalizedRequestedBrand) return true;
+
+  if (normalizedRequestedBrand === 'fairlife' && normalizedFoodBrand === 'core power') {
+    const normalizedSearch = normalizeSearchText(searchText);
+    return normalizedSearch.includes('core power') || normalizedSearch.includes('elite') || extractProteinSignal(normalizedSearch) !== null;
+  }
+
+  return false;
+}
+
 function extractProteinSignal(text: string) {
   const normalized = normalizeSearchText(text);
   if (!/\b(?:protein|shake|bar|fairlife|core power|premier|quest|muscle milk)\b/.test(normalized)) {
@@ -58,11 +72,10 @@ function extractProteinSignal(text: string) {
   }
 
   const match = normalized.match(/\b(\d{2})\s*(?:g|gram|grams)\b/);
-  if (!match) {
-    return null;
-  }
+  const normalizedProteinSizeMatch = match ?? normalized.match(/\b(\d{2})\b/);
+  if (!normalizedProteinSizeMatch) return null;
 
-  const value = Number(match[1]);
+  const value = Number(normalizedProteinSizeMatch[1]);
   return value >= 20 && value <= 50 ? value : null;
 }
 
@@ -81,7 +94,7 @@ function scoreCatalogFoodMatch(food: CatalogFoodRecord, text: string, brand?: st
     else if (includes) score += 82;
     else if (overlap) score += overlap * 9;
 
-    if (brand && normalizeSearchText(food.brand ?? '') === normalizeSearchText(brand)) {
+    if (brand && brandMatches(food.brand, brand, normalized)) {
       score += 18;
     }
 
@@ -143,7 +156,7 @@ export function findCatalogFoodByAlias(alias: string, brand?: string | null) {
   return (
     getCatalogFoods().find(
       (food) =>
-        (!brand || normalizeSearchText(food.brand ?? '') === normalizeSearchText(brand)) &&
+        brandMatches(food.brand, brand, normalized) &&
         food.aliases.some((candidate) => normalizeSearchText(candidate) === normalized)
     ) ?? null
   );
@@ -157,7 +170,7 @@ export function findCatalogFoodMatch(text: string, brand?: string | null) {
 
   return (
     getCatalogFoods()
-      .filter((food) => !brand || normalizeSearchText(food.brand ?? '') === normalizeSearchText(brand))
+      .filter((food) => brandMatches(food.brand, brand, normalized))
       .map((food) => scoreCatalogFoodMatch(food, normalized, brand))
       .filter((candidate): candidate is CatalogFoodMatch => Boolean(candidate))
       .sort((left, right) => right.score - left.score || Number(right.exactAlias) - Number(left.exactAlias))[0] ?? null

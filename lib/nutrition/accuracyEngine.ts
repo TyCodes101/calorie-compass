@@ -61,6 +61,7 @@ const inferredRestaurantItems: Array<{ pattern: RegExp; restaurant: string }> = 
 
 const ambiguousFoodTerms = [
   'chips',
+  'shake',
   'protein shake',
   'salad',
   'bowl',
@@ -125,7 +126,7 @@ function detectAmbiguousTerm(text: string, intent: Pick<NutritionIntent, 'brandI
   }
 
   const normalized = normalizeComparableText(text);
-  const compact = normalized.replace(/\b(i|had|ate|drank|a|an|the|some|for|lunch|dinner|snack|breakfast)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const compact = normalized.replace(/\b(i|had|ate|drank|log|add|track|please|a|an|one|the|some|for|was|lunch|dinner|snack|breakfast)\b/g, ' ').replace(/\s+/g, ' ').trim();
 
   return ambiguousFoodTerms.find((term) => compact === term || compact === `${term}s`) ?? null;
 }
@@ -285,6 +286,7 @@ export function withVerificationLabels(response: ParsedMealResponse): ParsedMeal
 export function buildAccuracyClarificationQuestion(intent: NutritionIntent, fallback = 'Which exact item and serving size should I use?') {
   if (intent.ambiguousTerm) {
     if (intent.ambiguousTerm === 'protein shake') return 'Which protein shake was it? Brand or bottle size is enough.';
+    if (intent.ambiguousTerm === 'shake') return 'Which shake was it? Brand, restaurant, or bottle size is enough.';
     if (intent.ambiguousTerm === 'fries') return 'Which restaurant or serving size were the fries?';
     if (intent.ambiguousTerm === 'bowl') return 'Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate.';
     if (intent.ambiguousTerm === 'salad') return 'What was in the salad, and about how much dressing or toppings did it have?';

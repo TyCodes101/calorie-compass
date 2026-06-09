@@ -2690,7 +2690,7 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (/\bchicken\b/.test(normalized) && !/\b(?:chipotle|wendy|sandwich|nuggets?|fried|grilled|tacos?|tenders?)\b/.test(normalized)) {
+  if (/\bchicken\b/.test(normalized) && !/\b(?:chipotle|wendy|sandwich|nuggets?|fried|grilled|chicken breast|tacos?|tenders?)\b/.test(normalized)) {
     items.push(
       makeGenericEstimate(
         {
@@ -3470,20 +3470,22 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   }
 
   if (/\bbaked (?:potato|potatoes)\b/.test(normalized)) {
+    const isLarge = /\blarge\b/.test(normalized);
+    const multiplier = isLarge ? 1.75 : 1;
     items.push(
       makeGenericEstimate(
         {
           key: 'baked potato',
           label: 'Baked potato',
           quantity: 1,
-          unit: 'potato',
-          calories: 160,
-          protein: 4,
-          carbs: 37,
-          fat: 0.2,
-          fiber: 4,
-          sugar: 2,
-          sodium: 20,
+          unit: isLarge ? 'large potato' : 'potato',
+          calories: 160 * multiplier,
+          protein: 4 * multiplier,
+          carbs: 37 * multiplier,
+          fat: 0.2 * multiplier,
+          fiber: 4 * multiplier,
+          sugar: 2 * multiplier,
+          sodium: 20 * multiplier,
           sourceName: 'Baked potato common serving estimate',
           sourceType: 'GENERIC_REFERENCE',
         },
