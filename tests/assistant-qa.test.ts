@@ -84,14 +84,6 @@ describe('assistant chatbot QA golden scenarios', () => {
       itemRange: [/large fry|fries/i, 430, 560] as const,
       forbidden: [/hash browns?/i, /baked potato/i, /frozen dinner/i],
     },
-    {
-      name: 'logs a generic protein shake without a clarification loop',
-      message: 'protein shake',
-      contains: [/protein shake/i],
-      calorieRange: [120, 260] as const,
-      itemRange: [/protein shake/i, 120, 260] as const,
-      forbidden: [/frozen dinner/i, /cottage cheese/i],
-    },
   ];
 
   for (const qaCase of basicLoggingCases) {
@@ -110,6 +102,20 @@ describe('assistant chatbot QA golden scenarios', () => {
       expectNoUnrelatedFood(turn, qaCase.forbidden);
     });
   }
+
+  it('asks for brand or size before logging a generic protein shake', async () => {
+    const conversation = await runQaScenario({
+      name: 'generic protein shake clarification',
+      messages: ['protein shake'],
+    });
+    const turn = conversation.turns[0];
+
+    expectBaselineQuality(turn);
+    expect(turn.response.should_ask_clarification).toBe(true);
+    expect(turn.response.next_state.pendingClarification).toMatch(/protein shake|brand|bottle/i);
+    expect(turn.response.next_state.currentMealItems).toEqual([]);
+    expect(turn.response.next_state.saved).toBe(false);
+  });
 
   it('updates quantities on active meals instead of creating new foods', async () => {
     const conversation = await runQaScenario({

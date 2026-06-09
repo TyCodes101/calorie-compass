@@ -23,9 +23,9 @@ const officialRestaurantBrands = new Set([
 ]);
 
 function getConfidenceLabel(sourceType: string | null | undefined, branded = false) {
-  if (sourceType === 'OFFICIAL_RESTAURANT' || branded) return 'Very High';
-  if (sourceType === 'AI_ESTIMATE') return 'Low';
-  return 'High';
+  if (sourceType === 'OFFICIAL_RESTAURANT' || branded) return 'Verified';
+  if (sourceType === 'AI_ESTIMATE') return 'Estimated';
+  return 'Matched';
 }
 
 function getMatchType(sourceType: string | null | undefined, branded = false, exact = true) {
@@ -63,7 +63,7 @@ function decorateTrustedCatalogResponse(text: string, response: ReturnType<typeo
     ...response,
     items: response.items.map((item) => ({
       ...item,
-      confidence_label: item.source_type === 'AI_ESTIMATE' ? 'Low' : getConfidenceLabel(item.source_type, Boolean(item.source_name && !/USDA|generic/i.test(item.source_name))),
+      confidence_label: item.source_type === 'AI_ESTIMATE' ? 'Estimated' : getConfidenceLabel(item.source_type, Boolean(item.source_name && !/USDA|generic/i.test(item.source_name))),
       match_type: item.match_type ?? getMatchType(item.source_type, Boolean(item.source_name && !/USDA|generic/i.test(item.source_name)), false),
       matched_query: normalized.matchedQuery,
       original_user_text: text,

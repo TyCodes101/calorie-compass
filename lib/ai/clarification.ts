@@ -10,6 +10,59 @@ const packagedSnackRegex = /\b(quaker(?: oats)?|white cheddar|rice cakes?|chips?
 const compoundFoodRegex = /\b(white cheddar rice cakes?|rice cakes?|protein bars?|chicken sandwich|peanut butter|ice cream|grilled chicken(?: breast)?|hash browns?|french fries|mac and cheese)\b/i;
 
 export function buildClarificationDecision(analysis: MealAnalysis): ClarificationDecision {
+  const normalized = analysis.normalizedText
+    .replace(/^\s*(?:i had|i ate|had|ate|drank)\s+/i, '')
+    .replace(/^\s*(?:a|an|some|the|one)\s+/i, '')
+    .trim();
+
+  if (/^chips?$/.test(normalized)) {
+    return {
+      needsClarification: true,
+      question: 'Which chips did you mean, and about how much did you have?',
+      reason: 'portion',
+    };
+  }
+
+  if (/^protein shake$/.test(normalized)) {
+    return {
+      needsClarification: true,
+      question: 'Which protein shake was it? Brand or bottle size is enough.',
+      reason: 'portion',
+    };
+  }
+
+  if (/^fries$/.test(normalized)) {
+    return {
+      needsClarification: true,
+      question: 'Which restaurant or serving size were the fries?',
+      reason: 'portion',
+    };
+  }
+
+  if (/^salad$/.test(normalized)) {
+    return {
+      needsClarification: true,
+      question: 'For the salad, what protein or toppings were in it, how much dressing, and about how big was it?',
+      reason: 'portion',
+    };
+  }
+
+  if (/^bowl$/.test(normalized)) {
+    return {
+      needsClarification: true,
+      question: 'Which bowl was it? Restaurant or main ingredients will keep the nutrition accurate.',
+      reason: 'portion',
+    };
+  }
+
+  if (/^sandwich$/.test(normalized)) {
+    return {
+      needsClarification: true,
+      question: 'For the sandwich, what bread, meat or main filling, cheese/condiments, and rough size should I use?',
+      reason: 'portion',
+    };
+  }
+
   if (!analysis.likelyNeedsClarification || packagedSnackRegex.test(analysis.normalizedText) || compoundFoodRegex.test(analysis.normalizedText)) {
     return { needsClarification: false, question: null, reason: 'none' };
   }

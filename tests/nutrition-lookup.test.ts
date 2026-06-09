@@ -281,7 +281,7 @@ describe('lookupNutrition', () => {
       carbs: 33,
       fat: 20,
       source_type: 'OFFICIAL_RESTAURANT',
-      confidence_label: 'Very High',
+      confidence_label: 'Verified',
       matched_query: "McDonald's McDouble",
       provider_used: 'local-verified-catalog',
       used_ai_fallback: false,
@@ -293,7 +293,7 @@ describe('lookupNutrition', () => {
     const response = await lookupNutrition({ text: 'a mcdouble', mealType: 'lunch' });
 
     expect(response?.items[0]?.calories).toBe(390);
-    expect(response?.items[0]?.confidence_label).toBe('Very High');
+    expect(response?.items[0]?.confidence_label).toBe('Verified');
   });
 
   it('scales quantities for verified restaurant items', async () => {
@@ -325,7 +325,7 @@ describe('lookupNutrition', () => {
     expect(banana?.items[0]).toMatchObject({
       source_name: 'USDA FoodData Central',
       provider_used: 'usda-fdc',
-      confidence_label: 'High confidence',
+      confidence_label: 'Matched',
     });
     expect(riceCakes?.items[0]?.food_name).toMatch(/rice cake/i);
     expect(chicken?.items[0]?.food_name).toMatch(/chicken breast/i);
@@ -363,7 +363,7 @@ describe('lookupNutrition', () => {
     expect(response?.items[0]).toMatchObject({
       food_name: 'Cottage cheese, 2% milkfat',
       source_name: 'USDA FoodData Central',
-      confidence_label: 'High confidence',
+      confidence_label: 'Matched',
       matched_query: 'Cottage Cheese',
     });
     expect(response?.totals.calories).toBe(84);
@@ -491,7 +491,7 @@ describe('lookupNutrition', () => {
     expect(response.items[1]).toMatchObject({
       food_name: "McDonald's McDouble",
       provider_used: 'local-verified-catalog',
-      confidence_label: 'Very High',
+      confidence_label: 'Verified',
     });
     expect(response.totals.calories).toBe(730);
   });
@@ -592,7 +592,7 @@ describe('lookupNutrition', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const response = await lookupNutrition({ text: 'chips', mealType: 'snack' });
+    const response = await lookupNutrition({ text: 'potato chips', mealType: 'snack' });
 
     expect(response?.items[0]).toMatchObject({
       quantity: 28.35,
@@ -742,7 +742,7 @@ describe('lookupNutrition', () => {
     const localMatch = await lookupNutrition({ text: 'mcdouble', mealType: 'lunch' }, { aiEstimateProvider: aiProvider });
     const fallback = await lookupNutrition({ text: 'mystery casserole surprise', mealType: 'dinner' }, { aiEstimateProvider: aiProvider });
 
-    expect(localMatch?.items[0]?.confidence_label).toBe('Very High');
+    expect(localMatch?.items[0]?.confidence_label).toBe('Verified');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(aiLookup).toHaveBeenCalledTimes(1);
     expect(fallback?.items[0]).toMatchObject({

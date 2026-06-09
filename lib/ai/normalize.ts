@@ -1,7 +1,17 @@
 import { parsedMealResponseSchema, type ParsedMealResponse } from '@/lib/ai/types';
 import { sanitizeNumber, sumNutrition } from '@/lib/nutrition';
+import { normalizeNutritionVerificationLabel } from '@/lib/nutrition/verification';
 
 function normalizeItem(item: Record<string, unknown>) {
+  const sourceType = item.source_type ? String(item.source_type) : item.sourceType ? String(item.sourceType) : null;
+  const isTrusted = Boolean(item.is_trusted ?? item.isTrusted ?? false);
+  const matchType = item.match_type ? String(item.match_type) : item.matchType ? String(item.matchType) : null;
+  const rawConfidenceLabel = item.confidence_label
+    ? String(item.confidence_label)
+    : item.confidenceLabel
+      ? String(item.confidenceLabel)
+      : null;
+
   return {
     food_name: String(item.food_name ?? item.foodName ?? 'Unknown item').trim() || 'Unknown item',
     quantity: sanitizeNumber(item.quantity ?? 1),
@@ -14,15 +24,15 @@ function normalizeItem(item: Record<string, unknown>) {
     sugar: sanitizeNumber(item.sugar),
     sodium: sanitizeNumber(item.sodium),
     notes: item.notes ? String(item.notes) : null,
-    is_trusted: Boolean(item.is_trusted ?? item.isTrusted ?? false),
-    source_type: item.source_type ? String(item.source_type) : item.sourceType ? String(item.sourceType) : null,
+    is_trusted: isTrusted,
+    source_type: sourceType,
     source_name: item.source_name ? String(item.source_name) : item.sourceName ? String(item.sourceName) : null,
-    confidence_label: item.confidence_label
-      ? String(item.confidence_label)
-      : item.confidenceLabel
-        ? String(item.confidenceLabel)
-        : null,
-    match_type: item.match_type ? String(item.match_type) : item.matchType ? String(item.matchType) : null,
+    confidence_label: normalizeNutritionVerificationLabel(rawConfidenceLabel, {
+      source_type: sourceType as never,
+      is_trusted: isTrusted,
+      match_type: matchType as never,
+    }),
+    match_type: matchType,
     matched_query: item.matched_query ? String(item.matched_query) : item.matchedQuery ? String(item.matchedQuery) : null,
     original_user_text: item.original_user_text
       ? String(item.original_user_text)

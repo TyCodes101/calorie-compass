@@ -1,6 +1,6 @@
 # Nutrition Pipeline — Calorie Compass
 
-Calorie Compass uses a trust-first nutrition pipeline. The goal is to log meals quickly while being honest about where nutrition data came from and how confident the estimate is.
+Calorie Compass uses a trust-first nutrition pipeline. The goal is to log meals quickly while being honest about where nutrition data came from and how the match was verified.
 
 ## Source Priority
 
@@ -48,7 +48,7 @@ Requirements:
 - Store USDA/FDC identifiers when available.
 - Preserve serving basis and conversion assumptions.
 - Clearly distinguish generic USDA matches from brand-specific items.
-- Use a medium/high confidence label depending on match quality.
+- Use `Verified` or `Matched` depending on source quality and match specificity.
 
 ## 3. Commercial Provider Slot
 
@@ -65,7 +65,7 @@ Requirements:
 
 - Keep provider name and item ID in metadata.
 - Do not hard-code a provider as permanently required.
-- Treat provider data as structured, but still surface confidence based on match quality.
+- Treat provider data as structured, but still surface verification based on match quality.
 - Fall back gracefully if no provider is configured or the provider fails.
 
 ## 4. AI Fallback Last
@@ -76,37 +76,38 @@ Use it for:
 
 - Natural-language mixed meals.
 - Homemade recipes without exact measurements.
-- Ambiguous meals where a reasonable estimate is better than blocking.
+- Ambiguous meals only after the user clarifies the brand, restaurant, serving, or preparation that materially changes nutrition.
 - Initial estimates that the user can correct.
 
 Requirements:
 
 - Label AI-generated estimates clearly.
 - Store assumptions: ingredients, serving size, preparation method, and portion guesses.
-- Use conservative confidence labels.
+- Use conservative verification labels.
 - Never present AI fallback nutrition as exact.
 - Prefer asking a follow-up if the missing information would materially change calories/macros.
 
-## Trust Badges
+## Verification Badges
 
-Every logged nutrition result should be eligible for a trust badge such as:
+Every logged nutrition result should be eligible for a verification badge:
 
-- **Verified** — local catalog or user-confirmed recurring item.
-- **Database match** — USDA or structured provider data.
-- **Estimated** — AI or heuristic estimate with stated assumptions.
-- **Needs review** — low confidence or missing critical serving information.
+- **Verified** - local catalog, official restaurant, label scan, or user-confirmed recurring item.
+- **Matched** - USDA or structured provider data with a plausible serving match.
+- **Estimated** - AI or heuristic estimate with stated assumptions.
+- **Needs Review** - missing critical serving information, unresolved ambiguity, or validation concern.
 
-Trust badges should help users understand the estimate without slowing down logging.
+Verification badges should help users understand the estimate without slowing down logging.
 
-## Confidence Labels
+## Verification Labels
 
-Use confidence labels alongside source metadata:
+Use only these item-level labels alongside source metadata:
 
-- **High confidence**: exact/near-exact local, USDA, or provider match with clear serving size.
-- **Medium confidence**: good structured match but some serving/brand/preparation uncertainty.
-- **Low confidence**: AI fallback, vague meal description, unknown portion, or broad assumptions.
+- **Verified**: exact local, official restaurant, label, or user-confirmed match with clear serving size.
+- **Matched**: structured database/provider match with acceptable serving and macro plausibility.
+- **Estimated**: AI or heuristic fallback with stated assumptions.
+- **Needs Review**: unresolved ambiguity, missing serving, brand mismatch, or macro plausibility concern.
 
-Confidence should affect assistant behavior. Low-confidence items may invite correction; high-confidence items should not nag the user.
+Numeric confidence can remain internal for ranking, but it must not be shown as a user-facing label. Every result still goes through review before save.
 
 ## Source Metadata
 

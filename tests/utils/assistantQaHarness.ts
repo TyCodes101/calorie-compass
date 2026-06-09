@@ -115,7 +115,7 @@ export function createQaItem(args: {
     is_trusted: sourceType !== 'AI_ESTIMATE',
     source_type: sourceType,
     source_name: args.source_name ?? (sourceType === 'OFFICIAL_RESTAURANT' ? 'Official nutrition' : 'QA nutrition reference'),
-    confidence_label: sourceType === 'AI_ESTIMATE' ? 'Estimated' : sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : 'High confidence',
+    confidence_label: sourceType === 'AI_ESTIMATE' ? 'Estimated' : sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : 'Matched',
     matched_query: null,
     original_user_text: args.original_user_text ?? null,
     provider_used: sourceType === 'AI_ESTIMATE' ? null : 'qa-resolver',

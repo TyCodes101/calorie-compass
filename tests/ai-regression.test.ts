@@ -32,11 +32,11 @@ const cases = [
     minItems: 1,
   },
   {
-    label: 'bare protein shake gets a default estimate',
+    label: 'bare protein shake asks for brand or size',
     text: 'protein shake',
     mealType: 'snack' as const,
-    expectClarification: false,
-    minItems: 1,
+    expectClarification: true,
+    minItems: 0,
   },
   {
     label: 'fairlife 42g shake gets branded product matching',
@@ -53,11 +53,11 @@ const cases = [
     minItems: 0,
   },
   {
-    label: 'vague salad gets an estimate-first review',
+    label: 'vague salad asks for details before review',
     text: 'I had a salad',
     mealType: 'lunch' as const,
-    expectClarification: false,
-    minItems: 1,
+    expectClarification: true,
+    minItems: 0,
   },
   {
     label: 'mcdonalds combo meal',

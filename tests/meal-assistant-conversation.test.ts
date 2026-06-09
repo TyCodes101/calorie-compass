@@ -1833,15 +1833,14 @@ describe('meal assistant conversational coverage', () => {
     expect(response.assistant_reply).not.toMatch(/hash brown|usda/i);
   });
 
-  it('logs a generic protein shake without forcing a clarification', async () => {
+  it('asks for brand or size before logging a generic protein shake', async () => {
     const [response] = await runConversation(['protein shake']);
 
     expect(response.intent).toBe('new_food_item');
-    expect(response.should_ask_clarification).toBe(false);
-    expect(response.meal.items[0]?.food_name).toMatch(/protein shake/i);
-    expect(response.meal.items[0]?.calories).toBeGreaterThanOrEqual(120);
-    expect(response.meal.items[0]?.calories).toBeLessThanOrEqual(260);
-    expect(response.assistant_reply).toMatch(/shake/i);
+    expect(response.should_ask_clarification).toBe(true);
+    expect(response.next_state.pendingClarification).toMatch(/protein shake|brand|bottle/i);
+    expect(response.meal.items).toEqual([]);
+    expect(response.next_state.saved).toBe(false);
   });
 
   it('keeps half-cup cottage cheese estimates aligned to the serving amount', async () => {

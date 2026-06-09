@@ -265,7 +265,7 @@ describe('runMealAssistant', () => {
       fat: 23,
       source_type: 'GENERIC_REFERENCE',
       source_name: 'USDA FoodData Central',
-      confidence_label: 'High confidence',
+      confidence_label: 'Matched',
     });
 
     const response = await runMealAssistant(
@@ -312,7 +312,7 @@ describe('runMealAssistant', () => {
       fat: 23,
       source_type: 'GENERIC_REFERENCE',
       source_name: 'USDA FoodData Central',
-      confidence_label: 'High confidence',
+      confidence_label: 'Matched',
     });
 
     const response = await runMealAssistant(

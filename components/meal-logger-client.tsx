@@ -1912,7 +1912,7 @@ export function MealLoggerClient({
                 </div>
                 <div className="logger-demo-card" aria-label="Sample interaction">
                   <div className="logger-demo-user">half a Chipotle chicken bowl and a Fairlife shake</div>
-                  <div className="logger-demo-assistant">I’ll split the bowl serving, keep the branded shake separate, and show confidence before you save.</div>
+                  <div className="logger-demo-assistant">I’ll split the bowl serving, keep the branded shake separate, and show verification before you save.</div>
                 </div>
                 <div className="logger-starter-actions">
                   <button
@@ -2096,10 +2096,10 @@ export function MealLoggerClient({
                     </div>
                   </div>
 
-                  <div className="logger-review-trust-strip" aria-label="Review confidence and source summary">
+                  <div className="logger-review-trust-strip" aria-label="Review source and verification summary">
                     <div className="logger-review-trust-primary">
                       <span className="logger-review-trust-dot" aria-hidden="true" />
-                      <span>{Math.round(confidenceScore * 100)}% confidence</span>
+                      <span>Review before save</span>
                     </div>
                     <span>{trustSummary.coverageSummary}</span>
                     <span>{trustSummary.estimatedSummary}</span>

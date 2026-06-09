@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-03T03:37:28.510Z",
+  "generatedAt": "2026-06-09T14:42:12.661Z",
   "summary": {
     "branded": {
       "total": 25,
@@ -43,13 +43,13 @@
     },
     "correction": {
       "total": 25,
-      "passed": 21,
-      "failed": 4,
-      "exactMatchPercentage": 64,
-      "brandedMatchPercentage": 48,
+      "passed": 19,
+      "failed": 6,
+      "exactMatchPercentage": 56,
+      "brandedMatchPercentage": 44,
       "restaurantMatchPercentage": 28,
       "genericFallbackPercentage": 0,
-      "correctionSuccessPercentage": 84
+      "correctionSuccessPercentage": 76
     }
   },
   "results": [
@@ -62,7 +62,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Quest nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -76,7 +76,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Quest nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -90,7 +90,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Fairlife nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Fairlife Core Power Chocolate; got Fairlife chocolate protein shake."
@@ -104,7 +104,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Fairlife nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Fairlife Nutrition Plan Chocolate; got Fairlife chocolate protein shake."
@@ -118,7 +118,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Premier Protein nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -132,7 +132,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "David nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -146,7 +146,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Chobani nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -160,7 +160,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Oikos nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -174,7 +174,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Kodiak Cakes nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -188,7 +188,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Coca-Cola nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -202,7 +202,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Dr Pepper nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -216,7 +216,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Doritos nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -230,7 +230,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Goldfish nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -244,7 +244,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Barebells nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -258,7 +258,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Legendary Foods nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -272,7 +272,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Pure Protein nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -286,7 +286,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Nature Valley nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -300,7 +300,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Quaker nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -314,7 +314,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Gatorade nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Gatorade Zero; got Gatorade."
@@ -328,7 +328,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Celsius nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -342,7 +342,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Pop-Tarts nutrition reference",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -356,7 +356,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Cheez-It nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -370,7 +370,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Clif Bar nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -384,7 +384,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "RXBAR nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -398,7 +398,7 @@
       "expectedCategory": "branded",
       "actualCategory": "estimated",
       "sourceUsed": "Milk common serving estimate; Protein shake common serving estimate",
-      "confidenceLabel": "High; Low",
+      "confidenceLabel": "Matched; Estimated",
       "matchType": "fuzzy",
       "passed": false,
       "notes": "Expected Muscle Milk Protein Shake; got Milk, Protein shake."
@@ -412,7 +412,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "McDonald's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -426,7 +426,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "McDonald's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -440,7 +440,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "McDonald's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -454,7 +454,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Chick-fil-A official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -468,7 +468,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Chick-fil-A official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -482,7 +482,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Chipotle official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -496,7 +496,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Chipotle official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -510,7 +510,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Starbucks official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -524,7 +524,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Starbucks nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -538,7 +538,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Dunkin' official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Dunkin Cold Brew; got Dunkin' Medium Latte."
@@ -552,7 +552,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Dunkin' official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Dunkin Wake-Up Wrap; got Dunkin' Medium Latte."
@@ -566,7 +566,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Taco Bell nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -580,7 +580,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Taco Bell official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -594,7 +594,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Wendy's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich."
@@ -608,7 +608,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Wendy's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -622,7 +622,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Panera official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -636,7 +636,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Subway official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -650,7 +650,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Panda Express official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -664,7 +664,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Panda Express official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Panda Express Chow Mein; got Panda Express Orange Chicken."
@@ -678,7 +678,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Raising Cane's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -706,7 +706,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "KFC official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -720,7 +720,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Burger King official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -734,7 +734,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Chick-fil-A official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -748,7 +748,7 @@
       "expectedCategory": "restaurant",
       "actualCategory": "restaurant",
       "sourceUsed": "Jersey Mike's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -762,7 +762,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Apple common serving estimate",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "Estimated",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -776,7 +776,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Banana common serving estimate",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "Estimated",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -790,7 +790,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Rice common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected white rice; got Rice."
@@ -804,7 +804,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Rice common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected brown rice; got Rice."
@@ -818,7 +818,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Chicken common serving estimate; Grilled chicken common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -832,7 +832,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Salmon common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -846,7 +846,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Egg common serving estimate",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "Estimated",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -860,7 +860,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Oatmeal common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -874,7 +874,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Peanut butter common serving estimate; Toast common serving estimate",
-      "confidenceLabel": "High; Low",
+      "confidenceLabel": "Matched; Estimated",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -888,7 +888,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Calorie Compass common-food fallback",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "Estimated",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -902,7 +902,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Broccoli common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -916,7 +916,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Potatoes common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -930,7 +930,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Potatoes common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected sweet potato; got Potatoes."
@@ -944,7 +944,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Avocado common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -972,7 +972,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Blueberry common serving reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1000,7 +1000,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Whole milk common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1014,7 +1014,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Milk common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected skim milk; got Milk."
@@ -1056,7 +1056,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Turkey sandwich common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1070,7 +1070,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Generic nutrition reference",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "Estimated",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1098,7 +1098,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Orange juice common serving estimate",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "Estimated",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1112,7 +1112,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Quest nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1126,7 +1126,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Fairlife nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1154,7 +1154,7 @@
       "expectedCategory": "branded",
       "actualCategory": "restaurant",
       "sourceUsed": "Chick-fil-A official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1168,7 +1168,7 @@
       "expectedCategory": "branded",
       "actualCategory": "restaurant",
       "sourceUsed": "McDonald's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1196,7 +1196,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Chicken common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Chipotle Chicken Bowl; got Chicken."
@@ -1210,7 +1210,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Doritos nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1224,7 +1224,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Chobani nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1238,7 +1238,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Oikos nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1252,7 +1252,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Coca-Cola common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Coke Zero; got Coke."
@@ -1266,7 +1266,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Dr Pepper nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1280,7 +1280,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Chicken common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Panda Express Orange Chicken; got Chicken."
@@ -1294,7 +1294,7 @@
       "expectedCategory": "branded",
       "actualCategory": "restaurant",
       "sourceUsed": "Taco Bell nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1308,7 +1308,7 @@
       "expectedCategory": "branded",
       "actualCategory": "restaurant",
       "sourceUsed": "Wendy's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Wendy's Dave's Single; got Wendy's Spicy Chicken Sandwich."
@@ -1322,7 +1322,7 @@
       "expectedCategory": "branded",
       "actualCategory": "restaurant",
       "sourceUsed": "Subway official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1336,7 +1336,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Kodiak Cakes nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1350,7 +1350,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Goldfish nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1364,7 +1364,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Cheez-It nutrition reference",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1378,7 +1378,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Barebells nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1392,7 +1392,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Legendary Foods nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1406,7 +1406,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Quaker nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1420,7 +1420,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Celsius nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1434,7 +1434,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Muscle Milk nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1448,7 +1448,7 @@
       "expectedCategory": "branded",
       "actualCategory": "branded",
       "sourceUsed": "Pop-Tarts nutrition reference · high-confidence product match",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1462,7 +1462,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Banana common serving estimate",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "Estimated",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1472,14 +1472,14 @@
       "category": "correction",
       "prompt": "I had Premier Protein → Actually it was Fairlife",
       "expectedIdentity": "Fairlife",
-      "actualIdentity": "Fairlife protein shake",
+      "actualIdentity": "Premier Protein Shake",
       "expectedCategory": "generic",
       "actualCategory": "branded",
-      "sourceUsed": "Fairlife nutrition reference",
-      "confidenceLabel": "High",
-      "matchType": "exact",
-      "passed": true,
-      "notes": "Pass under current benchmark criteria."
+      "sourceUsed": "Premier Protein nutrition reference · high-confidence product match",
+      "confidenceLabel": "Verified",
+      "matchType": "miss",
+      "passed": false,
+      "notes": "Expected Fairlife; got Premier Protein Shake."
     },
     {
       "name": "I had Quest chips → Actually BBQ flavor",
@@ -1490,7 +1490,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Quest nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1500,14 +1500,14 @@
       "category": "correction",
       "prompt": "I had fries → Make them medium fries",
       "expectedIdentity": "Medium Fries",
-      "actualIdentity": "Medium fries",
+      "actualIdentity": "",
       "expectedCategory": "generic",
-      "actualCategory": "estimated",
-      "sourceUsed": "Fries common serving estimate",
-      "confidenceLabel": "Low",
-      "matchType": "exact",
-      "passed": true,
-      "notes": "Pass under current benchmark criteria."
+      "actualCategory": "unknown",
+      "sourceUsed": null,
+      "confidenceLabel": null,
+      "matchType": "miss",
+      "passed": false,
+      "notes": "Expected Medium Fries; got no items."
     },
     {
       "name": "I had white rice → Change it to brown rice",
@@ -1518,7 +1518,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Rice common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Brown Rice; got Rice."
@@ -1532,7 +1532,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Chicken common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "miss",
       "passed": false,
       "notes": "Expected Grilled Chicken; got 6 Chicken."
@@ -1546,7 +1546,7 @@
       "expectedCategory": "generic",
       "actualCategory": "restaurant",
       "sourceUsed": "McDonald's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1560,7 +1560,7 @@
       "expectedCategory": "generic",
       "actualCategory": "restaurant",
       "sourceUsed": "Starbucks official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1574,7 +1574,7 @@
       "expectedCategory": "generic",
       "actualCategory": "restaurant",
       "sourceUsed": "Chipotle official nutrition; Chicken common serving estimate",
-      "confidenceLabel": "Very High; High",
+      "confidenceLabel": "Verified; Matched",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1584,14 +1584,14 @@
       "category": "correction",
       "prompt": "I had a protein shake → Actually it was Fairlife Core Power",
       "expectedIdentity": "Fairlife Core Power",
-      "actualIdentity": "Fairlife protein shake",
+      "actualIdentity": "",
       "expectedCategory": "generic",
-      "actualCategory": "branded",
-      "sourceUsed": "Fairlife nutrition reference",
-      "confidenceLabel": "High",
+      "actualCategory": "unknown",
+      "sourceUsed": null,
+      "confidenceLabel": null,
       "matchType": "miss",
       "passed": false,
-      "notes": "Expected Fairlife Core Power; got Fairlife protein shake."
+      "notes": "Expected Fairlife Core Power; got no items."
     },
     {
       "name": "I had McDonald's burger → Actually Big Mac",
@@ -1602,7 +1602,7 @@
       "expectedCategory": "generic",
       "actualCategory": "restaurant",
       "sourceUsed": "McDonald's official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1616,7 +1616,7 @@
       "expectedCategory": "generic",
       "actualCategory": "restaurant",
       "sourceUsed": "Chick-fil-A official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1630,7 +1630,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Oatmeal common serving estimate; Peanut butter common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1644,7 +1644,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Smoothie common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1672,7 +1672,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Egg common serving estimate",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "Estimated",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1686,7 +1686,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Coca-Cola nutrition reference",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1700,7 +1700,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Generic nutrition reference",
-      "confidenceLabel": "Low",
+      "confidenceLabel": "Estimated",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1714,7 +1714,7 @@
       "expectedCategory": "generic",
       "actualCategory": "restaurant",
       "sourceUsed": "Panda Express official nutrition; Chicken common serving estimate",
-      "confidenceLabel": "Very High; High",
+      "confidenceLabel": "Verified; Matched",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1728,7 +1728,7 @@
       "expectedCategory": "generic",
       "actualCategory": "restaurant",
       "sourceUsed": "Chipotle official nutrition",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "fuzzy",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1742,7 +1742,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Doritos nutrition reference",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1756,7 +1756,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Chobani nutrition reference",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1770,7 +1770,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Barebells nutrition reference",
-      "confidenceLabel": "Very High",
+      "confidenceLabel": "Verified",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1784,7 +1784,7 @@
       "expectedCategory": "generic",
       "actualCategory": "estimated",
       "sourceUsed": "Toast common serving estimate; Peanut butter common serving estimate",
-      "confidenceLabel": "Low; High",
+      "confidenceLabel": "Estimated; Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
@@ -1798,7 +1798,7 @@
       "expectedCategory": "generic",
       "actualCategory": "branded",
       "sourceUsed": "Chicken common serving estimate; Rice common serving estimate; Broccoli common serving estimate",
-      "confidenceLabel": "High",
+      "confidenceLabel": "Matched",
       "matchType": "exact",
       "passed": true,
       "notes": "Pass under current benchmark criteria."
