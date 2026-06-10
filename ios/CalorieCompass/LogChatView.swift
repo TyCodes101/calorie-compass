@@ -218,11 +218,13 @@ struct LogChatView: View {
     @State private var showReviewCard = false
     @State private var isSavingMeal = false
     @State private var saveError: String? = nil
+    @State private var composerHeight: CGFloat = 0
     @FocusState private var mealInputFocused: Bool
     private let stabilityReporter = ConsoleStabilityReporter()
     private let bottomAnchorID = "meal-log-bottom-anchor"
     private let reviewCardAnchorID = "meal-review-card-anchor"
-    private let composerClearance: CGFloat = 210
+    private let composerContentGap: CGFloat = 20
+    private var contentBottomPadding: CGFloat { max(32, composerHeight + composerContentGap) }
 
     init(
         previewMessages: [MealAssistantTranscriptMessage] = [],
@@ -271,12 +273,11 @@ struct LogChatView: View {
                         }
                         .padding(.horizontal, 18)
                         .padding(.top, 12)
-                        .padding(.bottom, composerClearance)
+                        .padding(.bottom, contentBottomPadding)
                     }
                     .onChange(of: messages.count) { _, _ in scrollToLatest(proxy) }
                     .onChange(of: isLoading) { _, _ in scrollToLatest(proxy) }
                     .onChange(of: showReviewCard) { _, _ in scrollToLatest(proxy) }
-                    .onChange(of: reviewItems.count) { _, _ in scrollToLatest(proxy) }
                     .safeAreaInset(edge: .bottom) {
                         composer
                     }
@@ -446,6 +447,15 @@ struct LogChatView: View {
         .padding(.top, 12)
         .padding(.bottom, 12)
         .background(.regularMaterial)
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: ComposerHeightPreferenceKey.self, value: proxy.size.height)
+            }
+        )
+        .onPreferenceChange(ComposerHeightPreferenceKey.self) { height in
+            composerHeight = height
+        }
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(MacroMeshTheme.border)
@@ -1772,6 +1782,14 @@ struct NutritionDisclaimerView: View {
             .foregroundColor(MacroMeshTheme.muted)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel("Nutrition estimates are approximate and not medical advice. Review before saving.")
+    }
+}
+
+private struct ComposerHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

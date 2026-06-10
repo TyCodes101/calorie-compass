@@ -34,6 +34,31 @@ function foodNames(response: Awaited<ReturnType<typeof runPrompt>>) {
   return response.meal.items.map((item) => item.food_name).join(', ');
 }
 
+function expectPlausibleNutrition(response: Awaited<ReturnType<typeof runPrompt>>) {
+  const item = response.meal.items[0];
+  expect(item?.calories).toBeGreaterThan(30);
+  expect(item?.calories).toBeLessThan(1_200);
+  expect(item?.protein).toBeGreaterThanOrEqual(0);
+  expect(item?.carbs).toBeGreaterThanOrEqual(0);
+  expect(item?.fat).toBeGreaterThanOrEqual(0);
+}
+
+function expectAssistantSourceMatchesCard(response: Awaited<ReturnType<typeof runPrompt>>) {
+  const item = response.meal.items[0];
+  expect(item).toBeDefined();
+
+  if (item?.source_type === 'OFFICIAL_RESTAURANT') {
+    expect(response.assistant_reply).toMatch(/restaurant verified/i);
+    expect(response.assistant_reply).not.toMatch(/brand verified|generic reference|USDA match|common serving/i);
+  } else if (item?.source_type === 'GENERIC_REFERENCE') {
+    expect(response.assistant_reply).toMatch(/generic reference|brand verified|USDA match/i);
+    expect(response.assistant_reply).not.toMatch(/restaurant verified/i);
+  } else if (item?.source_type === 'AI_ESTIMATE') {
+    expect(response.assistant_reply).toMatch(/estimated/i);
+    expect(response.assistant_reply).not.toMatch(/verified/i);
+  }
+}
+
 function expectRestaurantMatch(response: Awaited<ReturnType<typeof runPrompt>>, expectedName: RegExp) {
   expect(response.should_ask_clarification).toBe(false);
   expect(response.meal.items.length).toBeGreaterThan(0);
@@ -45,6 +70,8 @@ function expectRestaurantMatch(response: Awaited<ReturnType<typeof runPrompt>>, 
   expect(response.meal.items[0]?.match_type).toMatch(/restaurant/);
   expect(response.assistant_reply).toMatch(/verified|restaurant/i);
   expect(response.assistant_reply).not.toMatch(/generic|USDA|common serving/i);
+  expectAssistantSourceMatchesCard(response);
+  expectPlausibleNutrition(response);
 }
 
 describe('restaurant log screenshot regressions', () => {
@@ -92,6 +119,15 @@ describe('restaurant log screenshot regressions', () => {
 
     expectRestaurantMatch(response, /chick-fil-a.*chicken sandwich/i);
     expect(foodNames(response)).not.toMatch(/^Chicken$/i);
+    expect(response.meal.items[0]?.unit).toBe('sandwich');
+  });
+
+  it('matches the exact Chick-fil-A sandwich prompt without typo drift', async () => {
+    const response = await runPrompt('A chic fil a chicken sandwich');
+
+    expectRestaurantMatch(response, /chick-fil-a.*chicken sandwich/i);
+    expect(foodNames(response)).not.toMatch(/^Chicken$/i);
+    expect(response.meal.items[0]?.unit).toBe('sandwich');
   });
 
   it('matches a White Castle slider without asking what the food was', async () => {
@@ -99,5 +135,27 @@ describe('restaurant log screenshot regressions', () => {
 
     expectRestaurantMatch(response, /white castle.*original slider/i);
     expect(response.meal.items[0]?.unit).toBe('slider');
+  });
+
+  it('keeps McDouble as a McDonald restaurant item', async () => {
+    const response = await runPrompt('McDouble');
+
+    expectRestaurantMatch(response, /mcdouble/i);
+    expect(response.meal.items[0]?.unit).toBe('burger');
+  });
+
+  it.each([
+    ['A SUBWAY BMT SANDWICH', /subway.*b\.?m\.?t|italian b\.?m\.?t/i],
+    ['A subway bmt sandwhich', /subway.*b\.?m\.?t|italian b\.?m\.?t/i],
+    ['AN ARBY ROAST BEEF', /arby'?s.*classic roast beef/i],
+    ['WHITE CASTLE SLIDER', /white castle.*original slider/i],
+    ['chickfila chicken sandwhich', /chick-fil-a.*chicken sandwich/i],
+  ])('preserves restaurant intent for case and typo variant %s', async (message, expectedName) => {
+    const response = await runPrompt(message);
+
+    expectRestaurantMatch(response, expectedName);
+    if (/chick/i.test(message)) {
+      expect(foodNames(response)).not.toMatch(/^Chicken$/i);
+    }
   });
 });

@@ -4091,12 +4091,16 @@ function buildFoodAwareFallbackReply(message: string, items: ParsedFoodItem[]) {
 
   const totalCalories = Math.round(sumTotals(items).calories);
   const foodLabel = items.length === 1 ? formatParsedItemLabel(items[0]) : items.map((item) => item.food_name).join(' and ');
-  const sourceLabel = items.every((item) => item.source_type === 'OFFICIAL_RESTAURANT')
-    ? 'Verified match'
-    : items.some((item) => item.source_type && item.source_type !== 'AI_ESTIMATE')
-      ? 'Part verified, part estimated'
-      : 'Estimated';
+  const sourceLabel = getCombinedSourceLabel(items);
   return `${foodLabel}, about ${totalCalories} calories total. ${sourceLabel}.`;
+}
+
+function getCombinedSourceLabel(items: ParsedFoodItem[]) {
+  const labels = Array.from(new Set(items.map((item) => getSourceLabel(item))));
+  if (labels.length === 1) {
+    return labels[0] ?? 'Estimated';
+  }
+  return `Mixed sources: ${labels.join(' and ')}`;
 }
 
 function getConfidenceScore(items: ParsedFoodItem[]) {
