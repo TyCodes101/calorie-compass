@@ -279,7 +279,7 @@ struct MealAssistantClientLogic {
         let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
 
-        if hasActiveMeal && ["discard", "discard that", "cancel", "clear", "clear meal", "clear everything", "reset", "reset meal", "start over", "start over please", "new meal", "delete this meal", "delete meal", "nevermind", "never mind"].contains(normalized) {
+        if hasActiveMeal && ["discard", "discard that", "cancel", "clear", "clear meal", "clear everything", "reset", "reset meal", "start over", "start over please", "new meal", "delete this meal", "delete meal", "delete that", "delete that nvm", "remove that", "remove that nvm", "nvm", "nevermind", "never mind"].contains(normalized) {
             return .discard
         }
 
@@ -298,6 +298,47 @@ struct MealAssistantClientLogic {
         }
 
         return nil
+    }
+
+    static func isRecentSavedMealUndoCommand(_ message: String) -> Bool {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+        let commands = [
+            "delete that",
+            "delete that nvm",
+            "delete it",
+            "delete this",
+            "delete last",
+            "delete last meal",
+            "remove that",
+            "remove that nvm",
+            "remove it",
+            "remove last",
+            "remove last meal",
+            "undo that",
+            "undo it",
+            "undo last",
+            "discard that",
+            "clear that"
+        ]
+        return commands.contains(normalized)
+    }
+
+    static func saveSignature(for items: [MealRequestItem]) -> String {
+        items
+            .map { item in
+                [
+                    item.food_name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                    item.unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                    String(format: "%.3f", item.quantity),
+                    String(format: "%.1f", item.calories),
+                    String(format: "%.1f", item.protein),
+                    String(format: "%.1f", item.carbs),
+                    String(format: "%.1f", item.fat)
+                ].joined(separator: ":")
+            }
+            .sorted()
+            .joined(separator: "|")
     }
 
     static func quantityResolution(for message: String, items: [MealRequestItem]) -> MealAssistantQuantityResolution? {

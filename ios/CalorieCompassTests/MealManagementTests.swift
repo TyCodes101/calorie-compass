@@ -213,8 +213,18 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Save the meal", hasActiveMeal: true), .save)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Okay now save the meal", hasActiveMeal: true), .save)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Save", hasActiveMeal: true), .save)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("nvm", hasActiveMeal: true), .discard)
+        XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("delete that nvm", hasActiveMeal: true), .discard)
         XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: false))
         XCTAssertNil(MealAssistantClientLogic.detectLocalCommand("Save the meal", hasActiveMeal: false))
+    }
+
+    func testRecentSavedMealUndoCommandsAreRecognizedWithoutActiveDraft() {
+        XCTAssertTrue(MealAssistantClientLogic.isRecentSavedMealUndoCommand("delete that nvm"))
+        XCTAssertTrue(MealAssistantClientLogic.isRecentSavedMealUndoCommand("undo that"))
+        XCTAssertTrue(MealAssistantClientLogic.isRecentSavedMealUndoCommand("remove last"))
+        XCTAssertFalse(MealAssistantClientLogic.isRecentSavedMealUndoCommand("1 can coke zero"))
+        XCTAssertFalse(MealAssistantClientLogic.isRecentSavedMealUndoCommand("delete fries"))
     }
 
     func testRemoveFriesUpdatesActiveMealItemsLocally() {
@@ -714,6 +724,13 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(encodedItem["food_name"] as? String, "banana")
         XCTAssertEqual(encodedItem["is_trusted"] as? Bool, true)
         XCTAssertEqual(encodedItem["catalog_food_id"] as? String, "food-banana")
+    }
+
+    func testSaveSignaturesIgnoreWhitespaceAndCaseForDuplicateGuards() {
+        let first = MealRequestItem(food_name: "Coke Zero", quantity: 1, unit: "can", calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 40, notes: nil, source_type: "GENERIC_REFERENCE", source_name: "Coca-Cola", confidence_label: "Matched")
+        let second = MealRequestItem(food_name: " coke zero ", quantity: 1, unit: "CAN", calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 40, notes: nil, source_type: "GENERIC_REFERENCE", source_name: "Coca-Cola", confidence_label: "Matched")
+
+        XCTAssertEqual(MealAssistantClientLogic.saveSignature(for: [first]), MealAssistantClientLogic.saveSignature(for: [second]))
     }
 
     private static func item(_ name: String, quantity: Double = 1, unit: String = "serving") -> MealRequestItem {

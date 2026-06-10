@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getDashboardData } from '@/lib/dashboard';
 import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/current-user';
 import { saveConfirmedMeal } from '@/lib/meals';
+import { mapMealForNative } from '@/lib/native-meals';
 import { normalizeNutritionVerificationLabel, nutritionVerificationLabels } from '@/lib/nutrition/verification';
 import { prisma } from '@/lib/prisma';
 import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
@@ -41,64 +42,6 @@ const requestSchema = z.object({
   source_reusable_meal_id: z.string().nullable().optional(),
   items: z.array(parsedItemSchema).min(1),
 });
-
-
-function mapMealForNative(meal: {
-  id: string;
-  mealType: string;
-  rawText: string | null;
-  date: Date;
-  createdAt: Date;
-  confidenceScore: number | null;
-  totalCalories: number;
-  totalProtein: number;
-  totalCarbs: number;
-  totalFat: number;
-  items: Array<{
-    foodName: string;
-    quantity: number;
-    unit: string;
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-    fiber: number;
-    sugar: number;
-    sodium: number;
-    notes: string | null;
-    nutritionSourceType: string | null;
-    nutritionSourceName: string | null;
-  }>;
-}) {
-  return {
-    id: meal.id,
-    mealType: meal.mealType.toLowerCase(),
-    rawText: meal.rawText,
-    date: meal.date.toISOString(),
-    createdAt: meal.createdAt.toISOString(),
-    confidenceScore: meal.confidenceScore ?? 0,
-    totalCalories: Math.round(meal.totalCalories),
-    totalProtein: Math.round(meal.totalProtein),
-    totalCarbs: Math.round(meal.totalCarbs),
-    totalFat: Math.round(meal.totalFat),
-    itemCount: meal.items.length,
-    items: meal.items.map((item) => ({
-      food_name: item.foodName,
-      quantity: item.quantity,
-      unit: item.unit,
-      calories: item.calories,
-      protein: item.protein,
-      carbs: item.carbs,
-      fat: item.fat,
-      fiber: item.fiber,
-      sugar: item.sugar,
-      sodium: item.sodium,
-      notes: item.notes,
-      source_type: item.nutritionSourceType,
-      source_name: item.nutritionSourceName,
-    })),
-  };
-}
 
 export async function GET() {
   try {
@@ -148,7 +91,7 @@ export async function POST(request: Request) {
     const meal = await saveConfirmedMeal(payload);
     const dashboard = await getDashboardData(payload.date ?? new Date());
 
-    return NextResponse.json({ meal, dashboard });
+    return NextResponse.json({ meal: mapMealForNative(meal), dashboard });
   } catch (error) {
     logWriteFailure('meal.route', error);
 

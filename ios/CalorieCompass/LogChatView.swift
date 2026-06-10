@@ -200,6 +200,17 @@ enum LogToolCatalog {
     static var allTitles: [String] { foodToolTitles + cameraToolTitles }
 }
 
+private struct RecentSavedMealSnapshot {
+    let id: String?
+    let signature: String
+    let savedAt: Date
+    let items: [MealRequestItem]
+
+    var canUndo: Bool {
+        Date().timeIntervalSince(savedAt) <= 120
+    }
+}
+
 struct LogChatView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @State private var messages: [MealAssistantTranscriptMessage] = []
@@ -217,6 +228,8 @@ struct LogChatView: View {
     @State private var reviewItems: [MealItem] = []
     @State private var showReviewCard = false
     @State private var isSavingMeal = false
+    @State private var isDeletingRecentSavedMeal = false
+    @State private var recentSavedMeal: RecentSavedMealSnapshot?
     @State private var saveError: String? = nil
     @State private var composerHeight: CGFloat = 0
     @FocusState private var mealInputFocused: Bool
@@ -694,6 +707,11 @@ struct LogChatView: View {
 
     private func handleLocalCommand(_ userMessage: String) -> Bool {
         let activeItems = reviewItems.map { $0.asMealRequestItem() }
+        if activeItems.isEmpty && MealAssistantClientLogic.isRecentSavedMealUndoCommand(userMessage) {
+            deleteRecentSavedMeal()
+            return true
+        }
+
         guard let command = MealAssistantClientLogic.detectLocalCommand(userMessage, hasActiveMeal: !activeItems.isEmpty) else {
             return false
         }
@@ -725,6 +743,46 @@ struct LogChatView: View {
         }
     }
 
+    private func deleteRecentSavedMeal() {
+        guard !isDeletingRecentSavedMeal else {
+            stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Log"))
+            return
+        }
+
+        guard let snapshot = recentSavedMeal, snapshot.canUndo else {
+            messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "I don’t have a recent saved meal to remove here. Open History if you need to delete an older entry."))
+            return
+        }
+
+        guard let mealID = snapshot.id, !mealID.hasPrefix("local-") else {
+            recentSavedMeal = nil
+            messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "That local save can’t be removed from the server, but I won’t log it again."))
+            return
+        }
+
+        isDeletingRecentSavedMeal = true
+        saveError = nil
+        BackendService.deleteMeal(id: mealID) { result in
+            DispatchQueue.main.async {
+                isDeletingRecentSavedMeal = false
+                switch result {
+                case .success:
+                    recentSavedMeal = nil
+                    assistantState = MealAssistantState()
+                    reviewItems.removeAll()
+                    showReviewCard = false
+                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Deleted that saved meal. What would you like to log instead?"))
+                    NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
+                    loadReusableMeals()
+                case .failure(let err):
+                    sessionStore.apply(err)
+                    stabilityReporter.record(.networkFailure(screen: "Log", message: err.localizedDescription))
+                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: RetryCopy.nonDestructiveFailure(action: "delete that saved meal", error: err)))
+                }
+            }
+        }
+    }
+
     private func syncActiveMealItems(_ items: [MealItem]) {
         assistantState.currentMealItems = items.map { $0.asMealRequestItem() }
         assistantState.saved = false
@@ -748,7 +806,15 @@ struct LogChatView: View {
     }
 
     func saveMeal(items: [MealItem]) {
-        guard MealAssistantClientLogic.canAttemptSave(items: items.map { $0.asMealRequestItem() }, isSaving: isSavingMeal) else {
+        let requestItems = items.map { $0.asMealRequestItem() }
+        let saveSignature = MealAssistantClientLogic.saveSignature(for: requestItems)
+        if let recentSavedMeal, recentSavedMeal.signature == saveSignature, Date().timeIntervalSince(recentSavedMeal.savedAt) <= 8 {
+            stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Meal review"))
+            messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "That meal was already saved. Send the next one when you’re ready."))
+            return
+        }
+
+        guard MealAssistantClientLogic.canAttemptSave(items: requestItems, isSaving: isSavingMeal) else {
             if isSavingMeal {
                 stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Meal review"))
             }
@@ -763,21 +829,27 @@ struct LogChatView: View {
             source_reusable_meal_id: assistantState.sourceReusableMealId,
             notes: nil,
             date: nil,
-            items: items.map { $0.asMealRequestItem() }
+            items: requestItems
         )
         BackendService.saveConfirmedMeal(request: req) { result in
             DispatchQueue.main.async {
                 isSavingMeal = false
                 switch result {
-                case .success:
+                case .success(let response):
                     showReviewCard = false
                     reviewItems.removeAll()
                     assistantState = MealAssistantClientLogic.buildRequestState(
                         assistantState: assistantState,
-                        currentMealItems: items.map { $0.asMealRequestItem() },
+                        currentMealItems: requestItems,
                         incomingUserMessage: assistantState.currentMealText ?? ""
                     )
                     assistantState.saved = true
+                    recentSavedMeal = RecentSavedMealSnapshot(
+                        id: response.meal?.id,
+                        signature: saveSignature,
+                        savedAt: Date(),
+                        items: requestItems
+                    )
                     messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Saved. Ready for the next one?"))
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
                     loadReusableMeals()
@@ -906,6 +978,8 @@ struct FoodSearchSheet: View {
     @State private var results: [FoodSearchResult] = []
     @State private var isLoading = false
     @State private var message: String?
+    @State private var submittedQuery = ""
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationView {
@@ -914,12 +988,13 @@ struct FoodSearchSheet: View {
                     .textFieldStyle(MacroMeshTextFieldStyle())
                     .submitLabel(.search)
                     .onSubmit(search)
+                    .focused($searchFocused)
                     .accessibilityLabel("Search foods")
                 Button(action: search) {
                     if isLoading { ProgressView().tint(.white) } else { Label("Search", systemImage: "magnifyingglass") }
                 }
                 .buttonStyle(PrimaryCTAButtonStyle())
-                .disabled(isLoading || query.trimmingCharacters(in: .whitespacesAndNewlines).count < 2)
+                .disabled(!canSearch)
                 if let message {
                     Text(message)
                         .font(.caption)
@@ -927,6 +1002,11 @@ struct FoodSearchSheet: View {
                 }
                 ScrollView {
                     LazyVStack(spacing: 10) {
+                        if isLoading {
+                            ProgressView("Searching foods")
+                                .frame(maxWidth: .infinity, minHeight: 120)
+                                .foregroundColor(MacroMeshTheme.muted)
+                        }
                         ForEach(results) { result in
                             FoodSearchResultRow(result: result) {
                                 onSelect(result)
@@ -947,22 +1027,33 @@ struct FoodSearchSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             }
+            .onAppear {
+                searchFocused = true
+            }
         }
+    }
+
+    private var canSearch: Bool {
+        !isLoading && query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
     }
 
     private func search() {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 2 else { return }
+        guard trimmed.count >= 2, !isLoading else { return }
+        if trimmed == submittedQuery && !results.isEmpty { return }
+        submittedQuery = trimmed
+        results = []
         isLoading = true
-        message = nil
+        message = "Searching verified, custom, recent, and favorite foods..."
         BackendService.searchFoods(query: trimmed) { result in
             DispatchQueue.main.async {
                 isLoading = false
                 switch result {
                 case .success(let response):
                     results = response.results
-                    message = response.results.isEmpty ? "No verified, custom, recent, or favorite match found. Try a manual Quick Add or describe the food." : nil
+                    message = response.results.isEmpty ? "No verified, custom, recent, or favorite match found. Try Quick Add or describe the food." : nil
                 case .failure(let error):
+                    results = []
                     message = RetryCopy.nonDestructiveFailure(action: "search foods", error: error)
                 }
             }

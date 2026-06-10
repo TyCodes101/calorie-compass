@@ -2248,6 +2248,35 @@ describe('meal assistant conversational coverage', () => {
     expectNoBadAssistantPatterns(response.assistant_reply);
   });
 
+  it('treats delete-that shorthand after save as a control command instead of food', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const [response] = await runConversation(['Delete that nvm'], {
+      resolveItemNutrition,
+      initialState: buildState({
+        saved: true,
+        currentMealItems: [],
+        currentMealText: null,
+      }),
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('delete_command');
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.assistant_reply).not.toMatch(/delete that nvm|calories|food item/i);
+  });
+
+  it('logs explicit food inside log-this-again commands instead of treating them as empty save requests', async () => {
+    const [response] = await runConversation(['Log this again: 1 can coke zero.'], {
+      initialState: buildState({ saved: true, currentMealItems: [], currentMealText: null }),
+    });
+
+    expect(response.intent).toBe('new_food_item');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/coke zero/i);
+    expect(response.meal.items[0]?.calories).toBe(0);
+    expect(response.assistant_reply).not.toMatch(/not a meal to save|meal to save yet/i);
+  });
+
   it('keeps joke requests light and still anchored to the meal flow', async () => {
     const [response] = await runConversation(['tell me a joke'], {
       initialState: buildState({
@@ -2852,6 +2881,50 @@ describe('meal assistant conversational coverage', () => {
     expect(response.meal.items).toHaveLength(1);
     expect(response.meal.items[0]?.food_name).toMatch(/mcdouble/i);
     expect(response.assistant_reply).toMatch(/removed|took out|out/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
+
+  it('updates a Subway six-inch sub to a footlong from a terse correction', async () => {
+    const resolveItemNutrition = vi.fn(resolveConversationNutrition);
+    const [response] = await runConversation(['No a footlong'], {
+      resolveItemNutrition,
+      initialState: buildState({
+        currentMealItems: [
+          createItem({
+            food_name: 'SUBWAY, meatball marinara sub on white bread (no toppings)',
+            quantity: 1,
+            unit: '6-inch sub',
+            calories: 438,
+            protein: 18,
+            carbs: 52,
+            fat: 16,
+            source_type: 'OFFICIAL_RESTAURANT',
+            source_name: 'Subway nutrition reference',
+          }),
+        ],
+        currentMealText: 'Subway meatball marinara 6-inch sub',
+        mealType: 'snack',
+      }),
+    });
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('correction');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/footlong/i);
+    expect(response.meal.items[0]?.unit).toMatch(/footlong/i);
+    expect(response.meal.totals.calories).toBe(876);
+    expect(response.assistant_reply).toMatch(/footlong/i);
+    expectNoBadAssistantPatterns(response.assistant_reply);
+  });
+
+  it('fuzzy-matches Diet Coke typo prompts to a zero-calorie can instead of generic soft drink', async () => {
+    const [response] = await runConversation(['1 diet cooe']);
+
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toMatch(/diet coke|coke zero/i);
+    expect(response.meal.items[0]?.unit).toBe('can');
+    expect(response.meal.items[0]?.calories).toBe(0);
+    expect(response.meal.items[0]?.food_name).not.toMatch(/soft drink/i);
     expectNoBadAssistantPatterns(response.assistant_reply);
   });
 

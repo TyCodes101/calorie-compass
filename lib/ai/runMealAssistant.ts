@@ -244,7 +244,8 @@ function normalizeKnownFoodTypos(text: string) {
     .replace(/\bsandwhich\b/g, 'sandwich')
     .replace(/\bsandwhiches\b/g, 'sandwiches')
     .replace(/\bceasers\b/g, 'caesars')
-    .replace(/\bcaesers\b/g, 'caesars');
+    .replace(/\bcaesers\b/g, 'caesars')
+    .replace(/\bdiet\s+cooe\b/g, 'diet coke');
 }
 
 function normalizeFoodText(text: string) {
@@ -561,6 +562,25 @@ function isFoodReplacementClarification(message: string, state: MealAssistantSta
 function hasAffirmativeSaveCommand(message: string) {
   const trimmed = message.trim();
   return !/\?$/.test(trimmed) && saveRegex.test(message) && !negatedSaveRegex.test(message) && !saveQuestionRegex.test(trimmed);
+}
+
+function isRecentSavedMealUndoCommand(message: string) {
+  const normalized = normalizeFoodText(stripEmotionalPreface(message));
+  return /^(?:delete|remove|discard|undo|clear)\s+(?:that|it|this|last|last meal)(?:\s+(?:nvm|nevermind|never mind))?$/.test(normalized)
+    || /^(?:nvm|nevermind|never mind)\s+(?:delete|remove|discard|undo|clear)\s+(?:that|it|this|last|last meal)$/.test(normalized);
+}
+
+function extractExplicitFoodLogCommand(message: string) {
+  const trimmed = message.trim().replace(/[.?!]+$/g, '');
+  const colonMatch = trimmed.match(/^(?:log|add|repeat)\s+(?:this|that|it|meal)?\s*(?:again)?\s*:\s*(.+)$/i);
+  const inlineMatch = trimmed.match(/^(?:log|add)\s+(?:this|that|it|meal)?\s*(?:again)?\s+(.+)$/i);
+  const foodText = (colonMatch?.[1] ?? inlineMatch?.[1] ?? '').trim();
+
+  if (!foodText || /^(?:it|that|this|meal)$/i.test(foodText)) {
+    return null;
+  }
+
+  return hasStrongFoodSignal(normalizeFoodText(foodText)) ? foodText : null;
 }
 
 function isRecommendationRequestMessage(message: string) {
@@ -6409,6 +6429,99 @@ function preserveFrySizeCorrectionLabel(items: ParsedFoodItem[], message: string
   return items.map((item) => /\bfr(?:y|ies)\b/i.test(item.food_name) ? { ...item, food_name: 'Medium Fry' } : item);
 }
 
+type SubwayServingLength = 'six-inch' | 'footlong';
+
+function parseSubwayLengthCorrection(message: string): SubwayServingLength | null {
+  const normalized = normalizeFoodText(stripEmotionalPreface(message));
+  const hasCorrectionCue = /^(?:no|nah|actually|i meant|it was|that was|make it|make that|change it|change that|update it|update that)\b/.test(normalized);
+
+  if (!hasCorrectionCue) {
+    return null;
+  }
+
+  if (/\bfoot\s*long\b|\bfootlong\b/.test(normalized)) {
+    return 'footlong';
+  }
+
+  if (/\b6\s*(?:inch|in)\b|\bsix\s*(?:inch|in)\b/.test(normalized)) {
+    return 'six-inch';
+  }
+
+  return null;
+}
+
+function subwayServingLengthForItem(item: ParsedFoodItem): SubwayServingLength {
+  const text = normalizeFoodText(`${item.food_name} ${item.unit}`);
+  return /\bfoot\s*long\b|\bfootlong\b/.test(text) ? 'footlong' : 'six-inch';
+}
+
+function isSubwaySandwichItem(item: ParsedFoodItem) {
+  const text = normalizeFoodText(`${item.food_name} ${item.source_name ?? ''} ${item.unit}`);
+  return /\bsubway\b/.test(text) && /\b(?:sub|sandwich|meatball|bmt|club|turkey|footlong|inch)\b/.test(text);
+}
+
+function roundNutrition(value: number) {
+  return Number(value.toFixed(1));
+}
+
+function renameSubwayServing(foodName: string, target: SubwayServingLength) {
+  const label = target === 'footlong' ? 'Footlong' : '6-Inch';
+  let nextName = foodName
+    .replace(/\bfoot\s*long\b/gi, label)
+    .replace(/\bfootlong\b/gi, label)
+    .replace(/\b6\s*(?:inch|in)\b/gi, label)
+    .replace(/\bsix\s*(?:inch|in)\b/gi, label);
+
+  if (!new RegExp(`\\b${target === 'footlong' ? 'footlong' : '6 inch|6-inch'}\\b`, 'i').test(normalizeFoodText(nextName))) {
+    nextName = /^subway,?\s+/i.test(nextName)
+      ? nextName.replace(/^subway,?\s+/i, `SUBWAY, ${label} `)
+      : `${label} ${nextName}`;
+  }
+
+  return nextName.replace(/\s+/g, ' ').trim();
+}
+
+function applySubwayLengthCorrection(items: ParsedFoodItem[], target: SubwayServingLength) {
+  const targetIndex = items.findIndex(isSubwaySandwichItem);
+  if (targetIndex < 0) {
+    return null;
+  }
+
+  const currentItem = items[targetIndex];
+  if (!currentItem) {
+    return null;
+  }
+
+  const currentLength = subwayServingLengthForItem(currentItem);
+  if (currentLength === target) {
+    return items;
+  }
+
+  const currentMultiplier = currentLength === 'footlong' ? 2 : 1;
+  const targetMultiplier = target === 'footlong' ? 2 : 1;
+  const factor = targetMultiplier / currentMultiplier;
+  const nextItem: ParsedFoodItem = {
+    ...currentItem,
+    food_name: renameSubwayServing(currentItem.food_name, target),
+    quantity: 1,
+    unit: target === 'footlong' ? 'footlong' : '6-inch sub',
+    calories: roundNutrition(currentItem.calories * factor),
+    protein: roundNutrition(currentItem.protein * factor),
+    carbs: roundNutrition(currentItem.carbs * factor),
+    fat: roundNutrition(currentItem.fat * factor),
+    fiber: roundNutrition(currentItem.fiber * factor),
+    sugar: roundNutrition(currentItem.sugar * factor),
+    sodium: roundNutrition(currentItem.sodium * factor),
+    notes: [currentItem.notes, `Adjusted serving from ${currentLength} to ${target}.`].filter(Boolean).join(' '),
+  };
+
+  return [
+    ...items.slice(0, targetIndex),
+    nextItem,
+    ...items.slice(targetIndex + 1),
+  ];
+}
+
 async function buildAdaptiveMealMutationReply(
   input: MealAssistantRunInput,
   resolveItemNutrition: NutritionResolver,
@@ -6448,6 +6561,29 @@ async function buildAdaptiveMealMutationReply(
     return null;
   }
 
+  const subwayServingTarget = parseSubwayLengthCorrection(input.message);
+  if (subwayServingTarget) {
+    const nextItems = applySubwayLengthCorrection(currentItems, subwayServingTarget);
+    if (nextItems) {
+      const nextState: MealAssistantState = {
+        ...input.state,
+        currentMealItems: nextItems,
+        userCorrections: [...input.state.userCorrections, input.message],
+        currentMealText: buildMealTextFromItems(nextItems),
+        confidenceScore: getConfidenceScore(nextItems),
+        saved: false,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      };
+
+      return buildDirectResponse({
+        intent: 'correction',
+        assistantReply: `Got it, I changed that to a ${subwayServingTarget}. About ${Math.round(sumTotals(nextItems).calories)} calories total.`,
+        nextState,
+        message: input.message,
+      });
+    }
+  }
 
   const swapReplacement = parseSwapReplacement(input.message);
   if (swapReplacement) {
@@ -7041,6 +7177,39 @@ async function buildDeterministicDialogueResponse(
 ) {
   const state = input.state;
   const normalized = stripEmotionalPreface(input.message).toLowerCase();
+
+  const explicitFoodLogText = extractExplicitFoodLogCommand(input.message);
+  if (explicitFoodLogText) {
+    const directItems = detectKnownFoodEstimatesWithTrustedRestaurantFallback(explicitFoodLogText, state.mealType);
+    if (directItems.length) {
+      const hydratedItems = await hydrateKnownEstimatesWithProviders(directItems, state.mealType);
+      return buildDirectFoodEstimateResponse({
+        input: { ...input, message: explicitFoodLogText },
+        state,
+        items: hydratedItems,
+        intent: 'new_food_item',
+        context,
+      });
+    }
+  }
+
+  if (!state.currentMealItems.length && isRecentSavedMealUndoCommand(input.message)) {
+    return buildDirectResponse({
+      intent: 'delete_command',
+      assistantReply: state.saved
+        ? 'I will not log that as food. If that meal was just saved, I can remove the saved entry from the app.'
+        : 'I will not log that as food. There is no active meal here to delete.',
+      nextState: {
+        ...state,
+        currentMealItems: [],
+        currentMealText: null,
+        confidenceScore: 0.82,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      },
+      message: input.message,
+    });
+  }
 
   if (/^(?:nvm|nevermind|never mind|undo(?: that| it)?|go back)$/i.test(normalized)) {
     return buildDirectResponse({
@@ -7832,6 +8001,22 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     return {
       intent: 'meal_review',
       assistant_reply: 'Here’s what I have so far.',
+      items: [],
+      corrections: [],
+      should_lookup_nutrition: false,
+      should_save_meal: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+      confidence: 'high',
+    };
+  }
+
+  if (!hasActiveMeal && isRecentSavedMealUndoCommand(message)) {
+    return {
+      intent: 'delete_command',
+      assistant_reply: state.saved
+        ? 'I will not log that as food. If that meal was just saved, I can remove the saved entry from the app.'
+        : 'I will not log that as food. There is no active meal here to delete.',
       items: [],
       corrections: [],
       should_lookup_nutrition: false,

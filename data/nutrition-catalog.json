@@ -161,6 +161,14 @@
       "notes": "Used for branded packaged food matching"
     },
     {
+      "id": "fritolay_reference",
+      "name": "Frito-Lay nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Frito-Lay",
+      "citation": "Frito-Lay packaged snack nutrition reference",
+      "notes": "Used for branded packaged snack matching"
+    },
+    {
       "id": "oikos_reference",
       "name": "Oikos nutrition reference",
       "sourceType": "GENERIC_REFERENCE",
@@ -1450,6 +1458,28 @@
       ]
     },
     {
+      "id": "diet_coke_can",
+      "canonicalName": "Diet Coke",
+      "brand": "Coca-Cola",
+      "servingQuantity": 1,
+      "servingUnit": "can",
+      "calories": 0,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 0,
+      "fiber": 0,
+      "sugar": 0,
+      "sodium": 40,
+      "sourceId": "cocacola_reference",
+      "active": true,
+      "aliases": [
+        "diet coke",
+        "diet coke can",
+        "coca cola diet coke",
+        "diet cooe"
+      ]
+    },
+    {
       "id": "oikos_triple_zero_yogurt",
       "canonicalName": "Oikos Triple Zero Greek Yogurt",
       "brand": "Oikos",
@@ -1973,6 +2003,31 @@
         "quest nacho cheese protein chips",
         "quest nacho protein chips",
         "quest nacho cheese chips"
+      ]
+    },
+    {
+      "id": "cheetos_flamin_hot_crunchy",
+      "canonicalName": "Cheetos Crunchy Flamin' Hot",
+      "brand": "Cheetos",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 170,
+      "protein": 2,
+      "carbs": 15,
+      "fat": 11,
+      "fiber": 1,
+      "sugar": 1,
+      "sodium": 250,
+      "sourceId": "fritolay_reference",
+      "active": true,
+      "aliases": [
+        "hot cheetos",
+        "flamin hot cheetos",
+        "flaming hot cheetos",
+        "cheetos flamin hot",
+        "cheetos flaming hot",
+        "hot cheeots",
+        "cheetos"
       ]
     },
     {
