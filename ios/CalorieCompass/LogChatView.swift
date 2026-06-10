@@ -221,6 +221,19 @@ struct LogChatView: View {
     @FocusState private var mealInputFocused: Bool
     private let stabilityReporter = ConsoleStabilityReporter()
     private let bottomAnchorID = "meal-log-bottom-anchor"
+    private let reviewCardAnchorID = "meal-review-card-anchor"
+    private let composerClearance: CGFloat = 210
+
+    init(
+        previewMessages: [MealAssistantTranscriptMessage] = [],
+        previewReviewItems: [MealItem] = [],
+        previewMealType: String = "snack"
+    ) {
+        _messages = State(initialValue: previewMessages)
+        _reviewItems = State(initialValue: previewReviewItems)
+        _showReviewCard = State(initialValue: !previewReviewItems.isEmpty)
+        _selectedMealType = State(initialValue: previewMealType)
+    }
 
     var body: some View {
         NavigationView {
@@ -228,7 +241,9 @@ struct LogChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
-                            introCard
+                            if messages.isEmpty && !showReviewCard {
+                                introCard
+                            }
                             ForEach(Array(messages.enumerated()), id: \.offset) { _, msg in
                                 ChatBubble(role: msg.role, text: msg.text)
                             }
@@ -237,6 +252,7 @@ struct LogChatView: View {
                             }
                             if showReviewCard {
                                 MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
+                                    .id(reviewCardAnchorID)
                                     .onChange(of: reviewItems) { _, nextItems in
                                         syncActiveMealItems(nextItems)
                                     }
@@ -255,12 +271,12 @@ struct LogChatView: View {
                         }
                         .padding(.horizontal, 18)
                         .padding(.top, 12)
-                        .padding(.bottom, 16)
+                        .padding(.bottom, composerClearance)
                     }
-                    .onChange(of: messages.count) { _, _ in scrollToBottom(proxy) }
-                    .onChange(of: isLoading) { _, _ in scrollToBottom(proxy) }
-                    .onChange(of: showReviewCard) { _, _ in scrollToBottom(proxy) }
-                    .onChange(of: reviewItems.count) { _, _ in scrollToBottom(proxy) }
+                    .onChange(of: messages.count) { _, _ in scrollToLatest(proxy) }
+                    .onChange(of: isLoading) { _, _ in scrollToLatest(proxy) }
+                    .onChange(of: showReviewCard) { _, _ in scrollToLatest(proxy) }
+                    .onChange(of: reviewItems.count) { _, _ in scrollToLatest(proxy) }
                     .safeAreaInset(edge: .bottom) {
                         composer
                     }
@@ -399,7 +415,7 @@ struct LogChatView: View {
     }
 
     private var composer: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             mealTypeSelector
             NutritionDisclaimerView()
             HStack(spacing: 10) {
@@ -427,14 +443,15 @@ struct LogChatView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
-        .background(.ultraThinMaterial)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
+        .background(.regularMaterial)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(MacroMeshTheme.border)
                 .frame(height: 1)
         }
+        .shadow(color: MacroMeshTheme.shadow.opacity(0.9), radius: 18, x: 0, y: -8)
     }
 
     private var mealTypeSelector: some View {
@@ -446,12 +463,18 @@ struct LogChatView: View {
                         assistantState = MealAssistantClientLogic.applyingMealType(mealType, to: assistantState)
                     } label: {
                         Text(mealType.capitalized)
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(selectedMealType == mealType ? MacroMeshTheme.primary : MacroMeshTheme.cardSubtle)
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.86)
+                            .frame(minWidth: 76)
+                            .padding(.vertical, 9)
+                            .background(selectedMealType == mealType ? MacroMeshTheme.primary : Color.white.opacity(0.72))
                             .foregroundColor(selectedMealType == mealType ? .white : MacroMeshTheme.primaryDark)
                             .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(selectedMealType == mealType ? Color.clear : MacroMeshTheme.border, lineWidth: 1)
+                            )
                     }
                     .accessibilityLabel("Set meal type to \(mealType)")
                 }
@@ -626,10 +649,14 @@ struct LogChatView: View {
         sendMessage(retryText: retryMessage)
     }
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+    private func scrollToLatest(_ proxy: ScrollViewProxy) {
         DispatchQueue.main.async {
             withAnimation(.easeOut(duration: 0.2)) {
-                proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+                if showReviewCard {
+                    proxy.scrollTo(reviewCardAnchorID, anchor: .top)
+                } else {
+                    proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+                }
             }
         }
     }
@@ -1694,19 +1721,19 @@ struct ChatBubble: View {
                     .font(.caption2.weight(.bold))
                     .foregroundColor(MacroMeshTheme.muted)
                 Text(text)
-                    .font(.body)
+                    .font(.callout)
                     .foregroundColor(isUser ? .white : MacroMeshTheme.text)
                     .multilineTextAlignment(isUser ? .trailing : .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 9)
                     .background(isUser ? MacroMeshTheme.primary : MacroMeshTheme.card)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
                             .stroke(isUser ? Color.clear : MacroMeshTheme.border, lineWidth: 1)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: MacroMeshTheme.shadow.opacity(isUser ? 0.16 : 0.10), radius: 10, x: 0, y: 6)
-                    .frame(maxWidth: 320, alignment: isUser ? .trailing : .leading)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .shadow(color: MacroMeshTheme.shadow.opacity(isUser ? 0.12 : 0.08), radius: 8, x: 0, y: 5)
+                    .frame(maxWidth: 300, alignment: isUser ? .trailing : .leading)
                     .accessibilityLabel((isUser ? "You: " : "MacroMesh: ") + text)
             }
             if !isUser { Spacer(minLength: 44) }
@@ -1748,6 +1775,52 @@ struct NutritionDisclaimerView: View {
     }
 }
 
-#Preview {
+private enum LogChatPreviewFixtures {
+    static let longRestaurantItem = MealItem(from: MealRequestItem(
+        food_name: "SUBWAY Meatball Marinara 6-Inch on white bread with lettuce and tomato",
+        quantity: 100,
+        unit: "g",
+        calories: 220,
+        protein: 10,
+        carbs: 27,
+        fat: 10,
+        fiber: 3,
+        sugar: 4,
+        sodium: 565,
+        notes: "Scaled from the restaurant serving.",
+        source_type: "OFFICIAL_RESTAURANT",
+        source_name: "Subway official nutrition",
+        confidence_label: "Verified",
+        is_trusted: true,
+        catalog_food_id: "subway_meatball_marinara_6in"
+    ))
+
+    static let chatMessages = [
+        MealAssistantTranscriptMessage(role: "user", text: "A subway meatball sandwich"),
+        MealAssistantTranscriptMessage(role: "assistant", text: "I found Subway Meatball Marinara 6-Inch, about 460 calories. Restaurant verified.")
+    ]
+}
+
+#Preview("Empty Log") {
     LogChatView()
+        .environmentObject(SessionStore())
+}
+
+#Preview("Review Card") {
+    LogChatView(
+        previewMessages: LogChatPreviewFixtures.chatMessages,
+        previewReviewItems: [LogChatPreviewFixtures.longRestaurantItem],
+        previewMealType: "lunch"
+    )
+    .environmentObject(SessionStore())
+}
+
+#Preview("Small Review") {
+    LogChatView(
+        previewMessages: LogChatPreviewFixtures.chatMessages,
+        previewReviewItems: [LogChatPreviewFixtures.longRestaurantItem],
+        previewMealType: "lunch"
+    )
+    .environmentObject(SessionStore())
+    .previewDevice("iPhone SE (3rd generation)")
 }

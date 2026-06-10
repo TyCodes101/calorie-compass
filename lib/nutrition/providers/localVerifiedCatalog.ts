@@ -10,6 +10,8 @@ import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
 const officialRestaurantBrands = new Set([
+  "Arby's",
+  'Burger King',
   'CAVA',
   'Chick-fil-A',
   'Chipotle',
@@ -19,6 +21,7 @@ const officialRestaurantBrands = new Set([
   'Starbucks',
   'Subway',
   'Taco Bell',
+  'White Castle',
   "Wendy's",
 ]);
 
@@ -81,7 +84,11 @@ export const localVerifiedCatalogProvider: NutritionLookupProvider = {
     if (match) {
       const source = getNutritionSourceById(match.food.sourceId);
       if (source && (match.exactAlias || match.exactProduct) && (source.sourceType === 'OFFICIAL_RESTAURANT' || Boolean(source.brand))) {
-        const item = scaleCatalogFood(match.food, normalizedQuery.quantity, match.food.servingUnit);
+        const item = scaleCatalogFood(
+          match.food,
+          normalizedQuery.quantity,
+          normalizedQuery.quantityUnit === 'g' ? 'g' : match.food.servingUnit,
+        );
 
         return makeCatalogMealResponse(
           mealType,

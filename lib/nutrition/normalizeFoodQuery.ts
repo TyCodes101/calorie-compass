@@ -12,10 +12,15 @@ const quantityWords: Record<string, number> = {
 };
 
 const brandHints = [
+  { pattern: /\barby'?s\b|\barbys\b|\barby\b/, brand: "Arby's" },
   { pattern: /\bmcdonalds\b/, brand: "McDonald's" },
+  { pattern: /\bmcd\b/, brand: "McDonald's" },
+  { pattern: /\bburger king\b|\bburgerking\b/, brand: 'Burger King' },
   { pattern: /\btaco bell\b/, brand: 'Taco Bell' },
   { pattern: /\bchipotle\b/, brand: 'Chipotle' },
-  { pattern: /\bchick fil a\b|\bchickfila\b/, brand: 'Chick-fil-A' },
+  { pattern: /\bchick fil a\b|\bchic fil a\b|\bchickfila\b|\bchicfila\b/, brand: 'Chick-fil-A' },
+  { pattern: /\bsubway\b/, brand: 'Subway' },
+  { pattern: /\bwhite castle\b|\bwhitecastle\b/, brand: 'White Castle' },
   { pattern: /\blittle caesars\b/, brand: 'Little Caesars' },
   { pattern: /\bstarbucks\b/, brand: 'Starbucks' },
   { pattern: /\bwendys\b|\bwendy s\b/, brand: "Wendy's" },
@@ -74,6 +79,10 @@ function cleanupFreeText(text: string) {
     .replace(/\bdorittos\b/g, 'doritos')
     .replace(/\bchoclate\b/g, 'chocolate')
     .replace(/\bnuggest\b/g, 'nuggets')
+    .replace(/\bsandwhich\b/g, 'sandwich')
+    .replace(/\bsandwhiches\b/g, 'sandwiches')
+    .replace(/\bchic\s+fil\s+a\b/g, 'chick fil a')
+    .replace(/\bchicfila\b/g, 'chickfila')
     .replace(/\bchees\b/g, 'cheese')
     .replace(/\bcotaage\b/g, 'cottage')
     .replace(/\bcotage\b/g, 'cottage')
