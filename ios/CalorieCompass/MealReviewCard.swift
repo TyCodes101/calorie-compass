@@ -124,45 +124,50 @@ struct MealReviewCard: View {
         if !showCard {
             EmptyView()
         } else {
-            AppCard(padding: 14) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .top, spacing: 14) {
+            AppCard(padding: 12) {
+                VStack(alignment: .leading, spacing: 11) {
+                    HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(.headline)
+                            .font(.subheadline.weight(.bold))
                             .foregroundColor(MacroMeshTheme.primary)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 32, height: 32)
                             .background(MacroMeshTheme.primary.opacity(0.12))
                             .clipShape(Circle())
                         VStack(alignment: .leading, spacing: 4) {
                             Text(Self.reviewTitle)
-                                .font(.title3.weight(.bold))
+                                .font(.headline.weight(.bold))
                                 .foregroundColor(MacroMeshTheme.text)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.85)
                             Text("Check serving sizes and confidence. Nothing is saved until you confirm.")
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundColor(MacroMeshTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
                         Text("\(Int(totalCalories)) cal")
-                            .font(.headline)
+                            .font(.title3.weight(.semibold))
                             .foregroundColor(MacroMeshTheme.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
                     }
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         ReviewMacroPill(label: "Protein", value: totalProtein)
                         ReviewMacroPill(label: "Carbs", value: totalCarbs)
                         ReviewMacroPill(label: "Fat", value: totalFat)
                     }
 
-                    VStack(spacing: 10) {
+                    VStack(spacing: 9) {
                         ForEach(items.indices, id: \.self) { idx in
-                            HStack(alignment: .top, spacing: 12) {
+                            HStack(alignment: .top, spacing: 10) {
                                 FoodAvatar(name: items[idx].name)
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: 6) {
                                     Text(items[idx].name)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundColor(MacroMeshTheme.text)
+                                        .lineLimit(3)
+                                        .fixedSize(horizontal: false, vertical: true)
                                     Text(servingText(for: items[idx]))
                                         .font(.caption)
                                         .foregroundColor(MacroMeshTheme.muted)
@@ -176,18 +181,24 @@ struct MealReviewCard: View {
                                     ServingAdjuster(item: $items[idx])
                                 }
                                 Spacer()
-                                Button(role: .destructive) {
+                                Button {
                                     items.remove(at: idx)
                                 } label: {
-                                    Image(systemName: "xmark.circle.fill")
+                                    Image(systemName: "xmark")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundColor(Color.red.opacity(0.78))
+                                        .frame(width: 28, height: 28)
+                                        .background(Color.red.opacity(0.08))
+                                        .clipShape(Circle())
                                 }
+                                .buttonStyle(.plain)
                                 .accessibilityLabel("Remove \(items[idx].name)")
                             }
-                            .padding(10)
-                            .background(Color.white.opacity(0.86))
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .padding(11)
+                            .background(Color.white.opacity(0.92))
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
                                     .stroke(MacroMeshTheme.border, lineWidth: 1)
                             )
                         }
@@ -239,30 +250,50 @@ struct ServingAdjuster: View {
     @State private var unitDraft: String = ""
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Button {
                 item.applyServing(quantity: item.quantity - stepSize)
             } label: {
-                Image(systemName: "minus.circle.fill")
+                Image(systemName: "minus")
+                    .font(.caption.weight(.bold))
+                    .frame(width: 28, height: 28)
+                    .background(MacroMeshTheme.primary.opacity(0.12))
+                    .clipShape(Circle())
             }
             .disabled(item.quantity <= stepSize)
             .accessibilityLabel("Decrease \(item.name) serving")
 
             Text(quantityLabel)
                 .font(.caption.weight(.semibold))
-                .frame(minWidth: 42)
+                .foregroundColor(MacroMeshTheme.primaryDark)
+                .frame(minWidth: 34)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 6)
+                .background(MacroMeshTheme.cardSubtle.opacity(0.8))
+                .clipShape(Capsule())
 
             Button {
                 item.applyServing(quantity: item.quantity + stepSize)
             } label: {
-                Image(systemName: "plus.circle.fill")
+                Image(systemName: "plus")
+                    .font(.caption.weight(.bold))
+                    .frame(width: 28, height: 28)
+                    .background(MacroMeshTheme.primary.opacity(0.12))
+                    .clipShape(Circle())
             }
             .accessibilityLabel("Increase \(item.name) serving")
 
             TextField("Unit", text: $unitDraft)
                 .font(.caption)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 92)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(width: 82)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(MacroMeshTheme.border, lineWidth: 1)
+                )
                 .onSubmit {
                     item.applyServing(quantity: item.quantity, unit: unitDraft)
                     unitDraft = item.unit
@@ -295,23 +326,31 @@ struct SourceBadge: View {
         if let label = displayLabel {
             Text(label)
                 .font(.caption2.weight(.bold))
-                .foregroundColor(MacroMeshTheme.primaryDark)
+                .foregroundColor(tint)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(MacroMeshTheme.cardSubtle)
+                .background(tint.opacity(0.10))
                 .clipShape(Capsule())
         }
     }
 
+    private var tint: Color {
+        let normalizedType = sourceType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+        if normalizedType.contains("AI") { return MacroMeshTheme.orange }
+        return MacroMeshTheme.primary
+    }
+
     private var displayLabel: String? {
         let normalizedType = sourceType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
-        if normalizedType.contains("USDA") { return "USDA Verified" }
-        if normalizedType.contains("OFFICIAL_RESTAURANT") { return "Restaurant Verified" }
-        if normalizedType.contains("BRAND") { return "Brand Verified" }
+        if normalizedType.contains("USDA") { return "USDA match" }
+        if normalizedType.contains("OFFICIAL_RESTAURANT") { return "Restaurant verified" }
+        if normalizedType.contains("BRAND") { return "Brand verified" }
+        if normalizedType.contains("GENERIC_REFERENCE") { return "Generic reference" }
         if normalizedType.contains("AI") { return "Estimated" }
 
         if let name = sourceName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
-            if name.localizedCaseInsensitiveContains("FoodData Central") { return "USDA Verified" }
+            if name.localizedCaseInsensitiveContains("FoodData Central") { return "USDA match" }
+            if name.localizedCaseInsensitiveContains("common serving") || name.localizedCaseInsensitiveContains("generic") { return "Generic fallback" }
             return name
         }
 
@@ -331,11 +370,11 @@ struct FoodAvatar: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.headline)
+            .font(.subheadline.weight(.semibold))
             .foregroundColor(MacroMeshTheme.primary)
-            .frame(width: 38, height: 38)
+            .frame(width: 34, height: 34)
             .background(MacroMeshTheme.cardSubtle)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
@@ -355,7 +394,7 @@ struct ConfidenceBadge: View {
 
     private var display: String {
         if let label, !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return label
+            return label == "Needs Review" ? "Review" : label
         }
         return isTrusted == false ? "Estimated" : "High confidence"
     }
@@ -368,14 +407,83 @@ struct ReviewMacroPill: View {
     var body: some View {
         VStack(spacing: 2) {
             Text("\(Int(value))g")
-                .font(.caption.weight(.bold))
+                .font(.subheadline.weight(.bold))
             Text(label)
                 .font(.caption2)
         }
         .foregroundColor(MacroMeshTheme.primaryDark)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity)
-        .background(MacroMeshTheme.cardSubtle)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(MacroMeshTheme.cardSubtle.opacity(0.82))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
+}
+
+private enum MealReviewPreviewFixtures {
+    static let chickFilA = MealItem(from: MealRequestItem(
+        food_name: "Chick-fil-A Chicken Sandwich",
+        quantity: 1,
+        unit: "sandwich",
+        calories: 420,
+        protein: 29,
+        carbs: 41,
+        fat: 18,
+        fiber: 2,
+        sugar: 6,
+        sodium: 1460,
+        notes: "Matched to trusted restaurant catalog entry.",
+        source_type: "OFFICIAL_RESTAURANT",
+        source_name: "Chick-fil-A official nutrition",
+        confidence_label: "Verified",
+        is_trusted: true,
+        catalog_food_id: "chickfila_sandwich"
+    ))
+
+    static let longSubway = MealItem(from: MealRequestItem(
+        food_name: "SUBWAY Meatball Marinara 6-Inch on white bread with lettuce and tomato",
+        quantity: 100,
+        unit: "g",
+        calories: 220,
+        protein: 10,
+        carbs: 27,
+        fat: 10,
+        fiber: 3,
+        sugar: 4,
+        sodium: 565,
+        notes: "Scaled from the restaurant serving.",
+        source_type: "OFFICIAL_RESTAURANT",
+        source_name: "Subway official nutrition",
+        confidence_label: "Verified",
+        is_trusted: true,
+        catalog_food_id: "subway_meatball_marinara_6in"
+    ))
+}
+
+#Preview("Meal Review") {
+    MacroMeshScreen {
+        ScrollView {
+            MealReviewCard(
+                items: .constant([MealReviewPreviewFixtures.chickFilA]),
+                showCard: .constant(true),
+                onConfirm: { _ in },
+                onCancel: {}
+            )
+            .padding()
+        }
+    }
+}
+
+#Preview("Long Restaurant Item") {
+    MacroMeshScreen {
+        ScrollView {
+            MealReviewCard(
+                items: .constant([MealReviewPreviewFixtures.longSubway]),
+                showCard: .constant(true),
+                onConfirm: { _ in },
+                onCancel: {}
+            )
+            .padding()
+        }
+    }
+    .previewDevice("iPhone SE (3rd generation)")
 }

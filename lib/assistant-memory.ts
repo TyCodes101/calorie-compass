@@ -79,7 +79,7 @@ type AssistantMemoryMealInput = {
   occurredAt?: string | null;
 };
 
-const knownRestaurants = ['Chipotle', "McDonald's", 'Taco Bell', 'Starbucks', 'Chick-fil-A', 'Wendy\'s', 'Subway', 'Panera'];
+const knownRestaurants = ["Arby's", 'Burger King', 'Chipotle', "McDonald's", 'Taco Bell', 'Starbucks', 'Chick-fil-A', 'Wendy\'s', 'Subway', 'Panera', 'White Castle'];
 const knownBrands = ['Fairlife', 'Quest', 'Premier Protein', 'Quaker', 'Daisy', 'Core Power', 'Chobani', 'Oikos', 'Gatorade'];
 
 function normalizeText(text: string) {

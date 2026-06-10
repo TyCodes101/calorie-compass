@@ -84,7 +84,7 @@ const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
 const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|(?:lets|let's) go back to|go back to|back to|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
-const strongFoodSignalRegex = /\b(?:sunflower seeds?|seeds?|cookie|cookies|oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chick[-\s]*fil[-\s]*a|starbucks|subway|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|trader joe'?s?|mcchicken|big mac|nuggets?|tacos?|sandwich|burgers?|fries|fry|latte|macchiato|footlong|orange chicken|caniac|mac and cheese|fairlife|core power|quest|pop[-\s]*tarts?|cheez[-\s]*its?|cheezits?|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|whey|shakes?|grilled chicken|chicken breast|chicken tenders?|chicken|turkey sausage|sausage|coke zero|coke|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|granola|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|sauce|ranch|pasta|gummy worms?|skittles?|snickers?|m&ms?|mms?|candy|candies|candy bars?)\b/i;
+const strongFoodSignalRegex = /\b(?:sunflower seeds?|seeds?|cookie|cookies|oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chic?k?[-\s]*fil[-\s]*a|starbucks|subway|white castle|arby'?s?|arbys|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|trader joe'?s?|mcchicken|big mac|nuggets?|tacos?|sandwich|sandwhich|burgers?|fries|fry|latte|macchiato|footlong|slider|orange chicken|caniac|mac and cheese|fairlife|core power|quest|pop[-\s]*tarts?|cheez[-\s]*its?|cheezits?|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|whey|shakes?|grilled chicken|chicken breast|chicken tenders?|chicken|turkey sausage|sausage|coke zero|coke|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|granola|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|sauce|ranch|pasta|gummy worms?|skittles?|snickers?|m&ms?|mms?|candy|candies|candy bars?)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -239,6 +239,10 @@ function normalizeKnownFoodTypos(text: string) {
     .replace(/\bcottagee\b/g, 'cottage')
     .replace(/\bchkn\b/g, 'chicken')
     .replace(/\bchikn\b/g, 'chicken')
+    .replace(/\bchic\s+fil\s+a\b/g, 'chick fil a')
+    .replace(/\bchicfila\b/g, 'chickfila')
+    .replace(/\bsandwhich\b/g, 'sandwich')
+    .replace(/\bsandwhiches\b/g, 'sandwiches')
     .replace(/\bceasers\b/g, 'caesars')
     .replace(/\bcaesers\b/g, 'caesars');
 }
@@ -3804,8 +3808,8 @@ function messageHasRestaurantCue(message: string) {
   const normalized = normalizeFoodText(message);
   const compact = normalized.replace(/[^a-z0-9]+/g, '');
   return (
-    /\b(?:chick\s*fil\s*a|chickfila|chipotle|mcdonalds?|mcdonald s|taco bell|starbucks|wendys|wendy s|panera|subway|cava|panda express|little caesars?)\b/.test(normalized)
-    || /(?:tacobell|mcdonalds|chickfila|burgerking|pandaexpress|dominos|pizzahut|raisingcanes|fiveguys|jerseymikes|littlecaesars)/.test(compact)
+    /\b(?:arby'?s?|arbys|chic?k\s*fil\s*a|chic?kfila|chipotle|mcdonalds?|mcdonald s|taco bell|starbucks|wendys|wendy s|panera|subway|white castle|cava|panda express|little caesars?)\b/.test(normalized)
+    || /(?:arbys|whitecastle|tacobell|mcdonalds|chickfila|chicfila|burgerking|pandaexpress|dominos|pizzahut|raisingcanes|fiveguys|jerseymikes|littlecaesars)/.test(compact)
   );
 }
 
@@ -3837,9 +3841,52 @@ function knownItemsAlreadyHaveReliableBrandMatch(items: ParsedFoodItem[]) {
   return items.some((item) => item.match_type === 'exact_branded' || item.match_type === 'fuzzy_branded');
 }
 
+function shouldPreferTrustedRestaurantFallback(message: string) {
+  const normalized = normalizeFoodText(message);
+  if (/\bchipotle\b/.test(normalized)) return false;
+  if (/\bmcdonalds?\b|\bmc donald\b/.test(normalized) && /\bfr(?:y|ies)\b/.test(normalized)) return false;
+  return true;
+}
+
+const trustedFallbackCoverageStopWords = new Set([
+  'and',
+  'around',
+  'classic',
+  'from',
+  'later',
+  'large',
+  'medium',
+  'order',
+  'serving',
+  'small',
+  'the',
+  'with',
+]);
+
+function getFoodCoverageTokens(item: ParsedFoodItem) {
+  return normalizeFoodText(item.food_name)
+    .split(' ')
+    .filter((token) => token.length > 2 && !trustedFallbackCoverageStopWords.has(token));
+}
+
+function trustedItemsCoverKnownItem(knownItem: ParsedFoodItem, trustedHaystack: string) {
+  const tokens = getFoodCoverageTokens(knownItem);
+  return tokens.length > 0 && tokens.every((token) => trustedHaystack.includes(token));
+}
+
+function trustedFallbackWouldDropKnownFood(knownItems: ParsedFoodItem[], trustedItems: ParsedFoodItem[]) {
+  if (!knownItems.length || !trustedItems.length || knownItems.length <= trustedItems.length) {
+    return false;
+  }
+
+  const trustedHaystack = normalizeFoodText(trustedItems.map((item) => item.food_name).join(' '));
+  return knownItems.some((knownItem) => !trustedItemsCoverKnownItem(knownItem, trustedHaystack));
+}
+
 function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, mealType: MealAssistantState['mealType']) {
   const knownItems = detectKnownFoodEstimates(message);
   const trustedItems = getTrustedCatalogEstimate(message, mealType)?.items ?? [];
+  const hasRestaurantCue = messageHasRestaurantCue(message);
 
   if (
     knownItems.length <= 1
@@ -3850,7 +3897,20 @@ function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, 
     return trustedItems;
   }
 
-  if (!knownItems.length || !messageHasRestaurantCue(message) || knownItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')) {
+  if (hasRestaurantCue && knownItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')) {
+    return knownItems;
+  }
+
+  if (
+    hasRestaurantCue
+    && shouldPreferTrustedRestaurantFallback(message)
+    && trustedItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')
+    && !trustedFallbackWouldDropKnownFood(knownItems, trustedItems)
+  ) {
+    return trustedItems;
+  }
+
+  if (!knownItems.length || !hasRestaurantCue) {
     return knownItems;
   }
 
@@ -4031,12 +4091,16 @@ function buildFoodAwareFallbackReply(message: string, items: ParsedFoodItem[]) {
 
   const totalCalories = Math.round(sumTotals(items).calories);
   const foodLabel = items.length === 1 ? formatParsedItemLabel(items[0]) : items.map((item) => item.food_name).join(' and ');
-  const sourceLabel = items.every((item) => item.source_type === 'OFFICIAL_RESTAURANT')
-    ? 'Verified match'
-    : items.some((item) => item.source_type && item.source_type !== 'AI_ESTIMATE')
-      ? 'Part verified, part estimated'
-      : 'Estimated';
+  const sourceLabel = getCombinedSourceLabel(items);
   return `${foodLabel}, about ${totalCalories} calories total. ${sourceLabel}.`;
+}
+
+function getCombinedSourceLabel(items: ParsedFoodItem[]) {
+  const labels = Array.from(new Set(items.map((item) => getSourceLabel(item))));
+  if (labels.length === 1) {
+    return labels[0] ?? 'Estimated';
+  }
+  return `Mixed sources: ${labels.join(' and ')}`;
 }
 
 function getConfidenceScore(items: ParsedFoodItem[]) {
@@ -4061,7 +4125,7 @@ function getConfidenceScore(items: ParsedFoodItem[]) {
 
 function getSourceLabel(item: ParsedFoodItem) {
   if (item.source_type === 'OFFICIAL_RESTAURANT') {
-    return 'Verified match';
+    return 'Restaurant verified';
   }
 
   const sourceName = item.source_name?.toLowerCase() ?? '';
@@ -4070,7 +4134,11 @@ function getSourceLabel(item: ParsedFoodItem) {
   }
 
   if (item.source_type === 'GENERIC_REFERENCE' && item.source_name && !sourceName.includes('generic')) {
-    return 'Branded database match';
+    return 'Brand verified';
+  }
+
+  if (item.source_type === 'GENERIC_REFERENCE') {
+    return 'Generic reference';
   }
 
   if (item.source_type === 'AI_ESTIMATE') {
@@ -4273,6 +4341,21 @@ function polishRepeatedOpening(reply: string, state: MealAssistantState) {
 
   if (startsWithWeakAcknowledgment(reply)) {
     return reply.replace(/^(?:got it|okay|ok|alright|makes sense|sounds good|sure|yep)[,!. ]+/i, '');
+  }
+
+  const withoutIveGot = reply.replace(/^I(?:'|’)ve got\s+/i, '');
+  if (withoutIveGot !== reply) {
+    return `Logged ${withoutIveGot}`;
+  }
+
+  const withoutLooksLike = reply.replace(/^That looks like\s+/i, '');
+  if (withoutLooksLike !== reply) {
+    return `Logged ${withoutLooksLike}`;
+  }
+
+  const withoutAlrightIveGot = reply.replace(/^Alright,\s*I(?:'|’)ve got\s+/i, '');
+  if (withoutAlrightIveGot !== reply) {
+    return `Logged ${withoutAlrightIveGot}`;
   }
 
   return reply;
@@ -7607,11 +7690,13 @@ function extractFallbackItems(input: string, state: MealAssistantState): MealAss
     ? 'Quaker'
     : /\bdaisy\b/.test(normalized)
       ? 'Daisy'
-      : /\bmcdouble\b|\bmcdonald|\bmc donald/.test(normalized) || compact.includes('mcdonalds')
+      : /\barby'?s?\b|\barbys\b|\barby\b/.test(normalized)
+        ? "Arby's"
+        : /\bmcdouble\b|\bmcdonald|\bmc donald|\bmcd\b/.test(normalized) || compact.includes('mcdonalds')
         ? "McDonald's"
         : /\btaco bell\b/.test(normalized) || compact.includes('tacobell')
           ? 'Taco Bell'
-          : /\bchick-fil-a\b|\bchick fil a\b/.test(normalized)
+          : /\bchick-fil-a\b|\bchick fil a\b|\bchic fil a\b/.test(normalized) || compact.includes('chicfila')
             ? 'Chick-fil-A'
             : /\bchipotle\b/.test(normalized)
               ? 'Chipotle'
@@ -7619,13 +7704,17 @@ function extractFallbackItems(input: string, state: MealAssistantState): MealAss
                 ? 'Starbucks'
                 : /\bsubway\b/.test(normalized)
                   ? 'Subway'
-                  : /\bpanda express\b/.test(normalized)
-                    ? 'Panda Express'
-                    : /\bpanera\b/.test(normalized)
-                      ? 'Panera'
-                      : /\bfairlife\b/.test(normalized)
-                        ? 'Fairlife'
-                        : null;
+                  : /\bwhite castle\b/.test(normalized) || compact.includes('whitecastle')
+                    ? 'White Castle'
+                    : /\bpanda express\b/.test(normalized)
+                      ? 'Panda Express'
+                      : /\bpanera\b/.test(normalized)
+                        ? 'Panera'
+                        : /\bburger king\b/.test(normalized) || compact.includes('burgerking')
+                          ? 'Burger King'
+                          : /\bfairlife\b/.test(normalized)
+                            ? 'Fairlife'
+                            : null;
 
   const leadingServing = parseLeadingServingFood(input);
   const quantityMatch = normalized.match(quantityOnlyRegex) ?? normalized.match(directQuantityRegex);
@@ -8591,6 +8680,21 @@ export async function runMealAssistant(
   const initialClarificationQuestion = !state.pendingClarification && !state.currentMealItems.length
     ? buildInitialClarificationQuestion(workingInput.message)
     : null;
+  const trustedInitialRestaurantItems = !dependencies.classify && !state.pendingClarification && !state.currentMealItems.length
+    ? detectKnownFoodEstimatesWithTrustedRestaurantFallback(workingInput.message, state.mealType)
+    : [];
+  if (trustedInitialRestaurantItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')) {
+    const hydratedItems = await hydrateKnownEstimatesWithProviders(trustedInitialRestaurantItems, state.mealType);
+    return finalizeResponse(buildDirectFoodEstimateResponse({
+      input: workingInput,
+      state,
+      items: hydratedItems,
+      intent: 'new_food_item',
+      followUpMessage: mixedIntent.followUpMessage,
+      context,
+    }), workingInput, context);
+  }
+
   if (initialClarificationQuestion) {
     return finalizeResponse(buildInitialClarificationResponse(workingInput, initialClarificationQuestion), workingInput, context);
   }

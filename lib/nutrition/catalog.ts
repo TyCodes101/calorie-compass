@@ -191,12 +191,20 @@ export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit
   const source = getNutritionSourceById(food.sourceId);
   const normalizedUnit = normalizeUnit(unit ?? food.servingUnit);
   const normalizedServingUnit = normalizeUnit(food.servingUnit);
-  const factor = normalizedUnit === normalizedServingUnit ? quantity / food.servingQuantity : quantity;
+  const servingGrams = 'servingGrams' in food ? Number(food.servingGrams) : null;
+  const hasServingGrams = servingGrams !== null && Number.isFinite(servingGrams) && servingGrams > 0;
+  const isGramScaledRestaurantServing = normalizedUnit === 'g' && normalizedServingUnit !== 'g' && hasServingGrams;
+  const factor = normalizedUnit === normalizedServingUnit
+    ? quantity / food.servingQuantity
+    : isGramScaledRestaurantServing
+      ? quantity / servingGrams
+      : quantity;
+  const baseNote = formatSourceNote(food);
 
   return {
     food_name: food.canonicalName,
     quantity,
-    unit: unit ?? food.servingUnit,
+    unit: normalizedUnit,
     calories: Math.round(food.calories * factor * 100) / 100,
     protein: Math.round(food.protein * factor * 100) / 100,
     carbs: Math.round(food.carbs * factor * 100) / 100,
@@ -204,7 +212,9 @@ export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit
     fiber: Math.round(food.fiber * factor * 100) / 100,
     sugar: Math.round(food.sugar * factor * 100) / 100,
     sodium: Math.round(food.sodium * factor * 100) / 100,
-    notes: formatSourceNote(food),
+    notes: isGramScaledRestaurantServing
+      ? `${baseNote}. Scaled from the restaurant serving (${food.servingQuantity} ${food.servingUnit}, about ${servingGrams} g).`
+      : baseNote,
     is_trusted: true,
     source_type: (source?.sourceType as ParsedFoodItem['source_type']) ?? null,
     source_name: source?.name ?? null,

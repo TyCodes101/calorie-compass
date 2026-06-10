@@ -67,6 +67,37 @@ function daysInWindow(currentDate: Date | string, length: number) {
   return Array.from({ length }, (_, index) => isoDay(addDaysUtc(start, index)));
 }
 
+export function buildStreakMilestone(currentStreakDays: number) {
+  const streak = Math.max(0, Math.floor(Number.isFinite(currentStreakDays) ? currentStreakDays : 0));
+  const milestones = [3, 7, 14, 30, 60, 100];
+  const nextMilestone = milestones.find((milestone) => milestone > streak) ?? null;
+  const achievedMilestone = [...milestones].reverse().find((milestone) => milestone <= streak) ?? null;
+
+  if (!nextMilestone) {
+    return {
+      achievedMilestone,
+      nextMilestone: null,
+      daysUntilNext: 0,
+      progressPercent: 100,
+      message: '100-day streak reached. Keep the rhythm steady.',
+    };
+  }
+
+  const daysUntilNext = nextMilestone - streak;
+  const progressPercent = Math.max(0, Math.min(100, Math.round((streak / nextMilestone) * 100)));
+  const halfway = streak >= Math.ceil(nextMilestone / 2) && daysUntilNext > 2;
+
+  return {
+    achievedMilestone,
+    nextMilestone,
+    daysUntilNext,
+    progressPercent,
+    message: halfway
+      ? `You're halfway to a ${nextMilestone}-day streak.`
+      : `${daysUntilNext} day${daysUntilNext === 1 ? '' : 's'} until your ${nextMilestone}-day streak.`,
+  };
+}
+
 export function buildDashboardStreaks({
   currentDate = new Date(),
   meals,
@@ -94,6 +125,7 @@ export function buildDashboardStreaks({
     longestStreakDays,
     mealsLoggedThisWeek,
     proteinGoalHitDaysThisWeek,
+    milestone: buildStreakMilestone(currentStreakDays),
     summary: currentStreakDays > 0 ? `${currentStreakDays} day streak` : 'Start a logging streak today',
   };
 }

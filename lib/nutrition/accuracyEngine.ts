@@ -32,6 +32,7 @@ type ResolutionResult = {
 };
 
 const restaurantBrands = new Set([
+  "Arby's",
   'Burger King',
   "Cane's",
   'CAVA',
@@ -51,12 +52,15 @@ const restaurantBrands = new Set([
   'Subway',
   'Taco Bell',
   "Wendy's",
+  'White Castle',
 ]);
 
 const inferredRestaurantItems: Array<{ pattern: RegExp; restaurant: string }> = [
+  { pattern: /\barby'?s?\b|\barbys\b|\barby\b/, restaurant: "Arby's" },
   { pattern: /\bmcdouble\b|\bbig mac\b|\bmcchicken\b/, restaurant: "McDonald's" },
   { pattern: /\bchipotle\b.*\bbowl\b|\bchipotle bowl\b/, restaurant: 'Chipotle' },
   { pattern: /\bsubway\b|\bfootlong\b/, restaurant: 'Subway' },
+  { pattern: /\bwhite castle\b|\bslider\b/, restaurant: 'White Castle' },
 ];
 
 const ambiguousFoodTerms = [
@@ -98,6 +102,7 @@ function brandTokens(brand: string) {
   if (normalized === 'mcdonald s') return ['mcdonald'];
   if (normalized === 'wendy s') return ['wendy'];
   if (normalized === 'chick fil a') return ['chick', 'fil'];
+  if (normalized === 'arby s') return ['arby'];
   if (normalized === 'coca cola') return ['coca', 'cola'];
   return tokens(normalized);
 }

@@ -1,11 +1,12 @@
 import { ActivityLevel, type NutritionSourceType } from '@prisma/client';
 
-import { getPastSevenDays, isoDay, startOfDayUtc } from '@/lib/date';
+import { addDaysUtc, getPastSevenDays, isoDay, startOfDayUtc } from '@/lib/date';
 import { sumMealTotals } from '@/lib/dashboard-aggregation';
 import { calculateRemainingCalories, toProgressValue } from '@/lib/nutrition';
 import { prisma } from '@/lib/prisma';
 import { summarizeTrustCounts } from '@/lib/trust';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
+import { buildWeeklyInsights } from '@/lib/weekly-insights';
 
 type MealLike = {
   date: Date;
@@ -216,6 +217,14 @@ export function buildInsightsViewModel({
   const today = startOfDayUtc(currentDate);
   const todayTotals = sumMealTotals(todayMeals);
   const weeklyDays = buildDaysWithTotals(weeklyMeals, today);
+  const weeklyInsights = buildWeeklyInsights({
+    currentDate: today,
+    meals: weeklyMeals.map((meal) => ({
+      date: meal.date,
+      totalCalories: meal.totalCalories,
+      totalProtein: meal.totalProtein,
+    })),
+  });
   const loggedDays = weeklyDays.filter((day) => day.logged);
   const loggingStreak = computeLoggingStreak(weeklyDays);
   const averageCalories = loggedDays.length ? Math.round(loggedDays.reduce((sum, day) => sum + day.calories, 0) / loggedDays.length) : 0;
@@ -254,6 +263,9 @@ export function buildInsightsViewModel({
       proteinConsistency: `${proteinConsistencyDays} of 7 days near protein target`,
       averageCalories: loggedDays.length ? `${averageCalories} avg calories` : 'No weekly average yet',
       averageProtein: loggedDays.length ? `${averageProtein}g avg protein` : 'No protein trend yet',
+      consistencyScore: weeklyInsights.daysLogged ? `${weeklyInsights.consistencyScore}/100 consistency` : 'No consistency score yet',
+      calorieTrend: weeklyInsights.calorieTrend.summary,
+      proteinTrend: weeklyInsights.proteinTrend.summary,
       averageMealsPerDay: loggedDays.length ? `${averageMealsPerDay} meals per logged day` : 'No repeat pace yet',
       topMealType: getTopMealType(weeklyDays),
     },
@@ -269,7 +281,7 @@ export async function getInsightsData(inputDate: Date | string = new Date()) {
   }
 
   const date = startOfDayUtc(inputDate);
-  const sevenDaysAgo = getPastSevenDays(date)[0] ?? date;
+  const fourteenDaysAgo = addDaysUtc(date, -13);
 
   const [todayMeals, weeklyMeals] = await Promise.all([
     prisma.meal.findMany({
@@ -299,7 +311,7 @@ export async function getInsightsData(inputDate: Date | string = new Date()) {
       where: {
         userId: user.id,
         date: {
-          gte: sevenDaysAgo,
+          gte: fourteenDaysAgo,
           lte: date,
         },
       },

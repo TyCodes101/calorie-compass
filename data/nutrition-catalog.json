@@ -57,6 +57,22 @@
       "notes": "Used for balanced trust-core restaurant matching"
     },
     {
+      "id": "arbys_official",
+      "name": "Arby's official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "Arby's",
+      "citation": "Arby's standard menu nutrition reference",
+      "notes": "Used for common restaurant sandwich matching"
+    },
+    {
+      "id": "whitecastle_official",
+      "name": "White Castle official nutrition",
+      "sourceType": "OFFICIAL_RESTAURANT",
+      "brand": "White Castle",
+      "citation": "White Castle standard menu nutrition reference",
+      "notes": "Used for common restaurant slider matching"
+    },
+    {
       "id": "tacobell_official",
       "name": "Taco Bell official nutrition",
       "sourceType": "OFFICIAL_RESTAURANT",
@@ -1124,6 +1140,61 @@
       ]
     },
     {
+      "id": "subway_italian_bmt_6in",
+      "canonicalName": "Subway Italian B.M.T. 6-Inch",
+      "brand": "Subway",
+      "servingQuantity": 1,
+      "servingUnit": "6-inch sub",
+      "servingGrams": 219,
+      "calories": 410,
+      "protein": 20,
+      "carbs": 46,
+      "fat": 16,
+      "fiber": 5,
+      "sugar": 8,
+      "sodium": 1260,
+      "sourceId": "subway_official",
+      "active": true,
+      "aliases": [
+        "subway italian bmt",
+        "subway italian b.m.t.",
+        "subway bmt",
+        "italian bmt",
+        "bmt sandwich",
+        "b.m.t. sandwich",
+        "subway bmt sandwich",
+        "subway italian bmt 6 inch",
+        "italian bmt 6 inch"
+      ]
+    },
+    {
+      "id": "subway_meatball_marinara_6in",
+      "canonicalName": "Subway Meatball Marinara 6-Inch",
+      "brand": "Subway",
+      "servingQuantity": 1,
+      "servingUnit": "6-inch sub",
+      "servingGrams": 209,
+      "calories": 460,
+      "protein": 20,
+      "carbs": 56,
+      "fat": 20,
+      "fiber": 7,
+      "sugar": 9,
+      "sodium": 1180,
+      "sourceId": "subway_official",
+      "active": true,
+      "aliases": [
+        "subway meatball marinara",
+        "subway meatball marinara sub",
+        "subway meatball sub",
+        "meatball marinara sub",
+        "meatball marinara sandwich",
+        "subway meatball marinara 6 inch",
+        "meatball marinara 6 inch",
+        "meatball sub"
+      ]
+    },
+    {
       "id": "tacobell_crunchy_taco",
       "canonicalName": "Taco Bell Crunchy Taco",
       "brand": "Taco Bell",
@@ -1703,6 +1774,57 @@
         "burger king whopper",
         "whopper",
         "burgerking whopper"
+      ]
+    },
+    {
+      "id": "arbys_classic_roast_beef",
+      "canonicalName": "Arby's Classic Roast Beef Sandwich",
+      "brand": "Arby's",
+      "servingQuantity": 1,
+      "servingUnit": "sandwich",
+      "servingGrams": 154,
+      "calories": 360,
+      "protein": 23,
+      "carbs": 37,
+      "fat": 14,
+      "fiber": 2,
+      "sugar": 5,
+      "sodium": 970,
+      "sourceId": "arbys_official",
+      "active": true,
+      "aliases": [
+        "arby's classic roast beef",
+        "arbys classic roast beef",
+        "arby classic roast beef",
+        "arby's roast beef",
+        "arbys roast beef",
+        "arby roast beef",
+        "classic roast beef sandwich",
+        "roast beef sandwich"
+      ]
+    },
+    {
+      "id": "whitecastle_original_slider",
+      "canonicalName": "White Castle Original Slider",
+      "brand": "White Castle",
+      "servingQuantity": 1,
+      "servingUnit": "slider",
+      "servingGrams": 55,
+      "calories": 140,
+      "protein": 7,
+      "carbs": 16,
+      "fat": 7,
+      "fiber": 1,
+      "sugar": 2,
+      "sodium": 380,
+      "sourceId": "whitecastle_official",
+      "active": true,
+      "aliases": [
+        "white castle original slider",
+        "white castle slider",
+        "whitecastle slider",
+        "original slider",
+        "slider"
       ]
     },
     {

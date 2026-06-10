@@ -183,29 +183,34 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Current streak</p>
                 <p className="mt-2 text-lg font-semibold text-slate-950">{dashboard.streaks.currentStreakDays} days</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">Longest: {dashboard.streaks.longestStreakDays} days</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{dashboard.streaks.milestone.message}</p>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200" aria-label="Streak milestone progress">
+                  <div className="h-full rounded-full bg-teal-500" style={{ width: `${dashboard.streaks.milestone.progressPercent}%` }} />
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">Longest: {dashboard.streaks.longestStreakDays} days</p>
               </div>
               <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">This week</p>
                 <p className="mt-2 text-lg font-semibold text-slate-950">{dashboard.weeklyInsights.daysLogged} / 7 days logged</p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">Avg {dashboard.weeklyInsights.averageCalories} cal, {dashboard.weeklyInsights.averageProtein}g protein</p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{dashboard.weeklyInsights.consistencyScore}/100 consistency</p>
               </div>
             </div>
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Best protein day</p>
-                <p className="mt-2 text-sm font-semibold text-slate-950">
-                  {dashboard.weeklyInsights.bestProteinDay ? `${dashboard.weeklyInsights.bestProteinDay.protein}g` : '—'}
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Calories trend</p>
+                <p className="mt-2 text-sm font-semibold capitalize text-slate-950">
+                  {dashboard.weeklyInsights.calorieTrend.direction === 'none' ? 'No comparison yet' : dashboard.weeklyInsights.calorieTrend.direction}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{dashboard.weeklyInsights.bestProteinDay?.date ?? 'Log a day to unlock'}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{dashboard.weeklyInsights.calorieTrend.summary}</p>
               </div>
               <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Highest calorie day</p>
-                <p className="mt-2 text-sm font-semibold text-slate-950">
-                  {dashboard.weeklyInsights.highestCalorieDay ? `${dashboard.weeklyInsights.highestCalorieDay.calories} cal` : '—'}
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Protein trend</p>
+                <p className="mt-2 text-sm font-semibold capitalize text-slate-950">
+                  {dashboard.weeklyInsights.proteinTrend.direction === 'none' ? 'No comparison yet' : dashboard.weeklyInsights.proteinTrend.direction}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{dashboard.weeklyInsights.highestCalorieDay?.date ?? 'Log a day to unlock'}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{dashboard.weeklyInsights.proteinTrend.summary}</p>
               </div>
             </div>
           </div>

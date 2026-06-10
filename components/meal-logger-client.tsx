@@ -9,16 +9,22 @@ import {
   BookmarkPlus,
   CheckCircle2,
   ChevronDown,
+  Download,
   LoaderCircle,
   PencilLine,
   Plus,
   RotateCcw,
+  Search,
   SendHorizontal,
+  Settings,
   Star,
+  Trash2,
+  Upload,
   WifiOff,
   X,
 } from 'lucide-react';
 
+import { AppModal } from '@/components/app-modal';
 import type { MealAssistantContext, MealAssistantResponse, MealAssistantState } from '@/lib/ai/mealAssistantSchema';
 import {
   assistantMemoryStorageKey,
@@ -38,17 +44,23 @@ import { getConfidenceCopy, getItemSourceLabel, getItemTrustPresentation, summar
 import { useOnlineStatus } from '@/lib/use-online-status';
 import {
   buildQuickFoodFromParsedItem,
+  buildQuickListsExport,
   createTemplate,
   defaultQuickListsState,
   deleteTemplate,
+  filterMealTemplates,
+  filterQuickFoods,
+  importQuickListsJson,
   loadQuickListsFromStorage,
   renameTemplate,
   saveQuickListsToStorage,
   toggleFavorite,
   touchTemplate,
   upsertRecentFood,
+  validateTemplateName,
   type PublicNutritionLabel,
   type QuickFood,
+  type MealTemplate,
 } from '@/lib/logger-quicklists';
 
 const mealTypeOptions = [
@@ -102,6 +114,7 @@ type ChatMessage = {
 };
 
 type EntryMode = 'chat' | 'barcode' | 'label';
+type QuickListKind = 'favorites' | 'recents' | 'templates';
 
 type NutritionLabelDraft = {
   name: string;
@@ -884,6 +897,12 @@ export function MealLoggerClient({
   );
   const [templateDraftOpen, setTemplateDraftOpen] = useState(false);
   const [templateDraftName, setTemplateDraftName] = useState('');
+  const [templateDraftError, setTemplateDraftError] = useState<string | null>(null);
+  const [templateRenameDialog, setTemplateRenameDialog] = useState<{ templateId: string; name: string; error: string | null } | null>(null);
+  const [quickListSearch, setQuickListSearch] = useState<Record<QuickListKind, string>>({ favorites: '', recents: '', templates: '' });
+  const [quickListSettingsOpen, setQuickListSettingsOpen] = useState<QuickListKind | null>(null);
+  const [quickListNotice, setQuickListNotice] = useState<string | null>(null);
+  const [confirmQuickListAction, setConfirmQuickListAction] = useState<'clearRecents' | null>(null);
   const [typingCopy, setTypingCopy] = useState(() => buildTypingCopy(initialDraft?.rawText ?? ''));
   const isOnline = useOnlineStatus();
 
@@ -892,6 +911,8 @@ export function MealLoggerClient({
   const confidence = getConfidenceCopy(confidenceScore);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const feedEndRef = useRef<HTMLDivElement | null>(null);
+  const favoritesImportRef = useRef<HTMLInputElement | null>(null);
+  const templatesImportRef = useRef<HTMLInputElement | null>(null);
   const canSaveMeal = items.length > 0 && !saving && isOnline && !hasSavedCurrentDraft;
   const canSaveFavorite = items.length > 0 && !favoriteSaving && !(sourceReusableMealId && favoriteState === 'saved') && isOnline;
   const canSend = composerText.trim().length > 0 && !loading && isOnline;
@@ -908,6 +929,14 @@ export function MealLoggerClient({
         remainingCalories,
       }),
     [assistantMemory, favoriteMeals, recentMeals, remainingProtein, remainingCalories],
+  );
+  const filteredQuickLists = useMemo(
+    () => ({
+      favorites: filterQuickFoods(quickLists.favorites, quickListSearch.favorites),
+      recents: filterQuickFoods(quickLists.recents, quickListSearch.recents),
+      templates: filterMealTemplates(quickLists.templates, quickListSearch.templates),
+    }),
+    [quickLists, quickListSearch],
   );
   const loggerSnapshot = useMemo(
     () => buildLoggerSnapshot({ remainingCalories, remainingProtein, todayMealCount }),
@@ -975,7 +1004,7 @@ export function MealLoggerClient({
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [chatHistory, clarifyingQuestion, items, loading, error, saveMessage, expandedIndex, entryMode, utilityMenuOpen]);
+  }, [chatHistory, clarifyingQuestion, items, loading, error, saveMessage, quickListNotice, expandedIndex, entryMode, utilityMenuOpen]);
 
   useEffect(() => {
     if (!loading) {
@@ -1376,12 +1405,19 @@ export function MealLoggerClient({
 
   function openTemplateDialog() {
     setTemplateDraftName('');
+    setTemplateDraftError(null);
     setTemplateDraftOpen(true);
   }
 
   function saveCurrentAsTemplate() {
     const foods = items.map(buildQuickFood);
-    const name = (templateDraftName.trim() || activePrompt || displayUserMessage || 'Saved meal').trim();
+    const name = templateDraftName.trim();
+    const validationError = validateTemplateName(quickLists.templates, name);
+
+    if (validationError) {
+      setTemplateDraftError(validationError);
+      return;
+    }
 
     setQuickLists((current) => ({
       ...current,
@@ -1389,7 +1425,99 @@ export function MealLoggerClient({
     }));
 
     setTemplateDraftOpen(false);
+    setTemplateDraftName('');
+    setTemplateDraftError(null);
+    setQuickListNotice(`Saved "${name}" as a template.`);
     appendChatMessage('assistant', `Saved “${name}” as a template.`, { compact: true });
+  }
+
+  function openRenameTemplateDialog(template: MealTemplate) {
+    setTemplateRenameDialog({ templateId: template.id, name: template.name, error: null });
+  }
+
+  function saveTemplateRename() {
+    if (!templateRenameDialog) return;
+    const validationError = validateTemplateName(quickLists.templates, templateRenameDialog.name, templateRenameDialog.templateId);
+
+    if (validationError) {
+      setTemplateRenameDialog((current) => current ? { ...current, error: validationError } : current);
+      return;
+    }
+
+    const nextName = templateRenameDialog.name.trim();
+    setQuickLists((current) => ({
+      ...current,
+      templates: renameTemplate(current.templates, templateRenameDialog.templateId, nextName),
+    }));
+    setTemplateRenameDialog(null);
+    setQuickListNotice(`Renamed template to "${nextName}".`);
+  }
+
+  function updateQuickListSearch(kind: QuickListKind, value: string) {
+    setQuickListSearch((current) => ({ ...current, [kind]: value }));
+  }
+
+  function downloadJsonFile(filename: string, contents: string) {
+    const blob = new Blob([contents], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  }
+
+  function exportQuickList(kind: Exclude<QuickListKind, 'recents'>) {
+    const items = kind === 'favorites' ? quickLists.favorites : quickLists.templates;
+    downloadJsonFile(`macromesh-${kind}-${new Date().toISOString().slice(0, 10)}.json`, buildQuickListsExport(kind, items));
+    setQuickListNotice(`${kind === 'favorites' ? 'Favorites' : 'Templates'} exported as JSON.`);
+  }
+
+  function mergeImportedFavorites(imported: QuickFood[]) {
+    setQuickLists((current) => {
+      const existing = new Set(current.favorites.map((food) => `${food.name}::${food.brand ?? ''}::${food.servingUnit}`.toLowerCase()));
+      const additions = imported.filter((food) => !existing.has(`${food.name}::${food.brand ?? ''}::${food.servingUnit}`.toLowerCase()));
+      return { ...current, favorites: [...additions, ...current.favorites] };
+    });
+    setQuickListNotice(`Imported ${imported.length} favorite${imported.length === 1 ? '' : 's'}.`);
+  }
+
+  function mergeImportedTemplates(imported: MealTemplate[]) {
+    setQuickLists((current) => {
+      const existing = new Set(current.templates.map((template) => template.name.trim().toLowerCase()));
+      const additions = imported.filter((template) => !existing.has(template.name.trim().toLowerCase()));
+      return { ...current, templates: [...additions, ...current.templates] };
+    });
+    setQuickListNotice(`Imported ${imported.length} template${imported.length === 1 ? '' : 's'}.`);
+  }
+
+  function importQuickList(kind: Exclude<QuickListKind, 'recents'>, file: File | null) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = importQuickListsJson(kind, String(reader.result ?? ''));
+      if (!result.ok) {
+        setQuickListNotice(result.error);
+        return;
+      }
+
+      if (result.kind === 'favorites') {
+        mergeImportedFavorites(result.items);
+      } else {
+        mergeImportedTemplates(result.items);
+      }
+    };
+    reader.onerror = () => setQuickListNotice('We could not read that JSON file.');
+    reader.readAsText(file);
+  }
+
+  function clearRecents() {
+    setQuickLists((current) => ({ ...current, recents: [] }));
+    setConfirmQuickListAction(null);
+    setQuickListSettingsOpen(null);
+    setQuickListNotice('Recent foods cleared.');
   }
 
   async function sendAssistantMessage(message: string, options?: { retry?: boolean }) {
@@ -2068,16 +2196,65 @@ export function MealLoggerClient({
                   </button>
                 </div>
 
-                {quickLists.favorites.length || quickLists.recents.length || quickLists.templates.length ? (
+                {quickListNotice ? (
+                  <div className="mt-4 rounded-[18px] border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-800">
+                    {quickListNotice}
+                  </div>
+                ) : null}
+
+                {quickLists ? (
                   <div className="mt-4 space-y-4">
-                    {quickLists.favorites.length ? (
+                    {quickLists ? (
                       <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-slate-950">Favorites</p>
-                          <p className="text-xs text-slate-500">Tap Add to review</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-slate-500">Tap Add to review</p>
+                            <button
+                              type="button"
+                              onClick={() => setQuickListSettingsOpen((current) => current === 'favorites' ? null : 'favorites')}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-teal-200 hover:text-teal-700"
+                              aria-label="Favorites settings"
+                            >
+                              <Settings className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
+                        <label className="mt-3 flex items-center gap-2 rounded-[16px] border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                          <Search className="h-4 w-4 text-slate-400" />
+                          <span className="sr-only">Search favorites</span>
+                          <input
+                            aria-label="Search favorites"
+                            value={quickListSearch.favorites}
+                            onChange={(event) => updateQuickListSearch('favorites', event.target.value)}
+                            placeholder="Search food or brand"
+                            className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                          />
+                        </label>
+                        {quickListSettingsOpen === 'favorites' ? (
+                          <div className="mt-3 flex flex-wrap gap-2 rounded-[18px] border border-slate-200 bg-white p-3">
+                            <button type="button" onClick={() => exportQuickList('favorites')} className="app-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-medium">
+                              <Download className="h-3.5 w-3.5" />
+                              Export favorites
+                            </button>
+                            <button type="button" onClick={() => favoritesImportRef.current?.click()} className="app-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-medium">
+                              <Upload className="h-3.5 w-3.5" />
+                              Import favorites
+                            </button>
+                            <input
+                              ref={favoritesImportRef}
+                              type="file"
+                              accept="application/json,.json"
+                              className="hidden"
+                              onChange={(event) => {
+                                importQuickList('favorites', event.target.files?.[0] ?? null);
+                                event.currentTarget.value = '';
+                              }}
+                            />
+                          </div>
+                        ) : null}
                         <div className="mt-3 grid gap-2">
-                          {quickLists.favorites.slice(0, 6).map((food) => (
+                          {filteredQuickLists.favorites.slice(0, 6).map((food) => (
                             <div key={food.id} className="flex items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-3 py-2">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-medium text-slate-950">{food.name}</p>
@@ -2098,17 +2275,57 @@ export function MealLoggerClient({
                             </div>
                           ))}
                         </div>
+                        {!filteredQuickLists.favorites.length ? (
+                          <div className="app-empty-state mt-3 rounded-[18px] p-4 text-sm text-slate-600">
+                            <p className="font-semibold text-slate-900">No favorite foods yet</p>
+                            <p className="mt-1 leading-6">Favorite the foods you repeat, then load them into review without retyping the brand or serving.</p>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 
-                    {quickLists.recents.length ? (
+                    {quickLists ? (
                       <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-slate-950">Recent foods</p>
-                          <p className="text-xs text-slate-500">Loads into review</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-slate-500">Loads into review</p>
+                            <button
+                              type="button"
+                              onClick={() => setQuickListSettingsOpen((current) => current === 'recents' ? null : 'recents')}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-teal-200 hover:text-teal-700"
+                              aria-label="Recent foods settings"
+                            >
+                              <Settings className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
+                        <label className="mt-3 flex items-center gap-2 rounded-[16px] border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                          <Search className="h-4 w-4 text-slate-400" />
+                          <span className="sr-only">Search recent foods</span>
+                          <input
+                            aria-label="Search recent foods"
+                            value={quickListSearch.recents}
+                            onChange={(event) => updateQuickListSearch('recents', event.target.value)}
+                            placeholder="Search food or brand"
+                            className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                          />
+                        </label>
+                        {quickListSettingsOpen === 'recents' ? (
+                          <div className="mt-3 flex flex-wrap gap-2 rounded-[18px] border border-slate-200 bg-white p-3">
+                            <button
+                              type="button"
+                              onClick={() => setConfirmQuickListAction('clearRecents')}
+                              disabled={!quickLists.recents.length}
+                              className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Clear recents
+                            </button>
+                          </div>
+                        ) : null}
                         <div className="mt-3 grid gap-2">
-                          {quickLists.recents.slice(0, 6).map((food) => (
+                          {filteredQuickLists.recents.slice(0, 6).map((food) => (
                             <div key={food.id} className="flex items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-3 py-2">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-medium text-slate-950">{food.name}</p>
@@ -2120,17 +2337,66 @@ export function MealLoggerClient({
                             </div>
                           ))}
                         </div>
+                        {!filteredQuickLists.recents.length ? (
+                          <div className="app-empty-state mt-3 rounded-[18px] p-4 text-sm text-slate-600">
+                            <p className="font-semibold text-slate-900">No recent foods yet</p>
+                            <p className="mt-1 leading-6">Saved meals will teach this list your normal repeats, then keep each one reviewable before it saves again.</p>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 
-                    {quickLists.templates.length ? (
+                    {quickLists ? (
                       <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-slate-950">Saved meals</p>
-                          <p className="text-xs text-slate-500">Templates</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-slate-500">Templates</p>
+                            <button
+                              type="button"
+                              onClick={() => setQuickListSettingsOpen((current) => current === 'templates' ? null : 'templates')}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-teal-200 hover:text-teal-700"
+                              aria-label="Template settings"
+                            >
+                              <Settings className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
+                        <label className="mt-3 flex items-center gap-2 rounded-[16px] border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                          <Search className="h-4 w-4 text-slate-400" />
+                          <span className="sr-only">Search templates</span>
+                          <input
+                            aria-label="Search templates"
+                            value={quickListSearch.templates}
+                            onChange={(event) => updateQuickListSearch('templates', event.target.value)}
+                            placeholder="Search template name"
+                            className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                          />
+                        </label>
+                        {quickListSettingsOpen === 'templates' ? (
+                          <div className="mt-3 flex flex-wrap gap-2 rounded-[18px] border border-slate-200 bg-white p-3">
+                            <button type="button" onClick={() => exportQuickList('templates')} className="app-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-medium">
+                              <Download className="h-3.5 w-3.5" />
+                              Export templates
+                            </button>
+                            <button type="button" onClick={() => templatesImportRef.current?.click()} className="app-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-medium">
+                              <Upload className="h-3.5 w-3.5" />
+                              Import templates
+                            </button>
+                            <input
+                              ref={templatesImportRef}
+                              type="file"
+                              accept="application/json,.json"
+                              className="hidden"
+                              onChange={(event) => {
+                                importQuickList('templates', event.target.files?.[0] ?? null);
+                                event.currentTarget.value = '';
+                              }}
+                            />
+                          </div>
+                        ) : null}
                         <div className="mt-3 grid gap-2">
-                          {quickLists.templates.slice(0, 4).map((template) => (
+                          {filteredQuickLists.templates.slice(0, 4).map((template) => (
                             <div key={template.id} className="flex items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-3 py-2">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-medium text-slate-950">{template.name}</p>
@@ -2139,12 +2405,7 @@ export function MealLoggerClient({
                               <div className="flex shrink-0 items-center gap-2">
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    setQuickLists((current) => {
-                                      const nextName = window.prompt('Rename template', template.name)?.trim();
-                                      return nextName ? { ...current, templates: renameTemplate(current.templates, template.id, nextName) } : current;
-                                    })
-                                  }
+                                  onClick={() => openRenameTemplateDialog(template)}
                                   className="app-button-secondary px-3 py-1.5 text-xs font-medium"
                                 >
                                   Rename
@@ -2170,6 +2431,12 @@ export function MealLoggerClient({
                             </div>
                           ))}
                         </div>
+                        {!filteredQuickLists.templates.length ? (
+                          <div className="app-empty-state mt-3 rounded-[18px] p-4 text-sm text-slate-600">
+                            <p className="font-semibold text-slate-900">No meal templates yet</p>
+                            <p className="mt-1 leading-6">Save a reviewed meal as a template when it is a repeatable routine, then reload it for review in one tap.</p>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -2517,26 +2784,6 @@ export function MealLoggerClient({
                   ) : null}
                 </div>
 
-                {templateDraftOpen ? (
-                  <div className="mt-3 rounded-[22px] border border-slate-200 bg-white p-4">
-                    <p className="text-sm font-semibold text-slate-950">Name this template</p>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">It will re-load into review before saving.</p>
-                    <input
-                      value={templateDraftName}
-                      onChange={(event) => setTemplateDraftName(event.target.value)}
-                      placeholder={activePrompt || 'Tyler breakfast'}
-                      className="app-input mt-3 px-4 py-3 text-sm"
-                    />
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" onClick={saveCurrentAsTemplate} className="app-button-primary px-4 py-2 text-sm font-semibold">
-                        Save
-                      </button>
-                      <button type="button" onClick={() => setTemplateDraftOpen(false)} className="app-button-secondary px-4 py-2 text-sm font-medium">
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
               </div>
             </ChatBubble>
           ) : null}
@@ -2676,6 +2923,98 @@ export function MealLoggerClient({
           </div>
         </div>
       </div>
+
+      <AppModal
+        open={templateDraftOpen}
+        title="Save template"
+        description="Name this reviewed meal so it can reload into review before saving again."
+        onClose={() => {
+          setTemplateDraftOpen(false);
+          setTemplateDraftError(null);
+        }}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setTemplateDraftOpen(false);
+                setTemplateDraftError(null);
+              }}
+              className="app-button-secondary px-4 py-2 text-sm font-medium"
+            >
+              Cancel
+            </button>
+            <button type="button" onClick={saveCurrentAsTemplate} className="app-button-primary px-4 py-2 text-sm font-semibold">
+              Save
+            </button>
+          </>
+        }
+      >
+        <label className="space-y-2 text-sm text-slate-600">
+          <span>Template name</span>
+          <input
+            aria-label="Template name"
+            value={templateDraftName}
+            onChange={(event) => {
+              setTemplateDraftName(event.target.value);
+              setTemplateDraftError(null);
+            }}
+            placeholder={activePrompt || displayUserMessage || 'Weekday breakfast'}
+            className="app-input px-4 py-3 text-sm"
+          />
+        </label>
+        {templateDraftError ? <p className="mt-2 text-sm text-rose-700">{templateDraftError}</p> : null}
+      </AppModal>
+
+      <AppModal
+        open={Boolean(templateRenameDialog)}
+        title="Rename template"
+        description="Update the saved meal name without changing its foods or nutrition."
+        onClose={() => setTemplateRenameDialog(null)}
+        footer={
+          <>
+            <button type="button" onClick={() => setTemplateRenameDialog(null)} className="app-button-secondary px-4 py-2 text-sm font-medium">
+              Cancel
+            </button>
+            <button type="button" onClick={saveTemplateRename} className="app-button-primary px-4 py-2 text-sm font-semibold">
+              Save
+            </button>
+          </>
+        }
+      >
+        <label className="space-y-2 text-sm text-slate-600">
+          <span>Template name</span>
+          <input
+            aria-label="Template name"
+            value={templateRenameDialog?.name ?? ''}
+            onChange={(event) => setTemplateRenameDialog((current) => current ? { ...current, name: event.target.value, error: null } : current)}
+            className="app-input px-4 py-3 text-sm"
+          />
+        </label>
+        {templateRenameDialog?.error ? <p className="mt-2 text-sm text-rose-700">{templateRenameDialog.error}</p> : null}
+      </AppModal>
+
+      <AppModal
+        open={confirmQuickListAction === 'clearRecents'}
+        title="Clear recents"
+        description="Remove locally remembered recent foods from this device. Favorites, templates, and saved meals stay untouched."
+        onClose={() => setConfirmQuickListAction(null)}
+        footer={
+          <>
+            <button type="button" onClick={() => setConfirmQuickListAction(null)} className="app-button-secondary px-4 py-2 text-sm font-medium">
+              Cancel
+            </button>
+            <button type="button" onClick={clearRecents} className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700">
+              <Trash2 className="h-4 w-4" />
+              Clear recents
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-[20px] border border-rose-100 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800">
+          This only clears the local quicklist. It does not delete meal history.
+        </div>
+      </AppModal>
     </div>
   );
 }

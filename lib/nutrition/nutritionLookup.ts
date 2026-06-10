@@ -118,6 +118,8 @@ function decorateEstimatedItem(item: ParsedFoodItem, originalUserText: string): 
 }
 
 const restaurantBrands = new Set([
+  "Arby's",
+  'Burger King',
   'CAVA',
   'Chick-fil-A',
   'Chipotle',
@@ -130,6 +132,7 @@ const restaurantBrands = new Set([
   'Taco Bell',
   'Texas Roadhouse',
   "Wendy's",
+  'White Castle',
 ]);
 
 function normalizeComparableText(text: string | null | undefined) {
@@ -145,6 +148,8 @@ function brandTokens(brandHint: string) {
   if (normalized === 'mcdonald s') return ['mcdonald', 'mcdonalds'];
   if (normalized === 'wendy s') return ['wendy', 'wendys'];
   if (normalized === 'chick fil a') return ['chick', 'fil'];
+  if (normalized === 'arby s') return ['arby', 'arbys'];
+  if (normalized === 'white castle') return ['white', 'castle'];
   return normalized.split(' ').filter((token) => token.length > 1);
 }
 

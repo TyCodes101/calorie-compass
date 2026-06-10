@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildDashboardStreaks,
+  buildStreakMilestone,
   buildNutritionAnalytics,
   calculateGoalTargets,
   summarizeWeightTrend,
@@ -26,6 +27,24 @@ describe('growth metrics helpers', () => {
     expect(streaks.mealsLoggedThisWeek).toBe(4);
     expect(streaks.proteinGoalHitDaysThisWeek).toBe(3);
     expect(streaks.summary).toMatch(/3 day streak/i);
+    expect(streaks.milestone.nextMilestone).toBe(7);
+    expect(streaks.milestone.message).toBe('4 days until your 7-day streak.');
+  });
+
+  it('builds subtle streak milestone progress copy', () => {
+    expect(buildStreakMilestone(5)).toMatchObject({
+      nextMilestone: 7,
+      daysUntilNext: 2,
+      message: '2 days until your 7-day streak.',
+    });
+    expect(buildStreakMilestone(15)).toMatchObject({
+      nextMilestone: 30,
+      message: "You're halfway to a 30-day streak.",
+    });
+    expect(buildStreakMilestone(100)).toMatchObject({
+      nextMilestone: null,
+      message: '100-day streak reached. Keep the rhythm steady.',
+    });
   });
 
   it('builds calorie and protein analytics for seven and thirty day windows', () => {
