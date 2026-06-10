@@ -2,7 +2,6 @@ import type { ParsedFoodItem } from '@/lib/ai/types';
 import type { CustomFoodSummary } from '@/lib/custom-foods';
 import type { FavoriteMealSummary } from '@/lib/reusable-meals';
 import {
-  findCatalogFoodMatch,
   getCatalogFoods,
   scaleCatalogFood,
   type CatalogFoodRecord,
@@ -36,19 +35,104 @@ type SearchCatalogFood = CatalogFoodRecord & {
 function normalizeSearchText(text: string) {
   return text
     .toLowerCase()
+    .replace(/\bcheeots\b/g, 'cheetos')
+    .replace(/\bflaming\b/g, 'flamin')
+    .replace(/\bcooe\b/g, 'coke')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
+const queryStopTokens = new Set([
+  'a',
+  'an',
+  'the',
+  'of',
+  'with',
+  'and',
+  'one',
+  '1',
+  'can',
+  'cans',
+  'bag',
+  'bags',
+  'serving',
+  'servings',
+  'food',
+]);
+
 function tokens(text: string) {
-  return normalizeSearchText(text).split(' ').filter(Boolean);
+  return normalizeSearchText(text)
+    .split(' ')
+    .filter(Boolean)
+    .filter((token) => !queryStopTokens.has(token));
 }
 
 function textMatches(query: string, value: string | null | undefined) {
+  return searchScore(query, value) !== null;
+}
+
+function editDistance(left: string, right: string) {
+  if (left === right) return 0;
+  if (Math.abs(left.length - right.length) > 2) return 3;
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    let lastDiagonal = previous[0] ?? 0;
+    previous[0] = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const oldDiagonal = previous[j] ?? 0;
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      previous[j] = Math.min(
+        (previous[j] ?? 0) + 1,
+        (previous[j - 1] ?? 0) + 1,
+        lastDiagonal + cost,
+      );
+      lastDiagonal = oldDiagonal;
+    }
+  }
+
+  return previous[right.length] ?? 3;
+}
+
+function fuzzyTokenMatches(queryToken: string, valueToken: string) {
+  if (queryToken === valueToken) return true;
+  if (queryToken.length < 4 || valueToken.length < 4) return false;
+  return editDistance(queryToken, valueToken) <= 1;
+}
+
+function searchScore(query: string, value: string | null | undefined) {
+  const normalizedQuery = normalizeSearchText(query);
+  const normalizedValue = normalizeSearchText(value ?? '');
   const queryTokens = tokens(query);
-  const valueTokens = new Set(tokens(value ?? ''));
-  return queryTokens.length > 0 && queryTokens.every((token) => valueTokens.has(token));
+  const valueTokens = tokens(value ?? '');
+  if (!queryTokens.length || !valueTokens.length) return null;
+
+  if (normalizedQuery === normalizedValue) return 120;
+  if (normalizedValue.includes(normalizedQuery) || normalizedQuery.includes(normalizedValue)) return 92;
+
+  let score = 0;
+  let matched = 0;
+  for (const queryToken of queryTokens) {
+    if (valueTokens.includes(queryToken)) {
+      matched += 1;
+      score += 18;
+    } else if (valueTokens.some((valueToken) => fuzzyTokenMatches(queryToken, valueToken))) {
+      matched += 1;
+      score += 11;
+    }
+  }
+
+  if (!matched) return null;
+  const coverage = matched / queryTokens.length;
+  const minimumCoverage = queryTokens.length <= 2 ? 1 : 0.66;
+  return coverage >= minimumCoverage ? score + Math.round(coverage * 30) : null;
+}
+
+function catalogSearchScore(query: string, food: SearchCatalogFood) {
+  const candidates = [food.canonicalName, food.brand ?? '', ...food.aliases];
+  const score = Math.max(...candidates.map((candidate) => searchScore(query, candidate) ?? 0));
+  return score > 0 ? score : null;
 }
 
 function labelForItems(defaultLabel: FoodSearchSourceLabel, items: ParsedFoodItem[]): FoodSearchSourceLabel {
@@ -135,13 +219,15 @@ export function buildFoodSearchResults({
   if (trimmed.length < 2) return [];
 
   const results: FoodSearchResult[] = [];
-  const catalogMatch = catalogFoods
-    ? catalogFoods.find((food) => food.active !== false && (textMatches(trimmed, food.canonicalName) || food.aliases.some((alias) => textMatches(trimmed, alias))))
-    : findCatalogFoodMatch(trimmed)?.food;
-
-  if (catalogMatch) {
-    results.push(catalogFoodToSearchResult(catalogMatch));
-  }
+  const activeCatalogFoods = (catalogFoods ?? verifiedCatalogFoodsForLookup()).filter((food) => food.active !== false);
+  results.push(
+    ...activeCatalogFoods
+      .map((food) => ({ food, score: catalogSearchScore(trimmed, food) }))
+      .filter((candidate): candidate is { food: SearchCatalogFood; score: number } => candidate.score !== null)
+      .sort((left, right) => right.score - left.score || left.food.canonicalName.localeCompare(right.food.canonicalName))
+      .slice(0, 6)
+      .map((candidate) => catalogFoodToSearchResult(candidate.food)),
+  );
 
   results.push(
     ...customFoods
