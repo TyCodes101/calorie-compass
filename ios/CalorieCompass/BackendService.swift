@@ -582,7 +582,11 @@ struct FoodSearchResult: Codable, Equatable, Identifiable {
     let id: String
     let name: String
     let brand: String?
+    let restaurant: String?
     let sourceLabel: String
+    let sourceType: String?
+    let sourceName: String?
+    let providerId: String?
     let servingQuantity: Double
     let servingUnit: String
     let calories: Double
@@ -592,15 +596,101 @@ struct FoodSearchResult: Codable, Equatable, Identifiable {
     let barcode: String?
     let mealType: String
     let confidenceScore: Double
+    let estimated: Bool
+    let needsReview: Bool
+    let reason: String?
     let sourceReusableMealId: String?
     let items: [MealRequestItem]
 
     var reviewItems: [MealRequestItem] { items }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case brand
+        case restaurant
+        case sourceLabel
+        case sourceType
+        case sourceName
+        case providerId
+        case servingQuantity
+        case servingUnit
+        case calories
+        case protein
+        case carbs
+        case fat
+        case barcode
+        case mealType
+        case confidenceScore
+        case estimated
+        case needsReview
+        case reason
+        case sourceReusableMealId
+        case items
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        brand = try container.decodeIfPresent(String.self, forKey: .brand)
+        restaurant = try container.decodeIfPresent(String.self, forKey: .restaurant)
+        sourceLabel = try container.decode(String.self, forKey: .sourceLabel)
+        sourceType = try container.decodeIfPresent(String.self, forKey: .sourceType)
+        sourceName = try container.decodeIfPresent(String.self, forKey: .sourceName)
+        providerId = try container.decodeIfPresent(String.self, forKey: .providerId)
+        servingQuantity = try container.decode(Double.self, forKey: .servingQuantity)
+        servingUnit = try container.decode(String.self, forKey: .servingUnit)
+        calories = try container.decode(Double.self, forKey: .calories)
+        protein = try container.decode(Double.self, forKey: .protein)
+        carbs = try container.decode(Double.self, forKey: .carbs)
+        fat = try container.decode(Double.self, forKey: .fat)
+        barcode = try container.decodeIfPresent(String.self, forKey: .barcode)
+        mealType = try container.decode(String.self, forKey: .mealType)
+        confidenceScore = try container.decode(Double.self, forKey: .confidenceScore)
+        estimated = try container.decodeIfPresent(Bool.self, forKey: .estimated) ?? false
+        needsReview = try container.decodeIfPresent(Bool.self, forKey: .needsReview) ?? false
+        reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        sourceReusableMealId = try container.decodeIfPresent(String.self, forKey: .sourceReusableMealId)
+        items = try container.decode([MealRequestItem].self, forKey: .items)
+    }
 }
 
 struct FoodSearchResponse: Codable, Equatable {
     let query: String
+    let normalizedQuery: String
     let results: [FoodSearchResult]
+    let clarificationQuestion: String?
+    let usedResolver: Bool
+    let usedRanking: Bool
+    let cache: FoodSearchCacheState?
+
+    enum CodingKeys: String, CodingKey {
+        case query
+        case normalizedQuery
+        case results
+        case clarificationQuestion
+        case usedResolver
+        case usedRanking
+        case cache
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        query = try container.decode(String.self, forKey: .query)
+        normalizedQuery = try container.decodeIfPresent(String.self, forKey: .normalizedQuery) ?? query
+        results = try container.decode([FoodSearchResult].self, forKey: .results)
+        clarificationQuestion = try container.decodeIfPresent(String.self, forKey: .clarificationQuestion)
+        usedResolver = try container.decodeIfPresent(Bool.self, forKey: .usedResolver) ?? false
+        usedRanking = try container.decodeIfPresent(Bool.self, forKey: .usedRanking) ?? false
+        cache = try container.decodeIfPresent(FoodSearchCacheState.self, forKey: .cache)
+    }
+}
+
+struct FoodSearchCacheState: Codable, Equatable {
+    let resolverHit: Bool
+    let rankingHit: Bool
+    let selectedResultHit: Bool
 }
 
 struct BarcodeLookupResponse: Codable, Equatable {

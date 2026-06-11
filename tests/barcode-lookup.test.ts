@@ -37,7 +37,7 @@ describe('barcode lookup helpers', () => {
     expect(result.found).toBe(true);
     expect(result.result).toMatchObject({
       name: 'Verified Protein Bar',
-      sourceLabel: 'Verified',
+      sourceLabel: 'Brand verified',
       barcode: '111111111111',
     });
   });

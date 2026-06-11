@@ -10,7 +10,11 @@ export function cachedFoodToSearchResult(food: CachedNutritionFood): FoodSearchR
     id: `cache:${food.provider}:${food.providerId}`,
     name: food.name,
     brand: food.brand ?? null,
-    sourceLabel: 'Verified',
+    restaurant: null,
+    sourceLabel: 'Brand verified',
+    sourceType: 'GENERIC_REFERENCE',
+    sourceName: `${food.provider}`,
+    providerId: food.providerId,
     servingQuantity: food.servingQuantity,
     servingUnit: food.servingUnit,
     calories: Math.round(food.calories),
@@ -20,6 +24,9 @@ export function cachedFoodToSearchResult(food: CachedNutritionFood): FoodSearchR
     barcode: food.barcode ?? null,
     mealType: 'snack',
     confidenceScore: 1,
+    estimated: false,
+    needsReview: false,
+    reason: null,
     sourceReusableMealId: null,
     items: [
       {
