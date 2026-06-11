@@ -442,6 +442,80 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(barcode.result?.reviewItems.first?.food_name, "Turkey Chili")
     }
 
+    func testFoodSearchResponseDecodesTrustAndReviewMetadata() throws {
+        let data = """
+        {
+          "query": "1 can coke zero",
+          "normalizedQuery": "Coke Zero",
+          "clarificationQuestion": null,
+          "usedResolver": true,
+          "usedRanking": false,
+          "cache": {
+            "resolverHit": false,
+            "rankingHit": false,
+            "selectedResultHit": false
+          },
+          "results": [
+            {
+              "id": "provider:coke-zero",
+              "name": "Coke Zero",
+              "brand": "Coca-Cola",
+              "restaurant": null,
+              "sourceLabel": "Brand verified",
+              "sourceType": "GENERIC_REFERENCE",
+              "sourceName": "Coca-Cola nutrition reference",
+              "providerId": "brand-provider",
+              "servingQuantity": 1,
+              "servingUnit": "can",
+              "calories": 0,
+              "protein": 0,
+              "carbs": 0,
+              "fat": 0,
+              "confidenceScore": 0.96,
+              "estimated": false,
+              "needsReview": false,
+              "reason": "Matched branded zero-calorie soda.",
+              "barcode": null,
+              "mealType": "snack",
+              "sourceReusableMealId": null,
+              "items": [
+                {
+                  "food_name": "Coke Zero",
+                  "quantity": 1,
+                  "unit": "can",
+                  "calories": 0,
+                  "protein": 0,
+                  "carbs": 0,
+                  "fat": 0,
+                  "fiber": 0,
+                  "sugar": 0,
+                  "sodium": 40,
+                  "source_type": "GENERIC_REFERENCE",
+                  "source_name": "Coca-Cola nutrition reference",
+                  "confidence_label": "Matched",
+                  "is_trusted": true
+                }
+              ]
+            }
+          ]
+        }
+        """.data(using: .utf8)
+
+        let response = try JSONDecoder().decode(FoodSearchResponse.self, from: try XCTUnwrap(data))
+        let result = try XCTUnwrap(response.results.first)
+
+        XCTAssertEqual(response.normalizedQuery, "Coke Zero")
+        XCTAssertEqual(response.cache?.resolverHit, false)
+        XCTAssertEqual(result.sourceLabel, "Brand verified")
+        XCTAssertEqual(result.sourceType, "GENERIC_REFERENCE")
+        XCTAssertEqual(result.sourceName, "Coca-Cola nutrition reference")
+        XCTAssertEqual(result.providerId, "brand-provider")
+        XCTAssertEqual(result.estimated, false)
+        XCTAssertEqual(result.needsReview, false)
+        XCTAssertEqual(result.reason, "Matched branded zero-calorie soda.")
+        XCTAssertEqual(result.reviewItems.first?.source_name, "Coca-Cola nutrition reference")
+    }
+
     func testManualQuickAddRejectsInvalidValuesAndBuildsReviewItem() {
         XCTAssertNil(ManualQuickAddBuilder.build(calories: -1, protein: 0, carbs: 0, fat: 0, barcode: nil))
 

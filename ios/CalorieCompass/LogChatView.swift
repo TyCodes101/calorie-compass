@@ -978,27 +978,62 @@ struct FoodSearchSheet: View {
     @State private var results: [FoodSearchResult] = []
     @State private var isLoading = false
     @State private var message: String?
+    @State private var errorMessage: String?
+    @State private var clarificationQuestion: String?
     @State private var submittedQuery = ""
+    @State private var inFlightQuery: String?
+    @State private var lastFailedQuery: String?
+    @State private var requestID = UUID()
     @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationView {
             VStack(alignment: .leading, spacing: 14) {
-                TextField("Search foods", text: $query)
-                    .textFieldStyle(MacroMeshTextFieldStyle())
-                    .submitLabel(.search)
-                    .onSubmit(search)
-                    .focused($searchFocused)
-                    .accessibilityLabel("Search foods")
-                Button(action: search) {
-                    if isLoading { ProgressView().tint(.white) } else { Label("Search", systemImage: "magnifyingglass") }
+                HStack(spacing: 10) {
+                    TextField("Search foods", text: $query)
+                        .textFieldStyle(MacroMeshTextFieldStyle())
+                        .submitLabel(.search)
+                        .onSubmit(search)
+                        .focused($searchFocused)
+                        .disabled(isLoading)
+                        .accessibilityLabel("Search foods")
+                    Button(action: search) {
+                        if isLoading {
+                            ProgressView().tint(.white)
+                        } else {
+                            Image(systemName: "magnifyingglass")
+                                .font(.headline.weight(.semibold))
+                        }
+                    }
+                    .buttonStyle(PrimaryCTAButtonStyle())
+                    .frame(width: 54)
+                    .disabled(!canSearch)
+                    .accessibilityLabel("Search")
                 }
-                .buttonStyle(PrimaryCTAButtonStyle())
-                .disabled(!canSearch)
                 if let message {
                     Text(message)
                         .font(.caption)
                         .foregroundColor(MacroMeshTheme.muted)
+                }
+                if let clarificationQuestion {
+                    Label(clarificationQuestion, systemImage: "questionmark.circle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.primaryDark)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(MacroMeshTheme.cardSubtle)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                if let errorMessage {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                        Button("Retry") {
+                            retrySearch()
+                        }
+                        .buttonStyle(SecondaryCTAButtonStyle())
+                    }
                 }
                 ScrollView {
                     LazyVStack(spacing: 10) {
@@ -1006,6 +1041,16 @@ struct FoodSearchSheet: View {
                             ProgressView("Searching foods")
                                 .frame(maxWidth: .infinity, minHeight: 120)
                                 .foregroundColor(MacroMeshTheme.muted)
+                        } else if results.isEmpty && submittedQuery.isEmpty {
+                            FoodSearchEmptyState(
+                                title: "Search verified foods",
+                                message: "Try a restaurant item, brand, common food, favorite, or recent meal."
+                            )
+                        } else if results.isEmpty && errorMessage == nil {
+                            FoodSearchEmptyState(
+                                title: "No matches found",
+                                message: "Try a more specific brand, restaurant, or serving."
+                            )
                         }
                         ForEach(results) { result in
                             FoodSearchResultRow(result: result) {
@@ -1041,23 +1086,62 @@ struct FoodSearchSheet: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2, !isLoading else { return }
         if trimmed == submittedQuery && !results.isEmpty { return }
+        if trimmed == inFlightQuery { return }
+        let currentRequestID = UUID()
+        requestID = currentRequestID
+        inFlightQuery = trimmed
         submittedQuery = trimmed
         results = []
         isLoading = true
-        message = "Searching verified, custom, recent, and favorite foods..."
+        errorMessage = nil
+        clarificationQuestion = nil
+        message = "Searching verified sources, custom foods, recents, and favorites..."
         BackendService.searchFoods(query: trimmed) { result in
             DispatchQueue.main.async {
+                guard requestID == currentRequestID else { return }
                 isLoading = false
+                inFlightQuery = nil
                 switch result {
                 case .success(let response):
                     results = response.results
-                    message = response.results.isEmpty ? "No verified, custom, recent, or favorite match found. Try Quick Add or describe the food." : nil
+                    clarificationQuestion = response.clarificationQuestion
+                    message = response.results.isEmpty ? nil : "\(response.results.count) result\(response.results.count == 1 ? "" : "s") for \(response.normalizedQuery)."
+                    lastFailedQuery = nil
                 case .failure(let error):
                     results = []
-                    message = RetryCopy.nonDestructiveFailure(action: "search foods", error: error)
+                    message = nil
+                    lastFailedQuery = trimmed
+                    errorMessage = RetryCopy.nonDestructiveFailure(action: "search foods", error: error)
                 }
             }
         }
+    }
+
+    private func retrySearch() {
+        guard let lastFailedQuery else { return }
+        query = lastFailedQuery
+        submittedQuery = ""
+        search()
+    }
+}
+
+struct FoodSearchEmptyState: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(MacroMeshTheme.text)
+            Text(message)
+                .font(.caption)
+                .foregroundColor(MacroMeshTheme.muted)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+        .background(MacroMeshTheme.cardSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -1774,31 +1858,83 @@ struct FoodSearchResultRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 FoodAvatar(name: result.name)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(result.name)
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(MacroMeshTheme.text)
                         .lineLimit(2)
-                    Text("\(Int(result.calories)) cal | \(Int(result.protein))g protein | \(result.servingQuantity.cleanServingQuantity) \(result.servingUnit)")
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundColor(MacroMeshTheme.muted)
+                            .lineLimit(1)
+                    }
+                    Text("\(result.servingQuantity.cleanServingQuantity) \(result.servingUnit) | \(Int(result.calories)) cal")
                         .font(.caption)
                         .foregroundColor(MacroMeshTheme.muted)
-                    Text(result.sourceLabel)
-                        .font(.caption2.weight(.bold))
-                        .foregroundColor(MacroMeshTheme.primary)
+                    HStack(spacing: 6) {
+                        FoodSearchBadge(text: result.sourceLabel, emphasized: !result.estimated)
+                        if result.needsReview {
+                            FoodSearchBadge(text: "Needs Review", emphasized: false)
+                        }
+                    }
+                    Text("\(Int(result.protein))g protein | \(Int(result.carbs))g carbs | \(Int(result.fat))g fat")
+                        .font(.caption2)
+                        .foregroundColor(MacroMeshTheme.muted)
+                    if let reason = result.reason, !reason.isEmpty {
+                        Text(reason)
+                            .font(.caption2)
+                            .foregroundColor(MacroMeshTheme.muted)
+                            .lineLimit(2)
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .foregroundColor(MacroMeshTheme.muted)
             }
-            .padding(12)
-            .background(Color.white)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(result.estimated ? MacroMeshTheme.cardSubtle : Color.white)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(MacroMeshTheme.border, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Review \(result.name)")
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var subtitle: String? {
+        result.restaurant ?? result.brand ?? result.sourceName
+    }
+
+    private var accessibilityText: String {
+        var parts = [
+            "Review \(result.name)",
+            "\(result.servingQuantity.cleanServingQuantity) \(result.servingUnit)",
+            "\(Int(result.calories)) calories",
+            result.sourceLabel
+        ]
+        if result.needsReview {
+            parts.append("Needs review")
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+struct FoodSearchBadge: View {
+    let text: String
+    let emphasized: Bool
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .foregroundColor(emphasized ? MacroMeshTheme.primaryDark : MacroMeshTheme.muted)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(emphasized ? MacroMeshTheme.cardSubtle : Color.white)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(MacroMeshTheme.border, lineWidth: 1))
     }
 }
 
