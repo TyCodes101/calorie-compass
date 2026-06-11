@@ -266,7 +266,7 @@ struct LogChatView: View {
                                 AssistantTypingCard()
                             }
                             if showReviewCard {
-                                MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
+                                MealReviewCard(mealType: selectedMealType, items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
                                     .id(reviewCardAnchorID)
                                     .onChange(of: reviewItems) { _, nextItems in
                                         syncActiveMealItems(nextItems)
@@ -640,18 +640,30 @@ struct LogChatView: View {
                         messages.append(MealAssistantTranscriptMessage(role: "assistant", text: warning))
                         return
                     }
-                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: resp.assistant_reply))
+                    // Keep the chat bubble concise when a review card is present.
+                    let conciseReply = MealAssistantClientLogic.conciseReply(
+                        rawReply: resp.assistant_reply,
+                        items: resp.meal.items,
+                        nextState: resp.next_state
+                    )
+                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: conciseReply))
                     if MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: activeItemsBeforeResponse, responseItems: resp.meal.items, responseSaved: resp.next_state.saved, incomingUserMessage: userMessage) {
                         assistantState = resp.next_state
                         assistantState.currentMealItems = activeItemsBeforeResponse
-                        showReviewCard = true
+                        // If the UI card previously failed to render, rebuild from the preserved state.
+                        if reviewItems.isEmpty {
+                            reviewItems = activeItemsBeforeResponse.map(MealItem.init(from:))
+                        }
+                        showReviewCard = !reviewItems.isEmpty
                         return
                     }
                     assistantState = resp.next_state
-                    reviewItems = resp.meal.items.map(MealItem.init(from:))
-                    if !reviewItems.isEmpty {
-                        syncActiveMealItems(reviewItems)
-                    }
+
+                    // Source of truth for the pending meal is next_state.currentMealItems.
+                    // resp.meal.items can be empty in some follow-up turns, but we still must keep the active draft.
+                    let nextItems = !resp.meal.items.isEmpty ? resp.meal.items : resp.next_state.currentMealItems
+                    reviewItems = nextItems.map(MealItem.init(from:))
+                    if !reviewItems.isEmpty { syncActiveMealItems(reviewItems) }
                     showReviewCard = !reviewItems.isEmpty && resp.next_state.saved == false
                     if resp.next_state.saved {
                         reviewItems.removeAll()
@@ -688,7 +700,7 @@ struct LogChatView: View {
         let typedState = MealAssistantClientLogic.applyingMealType(selectedMealType, to: assistantState)
         return MealAssistantClientLogic.buildRequestState(
             assistantState: typedState,
-            currentMealItems: reviewItems.map { $0.asMealRequestItem() },
+            currentMealItems: (!reviewItems.isEmpty ? reviewItems.map { $0.asMealRequestItem() } : assistantState.currentMealItems),
             incomingUserMessage: userMessage,
             fallbackMealType: selectedMealType
         )

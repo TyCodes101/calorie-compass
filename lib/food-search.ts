@@ -144,10 +144,82 @@ const selectedResultCache = new Map<string, FoodSearchResult>();
 function normalizeSearchText(text: string) {
   return text
     .toLowerCase()
+    .replace(/\bbaconnator\b/g, 'baconator')
     .replace(/\bflaming\b/g, 'flamin')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function normalizeTokenForMatching(token: string) {
+  return normalizeSearchText(token)
+    .replace(/\bmc\s+double\b/g, 'mcdouble')
+    .trim();
+}
+
+function candidateMatchesAnchorTokens(args: {
+  query: string;
+  resolver: FoodSearchResolverOutput | null;
+  candidateName: string;
+}) {
+  const rawTokens = tokens(args.query);
+  const intentText = [args.resolver?.brandIntent, args.resolver?.restaurantIntent]
+    .filter(Boolean)
+    .join(' ');
+  const intentTokens = intentText ? new Set(tokens(intentText).map(normalizeTokenForMatching)) : new Set<string>();
+
+  const anchorTokens = rawTokens
+    .map(normalizeTokenForMatching)
+    .filter(Boolean)
+    .filter((token) => !intentTokens.has(token))
+    // Avoid over-filtering generic words.
+    .filter((token) => token.length >= 4);
+
+  if (!anchorTokens.length) return true;
+
+  const candidateTokens = new Set(tokens(args.candidateName).map(normalizeTokenForMatching));
+  const matched = anchorTokens.filter((token) => (
+    candidateTokens.has(token) || Array.from(candidateTokens).some((candidateToken) => fuzzyTokenMatches(token, candidateToken))
+  ));
+
+  const coverage = matched.length / anchorTokens.length;
+  // For 1-2 token anchors (e.g. baconator, mcdouble) require exact coverage.
+  const requiredCoverage = anchorTokens.length <= 2 ? 1 : 0.66;
+  return coverage >= requiredCoverage;
+}
+
+function enforceIntentAnchors(args: {
+  query: string;
+  resolver: FoodSearchResolverOutput | null;
+  candidates: FoodSearchResult[];
+}) {
+  // Only enforce when the user has a brand/restaurant-style query.
+  const shouldEnforce = Boolean(
+    args.resolver
+    && (args.resolver.category === 'restaurant' || args.resolver.category === 'branded' || args.resolver.brandIntent || args.resolver.restaurantIntent)
+    && args.resolver.confidence >= 0.55
+  );
+
+  if (!shouldEnforce || args.candidates.length < 2) return { candidates: args.candidates, forcedClarification: null as string | null };
+
+  const filtered = args.candidates.filter((candidate) => candidateMatchesAnchorTokens({
+    query: args.query,
+    resolver: args.resolver,
+    candidateName: candidate.name,
+  }));
+
+  if (!filtered.length) {
+    // If every candidate misses the product tokens, we're better off asking than guessing.
+    const brand = args.resolver?.restaurantIntent ?? args.resolver?.brandIntent;
+    return {
+      candidates: args.candidates,
+      forcedClarification: brand
+        ? `Which ${brand} item do you mean? (For example: Baconator vs. Spicy Chicken Sandwich)`
+        : 'Which specific menu item do you mean?',
+    };
+  }
+
+  return { candidates: filtered, forcedClarification: null };
 }
 
 const queryStopTokens = new Set([
@@ -847,6 +919,20 @@ export async function buildFoodSearchResponse(
   const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, commercialDatabaseProvider];
   const providerResults = await searchProviders(queries, providers, resolver);
   let results = dedupeResults([...localResults, ...providerResults]).slice(0, 12);
+
+  const anchored = enforceIntentAnchors({ query, resolver, candidates: results });
+  if (anchored.forcedClarification) {
+    return {
+      query,
+      normalizedQuery: resolver?.normalizedQuery ?? query,
+      results,
+      clarificationQuestion: anchored.forcedClarification,
+      usedResolver,
+      usedRanking: false,
+      cache,
+    };
+  }
+  results = anchored.candidates;
 
   let ranking: FoodSearchRankingOutput | null = null;
   let usedRanking = false;

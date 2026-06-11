@@ -376,6 +376,27 @@ struct MealAssistantClientLogic {
         return nil
     }
 
+    static func conciseReply(rawReply: String, items: [MealRequestItem], nextState: MealAssistantState) -> String {
+        // If there's a reviewable pending meal, prefer a compact, non-chatbotty line.
+        guard !items.isEmpty, nextState.saved == false else {
+            return rawReply
+        }
+
+        let titles = items.prefix(2).map { item in
+            item.food_name.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+
+        if titles.count == 1 {
+            return "Found \(titles[0]). Review before saving."
+        }
+
+        if titles.count == 2 {
+            return "Found \(titles[0]) + \(titles[1]). Review before saving."
+        }
+
+        return "Meal ready to review."
+    }
+
     static func shouldPreserveActiveMeal(currentItems: [MealRequestItem], responseItems: [MealRequestItem], responseSaved: Bool, incomingUserMessage: String) -> Bool {
         !currentItems.isEmpty && responseItems.isEmpty && !responseSaved && !looksLikeReplacementClarification(incomingUserMessage, currentItems: currentItems)
     }

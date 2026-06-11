@@ -24,6 +24,10 @@ struct MealItem: Identifiable, Codable, Equatable {
     var isTrusted: Bool?
     var catalogFoodID: String?
 
+    var displayName: String {
+        FoodDisplayName.clean(name, sourceType: sourceType)
+    }
+
     init(from item: MealRequestItem) {
         name = item.food_name
         quantity = item.quantity
@@ -84,6 +88,50 @@ struct MealItem: Identifiable, Codable, Equatable {
     }
 }
 
+enum FoodDisplayName {
+    static func clean(_ raw: String, sourceType: String?) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Food item" }
+
+        // Prefer a clean title-case string.
+        let normalized = trimmed
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // If the backend gave us a giant USDA-ish comma chain, choose a humane display title.
+        if normalized.filter({ $0 == "," }).count >= 2 {
+            let lower = normalized.lowercased()
+            if lower.contains("kernels on cob") || lower.contains("on cob") {
+                if lower.contains("butter") || lower.contains("buttered") {
+                    return "Buttered Corn on the Cob"
+                }
+                return lower.contains("sweet") ? "Sweet Corn on the Cob" : "Corn on the Cob"
+            }
+
+            let head = normalized.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: true).first
+            let simplified = head.map(String.init) ?? normalized
+            return titleCase(simplified)
+        }
+
+        // Generic cleanup for “Chicken breast” → “Chicken Breast”.
+        return titleCase(normalized)
+    }
+
+    private static func titleCase(_ text: String) -> String {
+        let lowered = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !lowered.isEmpty else { return "Food item" }
+        return lowered
+            .split(separator: " ")
+            .map { part in
+                // Keep common brand punctuation unchanged.
+                let s = String(part)
+                if s.contains("'") { return s.prefix(1).uppercased() + s.dropFirst() }
+                return s.prefix(1).uppercased() + s.dropFirst()
+            }
+            .joined(separator: " ")
+    }
+}
+
 enum ServingUnitFormatter {
     static func clean(_ unit: String) -> String {
         let cleaned = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -107,6 +155,8 @@ enum ServingUnitFormatter {
 struct MealReviewCard: View {
     static let reviewTitle = "Review meal"
 
+    let mealType: String
+
     @Binding var items: [MealItem]
     @Binding var showCard: Bool
     @State private var isSaving = false
@@ -125,34 +175,18 @@ struct MealReviewCard: View {
             EmptyView()
         } else {
             AppCard(padding: 12) {
-                VStack(alignment: .leading, spacing: 11) {
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundColor(MacroMeshTheme.primary)
-                            .frame(width: 32, height: 32)
-                            .background(MacroMeshTheme.primary.opacity(0.12))
-                            .clipShape(Circle())
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(Self.reviewTitle)
-                                .font(.headline.weight(.bold))
-                                .foregroundColor(MacroMeshTheme.text)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.85)
-                            Text("Check serving sizes and confidence. Nothing is saved until you confirm.")
-                                .font(.caption2)
-                                .foregroundColor(MacroMeshTheme.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text("Review Meal · \(mealType.capitalized)")
+                            .font(.headline.weight(.bold))
+                            .foregroundColor(MacroMeshTheme.text)
                         Spacer()
                         Text("\(Int(totalCalories)) cal")
-                            .font(.title3.weight(.semibold))
+                            .font(.headline.weight(.semibold))
                             .foregroundColor(MacroMeshTheme.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.82)
                     }
 
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         ReviewMacroPill(label: "Protein", value: totalProtein)
                         ReviewMacroPill(label: "Carbs", value: totalCarbs)
                         ReviewMacroPill(label: "Fat", value: totalFat)
@@ -163,7 +197,7 @@ struct MealReviewCard: View {
                             HStack(alignment: .top, spacing: 10) {
                                 FoodAvatar(name: items[idx].name)
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text(items[idx].name)
+                                    Text(items[idx].displayName)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundColor(MacroMeshTheme.text)
                                         .lineLimit(3)
@@ -204,9 +238,11 @@ struct MealReviewCard: View {
                         }
                     }
 
-                    Text(items.isEmpty ? "No items left in this draft." : "\(trustedCount) of \(items.count) items matched with high-confidence or trusted nutrition data.")
-                        .font(.caption)
-                        .foregroundColor(MacroMeshTheme.muted)
+                    if items.isEmpty {
+                        Text("No items left in this draft.")
+                            .font(.caption)
+                            .foregroundColor(MacroMeshTheme.muted)
+                    }
 
                     if let error {
                         Text(error).font(.caption).foregroundColor(.red)
@@ -463,6 +499,7 @@ private enum MealReviewPreviewFixtures {
     MacroMeshScreen {
         ScrollView {
             MealReviewCard(
+                mealType: "lunch",
                 items: .constant([MealReviewPreviewFixtures.chickFilA]),
                 showCard: .constant(true),
                 onConfirm: { _ in },
@@ -477,6 +514,7 @@ private enum MealReviewPreviewFixtures {
     MacroMeshScreen {
         ScrollView {
             MealReviewCard(
+                mealType: "lunch",
                 items: .constant([MealReviewPreviewFixtures.longSubway]),
                 showCard: .constant(true),
                 onConfirm: { _ in },
