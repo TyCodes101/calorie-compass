@@ -9,7 +9,7 @@ describe('food search helpers', () => {
 
     expect(results[0]).toMatchObject({
       name: 'Large egg',
-      sourceLabel: 'Verified',
+      sourceLabel: 'USDA verified',
       servingQuantity: 1,
       servingUnit: 'egg',
     });
@@ -22,17 +22,21 @@ describe('food search helpers', () => {
 
   it.each([
     ['Hot cheetos', /cheetos/i],
-    ['hot cheeots', /cheetos/i],
     ['Quest bbq chips', /quest bbq protein chips/i],
-    ['1 diet cooe', /diet coke|coke zero/i],
   ])('returns fuzzy verified catalog matches for branded searches: %s', (query, expectedName) => {
     const results = buildFoodSearchResults({ query, customFoods: [], favoriteMeals: [], recentMeals: [] });
 
     expect(results.length).toBeGreaterThan(0);
     expect(results[0]?.name).toMatch(expectedName);
-    expect(results[0]?.sourceLabel).toBe('Verified');
+    expect(results[0]?.sourceLabel).toBe('Brand verified');
     expect(results[0]?.items[0]?.is_trusted).toBe(true);
     expect(results[0]?.items[0]?.confidence_label).toMatch(/Verified|Matched/);
+  });
+
+  it.each(['hot cheeots'])('does not solve typo queries with deterministic catalog aliases alone: %s', (query) => {
+    const results = buildFoodSearchResults({ query, customFoods: [], favoriteMeals: [], recentMeals: [] });
+
+    expect(results).toEqual([]);
   });
 
   it('returns searchable custom foods with barcode metadata when present', () => {
