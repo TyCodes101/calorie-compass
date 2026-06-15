@@ -2989,4 +2989,117 @@ describe('meal assistant conversational coverage', () => {
     expect(response.meal.items[0]?.normalizedGrams ?? 0).toBeLessThan(80);
   });
 
+  it('keeps an active pending meal through follow-up macro questions (no active meal memory loss)', async () => {
+    const resolveItemNutrition = vi.fn(async ({ item, mealType }: { item: { name: string }; mealType: MealAssistantState['mealType'] }) => {
+      const phrase = normalize(item.name);
+      if (phrase.includes('grilled chicken') && phrase.includes('asparagus')) {
+        return buildParsedMealResponse([
+          createItem({ food_name: 'Grilled Chicken Breast', unit: 'breast', quantity: 2, calories: 330, protein: 62, carbs: 0, fat: 7, source_name: 'USDA reference' }),
+          createItem({ food_name: 'Asparagus', unit: 'serving', quantity: 1, calories: 40, protein: 4, carbs: 7, fat: 0, source_name: 'USDA reference' }),
+        ], mealType);
+      }
+
+      return resolveConversationNutrition({ item: { brand: null, modifiers: [], name: item.name, quantity: 1 }, mealType });
+    });
+
+    const responses = await runConversation(
+      ['2 grilled chicken breast and asparagus', 'what about protein'],
+      { resolveItemNutrition },
+    );
+
+    expect(responses[0]?.meal.items.length).toBeGreaterThanOrEqual(1);
+    expect(responses[0]?.next_state.currentMealItems.length).toBeGreaterThanOrEqual(1);
+    expect(responses[1]?.assistant_reply.toLowerCase()).toContain('protein');
+    expect(responses[1]?.next_state.currentMealItems.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('treats a standalone new food as a replacement (Chipotle draft should not leak into McDouble)', async () => {
+    const classify = vi.fn(async ({ message }: { message: string; state: MealAssistantState }) => {
+      const normalized = normalize(message);
+      if (normalized.includes('chipotle')) {
+        return {
+          intent: 'new_food_item',
+          assistant_reply: 'Got it.',
+          action: 'add_food',
+          items: [{ name: 'chipotle bowl with white rice chicken corn salsa black beans pico', brand: null, quantity: 1, unit: 'bowl', modifiers: [], action: 'add' }],
+          corrections: [],
+          should_lookup_nutrition: true,
+          should_save_meal: false,
+          should_ask_clarification: false,
+          clarification_question: null,
+          confidence: 'high',
+        } satisfies MealAssistantModelOutput;
+      }
+
+      return {
+        // Intentionally wrong (model tries to add); server should coerce to new_food_item.
+        intent: 'add_to_current_meal',
+        assistant_reply: 'Got it.',
+        action: 'add_food',
+        items: [{ name: 'mcdouble no cheese', brand: null, quantity: 1, unit: 'burger', modifiers: ['no cheese'], action: 'add' }],
+        corrections: [],
+        should_lookup_nutrition: true,
+        should_save_meal: false,
+        should_ask_clarification: false,
+        clarification_question: null,
+        confidence: 'high',
+      } satisfies MealAssistantModelOutput;
+    });
+
+    const responses = await runConversation(
+      ['chipotle bowl with white rice chicken corn salsa black beans pico', 'mcdouble no cheese'],
+      { classify },
+    );
+
+    const secondItems = responses[1]?.meal.items ?? [];
+    expect(secondItems.length).toBe(1);
+    expect(secondItems[0]?.food_name.toLowerCase()).toContain('mcdouble');
+  });
+
+  it('respects explicit add vs replace wording for pending meals', async () => {
+    const classify = vi.fn(async ({ message }: { message: string; state: MealAssistantState }) => {
+      const normalized = normalize(message);
+      if (normalized.includes('chipotle')) {
+        return {
+          intent: 'new_food_item',
+          assistant_reply: 'Got it.',
+          action: 'add_food',
+          items: [{ name: 'chipotle bowl', brand: null, quantity: 1, unit: 'bowl', modifiers: [], action: 'add' }],
+          corrections: [],
+          should_lookup_nutrition: true,
+          should_save_meal: false,
+          should_ask_clarification: false,
+          clarification_question: null,
+          confidence: 'high',
+        } satisfies MealAssistantModelOutput;
+      }
+
+      return {
+        intent: 'add_to_current_meal',
+        assistant_reply: 'Got it.',
+        action: 'add_food',
+        items: [{ name: 'mcdouble no cheese', brand: null, quantity: 1, unit: 'burger', modifiers: ['no cheese'], action: 'add' }],
+        corrections: [],
+        should_lookup_nutrition: true,
+        should_save_meal: false,
+        should_ask_clarification: false,
+        clarification_question: null,
+        confidence: 'high',
+      } satisfies MealAssistantModelOutput;
+    });
+
+    const addResponses = await runConversation(
+      ['chipotle bowl', 'add McDouble no cheese'],
+      { classify },
+    );
+    expect(addResponses[1]?.meal.items.length).toBeGreaterThanOrEqual(2);
+
+    const replaceResponses = await runConversation(
+      ['chipotle bowl', 'replace with McDouble no cheese'],
+      { classify },
+    );
+    expect(replaceResponses[1]?.meal.items.length).toBe(1);
+    expect(replaceResponses[1]?.meal.items[0]?.food_name.toLowerCase()).toContain('mcdouble');
+  });
+
 });

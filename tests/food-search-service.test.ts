@@ -243,6 +243,110 @@ describe('LLM-assisted food search service', () => {
     expect(second.cache.rankingHit).toBe(true);
   });
 
+  it('enforces restaurant/product anchor tokens so Baconator cannot rank to an unrelated Wendy\'s item', async () => {
+    const resolveQuery = vi.fn(async () => resolverOutput({
+      normalizedQuery: "Wendy's Baconator",
+      aliases: ['wendys baconator'],
+      brandIntent: null,
+      restaurantIntent: "Wendy's",
+      category: 'restaurant',
+      confidence: 0.92,
+    }));
+
+    // Simulate a buggy ranker that would have picked the wrong candidate.
+    const rankCandidates = vi.fn(async (input: FoodSearchRankingInput) => ({
+      orderedCandidateIds: input.candidates.map((candidate) => candidate.id).reverse(),
+      bestCandidateId: input.candidates.at(-1)?.id ?? null,
+      confidence: 0.8,
+      reason: 'picked the wrong thing',
+      shouldAskClarification: false,
+      clarificationQuestion: null,
+    }));
+
+    const wendysChicken: NutritionLookupProvider = {
+      id: 'wendys-chicken',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: "Wendy's Spicy Chicken Sandwich",
+        calories: 490,
+        protein: 28,
+        carbs: 45,
+        fat: 19,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "Wendy's official nutrition",
+        provider_used: 'wendys-chicken',
+      }), 0.9)),
+    };
+
+    const wendysBaconator: NutritionLookupProvider = {
+      id: 'wendys-baconator',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: "Wendy's Baconator",
+        calories: 960,
+        protein: 57,
+        carbs: 40,
+        fat: 62,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "Wendy's official nutrition",
+        provider_used: 'wendys-baconator',
+      }), 0.92)),
+    };
+
+    const response = await buildFoodSearchResponse(
+      { query: 'wendys baconator', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { ai: { resolveQuery, rankCandidates }, providers: [wendysChicken, wendysBaconator], catalogFoods: [] },
+    );
+
+    expect(resolveQuery).toHaveBeenCalledTimes(1);
+    expect(response.clarificationQuestion).toBeNull();
+    expect(response.results[0]?.name.toLowerCase()).toContain('baconator');
+    expect(response.results[0]?.calories).toBeGreaterThan(700);
+  });
+
+  it('enforces anchor tokens so McDouble cannot resolve to McChicken', async () => {
+    const resolveQuery = vi.fn(async () => resolverOutput({
+      normalizedQuery: 'McDouble no cheese',
+      aliases: ['mcdonalds mcdouble no cheese'],
+      restaurantIntent: "McDonald's",
+      category: 'restaurant',
+      confidence: 0.9,
+    }));
+
+    const mcdoubleProvider: NutritionLookupProvider = {
+      id: 'mcdouble',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: 'McDouble (no cheese)',
+        calories: 360,
+        protein: 22,
+        carbs: 33,
+        fat: 16,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "McDonald's official nutrition",
+        provider_used: 'mcdouble',
+      }), 0.92)),
+    };
+
+    const mcchickenProvider: NutritionLookupProvider = {
+      id: 'mcchicken',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: 'McChicken',
+        calories: 400,
+        protein: 14,
+        carbs: 40,
+        fat: 21,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "McDonald's official nutrition",
+        provider_used: 'mcchicken',
+      }), 0.93)),
+    };
+
+    const response = await buildFoodSearchResponse(
+      { query: 'mcdouble no cheese', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { ai: { resolveQuery }, providers: [mcchickenProvider, mcdoubleProvider], catalogFoods: [] },
+    );
+
+    expect(response.results[0]?.name.toLowerCase()).toContain('mcdouble');
+  });
+
   it('lets ranking reorder candidates but never alter provider nutrition', async () => {
     const provider = (id: string, name: string, calories: number): NutritionLookupProvider => ({
       id,

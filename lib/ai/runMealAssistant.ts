@@ -245,7 +245,33 @@ function normalizeKnownFoodTypos(text: string) {
     .replace(/\bsandwhiches\b/g, 'sandwiches')
     .replace(/\bceasers\b/g, 'caesars')
     .replace(/\bcaesers\b/g, 'caesars')
-    .replace(/\bdiet\s+cooe\b/g, 'diet coke');
+    .replace(/\bdiet\s+cooe\b/g, 'diet coke')
+    .replace(/\bbaconnator\b/g, 'baconator')
+    .replace(/\bmc\s*double\b/g, 'mcdouble');
+}
+
+function isAffirmativeYes(message: string) {
+  const normalized = stripEmotionalPreface(message).trim().toLowerCase();
+  return /^(?:yes|y|yep|yeah|ya|yup|sure|ok|okay|confirm|sounds good|looks good|do it|go ahead)[!. ]*$/.test(normalized);
+}
+
+function lastQuestionWasSavePrompt(state: MealAssistantState) {
+  const question = (state.lastAssistantQuestion ?? '').toLowerCase();
+  if (!question) return false;
+  return /\b(?:save|log|confirm)\b/.test(question);
+}
+
+function shouldTreatAsStandaloneNewMeal(message: string, state: MealAssistantState) {
+  if (!state.currentMealItems.length || state.saved) return false;
+  const normalized = stripEmotionalPreface(message).toLowerCase().trim();
+  if (!hasStrongFoodSignal(normalized)) return false;
+  if (shouldAppendToCurrentMeal(message, state)) return false;
+  if (editRegex.test(normalized) || removeRegex.test(normalized) || startNewRegex.test(normalized)) return false;
+  if (correctionCueRegex.test(normalized)) return false;
+  if (/^replace\b/i.test(normalized)) return true;
+  // If user didn't reference "that/this/it" and didn't use an add/continuation cue, default to starting a fresh pending meal.
+  if (!mealDescriptorReferenceRegex.test(normalized)) return true;
+  return false;
 }
 
 function normalizeFoodText(text: string) {
@@ -7290,6 +7316,26 @@ async function buildDeterministicDialogueResponse(
     });
   }
 
+  // "Yes" should confirm the prior save/confirm prompt when a pending meal exists.
+  if (isAffirmativeYes(normalized) && state.currentMealItems.length && !state.saved && lastQuestionWasSavePrompt(state)) {
+    await saveMeal({ state, items: state.currentMealItems });
+    return buildDirectResponse({
+      intent: 'save_meal',
+      assistantReply: 'Saved. Ready for the next one?',
+      nextState: {
+        ...state,
+        currentMealItems: [...state.currentMealItems],
+        currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
+        confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+        saved: true,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      },
+      message: input.message,
+      shouldSaveMeal: true,
+    });
+  }
+
   if (repeatYesterdayRegex.test(input.message.trim().toLowerCase())) {
     const yesterdayMeal = findRepeatMealEntry(context, extractMealTypeHint(input.message) ?? null);
     if (yesterdayMeal) {
@@ -9158,6 +9204,22 @@ export async function runMealAssistant(
   });
   decision = normalizeAssistantDecision(decision, workingInput);
   decision = guardAssistantDecision(decision, workingInput);
+
+  // Guard against the model "editing" the current pending meal when the user is clearly starting a new one.
+  if (!state.pendingClarification && shouldTreatAsStandaloneNewMeal(workingInput.message, state)) {
+    if (decision.intent === 'add_to_current_meal' || decision.intent === 'correction' || decision.intent === 'quantity_change' || decision.intent === 'remove_item') {
+      decision = {
+        ...decision,
+        intent: 'new_food_item',
+        action: 'add_food',
+        operations: undefined,
+        target_item: null,
+        target_item_id: null,
+        target_item_index: null,
+        should_mutate_pending_meal: true,
+      };
+    }
+  }
   if (state.pendingClarification && decision.intent === 'new_food_item' && decision.should_lookup_nutrition) {
     decision = {
       ...decision,
@@ -9200,7 +9262,7 @@ export async function runMealAssistant(
       input: workingInput,
       state,
       items: hydratedItems,
-      intent: state.currentMealItems.length && !state.saved ? 'add_to_current_meal' : 'new_food_item',
+      intent: shouldAppendToCurrentMeal(workingInput.message, state) ? 'add_to_current_meal' : 'new_food_item',
       followUpMessage: mixedIntent.followUpMessage,
       context,
     }), workingInput, context);
