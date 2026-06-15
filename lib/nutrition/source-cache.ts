@@ -25,6 +25,36 @@ type CachedNutritionFood = {
   sodium: number;
 };
 
+type CachedNutritionFoodCreateData = CachedNutritionFood & {
+  rawPayload: Prisma.InputJsonValue;
+};
+
+type CachedNutritionFoodUpdateData = Omit<
+  CachedNutritionFoodCreateData,
+  'provider' | 'providerId' | 'normalizedQuery'
+>;
+
+type CachedNutritionFoodDelegate = {
+  findFirst(args: {
+    where: { barcode: string };
+    orderBy: { updatedAt: 'desc' };
+  }): Promise<CachedNutritionFood | null>;
+  upsert(args: {
+    where: {
+      provider_providerId: {
+        provider: string;
+        providerId: string;
+      };
+    };
+    create: CachedNutritionFoodCreateData;
+    update: CachedNutritionFoodUpdateData;
+  }): Promise<CachedNutritionFood>;
+};
+
+const cachedNutritionFood = (
+  prisma as typeof prisma & { cachedNutritionFood: CachedNutritionFoodDelegate }
+).cachedNutritionFood;
+
 type CachedNutritionFoodLike = {
   provider: string;
   providerId: string;
@@ -92,7 +122,7 @@ export async function getCachedFoodByBarcode(barcode: string) {
   const normalized = normalizeBarcode(barcode);
   if (!normalized) return null;
 
-  return ((prisma as any).cachedNutritionFood.findFirst({
+  return (cachedNutritionFood.findFirst({
     where: { barcode: normalized },
     orderBy: { updatedAt: 'desc' },
   }) as Promise<CachedNutritionFood | null>);
@@ -119,7 +149,7 @@ export async function upsertCachedFoodFromOpenFoodFacts(options: {
   const barcode = normalizeBarcode(options.barcode);
   if (!barcode) return null;
 
-  return ((prisma as any).cachedNutritionFood.upsert({
+  return (cachedNutritionFood.upsert({
     where: {
       provider_providerId: {
         provider: 'OPEN_FOOD_FACTS',
