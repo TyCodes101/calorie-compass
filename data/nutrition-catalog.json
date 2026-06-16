@@ -1225,6 +1225,30 @@
       ]
     },
     {
+      "id": "wendys_baconator",
+      "canonicalName": "Wendy's Baconator",
+      "brand": "Wendy's",
+      "servingQuantity": 1,
+      "servingUnit": "burger",
+      "calories": 960,
+      "protein": 57,
+      "carbs": 38,
+      "fat": 66,
+      "fiber": 2,
+      "sugar": 7,
+      "sodium": 1540,
+      "sourceId": "wendys_official",
+      "active": true,
+      "aliases": [
+        "wendy's baconator",
+        "wendys baconator",
+        "baconator",
+        "baconnator",
+        "wendy's baconnator",
+        "wendys baconnator"
+      ]
+    },
+    {
       "id": "wendys_spicy_chicken_sandwich",
       "canonicalName": "Wendy's Spicy Chicken Sandwich",
       "brand": "Wendy's",

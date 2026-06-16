@@ -8,6 +8,9 @@ import SwiftUI
 struct MealItem: Identifiable, Codable, Equatable {
     var id = UUID()
     var name: String
+    var serverDisplayName: String?
+    var canonicalName: String?
+    var sourceFoodName: String?
     var quantity: Double
     var unit: String
     var calories: Double
@@ -25,11 +28,17 @@ struct MealItem: Identifiable, Codable, Equatable {
     var catalogFoodID: String?
 
     var displayName: String {
+        if let serverDisplayName, !serverDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return serverDisplayName
+        }
         FoodDisplayName.clean(name, sourceType: sourceType)
     }
 
     init(from item: MealRequestItem) {
         name = item.food_name
+        serverDisplayName = item.display_name
+        canonicalName = item.canonical_name
+        sourceFoodName = item.source_food_name
         quantity = item.quantity
         unit = ServingUnitFormatter.clean(item.unit)
         calories = item.calories
@@ -65,6 +74,9 @@ struct MealItem: Identifiable, Codable, Equatable {
     func asMealRequestItem() -> MealRequestItem {
         MealRequestItem(
             food_name: name,
+            display_name: serverDisplayName,
+            canonical_name: canonicalName,
+            source_food_name: sourceFoodName,
             quantity: quantity,
             unit: ServingUnitFormatter.clean(unit),
             calories: calories,

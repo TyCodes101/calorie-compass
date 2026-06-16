@@ -11,6 +11,9 @@ import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } fro
 
 const parsedItemSchema = z.object({
   food_name: z.string().min(1),
+  display_name: z.string().nullable().optional(),
+  canonical_name: z.string().nullable().optional(),
+  source_food_name: z.string().nullable().optional(),
   quantity: z.number().positive(),
   unit: z.string().min(1),
   calories: z.number().nonnegative(),
@@ -37,6 +40,7 @@ const requestSchema = z.object({
   meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack']),
   confidence_score: z.number().min(0).max(1),
   raw_text: z.string().nullable().optional(),
+  idempotency_key: z.string().min(1).max(180).nullable().optional(),
   notes: z.string().nullable().optional(),
   date: z.string().optional(),
   source_reusable_meal_id: z.string().nullable().optional(),

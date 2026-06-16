@@ -107,6 +107,7 @@ model Meal {
   mealType          MealType
   date              DateTime
   rawText           String?
+  idempotencyKey    String?
   notes             String?
   confidenceScore   Float?
   totalCalories     Float          @default(0)
@@ -123,6 +124,7 @@ model Meal {
   sourceReusableMeals ReusableMeal[] @relation("SourceMealReusableMeals")
 
   @@index([userId, date])
+  @@unique([userId, idempotencyKey])
 }
 
 model FoodItem {

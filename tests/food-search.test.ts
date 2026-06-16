@@ -9,7 +9,7 @@ describe('food search helpers', () => {
 
     expect(results[0]).toMatchObject({
       name: 'Large egg',
-      sourceLabel: 'USDA verified',
+      sourceLabel: 'Generic reference',
       servingQuantity: 1,
       servingUnit: 'egg',
     });

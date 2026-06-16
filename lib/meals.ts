@@ -13,11 +13,17 @@ export type SaveMealPayload = {
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
   confidence_score: number;
   raw_text?: string | null;
+  idempotency_key?: string | null;
   notes?: string | null;
   date?: string;
   source_reusable_meal_id?: string | null;
   items: ParsedFoodItem[];
 };
+
+function normalizeIdempotencyKey(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? '';
+  return trimmed ? trimmed.slice(0, 180) : null;
+}
 
 function toMealType(value: SaveMealPayload['meal_type']) {
   return value.toUpperCase() as MealType;
@@ -85,12 +91,14 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
   }
 
   const { date, mealType, normalizedItems, totals } = await normalizeMealPayload(payload);
+  const idempotencyKey = normalizeIdempotencyKey(payload.idempotency_key);
 
   logWriteStart('meal.save', {
     userId: user.id,
     mealType,
     itemCount: normalizedItems.length,
     sourceReusableMealId: payload.source_reusable_meal_id ?? null,
+    idempotencyKey,
   });
 
   try {
@@ -101,12 +109,27 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
     });
 
     const meal = await prisma.$transaction(async (tx) => {
+      if (idempotencyKey) {
+        const existingMeal = await tx.meal.findFirst({
+          where: {
+            userId: user.id,
+            idempotencyKey,
+          },
+          include: { items: true },
+        });
+
+        if (existingMeal) {
+          return existingMeal;
+        }
+      }
+
       const createdMeal = await tx.meal.create({
         data: {
           userId: user.id,
           mealType,
           date,
           rawText: payload.raw_text ?? null,
+          idempotencyKey,
           notes: payload.notes ?? null,
           confidenceScore: sanitizeNumber(payload.confidence_score),
           totalCalories: totals.calories,

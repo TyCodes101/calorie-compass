@@ -93,7 +93,7 @@ describe('LLM-assisted food search service', () => {
     expect(response.usedResolver).toBe(false);
     expect(response.results[0]).toMatchObject({
       name: 'Large egg',
-      sourceLabel: 'USDA verified',
+      sourceLabel: 'Generic reference',
       estimated: false,
       needsReview: false,
     });
@@ -302,6 +302,37 @@ describe('LLM-assisted food search service', () => {
     expect(response.results[0]?.calories).toBeGreaterThan(700);
   });
 
+  it('clarifies when the only restaurant candidate conflicts with the named product', async () => {
+    const resolveQuery = vi.fn(async () => resolverOutput({
+      normalizedQuery: "Wendy's Baconator",
+      aliases: ['wendys baconator'],
+      restaurantIntent: "Wendy's",
+      category: 'restaurant',
+      confidence: 0.92,
+    }));
+    const wendysChicken: NutritionLookupProvider = {
+      id: 'wendys-chicken-only',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: "Wendy's Spicy Chicken Sandwich",
+        calories: 490,
+        protein: 28,
+        carbs: 45,
+        fat: 19,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "Wendy's official nutrition",
+        provider_used: 'wendys-chicken-only',
+      }), 0.9)),
+    };
+
+    const response = await buildFoodSearchResponse(
+      { query: 'wendys baconator', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { ai: { resolveQuery }, providers: [wendysChicken], catalogFoods: [] },
+    );
+
+    expect(response.clarificationQuestion).toMatch(/wendy|baconator|specific menu item/i);
+    expect(response.results.map((result) => result.name).join(' ')).not.toMatch(/spicy chicken/i);
+  });
+
   it('enforces anchor tokens so McDouble cannot resolve to McChicken', async () => {
     const resolveQuery = vi.fn(async () => resolverOutput({
       normalizedQuery: 'McDouble no cheese',
@@ -359,14 +390,20 @@ describe('LLM-assisted food search service', () => {
         provider_used: id,
       }), 0.88)),
     });
-    const rankCandidates = vi.fn(async (input) => ({
-      orderedCandidateIds: [input.candidates[1]?.id, input.candidates[0]?.id].filter(Boolean) as string[],
-      bestCandidateId: input.candidates[1]?.id ?? null,
-      confidence: 0.91,
-      reason: 'Restaurant intent matched the McDonald candidate.',
-      shouldAskClarification: false,
-      clarificationQuestion: null,
-    }));
+    const rankCandidates = vi.fn(async (input) => {
+      const restaurant = input.candidates.find((candidate) => candidate.source === 'Restaurant verified');
+      return {
+        orderedCandidateIds: [
+          restaurant?.id,
+          ...input.candidates.filter((candidate) => candidate.id !== restaurant?.id).map((candidate) => candidate.id),
+        ].filter(Boolean) as string[],
+        bestCandidateId: restaurant?.id ?? null,
+        confidence: 0.91,
+        reason: 'Restaurant intent matched the McDonald candidate.',
+        shouldAskClarification: false,
+        clarificationQuestion: null,
+      };
+    });
 
     const response = await buildFoodSearchResponse(
       { query: 'big mac meal', customFoods: [], favoriteMeals: [], recentMeals: [] },
@@ -380,7 +417,7 @@ describe('LLM-assisted food search service', () => {
           })),
           rankCandidates,
         },
-        providers: [provider('usda', 'Burger meal', 780), provider('restaurant', 'Big Mac Meal', 1120)],
+        providers: [provider('usda', 'Big Mac Meal generic reference', 780), provider('restaurant', 'Big Mac Meal', 1120)],
         catalogFoods: [],
       },
     );

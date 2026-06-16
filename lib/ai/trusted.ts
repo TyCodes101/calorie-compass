@@ -10,6 +10,7 @@ import {
   scaleCatalogFood,
   scaleParsedFoodItem,
 } from '@/lib/nutrition/catalog';
+import { applyNutritionModifiers } from '@/lib/nutrition/modifiers';
 
 type KnownRestaurantBrand =
   | "Arby's"
@@ -155,12 +156,24 @@ function splitRestaurantSegments(text: string) {
   const normalized = normalizeRestaurantText(text)
     .replace(/\b(arby'?s?|arbys|white castle|subway|chipotle|chic?k fil a|mcdonald'?s?|mcdonalds|taco bell|wendy'?s?|wendys|panera|starbucks|burger king)\s*,\s*/g, '$1 ');
   const afterWith = normalized.includes(' with ') ? normalized.split(' with ').slice(1).join(' with ') : normalized;
+  const leadingGramQuantity = normalized.match(/\b\d+(?:\.\d+)?\s*(?:g|gram|grams)\b/i)?.[0] ?? null;
 
-  return afterWith
+  const segments = afterWith
     .replace(/\band\b/g, ',')
     .split(',')
     .map(cleanSegment)
     .filter(Boolean);
+
+  if (
+    leadingGramQuantity
+    && segments.length === 2
+    && /\b(?:subway|mcdonalds?|wendy'?s?|arbys|chic?k fil a|chipotle|taco bell|starbucks)\b/i.test(segments[0] ?? '')
+    && !/\b\d+(?:\.\d+)?\s*(?:g|gram|grams)\b/i.test(segments[1] ?? '')
+  ) {
+    return [segments[0] ?? '', `${leadingGramQuantity} ${segments[1] ?? ''}`].filter(Boolean);
+  }
+
+  return segments;
 }
 
 function splitGenericSegments(text: string) {
@@ -344,10 +357,18 @@ function matchRestaurantAlias(segment: string, brand: Exclude<KnownRestaurantBra
     return [makeEstimatedItem('Taco Bell Crunchwrap Supreme', 1, 'item', { calories: 540, protein: 16, carbs: 71, fat: 21, fiber: 6, sugar: 6, sodium: 1210 }, 'Structured restaurant estimate for Taco Bell Crunchwrap Supreme.')].map((item) => ({ ...item, is_trusted: true, source_type: 'OFFICIAL_RESTAURANT', source_name: 'Taco Bell nutrition reference', confidence_label: 'Matched', provider_used: 'local-verified-catalog', used_ai_fallback: false, match_type: 'fuzzy_restaurant' }));
   }
 
-  const food = findCatalogFoodByBestMatch(segment, brand);
+  const grams = extractExplicitGramQuantity(segment);
+  if (brand === 'Subway' && /\bmeatball\b/.test(segment) && /\b(?:marinara|sub|sandwich)\b/.test(segment)) {
+    const food = findCatalogFoodById('subway_meatball_marinara_6in');
+    if (food) {
+      return scaleItems([scaleCatalogFood(food, grams ?? 1, grams ? 'g' : food.servingUnit)], factor);
+    }
+  }
+
+  const productText = segment.replace(/\b\d+(?:\.\d+)?\s*(?:g|gram|grams)\b/gi, '').trim();
+  const food = findCatalogFoodByBestMatch(productText || segment, brand);
   if (!food) return [];
 
-  const grams = extractExplicitGramQuantity(segment);
   const quantity = grams ?? extractRestaurantItemQuantity(segment);
   const unit = grams ? 'g' : food.servingUnit;
   return scaleItems([scaleCatalogFood(food, quantity, unit)], factor);
@@ -715,6 +736,8 @@ export function getTrustedCatalogEstimate(text: string, mealType: MealTypeValue)
     return null;
   }
 
+  const adjustedItems = applyNutritionModifiers(items, { text });
+
   const confidenceScore = trustedItemCount === items.length ? 0.9 : 0.78;
-  return makeCatalogMealResponse(mealType, items, confidenceScore);
+  return makeCatalogMealResponse(mealType, adjustedItems, confidenceScore);
 }

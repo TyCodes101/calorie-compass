@@ -78,7 +78,7 @@ export function cachedFoodToSearchResult<T extends CachedNutritionFoodLike>(food
     name: food.name,
     brand: food.brand ?? null,
     restaurant: null,
-    sourceLabel: 'Brand verified',
+    sourceLabel: food.brand ? 'Brand verified' : 'Database match',
     sourceType: 'GENERIC_REFERENCE',
     sourceName: `${food.provider}`,
     providerId: food.providerId,

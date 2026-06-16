@@ -2016,6 +2016,37 @@ describe('meal assistant conversational coverage', () => {
     expect(repeated.assistant_reply).toMatch(/yesterday|loaded|using|pulled/i);
   });
 
+  it('keeps one authoritative pending meal through macros and affirmative save', async () => {
+    const saveMeal = vi.fn().mockResolvedValue(undefined);
+    const [logged, macros, saved] = await runConversation(
+      ['2 grilled chicken breasts and asparagus', "where's my macros", 'yes'],
+      { saveMeal },
+    );
+
+    expect(logged.next_state.pendingMeal).toMatchObject({
+      version: 1,
+      status: 'ready_for_review',
+      mealType: 'lunch',
+    });
+    expect(logged.next_state.pendingMeal?.items.map((entry) => entry.food_name).join(' ')).toMatch(/chicken/i);
+    expect(logged.next_state.pendingMeal?.items.map((entry) => entry.food_name).join(' ')).toMatch(/asparagus/i);
+    expect(logged.next_state.pendingMeal?.totals.calories).toBeGreaterThan(0);
+
+    expect(macros.intent).toBe('macro_question');
+    expect(macros.next_state.pendingMeal?.id).toBe(logged.next_state.pendingMeal?.id);
+    expect(macros.next_state.pendingMeal?.version).toBe(logged.next_state.pendingMeal?.version);
+    expect(macros.next_state.pendingMeal?.items).toEqual(logged.next_state.pendingMeal?.items);
+    expect(macros.assistant_reply).toMatch(/calories|protein|carbs|fat/i);
+
+    expect(saveMeal).toHaveBeenCalledTimes(1);
+    expect(saved.next_state.pendingMeal).toMatchObject({
+      id: logged.next_state.pendingMeal?.id,
+      version: logged.next_state.pendingMeal?.version,
+      status: 'saved',
+    });
+    expect(saved.next_state.saved).toBe(true);
+  });
+
   it('handles casual and descriptive follow-ups without dropping the active meal', async () => {
     const currentMeal = createItem({ food_name: 'Burger', unit: 'burger', calories: 500, protein: 28, carbs: 38, fat: 24 });
 

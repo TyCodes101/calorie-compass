@@ -4,6 +4,9 @@ const verificationLabelSchema = z.enum(['Verified', 'Matched', 'Estimated', 'Nee
 
 export const parsedFoodItemSchema = z.object({
   food_name: z.string().min(1),
+  display_name: z.string().min(1).nullable().optional(),
+  canonical_name: z.string().min(1).nullable().optional(),
+  source_food_name: z.string().min(1).nullable().optional(),
   quantity: z.number().nonnegative(),
   unit: z.string().min(1),
   calories: z.number().nonnegative(),

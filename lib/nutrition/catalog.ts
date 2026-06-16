@@ -2,6 +2,7 @@ import catalogData from '@/data/nutrition-catalog.json';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import type { MealTypeValue } from '@/lib/ai/orchestrate';
+import { isIdentityCompatible } from '@/lib/nutrition/identity';
 
 export type NutritionSourceRecord = (typeof catalogData.sources)[number];
 export type CatalogFoodRecord = (typeof catalogData.foods)[number];
@@ -81,6 +82,10 @@ function extractProteinSignal(text: string) {
 
 function scoreCatalogFoodMatch(food: CatalogFoodRecord, text: string, brand?: string | null): CatalogFoodMatch | null {
   const normalized = normalizeSearchText(text);
+  if (food.brand && !isIdentityCompatible(normalized, `${food.canonicalName} ${food.aliases.join(' ')}`)) {
+    return null;
+  }
+
   const aliasScores = food.aliases.map((alias) => {
     const normalizedAlias = normalizeSearchText(alias);
     const exactAlias = normalizedAlias === normalized;

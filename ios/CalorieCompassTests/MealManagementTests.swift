@@ -326,6 +326,79 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "actually Quest BBQ protein chips"))
     }
 
+    func testResponseReducerUsesNextStateAsPendingMealSourceOfTruth() {
+        let stale = [Self.item("Chipotle bowl")]
+        let authoritative = [Self.item("McDouble no cheese")]
+        let legacyMealItems = [Self.item("McChicken")]
+
+        let items = MealAssistantClientLogic.resolvedReviewItems(
+            currentItems: stale,
+            nextStateItems: authoritative,
+            responseItems: legacyMealItems,
+            responseSaved: false,
+            incomingUserMessage: "McDouble no cheese"
+        )
+
+        XCTAssertEqual(items.map(\.food_name), ["McDouble no cheese"])
+    }
+
+    func testResponseReducerPrefersStructuredPendingMealOverLegacyFields() {
+        let stale = [Self.item("Chipotle bowl")]
+        let pending = PendingMeal(
+            id: "pending-1",
+            version: 1,
+            items: [Self.item("Baconator")],
+            totals: MealAssistantTotals(calories: 960, protein: 59, carbs: 38, fat: 62, fiber: 2, sugar: 8, sodium: 1600),
+            aggregateConfidence: 0.97,
+            sourceSummary: PendingMealSourceSummary(sourceTypes: ["OFFICIAL_RESTAURANT"], sourceNames: ["Wendy's official nutrition"], trustedItemCount: 1, estimatedItemCount: 0),
+            mealType: "lunch",
+            status: "ready_for_review",
+            clarification: nil,
+            createdAt: "2026-06-16T12:00:00.000Z",
+            updatedAt: "2026-06-16T12:00:00.000Z",
+            lastResolvedAt: "2026-06-16T12:00:00.000Z"
+        )
+
+        let items = MealAssistantClientLogic.resolvedReviewItems(
+            currentItems: stale,
+            pendingMeal: pending,
+            nextStateItems: [Self.item("Spicy Chicken")],
+            responseItems: [Self.item("McChicken")],
+            responseSaved: false,
+            incomingUserMessage: "Wendy's Baconator"
+        )
+
+        XCTAssertEqual(items.map(\.food_name), ["Baconator"])
+    }
+
+    func testResponseReducerPreservesPendingCardForMacroFollowUp() {
+        let current = [Self.item("grilled chicken breast"), Self.item("asparagus")]
+
+        let items = MealAssistantClientLogic.resolvedReviewItems(
+            currentItems: current,
+            nextStateItems: [],
+            responseItems: [],
+            responseSaved: false,
+            incomingUserMessage: "where are my macros"
+        )
+
+        XCTAssertEqual(items.map(\.food_name), ["grilled chicken breast", "asparagus"])
+    }
+
+    func testResponseReducerDoesNotRestoreStaleItemsAfterFailedReplacement() {
+        let current = [Self.item("Chipotle bowl")]
+
+        let items = MealAssistantClientLogic.resolvedReviewItems(
+            currentItems: current,
+            nextStateItems: [],
+            responseItems: [],
+            responseSaved: false,
+            incomingUserMessage: "McDouble no cheese"
+        )
+
+        XCTAssertTrue(items.isEmpty)
+    }
+
     func testMealReviewTitleUsesShortNonTruncatedCopy() {
         XCTAssertEqual(MealReviewCard.reviewTitle, "Review meal")
         XCTAssertLessThanOrEqual(MealReviewCard.reviewTitle.count, 16)
@@ -342,6 +415,35 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(item.protein, 20)
         XCTAssertEqual(item.source, "Nutrition catalog")
         XCTAssertEqual(item.catalogFoodID, "brand-greek-yogurt")
+    }
+
+    func testMealItemPrefersServerDisplayNameButPreservesSourceName() {
+        let requestItem = MealRequestItem(
+            food_name: "Corn, sweet, white, frozen, kernels on cob, unprepared",
+            display_name: "Buttered Corn on the Cob",
+            canonical_name: "Corn On The Cob",
+            source_food_name: "Corn, sweet, white, frozen, kernels on cob, unprepared",
+            quantity: 1,
+            unit: "ear",
+            calories: 155,
+            protein: 4,
+            carbs: 32,
+            fat: 3,
+            fiber: 3,
+            sugar: 6,
+            sodium: 120,
+            notes: nil,
+            source_type: "GENERIC_REFERENCE",
+            source_name: "USDA FoodData Central",
+            confidence_label: "Matched"
+        )
+
+        let item = MealItem(from: requestItem)
+        let roundTripped = item.asMealRequestItem()
+
+        XCTAssertEqual(item.displayName, "Buttered Corn on the Cob")
+        XCTAssertEqual(roundTripped.display_name, "Buttered Corn on the Cob")
+        XCTAssertEqual(roundTripped.source_food_name, "Corn, sweet, white, frozen, kernels on cob, unprepared")
     }
 
     func testServingUnitFormatterCleansMalformedUnits() {
@@ -798,6 +900,23 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(encodedItem["food_name"] as? String, "banana")
         XCTAssertEqual(encodedItem["is_trusted"] as? Bool, true)
         XCTAssertEqual(encodedItem["catalog_food_id"] as? String, "food-banana")
+    }
+
+    func testPostMealRequestEncodesPendingMealIdempotencyKey() throws {
+        let request = PostMealRequest(
+            meal_type: "lunch",
+            confidence_score: 0.95,
+            raw_text: "McDouble no cheese",
+            idempotency_key: "pending-1:v1",
+            source_reusable_meal_id: nil,
+            notes: nil,
+            date: nil,
+            items: [Self.item("McDouble no cheese")]
+        )
+
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any]
+
+        XCTAssertEqual(json?["idempotency_key"] as? String, "pending-1:v1")
     }
 
     func testSaveSignaturesIgnoreWhitespaceAndCaseForDuplicateGuards() {

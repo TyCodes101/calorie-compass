@@ -610,12 +610,6 @@ struct LogChatView: View {
             return
         }
 
-        // If a draft meal is still active but the user typed a fresh food entry,
-        // reset the draft so the backend doesn't treat it like a correction.
-        if !reviewItems.isEmpty && MealAssistantClientLogic.shouldStartNewMealDraft(message: userMessage, activeItems: reviewItems.map { $0.asMealRequestItem() }) {
-            discardActiveMeal()
-        }
-
         isLoading = true
         error = nil
         retryMessage = nil
@@ -647,21 +641,13 @@ struct LogChatView: View {
                         nextState: resp.next_state
                     )
                     messages.append(MealAssistantTranscriptMessage(role: "assistant", text: conciseReply))
-                    if MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: activeItemsBeforeResponse, responseItems: resp.meal.items, responseSaved: resp.next_state.saved, incomingUserMessage: userMessage) {
-                        assistantState = resp.next_state
-                        assistantState.currentMealItems = activeItemsBeforeResponse
-                        // If the UI card previously failed to render, rebuild from the preserved state.
-                        if reviewItems.isEmpty {
-                            reviewItems = activeItemsBeforeResponse.map(MealItem.init(from:))
-                        }
-                        showReviewCard = !reviewItems.isEmpty
-                        return
-                    }
                     assistantState = resp.next_state
 
-                    // Source of truth for the pending meal is next_state.currentMealItems.
-                    // resp.meal.items can be empty in some follow-up turns, but we still must keep the active draft.
-                    let nextItems = !resp.meal.items.isEmpty ? resp.meal.items : resp.next_state.currentMealItems
+                    let nextItems = MealAssistantClientLogic.resolvedReviewItems(
+                        currentItems: activeItemsBeforeResponse,
+                        response: resp,
+                        incomingUserMessage: userMessage
+                    )
                     reviewItems = nextItems.map(MealItem.init(from:))
                     if !reviewItems.isEmpty { syncActiveMealItems(reviewItems) }
                     showReviewCard = !reviewItems.isEmpty && resp.next_state.saved == false
@@ -838,6 +824,7 @@ struct LogChatView: View {
             meal_type: assistantState.mealType,
             confidence_score: assistantState.confidenceScore,
             raw_text: assistantState.currentMealText,
+            idempotency_key: MealAssistantClientLogic.pendingMealSaveIdempotencyKey(state: assistantState),
             source_reusable_meal_id: assistantState.sourceReusableMealId,
             notes: nil,
             date: nil,
@@ -856,6 +843,7 @@ struct LogChatView: View {
                         incomingUserMessage: assistantState.currentMealText ?? ""
                     )
                     assistantState.saved = true
+                    assistantState.pendingMeal?.status = "saved"
                     recentSavedMeal = RecentSavedMealSnapshot(
                         id: response.meal?.id,
                         signature: saveSignature,

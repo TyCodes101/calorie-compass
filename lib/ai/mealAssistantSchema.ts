@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { assistantMemorySchema } from '@/lib/assistant-memory';
+import { pendingMealSchema } from '@/lib/ai/pendingMeal';
 import { parsedFoodItemSchema } from '@/lib/ai/types';
 
 export const mealAssistantIntentSchema = z.enum([
@@ -98,6 +99,7 @@ export const mealAssistantModelOutputSchema = z.object({
 export const mealAssistantMealTypeSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
 
 export const mealAssistantStateSchema = z.object({
+  pendingMeal: pendingMealSchema.nullable().optional(),
   currentMealItems: z.array(parsedFoodItemSchema).default([]),
   pendingClarification: z.string().nullable().default(null),
   lastAssistantQuestion: z.string().nullable().default(null),

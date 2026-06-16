@@ -145,6 +145,52 @@ describe('restaurant log screenshot regressions', () => {
   });
 
   it.each([
+    "Wendy's Baconator",
+    'wendys baconator',
+    'a baconnator from wendys',
+    "I had Wendy's Baconator",
+  ])('keeps Baconator identity for %s', async (message) => {
+    const response = await runPrompt(message);
+
+    expectRestaurantMatch(response, /wendy'?s.*baconator/i);
+    expect(foodNames(response)).not.toMatch(/chicken/i);
+    expect(response.meal.items[0]?.unit).toBe('burger');
+  });
+
+  it.each([
+    'McDouble no cheese',
+    'a mcdouble without cheese',
+    "McDonald's McDouble, no cheese",
+    'mcdouble hold the cheese',
+  ])('keeps McDouble identity while applying no-cheese modifier for %s', async (message) => {
+    const response = await runPrompt(message);
+
+    expectRestaurantMatch(response, /mcdouble/i);
+    expect(foodNames(response)).not.toMatch(/mcchicken|chicken/i);
+    expect(response.meal.items[0]?.notes).toMatch(/no cheese|without cheese|cheese removed/i);
+  });
+
+  it.each([
+    'Subway meatball marinara footlong',
+    'a footlong meatball sub from subway',
+  ])('keeps Subway meatball product and footlong serving for %s', async (message) => {
+    const response = await runPrompt(message);
+
+    expectRestaurantMatch(response, /subway.*meatball marinara/i);
+    expect(response.meal.items[0]?.calories).toBeGreaterThan(700);
+  });
+
+  it.each([
+    "Arby's classic roast beef",
+    'arbys roast beef sandwich',
+  ])("keeps Arby's roast beef product identity for %s", async (message) => {
+    const response = await runPrompt(message);
+
+    expectRestaurantMatch(response, /arby'?s.*classic roast beef/i);
+    expect(foodNames(response)).not.toMatch(/chicken/i);
+  });
+
+  it.each([
     ['A SUBWAY BMT SANDWICH', /subway.*b\.?m\.?t|italian b\.?m\.?t/i],
     ['A subway bmt sandwhich', /subway.*b\.?m\.?t|italian b\.?m\.?t/i],
     ['AN ARBY ROAST BEEF', /arby'?s.*classic roast beef/i],

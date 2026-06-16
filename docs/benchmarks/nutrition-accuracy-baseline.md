@@ -1,6 +1,6 @@
 # Nutrition Accuracy Benchmark
 
-Generated: 2026-06-09T20:48:10.851Z
+Generated: 2026-06-16T14:43:07.807Z
 
 This benchmark is a permanent reliability gate for the nutrition accuracy program. It combines lookup resolution, typo normalization, ambiguity handling, validation risk scoring, and golden dataset checks.
 
