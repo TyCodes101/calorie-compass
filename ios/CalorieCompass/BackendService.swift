@@ -442,7 +442,10 @@ struct MealAssistantClientLogic {
     }
 
     static func shouldPreserveActiveMeal(currentItems: [MealRequestItem], responseItems: [MealRequestItem], responseSaved: Bool, incomingUserMessage: String) -> Bool {
-        !currentItems.isEmpty && responseItems.isEmpty && !responseSaved && !looksLikeReplacementClarification(incomingUserMessage, currentItems: currentItems)
+        guard !currentItems.isEmpty && responseItems.isEmpty && !responseSaved else { return false }
+        if looksLikeReplacementClarification(incomingUserMessage, currentItems: currentItems) { return false }
+        if looksLikeStandaloneFoodEntry(incomingUserMessage, currentItems: currentItems) { return false }
+        return true
     }
 
     static func resolvedReviewItems(
@@ -547,6 +550,8 @@ struct MealAssistantClientLogic {
         let hasReplacementCue = normalized.hasPrefix("actually") ||
             normalized.hasPrefix("no ") ||
             normalized.hasPrefix("nah ") ||
+            normalized.contains("replace") ||
+            normalized.contains("swap") ||
             normalized.contains("meant") ||
             normalized.contains("instead") ||
             normalized.contains("change it") ||
@@ -564,6 +569,42 @@ struct MealAssistantClientLogic {
         }
 
         return !messageTokens.isSubset(of: currentTokens)
+    }
+
+    private static func looksLikeStandaloneFoodEntry(_ message: String, currentItems: [MealRequestItem]) -> Bool {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        if detectLocalCommand(normalized, hasActiveMeal: true) != nil { return false }
+        if quantityResolution(for: normalized, items: currentItems) != nil { return false }
+        if normalized.hasPrefix("and ") || normalized.hasPrefix("also ") || normalized.hasPrefix("add ") || normalized.contains(" add ") {
+            return false
+        }
+
+        let questionCues = ["?", "how many", "how much", "what are", "what is", "what's", "where are", "where's", "total"]
+        let nutritionCues = ["macro", "macros", "calorie", "calories", "protein", "carb", "carbs", "fat"]
+        if questionCues.contains(where: { normalized.contains($0) }) &&
+            nutritionCues.contains(where: { normalized.contains($0) }) {
+            return false
+        }
+
+        let ignored: Set<String> = ["i", "ate", "had", "logged", "log", "please", "for", "my", "meal", "lunch", "dinner", "breakfast", "snack", "no", "without", "hold"]
+        let messageTokens = significantTokens(in: normalized).subtracting(ignored)
+        guard !messageTokens.isEmpty else { return false }
+
+        let currentTokens = currentItems.reduce(into: Set<String>()) { partialResult, item in
+            partialResult.formUnion(significantTokens(in: item.food_name))
+        }
+        if !messageTokens.isDisjoint(with: currentTokens) { return false }
+
+        let foodCueTokens: Set<String> = [
+            "apple", "banana", "bar", "baconator", "bagel", "bowl", "burger", "burrito", "cereal",
+            "chicken", "chip", "chips", "coke", "egg", "eggs", "fairlife", "fries", "mcdouble",
+            "mcchicken", "oatmeal", "pasta", "pizza", "rice", "salad", "sandwich", "shake",
+            "skittle", "snicker", "taco", "tacos", "yogurt"
+        ]
+        let foodCuePhrases = ["big mac", "coke zero", "core power", "greek yogurt", "protein bar", "protein shake"]
+        return !messageTokens.isDisjoint(with: foodCueTokens) || foodCuePhrases.contains(where: { normalized.contains($0) })
     }
 }
 
