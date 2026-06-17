@@ -382,10 +382,10 @@ struct MealAssistantClientLogic {
     static func quantityResolution(for message: String, items: [MealRequestItem]) -> MealAssistantQuantityResolution? {
         let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
-        let looksLikeQuantityEdit = normalized.contains("make") || normalized.contains("double") || normalized.contains("half") || normalized.contains("large") || normalized.contains("ounces") || normalized.contains("oz")
+        let messageTokens = significantTokens(in: normalized)
+        let looksLikeQuantityEdit = ["make", "double", "half", "large", "ounce", "oz"].contains { messageTokens.contains($0) }
         guard looksLikeQuantityEdit else { return nil }
 
-        let messageTokens = significantTokens(in: normalized)
         let namedMatches = items.filter { !messageTokens.isDisjoint(with: significantTokens(in: $0.food_name)) }
         if let match = namedMatches.first {
             return .target(foodName: match.food_name)

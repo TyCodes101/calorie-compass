@@ -268,6 +268,7 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Half the rice", items: [Self.item("chicken"), Self.item("rice")]), .target(foodName: "rice"))
         XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Make the fries large", items: [Self.item("burger"), Self.item("fries")]), .target(foodName: "fries"))
         XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Make it large", items: [Self.item("burger"), Self.item("fries")]), .target(foodName: "fries"))
+        XCTAssertNil(MealAssistantClientLogic.quantityResolution(for: "McDouble no cheese", items: [Self.item("Chipotle bowl")]))
     }
 
     func testBrandCorrectionUpdatesPreviousBrandItem() {
