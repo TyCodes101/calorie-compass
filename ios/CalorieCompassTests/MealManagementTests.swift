@@ -919,6 +919,44 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(json?["idempotency_key"] as? String, "pending-1:v1")
     }
 
+    func testConciseReplyPreservesMacroQuestionDetails() {
+        let rawReply = "That pending meal is about 370 calories, 66g protein, 7g carbs, and 7g fat."
+        let reply = MealAssistantClientLogic.conciseReply(
+            rawReply: rawReply,
+            items: [Self.item("grilled chicken breast"), Self.item("asparagus")],
+            nextState: MealAssistantState(),
+            intent: "macro_question"
+        )
+
+        XCTAssertEqual(reply, rawReply)
+    }
+
+    func testPendingMealIdempotencyKeyChangesAfterLocalReviewEdits() {
+        var state = MealAssistantState()
+        state.pendingMeal = PendingMeal(
+            id: "pending-1",
+            version: 1,
+            items: [Self.item("McDouble")],
+            totals: MealAssistantTotals(calories: 390, protein: 22, carbs: 33, fat: 19, fiber: 2, sugar: 7, sodium: 920),
+            aggregateConfidence: 0.95,
+            sourceSummary: PendingMealSourceSummary(sourceTypes: ["OFFICIAL_RESTAURANT"], sourceNames: ["McDonald's official nutrition"], trustedItemCount: 1, estimatedItemCount: 0),
+            mealType: "lunch",
+            status: "ready_for_review",
+            clarification: nil,
+            createdAt: "2026-06-16T12:00:00.000Z",
+            updatedAt: "2026-06-16T12:00:00.000Z",
+            lastResolvedAt: "2026-06-16T12:00:00.000Z"
+        )
+
+        let original = [Self.item("McDouble", quantity: 1, unit: "burger")]
+        let edited = [Self.item("McDouble", quantity: 2, unit: "burger")]
+
+        XCTAssertNotEqual(
+            MealAssistantClientLogic.pendingMealSaveIdempotencyKey(state: state, items: original),
+            MealAssistantClientLogic.pendingMealSaveIdempotencyKey(state: state, items: edited)
+        )
+    }
+
     func testSaveSignaturesIgnoreWhitespaceAndCaseForDuplicateGuards() {
         let first = MealRequestItem(food_name: "Coke Zero", quantity: 1, unit: "can", calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 40, notes: nil, source_type: "GENERIC_REFERENCE", source_name: "Coca-Cola", confidence_label: "Matched")
         let second = MealRequestItem(food_name: " coke zero ", quantity: 1, unit: "CAN", calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 40, notes: nil, source_type: "GENERIC_REFERENCE", source_name: "Coca-Cola", confidence_label: "Matched")

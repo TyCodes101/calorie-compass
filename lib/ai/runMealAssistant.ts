@@ -88,7 +88,7 @@ const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
 const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|(?:lets|let's) go back to|go back to|back to|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
-const strongFoodSignalRegex = /\b(?:sunflower seeds?|seeds?|cookie|cookies|oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chic?k?[-\s]*fil[-\s]*a|starbucks|subway|white castle|arby'?s?|arbys|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|trader joe'?s?|mcchicken|big mac|nuggets?|tacos?|sandwich|sandwhich|burgers?|fries|fry|latte|macchiato|footlong|slider|orange chicken|caniac|mac and cheese|fairlife|core power|quest|pop[-\s]*tarts?|cheez[-\s]*its?|cheezits?|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|whey|shakes?|grilled chicken|chicken breast|chicken tenders?|chicken|turkey sausage|sausage|coke zero|coke|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|granola|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|sauce|ranch|pasta|gummy worms?|skittles?|snickers?|m&ms?|mms?|candy|candies|candy bars?)\b/i;
+const strongFoodSignalRegex = /\b(?:sunflower seeds?|seeds?|cookie|cookies|oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|baconator|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chic?k?[-\s]*fil[-\s]*a|starbucks|subway|white castle|arby'?s?|arbys|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|trader joe'?s?|mcchicken|big mac|nuggets?|tacos?|sandwich|sandwhich|burgers?|fries|fry|latte|macchiato|footlong|slider|orange chicken|caniac|mac and cheese|fairlife|core power|quest|pop[-\s]*tarts?|cheez[-\s]*its?|cheezits?|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|whey|shakes?|grilled chicken|chicken breast|chicken tenders?|chicken|turkey sausage|sausage|coke zero|coke|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|granola|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|sauce|ranch|pasta|gummy worms?|skittles?|snickers?|m&ms?|mms?|candy|candies|candy bars?)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -263,6 +263,22 @@ function lastQuestionWasSavePrompt(state: MealAssistantState) {
   const question = (state.lastAssistantQuestion ?? '').toLowerCase();
   if (!question) return false;
   return /\b(?:save|log|confirm)\b/.test(question);
+}
+
+function nutritionQuestionNamesSpecificFood(message: string) {
+  const normalized = normalizeText(message);
+  if (!/\b(?:calories?|macros?|protein|carbs?|fat)\b/.test(normalized)) {
+    return false;
+  }
+
+  const target = normalized.match(/\b(?:in|for|from|of)\s+(?:a|an|the\s+)?(.+)$/)?.[1]?.trim()
+    ?? normalized.match(/\b(?:is|are)\s+(?:a|an|the\s+)?(.+)$/)?.[1]?.trim()
+    ?? '';
+  if (!target || /^(?:it|that|this|my|me|meal|current meal|pending meal|the meal|total|all of it)\b/.test(target)) {
+    return false;
+  }
+
+  return hasStrongFoodSignal(target);
 }
 
 function shouldTreatAsStandaloneNewMeal(message: string, state: MealAssistantState) {
@@ -4445,6 +4461,10 @@ function buildCurrentMealMacroReply(message: string, state: MealAssistantState) 
     return null;
   }
 
+  if (nutritionQuestionNamesSpecificFood(message)) {
+    return null;
+  }
+
   const totals = sumTotals(state.currentMealItems);
   const normalized = message.trim().toLowerCase();
 
@@ -5723,6 +5743,12 @@ function finalizeResponse(response: MealAssistantResponse, input: MealAssistantR
   const responseItems = response.next_state.currentMealItems.length
     ? response.next_state.currentMealItems
     : response.meal.items;
+  const failedStandaloneReplacement = response.intent === 'new_food_item'
+    && input.state.currentMealItems.length > 0
+    && responseItems.length === 0
+    && !response.next_state.pendingClarification
+    && !response.clarification_question
+    && !response.should_ask_clarification;
   const pendingMeal = reconcilePendingMeal({
     existing: input.state.pendingMeal,
     items: responseItems,
@@ -5730,7 +5756,8 @@ function finalizeResponse(response: MealAssistantResponse, input: MealAssistantR
     confidence: response.next_state.confidenceScore,
     saved: response.next_state.saved,
     clarification: response.next_state.pendingClarification ?? response.clarification_question,
-    cancelled: response.intent === 'start_new_meal'
+    cancelled: failedStandaloneReplacement
+      || response.intent === 'start_new_meal'
       || (
         response.intent === 'remove_item'
         && input.state.currentMealItems.length > 0
@@ -6618,6 +6645,9 @@ async function buildAdaptiveMealMutationReply(
   if (!input.state.currentMealItems.length || input.state.saved) {
     return null;
   }
+  if (nutritionQuestionNamesSpecificFood(input.message)) {
+    return null;
+  }
 
   const normalized = stripEmotionalPreface(input.message).toLowerCase();
   const currentItems = cloneParsedItems(input.state.currentMealItems);
@@ -7266,6 +7296,10 @@ async function buildDeterministicDialogueResponse(
   const state = input.state;
   const normalized = stripEmotionalPreface(input.message).toLowerCase();
 
+  if (nutritionQuestionNamesSpecificFood(input.message)) {
+    return null;
+  }
+
   const explicitFoodLogText = extractExplicitFoodLogCommand(input.message);
   if (explicitFoodLogText) {
     const directItems = detectKnownFoodEstimatesWithTrustedRestaurantFallback(explicitFoodLogText, state.mealType);
@@ -7723,6 +7757,10 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
   const remainingCarbs = getRemainingCarbs(context);
   const remainingFat = getRemainingFat(context);
   const remainingCalories = getRemainingCalories(context);
+
+  if (nutritionQuestionNamesSpecificFood(input.message)) {
+    return null;
+  }
 
   if (weeklySummaryRegex.test(normalized)) {
     return buildWeeklySummaryReply(context);
@@ -8211,7 +8249,15 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if (followUpMacroRegex.test(normalized) || (hasActiveMeal && /\b(?:carbs?|fat|protein|calories?)\b/i.test(normalized) && /\?/.test(normalized))) {
+  if (
+    followUpMacroRegex.test(normalized)
+    || (
+      hasActiveMeal
+      && /\b(?:carbs?|fat|protein|calories?)\b/i.test(normalized)
+      && /\?/.test(normalized)
+      && !nutritionQuestionNamesSpecificFood(message)
+    )
+  ) {
     return {
       intent: 'macro_question',
       assistant_reply: 'Let me check that.',
@@ -8896,6 +8942,7 @@ export async function runMealAssistant(
   if (
     (parsedLogIntent.action === 'ask_macros' || parsedLogIntent.action === 'ask_calories')
     && state.currentMealItems.length
+    && !nutritionQuestionNamesSpecificFood(workingInput.message)
   ) {
     const totals = sumTotals(state.currentMealItems);
     const assistantReply = parsedLogIntent.action === 'ask_calories'
@@ -9417,11 +9464,16 @@ export async function runMealAssistant(
     && (decision.should_ask_clarification || !decision.items.length || !decision.should_lookup_nutrition)
   ) {
     const hydratedItems = await hydrateKnownEstimatesWithProviders(classifiedKnownItems, state.mealType);
+    const knownItemIntent = parsedLogIntent.action === 'add_item'
+      || decision.intent === 'add_to_current_meal'
+      || shouldAppendToCurrentMeal(workingInput.message, state)
+      ? 'add_to_current_meal'
+      : 'new_food_item';
     return finalizeResponse(buildDirectFoodEstimateResponse({
       input: workingInput,
       state,
       items: hydratedItems,
-      intent: parsedLogIntent.action === 'add_item' ? 'add_to_current_meal' : 'new_food_item',
+      intent: knownItemIntent,
       followUpMessage: mixedIntent.followUpMessage,
       context,
     }), workingInput, context);

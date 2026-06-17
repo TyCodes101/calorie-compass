@@ -31,7 +31,7 @@ struct MealItem: Identifiable, Codable, Equatable {
         if let serverDisplayName, !serverDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return serverDisplayName
         }
-        FoodDisplayName.clean(name, sourceType: sourceType)
+        return FoodDisplayName.clean(name, sourceType: sourceType)
     }
 
     init(from item: MealRequestItem) {

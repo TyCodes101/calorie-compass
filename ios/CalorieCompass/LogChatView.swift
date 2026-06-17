@@ -638,7 +638,8 @@ struct LogChatView: View {
                     let conciseReply = MealAssistantClientLogic.conciseReply(
                         rawReply: resp.assistant_reply,
                         items: resp.meal.items,
-                        nextState: resp.next_state
+                        nextState: resp.next_state,
+                        intent: resp.intent
                     )
                     messages.append(MealAssistantTranscriptMessage(role: "assistant", text: conciseReply))
                     assistantState = resp.next_state
@@ -824,7 +825,7 @@ struct LogChatView: View {
             meal_type: assistantState.mealType,
             confidence_score: assistantState.confidenceScore,
             raw_text: assistantState.currentMealText,
-            idempotency_key: MealAssistantClientLogic.pendingMealSaveIdempotencyKey(state: assistantState),
+            idempotency_key: MealAssistantClientLogic.pendingMealSaveIdempotencyKey(state: assistantState, items: requestItems),
             source_reusable_meal_id: assistantState.sourceReusableMealId,
             notes: nil,
             date: nil,

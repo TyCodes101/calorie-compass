@@ -29,6 +29,15 @@ function toMealType(value: SaveMealPayload['meal_type']) {
   return value.toUpperCase() as MealType;
 }
 
+function isUniqueConstraintError(error: unknown) {
+  return Boolean(
+    error
+      && typeof error === 'object'
+      && 'code' in error
+      && (error as { code?: unknown }).code === 'P2002',
+  );
+}
+
 function buildStoredItemNotes(item: ParsedFoodItem) {
   const baseNotes = item.notes?.trim() || '';
   const traceParts = [
@@ -172,6 +181,27 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
 
     return meal;
   } catch (error) {
+    if (idempotencyKey && isUniqueConstraintError(error)) {
+      const existingMeal = await prisma.meal.findFirst({
+        where: {
+          userId: user.id,
+          idempotencyKey,
+        },
+        include: { items: true },
+      });
+
+      if (existingMeal) {
+        logWriteSuccess('meal.save', {
+          userId: user.id,
+          mealId: existingMeal.id,
+          totalCalories: existingMeal.totalCalories,
+          itemCount: existingMeal.items.length,
+        });
+
+        return existingMeal;
+      }
+    }
+
     logWriteFailure('meal.save', error, {
       userId: user.id,
       mealType,

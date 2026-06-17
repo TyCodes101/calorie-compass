@@ -94,6 +94,17 @@ describe('deterministic log meal intent', () => {
     expect(parseLogMealIntent('yes', buildState()).action).toBe('unknown');
   });
 
+  it('prioritizes active clarification answers over affirmative save shortcuts', () => {
+    const pendingClarification = buildState({
+      currentMealItems: [item('Chipotle Chicken Bowl', 760)],
+      pendingClarification: 'Did you mean double chicken or regular chicken?',
+      lastAssistantQuestion: 'Did you mean double chicken or regular chicken?',
+    });
+
+    expect(parseLogMealIntent('yes', pendingClarification).action).toBe('clarification_response');
+    expect(parseLogMealIntent('correct', pendingClarification).action).toBe('clarification_response');
+  });
+
   it.each([
     'actually 3',
     'Oh I meant 5',

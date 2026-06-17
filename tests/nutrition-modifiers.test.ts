@@ -54,6 +54,33 @@ describe('nutrition modifiers', () => {
     expect(mcchicken?.notes).not.toMatch(/no cheese adjustment/i);
   });
 
+  it('scales no-cheese adjustments by McDouble quantity', () => {
+    const [mcdoubles] = applyNutritionModifiers(
+      [
+        item({
+          quantity: 2,
+          unit: 'burgers',
+          calories: 780,
+          protein: 44,
+          carbs: 66,
+          fat: 38,
+          sodium: 1840,
+        }),
+      ],
+      { text: '2 McDoubles without cheese' },
+    );
+
+    expect(mcdoubles).toMatchObject({
+      food_name: "McDonald's McDouble",
+      quantity: 2,
+      calories: 680,
+      protein: 38,
+      carbs: 62,
+      fat: 30,
+      sodium: 1460,
+    });
+  });
+
   it('scales a six-inch Subway item to a footlong serving without duplicating the note', () => {
     const [footlong] = applyNutritionModifiers(
       [

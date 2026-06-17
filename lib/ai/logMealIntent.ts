@@ -150,6 +150,7 @@ function classifyAction(message: string, state: MealAssistantState): LogMealActi
     && /^(?:something|another|what about|how about|more)\b/.test(normalized);
 
   if (/^(?:cancel|discard|clear|start over)\b/.test(normalized)) return 'cancel';
+  if (state.pendingClarification && affirmativePattern.test(normalized)) return 'clarification_response';
   if (explicitSavePattern.test(normalized)) return hasPendingMeal ? 'save_confirm' : 'unknown';
   if (affirmativePattern.test(normalized)) return hasPendingMeal ? 'save_confirm' : 'unknown';
   if (isRecommendationRequest || isRecommendationFollowUp) return 'unknown';

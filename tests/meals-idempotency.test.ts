@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => {
     prisma: {
       $connect: vi.fn(),
       $transaction: vi.fn(async (callback: (tx: typeof tx) => unknown) => callback(tx)),
+      meal: {
+        findFirst: vi.fn(),
+      },
     },
     currentUser: {
       getCurrentUserWithProfile: vi.fn(),
@@ -81,6 +84,7 @@ describe('meal save idempotency', () => {
     mocks.catalogPersistence.getPersistableCatalogFoodIds.mockResolvedValue(new Set(['mcdonalds_mcdouble']));
     mocks.tx.meal.findFirst.mockResolvedValue(null);
     mocks.tx.meal.create.mockResolvedValue(savedMeal);
+    mocks.prisma.meal.findFirst.mockResolvedValue(null);
   });
 
   it('returns the existing meal for a repeated pending meal id/version', async () => {
@@ -109,5 +113,25 @@ describe('meal save idempotency', () => {
       }),
       include: { items: true },
     }));
+  });
+
+  it('recovers an idempotent retry when a concurrent create wins the unique race', async () => {
+    mocks.tx.meal.create.mockRejectedValueOnce(Object.assign(new Error('Unique constraint failed'), {
+      code: 'P2002',
+      meta: { target: ['userId', 'idempotencyKey'] },
+    }));
+    mocks.prisma.meal.findFirst.mockResolvedValueOnce(savedMeal);
+
+    const result = await saveConfirmedMeal(payload());
+
+    expect(result).toBe(savedMeal);
+    expect(mocks.prisma.meal.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        idempotencyKey: 'pending-1:v1',
+      },
+      include: { items: true },
+    });
+    expect(mocks.dashboard.upsertDailyLogForDate).not.toHaveBeenCalled();
   });
 });

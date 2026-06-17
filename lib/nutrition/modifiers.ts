@@ -43,17 +43,19 @@ function appendNote(item: ParsedFoodItem, note: string) {
 }
 
 function applyMcDoubleNoCheese(item: ParsedFoodItem) {
-  if (!/\bmcdouble\b/i.test(item.food_name) || /no cheese adjustment/i.test(item.notes ?? '')) {
+  if (!/\bmcdoubles?\b/i.test(item.food_name) || /no cheese adjustment/i.test(item.notes ?? '')) {
     return item;
   }
 
+  const servings = Math.max(0.01, item.quantity || 1);
+
   return {
     ...item,
-    calories: Math.max(0, round(item.calories - 50)),
-    protein: Math.max(0, round(item.protein - 3)),
-    carbs: Math.max(0, round(item.carbs - 2)),
-    fat: Math.max(0, round(item.fat - 4)),
-    sodium: Math.max(0, round(item.sodium - 190)),
+    calories: Math.max(0, round(item.calories - 50 * servings)),
+    protein: Math.max(0, round(item.protein - 3 * servings)),
+    carbs: Math.max(0, round(item.carbs - 2 * servings)),
+    fat: Math.max(0, round(item.fat - 4 * servings)),
+    sodium: Math.max(0, round(item.sodium - 190 * servings)),
     notes: appendNote(item, 'No cheese adjustment applied after the McDouble identity match.'),
   };
 }

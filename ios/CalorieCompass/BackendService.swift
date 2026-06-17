@@ -414,10 +414,16 @@ struct MealAssistantClientLogic {
         return nil
     }
 
-    static func conciseReply(rawReply: String, items: [MealRequestItem], nextState: MealAssistantState) -> String {
+    static func conciseReply(rawReply: String, items: [MealRequestItem], nextState: MealAssistantState, intent: String? = nil) -> String {
         // If there's a reviewable pending meal, prefer a compact, non-chatbotty line.
         guard !items.isEmpty, nextState.saved == false else {
             return rawReply
+        }
+        if let intent {
+            let reviewCopyIntents = ["new_food_item", "add_to_current_meal", "repeat_meal", "clarification_answer"]
+            guard reviewCopyIntents.contains(intent) else {
+                return rawReply
+            }
         }
 
         let titles = items.prefix(2).map { item in
@@ -492,11 +498,22 @@ struct MealAssistantClientLogic {
         !isSaving && !items.isEmpty
     }
 
-    static func pendingMealSaveIdempotencyKey(state: MealAssistantState) -> String? {
+    static func pendingMealSaveIdempotencyKey(state: MealAssistantState, items: [MealRequestItem]? = nil) -> String? {
         guard let pendingMeal = state.pendingMeal else { return nil }
         let terminalStatuses = ["saved", "cancelled"]
         guard !terminalStatuses.contains(pendingMeal.status.lowercased()) else { return nil }
-        return "\(pendingMeal.id):v\(pendingMeal.version)"
+        let base = "\(pendingMeal.id):v\(pendingMeal.version)"
+        guard let items, !items.isEmpty else { return base }
+        return "\(base):\(stableHash(saveSignature(for: items)))"
+    }
+
+    private static func stableHash(_ value: String) -> String {
+        var hash: UInt64 = 14695981039346656037
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1099511628211
+        }
+        return String(hash, radix: 16)
     }
 
     static func removingItems(matching target: String, from items: [MealRequestItem]) -> [MealRequestItem] {
