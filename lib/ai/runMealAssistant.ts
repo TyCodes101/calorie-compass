@@ -39,6 +39,7 @@ const repeatYesterdayRegex = /\b(?:repeat|log|use|same as|what(?: did)? i (?:hav
 const usualRegex = /\b(?:same as usual|my usual|the usual|usual)\b/i;
 const repeatCueRegex = /\b(?:same|usual|again|repeat|yesterday|last time|last meal)\b/i;
 const followUpMacroRegex = /\bwhat about (?:carbs?|protein|fat|calories?)\b|\bhow about (?:carbs?|protein|fat|calories?)\b/i;
+const aggregateMacroQuestionRegex = /\b(?:macros?|macro breakdown|macro split|macro totals)\b/i;
 const calorieLeftRegex = /\b(?:how many|how much|what(?:'s| is))\s+(?:calories?|cals?)\s+(?:do i have\s+)?(?:left|remaining)\b|\b(?:calories?|cals?|cal)\s+left\b/i;
 const proteinLeftRegex = /\b(?:how many|how much|what(?:'s| is))\s+protein\s+(?:do i have\s+)?(?:left|remaining)\b|\bprotein\s+left\b/i;
 const carbsQuestionRegex = /\b(?:carbs?|carbohydrates?)\b/i;
@@ -532,6 +533,7 @@ function isNonFoodDialogueMessage(message: string) {
     casualRegex.test(normalized) ||
     offTopicRegex.test(normalized) ||
     jokeRequestRegex.test(normalized) ||
+    aggregateMacroQuestionRegex.test(normalized) ||
     (isQuestionLikeText(normalized) && !hasStrongFoodSignal(normalized))
   );
 }
@@ -2614,7 +2616,26 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
     );
   }
 
-  if (/\bbacon\b/.test(normalized)) {
+  if (/\bbacon bits?\b/.test(normalized)) {
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'bacon bits',
+          label: 'Bacon bits',
+          quantity: 1,
+          unit: 'tbsp',
+          calories: 25,
+          protein: 2,
+          carbs: 1,
+          fat: 1.5,
+          sodium: 120,
+          sourceName: 'Bacon bits common topping estimate',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
+  } else if (/\bbacon\b/.test(normalized)) {
     const serving = parseLeadingServingFood(message);
     const quantity = serving?.unit && /^(?:slice|piece)$/.test(serving.unit)
       ? serving.quantity
@@ -3970,6 +3991,40 @@ function isBadGenericResolvedItem(item: ParsedFoodItem) {
   return genericFallbackNameRegex.test(item.food_name) || (item.source_type === 'AI_ESTIMATE' && item.calories === 520 && item.protein === 30 && item.carbs === 45 && item.fat === 20);
 }
 
+function normalizeSuspiciousToppingItem(item: ParsedFoodItem): ParsedFoodItem {
+  if (!/\bbacon bits?\b/i.test(item.food_name)) {
+    return item;
+  }
+
+  if (item.calories <= 100 && item.protein <= 8) {
+    return {
+      ...item,
+      source_type: item.source_type === 'OFFICIAL_RESTAURANT' ? 'GENERIC_REFERENCE' : item.source_type,
+      confidence_label: item.confidence_label === 'Verified' ? 'Matched' : item.confidence_label,
+      is_trusted: item.source_type === 'AI_ESTIMATE' ? false : item.is_trusted,
+    };
+  }
+
+  return {
+    ...item,
+    quantity: 1,
+    unit: 'tbsp',
+    calories: 25,
+    protein: 2,
+    carbs: 1,
+    fat: 1.5,
+    fiber: 0,
+    sugar: 0,
+    sodium: 120,
+    notes: [item.notes, 'Adjusted bacon bits to a common topping serving; ask for the amount if different.'].filter(Boolean).join(' '),
+    source_type: 'GENERIC_REFERENCE',
+    source_name: 'Bacon bits common topping estimate',
+    confidence_label: 'Matched',
+    is_trusted: true,
+    used_ai_fallback: false,
+  };
+}
+
 function hardenResolvedItems(args: { message: string; resolvedItems: ParsedFoodItem[] }) {
   const { message, resolvedItems } = args;
   const chipotleEstimate = detectChipotleBowlEstimate(message);
@@ -3977,7 +4032,7 @@ function hardenResolvedItems(args: { message: string; resolvedItems: ParsedFoodI
     return [chipotleEstimate];
   }
 
-  let nextItems = [...resolvedItems];
+  let nextItems = resolvedItems.map(normalizeSuspiciousToppingItem);
   const knownEstimates = detectKnownFoodEstimates(message);
 
   if (nextItems.some(isBadGenericResolvedItem)) {
@@ -4389,6 +4444,25 @@ function buildCurrentMealMacroReply(message: string, state: MealAssistantState) 
   const totals = sumTotals(state.currentMealItems);
   const normalized = message.trim().toLowerCase();
 
+  if (
+    calorieLeftRegex.test(normalized) ||
+    proteinLeftRegex.test(normalized) ||
+    /\b(?:carbs?|fat)\s+(?:left|remaining)\b/i.test(normalized) ||
+    /\b(?:left|remaining)\b/i.test(normalized)
+  ) {
+    return null;
+  }
+
+  if (
+    aggregateMacroQuestionRegex.test(normalized) &&
+    (
+      /\b(?:where|what|show|tell|breakdown|summary|check)\b/i.test(normalized) ||
+      /\?$/.test(normalized)
+    )
+  ) {
+    return `This review meal is about ${Math.round(totals.calories)} calories, ${Math.round(totals.protein)}g protein, ${Math.round(totals.carbs)}g carbs, and ${Math.round(totals.fat)}g fat. Review it, then save when it looks right.`;
+  }
+
   if (carbsQuestionRegex.test(normalized) && (followUpMacroRegex.test(normalized) || /\bhow much|what(?:'s| is)|carbs?\?/i.test(normalized))) {
     return `That meal is sitting around ${Math.round(totals.carbs)}g carbs.`;
   }
@@ -4397,15 +4471,61 @@ function buildCurrentMealMacroReply(message: string, state: MealAssistantState) 
     return `That meal is around ${Math.round(totals.fat)}g fat.`;
   }
 
-  if (proteinQuestionRegex.test(normalized) && followUpMacroRegex.test(normalized)) {
+  if (proteinQuestionRegex.test(normalized) && (followUpMacroRegex.test(normalized) || /\bhow much|what(?:'s| is)|protein\?/i.test(normalized))) {
     return `That meal is around ${Math.round(totals.protein)}g protein.`;
   }
 
-  if (caloriesQuestionRegex.test(normalized) && followUpMacroRegex.test(normalized)) {
+  if (caloriesQuestionRegex.test(normalized) && (followUpMacroRegex.test(normalized) || /\bhow many|how much|what(?:'s| is)|calories?\?/i.test(normalized))) {
     return `That meal is about ${Math.round(totals.calories)} calories.`;
   }
 
   return null;
+}
+
+function isPendingMealAttributeQuestion(message: string, state: MealAssistantState) {
+  if (!state.currentMealItems.length || state.saved) {
+    return false;
+  }
+
+  const normalized = stripEmotionalPreface(message).toLowerCase().trim();
+  const isQuestion = /\?$/.test(normalized) || isQuestionLikeText(normalized);
+  if (!isQuestion) {
+    return false;
+  }
+
+  if (/^(?:make|change|update|remove|delete|replace|swap|take out|drop)\b/i.test(normalized)) {
+    return false;
+  }
+
+  return (
+    /\b(?:no|without|with|have|has|include|included)\b.*\bcheese\b/i.test(normalized) ||
+    /\bcheese\b.*\b(?:no|without|with|have|has|include|included)\b/i.test(normalized)
+  );
+}
+
+function buildPendingMealAttributeReply(message: string, state: MealAssistantState) {
+  const normalized = stripEmotionalPreface(message).toLowerCase().trim();
+  const mealText = [
+    state.currentMealText ?? '',
+    ...state.currentMealItems.map((item) => `${item.food_name} ${item.notes ?? ''}`),
+  ].join(' ').toLowerCase();
+  const itemLabel = state.currentMealItems.length === 1
+    ? state.currentMealItems[0]?.food_name ?? 'this meal'
+    : 'this meal';
+
+  if (/\bcheese\b/.test(normalized)) {
+    if (/\b(?:no|without)\s+cheese\b|\bcheese\s+(?:removed|off|omitted)\b/i.test(mealText)) {
+      return `Yes - this review card is being treated as ${itemLabel} without cheese. Review it, then save when it looks right.`;
+    }
+
+    if (/\bcheese\b/i.test(mealText)) {
+      return `This review card still looks like it includes cheese. If you want it without cheese, say "make it no cheese."`;
+    }
+
+    return `I do not have cheese on this review card. Review it, then save when it looks right.`;
+  }
+
+  return `This review card is still available. Review it, then save when it looks right.`;
 }
 
 function getRecommendationPreferenceTokens(context: MealAssistantContext) {
@@ -4873,11 +4993,11 @@ function validateAssistantReply(args: {
   const recommendationReply = buildRecommendationReply({ message: args.message, state: args.state, context: args.context }, args.context);
   const comparisonReply = buildComparisonReply({ message: args.message, state: args.state, context: args.context });
 
-  if ((args.intent === 'macro_question' || followUpMacroRegex.test(args.message)) && macroReply) {
+  if ((args.intent === 'macro_question' || followUpMacroRegex.test(args.message) || aggregateMacroQuestionRegex.test(args.message)) && macroReply) {
     return macroReply;
   }
 
-  if ((args.intent === 'macro_question' || args.intent === 'nutrition_guidance' || args.intent === 'nutrition_question' || followUpMacroRegex.test(args.message)) && nutritionReply) {
+  if ((args.intent === 'macro_question' || args.intent === 'nutrition_guidance' || args.intent === 'nutrition_question' || followUpMacroRegex.test(args.message) || aggregateMacroQuestionRegex.test(args.message)) && nutritionReply) {
     return nutritionReply;
   }
 
@@ -4894,6 +5014,37 @@ function validateAssistantReply(args: {
   }
 
   return args.assistantReply;
+}
+
+function hasPreSavePersistenceClaim(reply: string) {
+  return /\b(?:i(?:'|â€™|’)?ve\s+added|i\s+added|logged|saved|that one is in|added to your day)\b/i.test(reply);
+}
+
+function buildReviewBeforeSaveReply(message: string, items: ParsedFoodItem[]) {
+  const totals = sumTotals(items);
+  const foodLabel = items.length === 1
+    ? formatParsedItemLabel(items[0])
+    : items.map((item) => item.food_name).join(' and ');
+  const sourceLabel = getCombinedSourceLabel(items);
+  const calorieText = totals.calories > 0 ? `, about ${Math.round(totals.calories)} calories total` : '';
+  const label = foodLabel || cleanOriginalFoodName(message) || 'that meal';
+  const addedText = extractAddCommandFoodText(message);
+
+  if (addedText && items.length > 1) {
+    const addedItem = items.at(-1);
+    const addedLabel = addedItem?.food_name ?? cleanOriginalFoodName(addedText);
+    return `Added ${addedLabel} to this review meal. Review it, then save when it looks right.`;
+  }
+
+  return `Ready to review ${label}${calorieText}. ${sourceLabel}. Save when it looks right.`;
+}
+
+function applyReviewBeforeSaveLanguage(reply: string, state: MealAssistantState, message?: string) {
+  if (state.saved || !state.currentMealItems.length || !hasPreSavePersistenceClaim(reply)) {
+    return reply;
+  }
+
+  return buildReviewBeforeSaveReply(message ?? state.currentMealText ?? 'this meal', state.currentMealItems);
 }
 
 function postProcessAssistantReply(reply: string, state: MealAssistantState, message?: string) {
@@ -4929,6 +5080,8 @@ function postProcessAssistantReply(reply: string, state: MealAssistantState, mes
       nextReply = buildContextualContinuityReply(state);
     }
   }
+
+  nextReply = applyReviewBeforeSaveLanguage(nextReply, state, message);
 
   return sanitizeAssistantText(nextReply);
 }
@@ -8102,7 +8255,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if (followUpMacroRegex.test(normalized) || (hasActiveMeal && /\b(?:carbs?|fat|protein|calories?)\b/i.test(normalized) && /\?/.test(normalized))) {
+  if (followUpMacroRegex.test(normalized) || aggregateMacroQuestionRegex.test(normalized) || (hasActiveMeal && /\b(?:carbs?|fat|protein|calories?)\b/i.test(normalized) && /\?/.test(normalized))) {
     return {
       intent: 'macro_question',
       assistant_reply: 'Let me check that.',
@@ -8764,6 +8917,24 @@ export async function runMealAssistant(
     : input;
   const state = { ...workingInput.state };
   const shouldUseModelIntentFirst = Boolean(process.env.OPENAI_API_KEY) && !dependencies.classify;
+
+  if (isPendingMealAttributeQuestion(workingInput.message, state)) {
+    return finalizeResponse(buildDirectResponse({
+      intent: 'meal_review',
+      assistantReply: buildPendingMealAttributeReply(workingInput.message, state),
+      nextState: {
+        ...state,
+        currentMealItems: [...state.currentMealItems],
+        currentMealText: state.currentMealText ?? buildMealTextFromItems(state.currentMealItems),
+        confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+        saved: false,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      },
+      message: workingInput.message,
+      activeQuestion: workingInput.message,
+    }), workingInput, context);
+  }
 
   if (state.pendingClarification && isClarificationMetaQuestion(workingInput.message)) {
     return finalizeResponse(buildDirectResponse({
@@ -9471,7 +9642,7 @@ export async function runMealAssistant(
           '',
         intent: /recommend|idea|suggest|something/.test(mixedIntent.followUpMessage.toLowerCase())
           ? 'recommendation_request'
-          : followUpMacroRegex.test(mixedIntent.followUpMessage.toLowerCase()) || /\b(?:carbs?|fat|protein|calories?)\b/i.test(mixedIntent.followUpMessage)
+          : followUpMacroRegex.test(mixedIntent.followUpMessage.toLowerCase()) || aggregateMacroQuestionRegex.test(mixedIntent.followUpMessage) || /\b(?:carbs?|fat|protein|calories?)\b/i.test(mixedIntent.followUpMessage)
             ? 'macro_question'
             : comparisonRegex.test(mixedIntent.followUpMessage.toLowerCase())
               ? 'comparison_question'

@@ -130,6 +130,35 @@ describe('restaurant log screenshot regressions', () => {
     expect(response.meal.items[0]?.unit).toBe('sandwich');
   });
 
+  it('scales the exact TestFlight Chick-fil-A typo prompt to two sandwiches', async () => {
+    const response = await runPrompt('I had 2 chic fil a chciken sandwhiches');
+
+    expectRestaurantMatch(response, /chick-fil-a.*chicken sandwich/i);
+    expect(response.meal.items[0]).toMatchObject({
+      quantity: 2,
+      unit: 'sandwich',
+      calories: 840,
+      source_type: 'OFFICIAL_RESTAURANT',
+      confidence_label: 'Verified',
+    });
+    expect(response.assistant_reply).not.toMatch(/\b(?:saved|logged)\b/i);
+  });
+
+  it('guards ambiguous bacon bits toppings instead of silently producing a giant serving', async () => {
+    const response = await runPrompt('medium baked potato and bacon bits');
+    const baconItem = response.meal.items.find((item) => /bacon bits/i.test(item.food_name));
+
+    if (baconItem) {
+      expect(baconItem.calories).toBeLessThanOrEqual(100);
+      expect(baconItem.protein).toBeLessThanOrEqual(8);
+      expect(baconItem.source_type).not.toBe('OFFICIAL_RESTAURANT');
+      expect(baconItem.confidence_label).not.toBe('Verified');
+    } else {
+      expect(response.should_ask_clarification || /bacon bits|how much|amount/i.test(response.assistant_reply)).toBe(true);
+      expect(foodNames(response)).toMatch(/baked potato/i);
+    }
+  });
+
   it('matches a White Castle slider without asking what the food was', async () => {
     const response = await runPrompt('A white castle slider');
 

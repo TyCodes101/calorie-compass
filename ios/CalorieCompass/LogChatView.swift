@@ -229,6 +229,7 @@ struct LogChatView: View {
     @State private var showReviewCard = false
     @State private var isSavingMeal = false
     @State private var isDeletingRecentSavedMeal = false
+    @State private var inFlightSubmissionKey: String?
     @State private var recentSavedMeal: RecentSavedMealSnapshot?
     @State private var saveError: String? = nil
     @State private var composerHeight: CGFloat = 0
@@ -600,6 +601,11 @@ struct LogChatView: View {
             return
         }
         let userMessage = trimmedInput
+        let submissionKey = MealAssistantClientLogic.submissionKey(message: userMessage, activeItems: reviewItems.map { $0.asMealRequestItem() })
+        guard inFlightSubmissionKey != submissionKey else {
+            stabilityReporter.record(.duplicateSubmissionBlocked(screen: "Log"))
+            return
+        }
         if !isRetry {
             messages.append(MealAssistantTranscriptMessage(role: "user", text: userMessage))
         }
@@ -617,6 +623,7 @@ struct LogChatView: View {
         }
 
         isLoading = true
+        inFlightSubmissionKey = submissionKey
         error = nil
         retryMessage = nil
 
@@ -631,6 +638,7 @@ struct LogChatView: View {
         BackendService.sendMealAssistant(request: req) { result in
             DispatchQueue.main.async {
                 isLoading = false
+                inFlightSubmissionKey = nil
                 switch result {
                 case .success(let resp):
                     let activeItemsBeforeResponse = reviewItems.map { $0.asMealRequestItem() }
@@ -661,7 +669,7 @@ struct LogChatView: View {
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Log", message: err.localizedDescription))
                     retryMessage = userMessage
-                    error = RetryCopy.nonDestructiveFailure(action: "send that meal description", error: err)
+                    error = RetryCopy.sendFailure(action: "send that meal description", error: err)
                 }
             }
         }
@@ -856,7 +864,7 @@ struct LogChatView: View {
                 case .failure(let err):
                     sessionStore.apply(err)
                     stabilityReporter.record(.networkFailure(screen: "Meal review", message: err.localizedDescription))
-                    saveError = RetryCopy.nonDestructiveFailure(action: "save this meal", error: err)
+                    saveError = RetryCopy.saveFailure(error: err)
                 }
             }
         }

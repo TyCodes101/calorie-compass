@@ -203,6 +203,18 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertFalse(requestState.saved)
     }
 
+    func testPendingMealQuestionsDoNotDiscardTheReviewDraft() {
+        let items = [
+            Self.item("Grilled chicken breast"),
+            Self.item("Asparagus")
+        ]
+
+        XCTAssertFalse(MealAssistantClientLogic.shouldStartNewMealDraft(message: "where's my macros", activeItems: items))
+        XCTAssertFalse(MealAssistantClientLogic.shouldStartNewMealDraft(message: "what are the macros?", activeItems: items))
+        XCTAssertFalse(MealAssistantClientLogic.shouldStartNewMealDraft(message: "calories?", activeItems: items))
+        XCTAssertFalse(MealAssistantClientLogic.shouldStartNewMealDraft(message: "Did it have no cheese?", activeItems: [Self.item("McDouble")]))
+    }
+
     func testDiscardAndSaveCommandsAreHandledLocallyBeforeFoodLookup() {
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Discard that", hasActiveMeal: true), .discard)
         XCTAssertEqual(MealAssistantClientLogic.detectLocalCommand("Delete this meal", hasActiveMeal: true), .discard)
@@ -805,6 +817,25 @@ final class MealAssistantParityTests: XCTestCase {
         let second = MealRequestItem(food_name: " coke zero ", quantity: 1, unit: "CAN", calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 40, notes: nil, source_type: "GENERIC_REFERENCE", source_name: "Coca-Cola", confidence_label: "Matched")
 
         XCTAssertEqual(MealAssistantClientLogic.saveSignature(for: [first]), MealAssistantClientLogic.saveSignature(for: [second]))
+    }
+
+    func testSubmissionKeysBlockDuplicateSendsForSameComposedTextAndDraft() {
+        let items = [Self.item("Grilled chicken breast"), Self.item("Asparagus")]
+
+        let first = MealAssistantClientLogic.submissionKey(message: " 2 grilled chicken breasts and asparagus ", activeItems: items)
+        let second = MealAssistantClientLogic.submissionKey(message: "2 GRILLED CHICKEN BREASTS AND ASPARAGUS", activeItems: items)
+        let changedDraft = MealAssistantClientLogic.submissionKey(message: "2 grilled chicken breasts and asparagus", activeItems: [Self.item("McDouble")])
+
+        XCTAssertEqual(first, second)
+        XCTAssertNotEqual(first, changedDraft)
+    }
+
+    func testMealReviewDisplayNamesNormalizeProtectedBrands() {
+        let mcdouble = MealItem(from: MealRequestItem(food_name: "mcdouble", quantity: 1, unit: "burger", calories: 390, protein: 22, carbs: 33, fat: 19, fiber: 2, sugar: 7, sodium: 850, notes: nil, source_type: "OFFICIAL_RESTAURANT", source_name: "McDonald's official nutrition", confidence_label: "Verified"))
+        let chickFilA = MealItem(from: MealRequestItem(food_name: "chick-fil-a chicken sandwich", quantity: 1, unit: "sandwich", calories: 420, protein: 29, carbs: 41, fat: 18, fiber: 2, sugar: 6, sodium: 1460, notes: nil, source_type: "OFFICIAL_RESTAURANT", source_name: "Chick-fil-A official nutrition", confidence_label: "Verified"))
+
+        XCTAssertEqual(mcdouble.displayName, "McDouble")
+        XCTAssertEqual(chickFilA.displayName, "Chick-fil-A Chicken Sandwich")
     }
 
     private static func item(_ name: String, quantity: Double = 1, unit: String = "serving") -> MealRequestItem {

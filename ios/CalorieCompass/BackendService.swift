@@ -263,6 +263,7 @@ struct MealAssistantClientLogic {
 
         let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalized.isEmpty { return false }
+        if isPendingMealQuestion(normalized) { return false }
 
         // If user explicitly signals modification, keep the draft.
         let modificationSignals = ["actually", "change", "make it", "remove", "delete", "take out", "drop ", "instead", "swap", "replace", "add"]
@@ -273,6 +274,14 @@ struct MealAssistantClientLogic {
 
         // Otherwise, treat as a brand-new entry (prevents state leakage).
         return true
+    }
+
+    static func submissionKey(message: String, activeItems: [MealRequestItem]) -> String {
+        let normalizedMessage = message
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        return "\(normalizedMessage)|\(saveSignature(for: activeItems))"
     }
 
     static func detectLocalCommand(_ message: String, hasActiveMeal: Bool) -> MealAssistantLocalCommand? {
@@ -408,6 +417,26 @@ struct MealAssistantClientLogic {
             token.count > 1 && !ignored.contains(token)
         }
         return Set(filtered)
+    }
+
+    private static func isPendingMealQuestion(_ normalized: String) -> Bool {
+        if normalized.contains("macro") || normalized.contains("macros") {
+            return true
+        }
+
+        if normalized.range(of: #"^(?:what|where|show|tell|how).*(?:calories|protein|carbs|fat)"#, options: .regularExpression) != nil {
+            return true
+        }
+
+        if normalized.range(of: #"^(?:calories|protein|carbs|fat)\??$"#, options: .regularExpression) != nil {
+            return true
+        }
+
+        if normalized.range(of: #"^(?:did|does|is|was|are).*(?:no cheese|without cheese|cheese)"#, options: .regularExpression) != nil {
+            return true
+        }
+
+        return false
     }
 
     private static func looksLikeReplacementClarification(_ message: String, currentItems: [MealRequestItem]) -> Bool {

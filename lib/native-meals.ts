@@ -22,8 +22,8 @@ export type NativeMealRecord = {
   id: string;
   mealType: string;
   rawText: string | null;
-  date: Date;
-  createdAt: Date;
+  date: Date | string | null;
+  createdAt: Date | string | null;
   confidenceScore: number | null;
   totalCalories: number;
   totalProtein: number;
@@ -40,6 +40,21 @@ function normalizeStoredSourceType(sourceType: string | null): ParsedFoodItem['s
   return sourceType === 'OFFICIAL_RESTAURANT' || sourceType === 'GENERIC_REFERENCE' || sourceType === 'AI_ESTIMATE'
     ? sourceType
     : null;
+}
+
+function toIsoDate(value: Date | string | null | undefined, fallback?: string) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const timestamp = Date.parse(value);
+    if (Number.isFinite(timestamp)) {
+      return new Date(timestamp).toISOString();
+    }
+  }
+
+  return fallback ?? new Date(0).toISOString();
 }
 
 export function mapMealForNative(meal: NativeMealRecord) {
@@ -72,13 +87,15 @@ export function mapMealForNative(meal: NativeMealRecord) {
   });
   const trustedCount = items.filter((item) => item.is_trusted).length;
   const estimatedCount = items.filter((item) => item.source_type === 'AI_ESTIMATE' || item.confidence_label === 'Estimated').length;
+  const date = toIsoDate(meal.date);
+  const createdAt = toIsoDate(meal.createdAt, date);
 
   return {
     id: meal.id,
     mealType: meal.mealType.toLowerCase(),
     rawText: meal.rawText,
-    date: meal.date.toISOString(),
-    createdAt: meal.createdAt.toISOString(),
+    date,
+    createdAt,
     confidenceScore: meal.confidenceScore ?? 0,
     totalCalories: Math.round(meal.totalCalories),
     totalProtein: Math.round(meal.totalProtein),

@@ -137,6 +137,9 @@ function normalizeRestaurantText(text: string) {
     .toLowerCase()
     .replace(/[’]/g, "'")
     .replace(/\bchic\s+fil\s+a\b/g, 'chick fil a')
+    .replace(/\bchciken\b/g, 'chicken')
+    .replace(/\bchiken\b/g, 'chicken')
+    .replace(/\bchikn\b/g, 'chicken')
     .replace(/\bsandwhich\b/g, 'sandwich')
     .replace(/\bsandwhiches\b/g, 'sandwiches');
 }
@@ -189,7 +192,7 @@ const countWordMap: Record<string, number> = {
 };
 
 function extractRestaurantItemQuantity(segment: string) {
-  const match = segment.match(/\b(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b\s+(?:soft\s+|spicy\s+|crunchy\s+|chicken\s+|potato\s+|pepperoni\s+|turkey\s+|orange\s+|mac\s+and\s+cheese\s+|big\s+mac\s+|mcchicken\s+|caniac\s+){0,6}(?:tacos?|sandwich(?:es)?|burgers?|nuggets?|lattes?|subs?|footlongs?|bowls?|combos?|slices?|pizzas?|servings?|orders?)\b/i);
+  const match = segment.match(/\b(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b\s+(?:(?:arby'?s?|arbys|white\s+castle|subway|chipotle|chick\s+fil\s+a|mcdonald'?s?|mcdonalds|taco\s+bell|wendy'?s?|wendys)\s+)?(?:soft\s+|spicy\s+|crunchy\s+|chicken\s+|potato\s+|pepperoni\s+|turkey\s+|orange\s+|mac\s+and\s+cheese\s+|big\s+mac\s+|mcchicken\s+|caniac\s+){0,6}(?:tacos?|sandwich(?:es)?|burgers?|nuggets?|lattes?|subs?|footlongs?|bowls?|combos?|slices?|pizzas?|servings?|orders?)\b/i);
   if (!match) return 1;
   const raw = (match[1] ?? '1').toLowerCase();
   return countWordMap[raw] ?? (Number(raw) || 1);
@@ -298,7 +301,8 @@ function matchChickFilASegment(segment: string, factor: number): ParsedFoodItem[
 
   if (segment.includes('sandwich')) {
     const food = findCatalogFoodById('chickfila_sandwich');
-    return food ? scaleItems([scaleCatalogFood(food, 1, 'sandwich')], factor) : [];
+    const quantity = extractRestaurantItemQuantity(segment);
+    return food ? scaleItems([scaleCatalogFood(food, quantity, 'sandwich')], factor) : [];
   }
 
   return [];
