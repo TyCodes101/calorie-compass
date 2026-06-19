@@ -3,6 +3,8 @@ import OpenAI from 'openai';
 import { getMockParsedMeal } from '@/lib/ai/mock';
 import { parseMealText } from '@/lib/ai/openai';
 import { mealAssistantSystemPrompt } from '@/lib/ai/mealAssistantSystemPrompt';
+import { parseLogMealIntent } from '@/lib/ai/logMealIntent';
+import { buildPendingMealSaveIdempotencyKey, reconcilePendingMeal } from '@/lib/ai/pendingMeal';
 import { getTrustedCatalogEstimate } from '@/lib/ai/trusted';
 import {
   type MealAssistantAction,
@@ -18,7 +20,16 @@ import {
 } from '@/lib/ai/mealAssistantSchema';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { saveConfirmedMeal, updateSavedMeal } from '@/lib/meals';
+import { decorateFoodItemNames } from '@/lib/nutrition/displayNames';
+import { applyNutritionModifiers, extractNutritionModifiers } from '@/lib/nutrition/modifiers';
 import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
+import {
+  parsedMealResponseToFoodCandidates,
+  resolveFoodCandidates,
+  type FoodResolutionIntent,
+  type FoodResolutionResult,
+} from '@/lib/nutrition/foodResolution';
+import { detectProductFamilies } from '@/lib/nutrition/productFamilies';
 
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
 const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
@@ -31,7 +42,7 @@ const saveQuestionRegex = /^(?:should\s+(?:i|we)|do you think i should|think i s
 const explicitQuantityUpdateRegex = /^(?:actually\s+)?(?:make|change|update)\s+(?:it|that|this)(?:\s+to)?\s+(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const editRegex = /^(?:edit(?: it| that| this)?|change(?: it| that| this)?|tweak(?: it| that| this)?|adjust(?: it| that| this)?)\b/i;
 const reviewRegex = /\b(?:review (?:it|this|that)|show me (?:the )?(?:meal|review)|what do i have so far|show me what i have)\b/i;
-const quantityOnlyRegex = /^(?:actually|make that|update that to|it was|that was|no|i meant|instead)\s+(?:only\s+)?(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
+const quantityOnlyRegex = /^(?:actually|make that|update that to|it was|that was|no|i meant|instead|nvm|nevermind|never mind)\s+(?:only\s+)?(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const directQuantityRegex = /^(\d+(?:\.\d+)?|\.\d+|a half|half|three quarters?|a quarter|quarter|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
 const casualRegex = /^(?:hi|hello|hey|yo|sup|what(?:'|’)??s up|thanks|thank you|cool|okay|ok|nice|lol|how are you|how(?:'|’)??s your day)\b/i;
 const offTopicRegex = /\b(?:weather|movie|music|homework|code|browser|news|sports|joke|workout|gym|training|lift|lifting|destroyed me)\b/i;
@@ -84,7 +95,7 @@ const pizzaSliceUnitRegex = /\b(?:slice|slices)\b/i;
 const genericFallbackNameRegex = /\b(?:estimated mixed meal|mixed meal|meal item|unknown food)\b/i;
 const correctionCueRegex = /^(?:actually|no|nah|i meant|make that|change (?:it|that|this)|update (?:it|that|this)|(?:lets|let's) go back to|go back to|back to|instead|not )\b/i;
 const discourseFoodBlockerRegex = /\b(?:actually|make that|instead(?: of)?|what should i eat|what should i have|tonight|add that|change it|change that|remove|keep|also|btw|wym|what do you mean)\b/i;
-const strongFoodSignalRegex = /\b(?:sunflower seeds?|seeds?|cookie|cookies|oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chic?k?[-\s]*fil[-\s]*a|starbucks|subway|white castle|arby'?s?|arbys|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|trader joe'?s?|mcchicken|big mac|nuggets?|tacos?|sandwich|sandwhich|burgers?|fries|fry|latte|macchiato|footlong|slider|orange chicken|caniac|mac and cheese|fairlife|core power|quest|pop[-\s]*tarts?|cheez[-\s]*its?|cheezits?|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|whey|shakes?|grilled chicken|chicken breast|chicken tenders?|chicken|turkey sausage|sausage|coke zero|coke|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|granola|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|sauce|ranch|pasta|gummy worms?|skittles?|snickers?|m&ms?|mms?|candy|candies|candy bars?)\b/i;
+const strongFoodSignalRegex = /\b(?:sunflower seeds?|seeds?|cookie|cookies|oatmeal|oats?|blueberr(?:y|ies)|greek yogurt|cottage cheese|cheese|rice cakes?|rice|peanut butter|toast|eggs?|bacon|orange juice|hash browns?|pizza|little caesars?|chipotle|taco\s*bell|tacobell|wendy'?s|baconator|mcdouble|mc double|mcdonald'?s?|mc\s*donalds?|chic?k?[-\s]*fil[-\s]*a|starbucks|subway|white castle|arby'?s?|arbys|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|trader joe'?s?|mcchicken|big mac|nuggets?|tacos?|sandwich|sandwhich|burgers?|fries|fry|latte|macchiato|footlong|slider|orange chicken|caniac|mac and cheese|fairlife|core power|quest|pop[-\s]*tarts?|cheez[-\s]*its?|cheezits?|beans?|pickles?|bananas?|apples?|protein bars?|protein shake|protein powder|whey|shakes?|grilled chicken|chicken breast|chicken tenders?|chicken|turkey sausage|sausage|coke zero|coke|soda|chips?|guac(?:amole)?|broccoli|cereal|cinnamon toast crunch|granola|milk|coffee|muffins?|steak|potatoes|salmon|avocado|salsa|sauce|ranch|pasta|gummy worms?|skittles?|snickers?|m&ms?|mms?|candy|candies|candy bars?)\b/i;
 
 const emptyContext: MealAssistantContext = {
   favoriteMeals: [],
@@ -245,7 +256,49 @@ function normalizeKnownFoodTypos(text: string) {
     .replace(/\bsandwhiches\b/g, 'sandwiches')
     .replace(/\bceasers\b/g, 'caesars')
     .replace(/\bcaesers\b/g, 'caesars')
-    .replace(/\bdiet\s+cooe\b/g, 'diet coke');
+    .replace(/\bdiet\s+cooe\b/g, 'diet coke')
+    .replace(/\bbaconnator\b/g, 'baconator')
+    .replace(/\bmc\s*double\b/g, 'mcdouble');
+}
+
+function isAffirmativeYes(message: string) {
+  const normalized = stripEmotionalPreface(message).trim().toLowerCase();
+  return /^(?:yes|y|yep|yeah|ya|yup|sure|ok|okay|confirm|sounds good|looks good|do it|go ahead)[!. ]*$/.test(normalized);
+}
+
+function lastQuestionWasSavePrompt(state: MealAssistantState) {
+  const question = (state.lastAssistantQuestion ?? '').toLowerCase();
+  if (!question) return false;
+  return /\b(?:save|log|confirm)\b/.test(question);
+}
+
+function nutritionQuestionNamesSpecificFood(message: string) {
+  const normalized = normalizeText(message);
+  if (!/\b(?:calories?|macros?|protein|carbs?|fat)\b/.test(normalized)) {
+    return false;
+  }
+
+  const target = normalized.match(/\b(?:in|for|from|of)\s+(?:a|an|the\s+)?(.+)$/)?.[1]?.trim()
+    ?? normalized.match(/\b(?:is|are)\s+(?:a|an|the\s+)?(.+)$/)?.[1]?.trim()
+    ?? '';
+  if (!target || /^(?:it|that|this|my|me|meal|current meal|pending meal|the meal|total|all of it)\b/.test(target)) {
+    return false;
+  }
+
+  return hasStrongFoodSignal(target);
+}
+
+function shouldTreatAsStandaloneNewMeal(message: string, state: MealAssistantState) {
+  if (!state.currentMealItems.length || state.saved) return false;
+  const normalized = stripEmotionalPreface(message).toLowerCase().trim();
+  if (!hasStrongFoodSignal(normalized)) return false;
+  if (shouldAppendToCurrentMeal(message, state)) return false;
+  if (editRegex.test(normalized) || removeRegex.test(normalized) || startNewRegex.test(normalized)) return false;
+  if (correctionCueRegex.test(normalized)) return false;
+  if (/^replace\b/i.test(normalized)) return true;
+  // If user didn't reference "that/this/it" and didn't use an add/continuation cue, default to starting a fresh pending meal.
+  if (!mealDescriptorReferenceRegex.test(normalized)) return true;
+  return false;
 }
 
 function normalizeFoodText(text: string) {
@@ -1745,6 +1798,7 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
   const lookupText = buildItemLookupText(item);
   const lookupNormalized = normalizeFoodText(lookupText);
   const isPizzaSlices = pizzaNameRegex.test(lookupText) && (pizzaSliceUnitRegex.test(lookupText) || item.quantity >= 2);
+  const decorate = (candidate: ParsedFoodItem) => decorateFoodItemNames(candidate, lookupText);
 
   if (isPizzaSlices) {
     const resolvedCalories = Number(resolvedItem.calories || 0);
@@ -1752,21 +1806,21 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
     const genericName = genericResolvedFoodRegex.test(resolvedItem.food_name.trim());
 
     if (genericName || caloriesLookTooLow) {
-      return buildPizzaSliceEstimate(item);
+      return decorate(buildPizzaSliceEstimate(item));
     }
   }
 
   const candyEstimate = buildCandyServingEstimate(item, lookupText);
   if (candyEstimate && (/\b(?:snickers|skittles)\b/.test(lookupNormalized) || /\b(?:100\s*g|gram|grams)\b/i.test(`${resolvedItem.quantity} ${resolvedItem.unit}`))) {
-    return candyEstimate;
+    return decorate(candyEstimate);
   }
 
   if (/\bcottage cheese\b/.test(lookupNormalized) && !/\bcottage cheese\b/i.test(resolvedItem.food_name.trim())) {
-    return buildCottageCheeseServingEstimate(item, lookupText);
+    return decorate(buildCottageCheeseServingEstimate(item, lookupText));
   }
 
   if (/\btoast\b/.test(lookupNormalized) && /\bbread\b/i.test(resolvedItem.food_name.trim())) {
-    return {
+    return decorate({
       ...resolvedItem,
       food_name: 'Toast',
       quantity: item.quantity || resolvedItem.quantity,
@@ -1778,32 +1832,32 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
       confidence_label: resolvedItem.confidence_label ?? 'Estimated',
       is_trusted: resolvedItem.source_type === 'OFFICIAL_RESTAURANT' ? false : resolvedItem.is_trusted,
       used_ai_fallback: resolvedItem.source_type === 'OFFICIAL_RESTAURANT' ? true : resolvedItem.used_ai_fallback,
-    };
+    });
   }
 
   if (genericResolvedFoodRegex.test(resolvedItem.food_name.trim())) {
     const humanName = buildHumanFoodNameFromAssistantItem(item);
     if (humanName) {
-      return {
+      return decorate({
         ...resolvedItem,
         food_name: humanName,
         quantity: item.quantity || resolvedItem.quantity,
         unit: item.unit?.trim() || resolvedItem.unit,
         matched_query: resolvedItem.matched_query ?? lookupText,
         original_user_text: resolvedItem.original_user_text ?? lookupText,
-      };
+      });
     }
   }
 
   if (item.quantity > 1 && /^rice cake$/i.test(resolvedItem.food_name.trim())) {
-    return {
+    return decorate({
       ...resolvedItem,
       food_name: 'rice cakes',
       quantity: item.quantity || resolvedItem.quantity,
       unit: item.unit?.trim() || resolvedItem.unit,
       matched_query: resolvedItem.matched_query ?? lookupText,
       original_user_text: resolvedItem.original_user_text ?? lookupText,
-    };
+    });
   }
 
   const userFacingUnit = normalizeQuantityUnit(item.unit);
@@ -1814,7 +1868,7 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
     const shouldUseGrilledChickenName = /\bgrilled chicken\b/.test(lookupNormalized) && /\bchicken breast\b/i.test(resolvedItem.food_name.trim());
     const displayUnit = userFacingUnit ?? resolvedItem.unit;
 
-    return {
+    return decorate({
       ...resolvedItem,
       food_name: shouldUseGrilledChickenName ? 'Grilled chicken breast' : resolvedItem.food_name,
       quantity: item.quantity,
@@ -1825,10 +1879,10 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
         resolvedItem.notes,
         `Serving display kept as ${formatDisplayQuantity(item.quantity)} ${formatUnitForQuantity(displayUnit, item.quantity)} from the user message.`,
       ].filter(Boolean).join(' '),
-    };
+    });
   }
 
-  return resolvedItem;
+  return decorate(resolvedItem);
 }
 
 type GenericEstimateSpec = {
@@ -2194,6 +2248,30 @@ function detectKnownFoodEstimates(message: string): ParsedFoodItem[] {
   const chipotleEstimate = detectChipotleBowlEstimate(message);
   if (chipotleEstimate) {
     items.push(chipotleEstimate);
+  }
+
+  if (/\basparagus\b/.test(normalized)) {
+    const quantity = readCountBefore('(?:servings?\\s+(?:of\\s+)?)?asparagus', 1);
+    items.push(
+      makeGenericEstimate(
+        {
+          key: 'asparagus',
+          label: 'Asparagus',
+          quantity,
+          unit: quantity === 1 ? 'serving' : 'servings',
+          calories: 27 * quantity,
+          protein: 3 * quantity,
+          carbs: 5 * quantity,
+          fat: 0.2 * quantity,
+          fiber: 3 * quantity,
+          sugar: 2.5 * quantity,
+          sodium: 3 * quantity,
+          sourceName: 'Asparagus common serving reference',
+          sourceType: 'GENERIC_REFERENCE',
+        },
+        message,
+      ),
+    );
   }
 
   const sliceMatch = normalized.match(/\b(\d+(?:\.\d+)?)\s+(?:slices?|pieces?)\s+(?:of\s+)?(?:little caesars\s+)?(?:pizza|pepperoni pizza|cheese pizza)\b/);
@@ -3907,6 +3985,7 @@ function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, 
   const knownItems = detectKnownFoodEstimates(message);
   const trustedItems = getTrustedCatalogEstimate(message, mealType)?.items ?? [];
   const hasRestaurantCue = messageHasRestaurantCue(message);
+  const finalize = (items: ParsedFoodItem[]) => applyNutritionModifiers(items, { text: message });
 
   if (
     knownItems.length <= 1
@@ -3914,11 +3993,11 @@ function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, 
     && !knownItemsAlreadyHaveReliableBrandMatch(knownItems)
     && hasHighPriorityBrandedCatalogMatch(trustedItems)
   ) {
-    return trustedItems;
+    return finalize(trustedItems);
   }
 
   if (hasRestaurantCue && knownItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')) {
-    return knownItems;
+    return finalize(knownItems);
   }
 
   if (
@@ -3927,14 +4006,14 @@ function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, 
     && trustedItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')
     && !trustedFallbackWouldDropKnownFood(knownItems, trustedItems)
   ) {
-    return trustedItems;
+    return finalize(trustedItems);
   }
 
   if (!knownItems.length || !hasRestaurantCue) {
-    return knownItems;
+    return finalize(knownItems);
   }
 
-  return trustedItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT') ? trustedItems : knownItems;
+  return finalize(trustedItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT') ? trustedItems : knownItems);
 }
 
 function shouldAskPizzaPortion(message: string, items: MealAssistantItem[]) {
@@ -4065,7 +4144,10 @@ function hardenResolvedItems(args: { message: string; resolvedItems: ParsedFoodI
     }
   }
 
-  return suppressNearDuplicateResolvedItems(dedupeParsedItems(nextItems), message);
+  return applyNutritionModifiers(
+    suppressNearDuplicateResolvedItems(dedupeParsedItems(nextItems), message),
+    { text: message },
+  );
 }
 
 function suppressNearDuplicateResolvedItems(items: ParsedFoodItem[], message: string) {
@@ -4383,6 +4465,10 @@ function polishRepeatedOpening(reply: string, state: MealAssistantState) {
 
 function buildCurrentMealMacroReply(message: string, state: MealAssistantState) {
   if (!state.currentMealItems.length) {
+    return null;
+  }
+
+  if (nutritionQuestionNamesSpecificFood(message)) {
     return null;
   }
 
@@ -5660,24 +5746,145 @@ function buildCompanionInsight(args: { response: MealAssistantResponse; input: M
   return null;
 }
 
-function finalizeResponse(response: MealAssistantResponse, input: MealAssistantRunInput, context: MealAssistantContext) {
-  const insight = buildCompanionInsight({ response, input, context });
+function sourceTrustFromPendingMeal(pendingMeal: MealAssistantResponse['next_state']['pendingMeal']) {
+  const sourceTypes = pendingMeal?.sourceSummary.sourceTypes ?? [];
+  if (sourceTypes.includes('OFFICIAL_RESTAURANT')) return 'official_restaurant';
+  if (sourceTypes.includes('AI_ESTIMATE')) return 'ai_estimate';
+  if (sourceTypes.includes('GENERIC_REFERENCE')) return 'curated_generic';
+  return null;
+}
 
-  if (!insight || normalizeText(response.assistant_reply).includes(normalizeText(insight))) {
-    return response;
+function foodResolutionSummary(response: MealAssistantResponse): MealAssistantResponse['food_resolution'] {
+  if (response.food_resolution) {
+    return response.food_resolution;
+  }
+
+  const pendingMeal = response.next_state.pendingMeal ?? null;
+  const sourceTrust = sourceTrustFromPendingMeal(pendingMeal);
+  const foodIntents = new Set([
+    'new_food_item',
+    'add_to_current_meal',
+    'correction',
+    'clarification_answer',
+    'repeat_meal',
+  ]);
+
+  if (pendingMeal?.status === 'ready_for_review' && pendingMeal.items.length) {
+    const aiEstimated = pendingMeal.sourceSummary.estimatedItemCount > 0
+      || pendingMeal.sourceSummary.sourceTypes.includes('AI_ESTIMATE');
+    const normalizedQuery = response.next_state.currentMealText
+      ?? pendingMeal.items.map((item) => item.food_name).join(', ');
+
+    return {
+      status: 'resolved',
+      normalizedQuery,
+      confidence: pendingMeal.aggregateConfidence >= 0.9 ? 'high' : pendingMeal.aggregateConfidence >= 0.72 ? 'medium' : 'low',
+      sourceTrust,
+      rejectionReasons: [],
+      provenance: {
+        provider: pendingMeal.items[0]?.provider_used ?? 'meal-assistant',
+        source: pendingMeal.sourceSummary.sourceTypes[0] ?? 'UNKNOWN',
+        sourceName: pendingMeal.sourceSummary.sourceNames[0] ?? null,
+        sourceTrust: sourceTrust ?? 'curated_generic',
+        verified: pendingMeal.sourceSummary.trustedItemCount > 0,
+        estimated: pendingMeal.sourceSummary.estimatedItemCount > 0,
+      },
+      aiUsed: aiEstimated,
+      aiRole: aiEstimated ? 'estimator' : 'none',
+    };
+  }
+
+  if (pendingMeal?.status === 'needs_clarification' || response.should_ask_clarification || response.clarification_question) {
+    const normalizedQuery = response.next_state.currentMealText
+      ?? pendingMeal?.items.map((item) => item.food_name).join(', ')
+      ?? '';
+
+    return {
+      status: 'needs_clarification',
+      normalizedQuery,
+      confidence: 'low',
+      sourceTrust: null,
+      rejectionReasons: [response.clarification_question ?? pendingMeal?.clarification ?? 'needs_clarification'],
+      provenance: null,
+      aiUsed: false,
+      aiRole: 'clarification',
+    };
+  }
+
+  if (foodIntents.has(response.intent) && !response.meal.items.length && !response.next_state.currentMealItems.length) {
+    return {
+      status: 'unsupported',
+      normalizedQuery: response.next_state.currentMealText ?? '',
+      confidence: 'low',
+      sourceTrust: null,
+      rejectionReasons: ['no_reviewable_food_items'],
+      provenance: null,
+      aiUsed: false,
+      aiRole: 'none',
+    };
+  }
+
+  return undefined;
+}
+
+function finalizeResponse(response: MealAssistantResponse, input: MealAssistantRunInput, context: MealAssistantContext) {
+  const responseItems = response.next_state.currentMealItems.length
+    ? response.next_state.currentMealItems
+    : response.meal.items;
+  const failedStandaloneReplacement = response.intent === 'new_food_item'
+    && input.state.currentMealItems.length > 0
+    && responseItems.length === 0
+    && !response.next_state.pendingClarification
+    && !response.clarification_question
+    && !response.should_ask_clarification;
+  const pendingMeal = reconcilePendingMeal({
+    existing: input.state.pendingMeal,
+    items: responseItems,
+    mealType: response.next_state.mealType,
+    confidence: response.next_state.confidenceScore,
+    saved: response.next_state.saved,
+    clarification: response.next_state.pendingClarification ?? response.clarification_question,
+    cancelled: failedStandaloneReplacement
+      || response.intent === 'start_new_meal'
+      || (
+        response.intent === 'remove_item'
+        && input.state.currentMealItems.length > 0
+        && response.next_state.currentMealItems.length === 0
+        && !response.next_state.pendingClarification
+      ),
+  });
+  const synchronizedResponseWithoutResolution: MealAssistantResponse = {
+    ...response,
+    next_state: {
+      ...response.next_state,
+      pendingMeal,
+      currentMealItems: pendingMeal?.items ?? response.next_state.currentMealItems,
+      currentMealText: pendingMeal?.items.length
+        ? response.next_state.currentMealText ?? buildMealTextFromItems(pendingMeal.items)
+        : response.next_state.currentMealText,
+    },
+  };
+  const synchronizedResponse: MealAssistantResponse = {
+    ...synchronizedResponseWithoutResolution,
+    food_resolution: foodResolutionSummary(synchronizedResponseWithoutResolution),
+  };
+  const insight = buildCompanionInsight({ response: synchronizedResponse, input, context });
+
+  if (!insight || normalizeText(synchronizedResponse.assistant_reply).includes(normalizeText(insight))) {
+    return synchronizedResponse;
   }
 
   const combinedReply = postProcessAssistantReply(
-    `${response.assistant_reply.replace(/[.!?]+$/, '')}. ${insight}`,
-    response.next_state,
+    `${synchronizedResponse.assistant_reply.replace(/[.!?]+$/, '')}. ${insight}`,
+    synchronizedResponse.next_state,
     input.message,
   );
 
   return {
-    ...response,
+    ...synchronizedResponse,
     assistant_reply: combinedReply,
     next_state: {
-      ...response.next_state,
+      ...synchronizedResponse.next_state,
       lastAssistantReply: combinedReply,
     },
   };
@@ -6530,6 +6737,9 @@ async function buildAdaptiveMealMutationReply(
   if (!input.state.currentMealItems.length || input.state.saved) {
     return null;
   }
+  if (nutritionQuestionNamesSpecificFood(input.message)) {
+    return null;
+  }
 
   const normalized = stripEmotionalPreface(input.message).toLowerCase();
   const currentItems = cloneParsedItems(input.state.currentMealItems);
@@ -7178,6 +7388,10 @@ async function buildDeterministicDialogueResponse(
   const state = input.state;
   const normalized = stripEmotionalPreface(input.message).toLowerCase();
 
+  if (nutritionQuestionNamesSpecificFood(input.message)) {
+    return null;
+  }
+
   const explicitFoodLogText = extractExplicitFoodLogCommand(input.message);
   if (explicitFoodLogText) {
     const directItems = detectKnownFoodEstimatesWithTrustedRestaurantFallback(explicitFoodLogText, state.mealType);
@@ -7287,6 +7501,26 @@ async function buildDeterministicDialogueResponse(
       },
       message: input.message,
       shouldSaveMeal: Boolean(state.currentMealItems.length),
+    });
+  }
+
+  // "Yes" should confirm the prior save/confirm prompt when a pending meal exists.
+  if (isAffirmativeYes(normalized) && state.currentMealItems.length && !state.saved && lastQuestionWasSavePrompt(state)) {
+    await saveMeal({ state, items: state.currentMealItems });
+    return buildDirectResponse({
+      intent: 'save_meal',
+      assistantReply: 'Saved. Ready for the next one?',
+      nextState: {
+        ...state,
+        currentMealItems: [...state.currentMealItems],
+        currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
+        confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+        saved: true,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      },
+      message: input.message,
+      shouldSaveMeal: true,
     });
   }
 
@@ -7616,6 +7850,10 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
   const remainingFat = getRemainingFat(context);
   const remainingCalories = getRemainingCalories(context);
 
+  if (nutritionQuestionNamesSpecificFood(input.message)) {
+    return null;
+  }
+
   if (weeklySummaryRegex.test(normalized)) {
     return buildWeeklySummaryReply(context);
   }
@@ -7810,6 +8048,7 @@ async function defaultSaveMeal({ state, items }: { state: MealAssistantState; it
     meal_type: state.mealType,
     confidence_score: getConfidenceScore(items),
     raw_text: state.currentMealText,
+    idempotency_key: buildPendingMealSaveIdempotencyKey(state.pendingMeal),
     source_reusable_meal_id: state.sourceReusableMealId ?? null,
     items,
   });
@@ -8102,7 +8341,15 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if (followUpMacroRegex.test(normalized) || (hasActiveMeal && /\b(?:carbs?|fat|protein|calories?)\b/i.test(normalized) && /\?/.test(normalized))) {
+  if (
+    followUpMacroRegex.test(normalized)
+    || (
+      hasActiveMeal
+      && /\b(?:carbs?|fat|protein|calories?)\b/i.test(normalized)
+      && /\?/.test(normalized)
+      && !nutritionQuestionNamesSpecificFood(message)
+    )
+  ) {
     return {
       intent: 'macro_question',
       assistant_reply: 'Let me check that.',
@@ -8459,7 +8706,77 @@ function applyRemovedItems(currentItems: ParsedFoodItem[], itemsToRemove: MealAs
 type ResolveAssistantItemsResult = {
   items: ParsedFoodItem[];
   clarificationQuestion: string | null;
+  foodResolution?: FoodResolutionResult | null;
 };
+
+function buildAssistantFoodResolutionIntent(args: {
+  item: MealAssistantItem;
+  lookupText: string;
+  mealType: MealAssistantState['mealType'];
+  message: string;
+}): FoodResolutionIntent {
+  const family = detectProductFamilies([
+    args.message,
+    args.lookupText,
+    args.item.brand,
+    args.item.name,
+  ].filter(Boolean).join(' '))[0];
+  const restaurantOrBrand = args.item.brand ?? family?.brand ?? family?.restaurant ?? null;
+
+  return {
+    rawText: args.message || args.lookupText,
+    searchText: args.lookupText || args.item.name,
+    restaurant: family?.restaurant ?? restaurantOrBrand,
+    brand: restaurantOrBrand,
+    modifiers: [...new Set([...(args.item.modifiers ?? []), ...extractNutritionModifiers(`${args.message} ${args.lookupText}`)])],
+    mealType: args.mealType,
+  };
+}
+
+function shouldGuardAssistantResolution(intent: FoodResolutionIntent) {
+  return Boolean(
+    intent.restaurant
+    || intent.brand
+    || detectProductFamilies(`${intent.rawText} ${intent.searchText}`).length,
+  );
+}
+
+function validateAssistantNutritionResponse(args: {
+  item: MealAssistantItem;
+  lookupText: string;
+  mealType: MealAssistantState['mealType'];
+  message: string;
+  response: ParsedMealResponse;
+}) {
+  const intent = buildAssistantFoodResolutionIntent(args);
+  if (!shouldGuardAssistantResolution(intent)) {
+    return null;
+  }
+
+  const provider = args.response.items[0]?.provider_used ?? 'assistant-nutrition-resolver';
+  const candidates = parsedMealResponseToFoodCandidates(args.response, provider);
+  return resolveFoodCandidates({
+    intent,
+    candidates,
+    selectedCandidateId: candidates[0]?.candidateId ?? null,
+    providersSearched: [provider],
+    normalizedQuery: intent.searchText,
+    aiUsed: true,
+    aiRole: 'parser',
+  });
+}
+
+function buildFoodResolutionClarification(resolution: FoodResolutionResult) {
+  if (resolution.rejectionReasons.some((reason) => reason.includes('product') || reason.includes('family'))) {
+    return 'I could not verify that exact item. Which exact food should I use, or would you like to enter calories/macros manually?';
+  }
+
+  if (resolution.rejectionReasons.some((reason) => reason.includes('restaurant') || reason.includes('brand'))) {
+    return 'I found a possible match, but the restaurant or brand did not line up. Which exact item should I use?';
+  }
+
+  return 'I need one more detail before I can show a safe review card. Which exact item and serving should I use?';
+}
 
 async function resolveAssistantItemsWithClarification(
   items: MealAssistantItem[],
@@ -8468,6 +8785,7 @@ async function resolveAssistantItemsWithClarification(
   message = '',
 ): Promise<ResolveAssistantItemsResult> {
   const resolved: ParsedFoodItem[] = [];
+  let lastFoodResolution: FoodResolutionResult | null = null;
   const safeItems = isNonFoodDialogueMessage(message)
     ? []
     : items.filter((item) => !isUnsafeLookupItem(item, message));
@@ -8482,6 +8800,7 @@ async function resolveAssistantItemsWithClarification(
         resolvedItems: trustedMessageResponse.items,
       }),
       clarificationQuestion: null,
+      foodResolution: null,
     };
   }
 
@@ -8495,11 +8814,46 @@ async function resolveAssistantItemsWithClarification(
       return {
         items: [],
         clarificationQuestion: response.clarifying_question ?? 'Which exact item and serving size should I use?',
+        foodResolution: null,
       };
     }
 
     if (response?.items.length) {
-      resolved.push(...response.items.map((resolvedItem) => repairResolvedNutritionItem(item, resolvedItem)));
+      const chipotleAggregate = detectChipotleBowlEstimate(message);
+      const shouldUseChipotleAggregate = Boolean(
+        chipotleAggregate
+        && /\bchipotle\b/i.test(`${message} ${lookupText}`)
+        && response.items.length > 1
+        && response.items.every((resolvedItem) => /\bchipotle\b/i.test(`${resolvedItem.food_name} ${resolvedItem.source_name ?? ''}`)),
+      );
+      const responseForIdentity: ParsedMealResponse = shouldUseChipotleAggregate
+        ? {
+            ...response,
+            items: [chipotleAggregate as ParsedFoodItem],
+          }
+        : response;
+      const foodResolution = validateAssistantNutritionResponse({
+        item,
+        lookupText,
+        mealType,
+        message,
+        response: responseForIdentity,
+      });
+
+      if (foodResolution) {
+        lastFoodResolution = foodResolution;
+        if (foodResolution.status !== 'resolved') {
+          return {
+            items: [],
+            clarificationQuestion: buildFoodResolutionClarification(foodResolution),
+            foodResolution,
+          };
+        }
+      }
+
+      resolved.push(...(shouldUseChipotleAggregate && chipotleAggregate
+        ? [chipotleAggregate]
+        : response.items.map((resolvedItem) => repairResolvedNutritionItem(item, resolvedItem))));
     }
   }
 
@@ -8509,6 +8863,7 @@ async function resolveAssistantItemsWithClarification(
       resolvedItems: resolved,
     }),
     clarificationQuestion: null,
+    foodResolution: lastFoodResolution,
   };
 }
 
@@ -8763,7 +9118,49 @@ export async function runMealAssistant(
       }
     : input;
   const state = { ...workingInput.state };
+  const parsedLogIntent = parseLogMealIntent(workingInput.message, state);
+  const startsStandaloneMeal = parsedLogIntent.action === 'new_meal'
+    && shouldTreatAsStandaloneNewMeal(workingInput.message, state);
   const shouldUseModelIntentFirst = Boolean(process.env.OPENAI_API_KEY) && !dependencies.classify;
+
+  if (parsedLogIntent.action === 'save_confirm' && state.currentMealItems.length && !state.saved) {
+    await saveMeal({ state, items: state.currentMealItems });
+    return finalizeResponse(buildDirectResponse({
+      intent: 'save_meal',
+      assistantReply: 'Saved. That meal is logged.',
+      nextState: {
+        ...state,
+        saved: true,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+      },
+      message: workingInput.message,
+      shouldSaveMeal: true,
+    }), workingInput, context);
+  }
+
+  if (
+    (parsedLogIntent.action === 'ask_macros' || parsedLogIntent.action === 'ask_calories')
+    && state.currentMealItems.length
+    && !nutritionQuestionNamesSpecificFood(workingInput.message)
+  ) {
+    const totals = sumTotals(state.currentMealItems);
+    const assistantReply = parsedLogIntent.action === 'ask_calories'
+      ? `That pending meal is about ${Math.round(totals.calories)} calories.`
+      : `That pending meal is about ${Math.round(totals.calories)} calories, ${Math.round(totals.protein)}g protein, ${Math.round(totals.carbs)}g carbs, and ${Math.round(totals.fat)}g fat.`;
+
+    return finalizeResponse(buildDirectResponse({
+      intent: 'macro_question',
+      assistantReply,
+      nextState: {
+        ...state,
+        currentMealItems: [...state.currentMealItems],
+        saved: false,
+      },
+      message: workingInput.message,
+      activeQuestion: workingInput.message,
+    }), workingInput, context);
+  }
 
   if (state.pendingClarification && isClarificationMetaQuestion(workingInput.message)) {
     return finalizeResponse(buildDirectResponse({
@@ -8806,6 +9203,57 @@ export async function runMealAssistant(
         state,
         items: hydratedItems,
         intent: 'clarification_answer',
+        followUpMessage: mixedIntent.followUpMessage,
+        context,
+      }), workingInput, context);
+    }
+  }
+
+  if (
+    parsedLogIntent.items.length > 1
+    && parsedLogIntent.action === 'new_meal'
+    && !state.currentMealItems.length
+    && !state.pendingClarification
+    && !parsedLogIntent.restaurant
+    && !buildInitialClarificationQuestion(workingInput.message)
+    && detectKnownFoodEstimatesWithTrustedRestaurantFallback(workingInput.message, state.mealType).length < parsedLogIntent.items.length
+  ) {
+    const structuredItems: MealAssistantItem[] = parsedLogIntent.items.map((item) => ({
+      name: item.name,
+      brand: parsedLogIntent.brand,
+      quantity: item.quantity,
+      unit: item.unit,
+      modifiers: item.modifiers,
+      action: 'replace',
+    }));
+    const resolved = await resolveAssistantItemsWithClarification(
+      structuredItems,
+      parsedLogIntent.mealType ?? state.mealType,
+      resolveItemNutrition,
+      workingInput.message,
+    );
+
+    if (resolved.clarificationQuestion) {
+      return finalizeResponse(buildDirectResponse({
+        intent: 'new_food_item',
+        assistantReply: resolved.clarificationQuestion,
+        nextState: {
+          ...state,
+          pendingClarification: resolved.clarificationQuestion,
+          lastAssistantQuestion: resolved.clarificationQuestion,
+          saved: false,
+        },
+        message: workingInput.message,
+        activeQuestion: resolved.clarificationQuestion,
+      }), workingInput, context);
+    }
+
+    if (resolved.items.length) {
+      return finalizeResponse(buildDirectFoodEstimateResponse({
+        input: workingInput,
+        state,
+        items: resolved.items,
+        intent: 'new_food_item',
         followUpMessage: mixedIntent.followUpMessage,
         context,
       }), workingInput, context);
@@ -8921,7 +9369,11 @@ export async function runMealAssistant(
       }), workingInput, context);
     }
 
-    if (!hasAffirmativeSaveCommand(workingInput.message) && !correctionCueRegex.test(workingInput.message) && shouldAppendToCurrentMeal(workingInput.message, state)) {
+    if (
+      parsedLogIntent.action === 'add_item'
+      && !hasAffirmativeSaveCommand(workingInput.message)
+      && !correctionCueRegex.test(workingInput.message)
+    ) {
       const appendItems = detectKnownFoodEstimatesWithTrustedRestaurantFallback(workingInput.message, state.mealType);
       if (appendItems.length) {
         const hydratedItems = await hydrateKnownEstimatesWithProviders(appendItems, state.mealType);
@@ -8948,7 +9400,7 @@ export async function runMealAssistant(
       && (
         !state.currentMealItems.length
         || state.saved
-        || continuationRegex.test(stripEmotionalPreface(workingInput.message).toLowerCase())
+        || parsedLogIntent.action === 'add_item'
         || Boolean(extractMealTypeHint(workingInput.message))
       );
     const directKnownItems = canUseDirectKnownFood ? detectKnownFoodEstimatesWithTrustedRestaurantFallback(workingInput.message, state.mealType) : [];
@@ -9158,6 +9610,22 @@ export async function runMealAssistant(
   });
   decision = normalizeAssistantDecision(decision, workingInput);
   decision = guardAssistantDecision(decision, workingInput);
+
+  // Guard against the model "editing" the current pending meal when the user is clearly starting a new one.
+  if (!state.pendingClarification && startsStandaloneMeal) {
+    if (decision.intent === 'add_to_current_meal' || decision.intent === 'correction' || decision.intent === 'quantity_change' || decision.intent === 'remove_item') {
+      decision = {
+        ...decision,
+        intent: 'new_food_item',
+        action: 'add_food',
+        operations: undefined,
+        target_item: null,
+        target_item_id: null,
+        target_item_index: null,
+        should_mutate_pending_meal: true,
+      };
+    }
+  }
   if (state.pendingClarification && decision.intent === 'new_food_item' && decision.should_lookup_nutrition) {
     decision = {
       ...decision,
@@ -9196,11 +9664,16 @@ export async function runMealAssistant(
     && (decision.should_ask_clarification || !decision.items.length || !decision.should_lookup_nutrition)
   ) {
     const hydratedItems = await hydrateKnownEstimatesWithProviders(classifiedKnownItems, state.mealType);
+    const knownItemIntent = parsedLogIntent.action === 'add_item'
+      || decision.intent === 'add_to_current_meal'
+      || shouldAppendToCurrentMeal(workingInput.message, state)
+      ? 'add_to_current_meal'
+      : 'new_food_item';
     return finalizeResponse(buildDirectFoodEstimateResponse({
       input: workingInput,
       state,
       items: hydratedItems,
-      intent: state.currentMealItems.length && !state.saved ? 'add_to_current_meal' : 'new_food_item',
+      intent: knownItemIntent,
       followUpMessage: mixedIntent.followUpMessage,
       context,
     }), workingInput, context);

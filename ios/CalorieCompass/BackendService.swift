@@ -11,6 +11,7 @@ struct MealAssistantTranscriptMessage: Codable, Equatable {
 }
 
 struct MealAssistantState: Codable, Equatable {
+    var pendingMeal: PendingMeal? = nil
     var currentMealItems: [MealRequestItem] = []
     var pendingClarification: String? = nil
     var lastAssistantQuestion: String? = nil
@@ -28,6 +29,28 @@ struct MealAssistantState: Codable, Equatable {
     var activeQuestion: String? = nil
     var previousIntent: String? = nil
     var previousUserMessage: String? = nil
+}
+
+struct PendingMealSourceSummary: Codable, Equatable {
+    var sourceTypes: [String]
+    var sourceNames: [String]
+    var trustedItemCount: Int
+    var estimatedItemCount: Int
+}
+
+struct PendingMeal: Codable, Equatable {
+    var id: String
+    var version: Int
+    var items: [MealRequestItem]
+    var totals: MealAssistantTotals
+    var aggregateConfidence: Double
+    var sourceSummary: PendingMealSourceSummary
+    var mealType: String
+    var status: String
+    var clarification: String?
+    var createdAt: String
+    var updatedAt: String
+    var lastResolvedAt: String
 }
 
 struct MealAssistantContext: Codable, Equatable {
@@ -80,6 +103,26 @@ struct MealAssistantMeal: Codable, Equatable {
     let confidence_score: Double
 }
 
+struct FoodResolutionProvenance: Codable, Equatable {
+    let provider: String?
+    let source: String?
+    let sourceName: String?
+    let sourceTrust: String?
+    let verified: Bool?
+    let estimated: Bool?
+}
+
+struct FoodResolutionSummary: Codable, Equatable {
+    let status: String
+    let normalizedQuery: String?
+    let confidence: String?
+    let sourceTrust: String?
+    let rejectionReasons: [String]?
+    let provenance: FoodResolutionProvenance?
+    let aiUsed: Bool?
+    let aiRole: String?
+}
+
 struct MealAssistantResponse: Codable {
     let assistant_reply: String
     let meal: MealAssistantMeal
@@ -87,6 +130,7 @@ struct MealAssistantResponse: Codable {
     let intent: String?
     let should_save_meal: Bool?
     let clarification_question: String?
+    let food_resolution: FoodResolutionSummary?
 
     enum CodingKeys: String, CodingKey {
         case assistant_reply
@@ -95,6 +139,7 @@ struct MealAssistantResponse: Codable {
         case intent
         case should_save_meal
         case clarification_question
+        case food_resolution
     }
 
     init(from decoder: Decoder) throws {
@@ -105,12 +150,16 @@ struct MealAssistantResponse: Codable {
         intent = try container.decodeIfPresent(String.self, forKey: .intent)
         should_save_meal = try container.decodeIfPresent(Bool.self, forKey: .should_save_meal)
         clarification_question = try container.decodeIfPresent(String.self, forKey: .clarification_question)
+        food_resolution = try container.decodeIfPresent(FoodResolutionSummary.self, forKey: .food_resolution)
     }
 }
 
 struct MealRequestItem: Codable, Equatable, Identifiable {
     var id: String { food_name + unit + String(quantity) }
     var food_name: String
+    var display_name: String?
+    var canonical_name: String?
+    var source_food_name: String?
     var quantity: Double
     var unit: String
     var calories: Double
@@ -129,6 +178,9 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
 
     init(
         food_name: String,
+        display_name: String? = nil,
+        canonical_name: String? = nil,
+        source_food_name: String? = nil,
         quantity: Double,
         unit: String,
         calories: Double,
@@ -146,6 +198,9 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         catalog_food_id: String? = nil
     ) {
         self.food_name = food_name
+        self.display_name = display_name
+        self.canonical_name = canonical_name
+        self.source_food_name = source_food_name
         self.quantity = quantity
         self.unit = unit
         self.calories = calories
@@ -165,6 +220,9 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case food_name
+        case display_name
+        case canonical_name
+        case source_food_name
         case quantity
         case unit
         case calories
@@ -185,6 +243,9 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         food_name = try container.decodeIfPresent(String.self, forKey: .food_name) ?? "Food item"
+        display_name = try container.decodeIfPresent(String.self, forKey: .display_name)
+        canonical_name = try container.decodeIfPresent(String.self, forKey: .canonical_name)
+        source_food_name = try container.decodeIfPresent(String.self, forKey: .source_food_name)
         quantity = try container.decodeIfPresent(Double.self, forKey: .quantity) ?? 1
         unit = try container.decodeIfPresent(String.self, forKey: .unit) ?? "serving"
         calories = try container.decodeIfPresent(Double.self, forKey: .calories) ?? 0
@@ -344,10 +405,10 @@ struct MealAssistantClientLogic {
     static func quantityResolution(for message: String, items: [MealRequestItem]) -> MealAssistantQuantityResolution? {
         let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
-        let looksLikeQuantityEdit = normalized.contains("make") || normalized.contains("double") || normalized.contains("half") || normalized.contains("large") || normalized.contains("ounces") || normalized.contains("oz")
+        let messageTokens = significantTokens(in: normalized)
+        let looksLikeQuantityEdit = ["make", "double", "half", "large", "ounce", "oz"].contains { messageTokens.contains($0) }
         guard looksLikeQuantityEdit else { return nil }
 
-        let messageTokens = significantTokens(in: normalized)
         let namedMatches = items.filter { !messageTokens.isDisjoint(with: significantTokens(in: $0.food_name)) }
         if let match = namedMatches.first {
             return .target(foodName: match.food_name)
@@ -376,12 +437,116 @@ struct MealAssistantClientLogic {
         return nil
     }
 
+    static func conciseReply(rawReply: String, items: [MealRequestItem], nextState: MealAssistantState, intent: String? = nil) -> String {
+        // If there's a reviewable pending meal, prefer a compact, non-chatbotty line.
+        guard !items.isEmpty, nextState.saved == false else {
+            return rawReply
+        }
+        if let intent {
+            let reviewCopyIntents = ["new_food_item", "add_to_current_meal", "repeat_meal", "clarification_answer"]
+            guard reviewCopyIntents.contains(intent) else {
+                return rawReply
+            }
+        }
+
+        let titles = items.prefix(2).map { item in
+            item.food_name.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+
+        if titles.count == 1 {
+            return "Found \(titles[0]). Review before saving."
+        }
+
+        if titles.count == 2 {
+            return "Found \(titles[0]) + \(titles[1]). Review before saving."
+        }
+
+        return "Meal ready to review."
+    }
+
     static func shouldPreserveActiveMeal(currentItems: [MealRequestItem], responseItems: [MealRequestItem], responseSaved: Bool, incomingUserMessage: String) -> Bool {
-        !currentItems.isEmpty && responseItems.isEmpty && !responseSaved && !looksLikeReplacementClarification(incomingUserMessage, currentItems: currentItems)
+        guard !currentItems.isEmpty && responseItems.isEmpty && !responseSaved else { return false }
+        if looksLikeReplacementClarification(incomingUserMessage, currentItems: currentItems) { return false }
+        if looksLikeStandaloneFoodEntry(incomingUserMessage, currentItems: currentItems) { return false }
+        return true
+    }
+
+    static func resolvedReviewItems(
+        currentItems: [MealRequestItem],
+        response: MealAssistantResponse,
+        incomingUserMessage: String
+    ) -> [MealRequestItem] {
+        resolvedReviewItems(
+            currentItems: currentItems,
+            pendingMeal: response.next_state.pendingMeal,
+            foodResolutionStatus: response.food_resolution?.status,
+            nextStateItems: response.next_state.currentMealItems,
+            responseItems: response.meal.items,
+            responseSaved: response.next_state.saved,
+            incomingUserMessage: incomingUserMessage
+        )
+    }
+
+    static func resolvedReviewItems(
+        currentItems: [MealRequestItem],
+        pendingMeal: PendingMeal? = nil,
+        foodResolutionStatus: String? = nil,
+        nextStateItems: [MealRequestItem],
+        responseItems: [MealRequestItem],
+        responseSaved: Bool,
+        incomingUserMessage: String
+    ) -> [MealRequestItem] {
+        if responseSaved {
+            return []
+        }
+
+        let normalizedResolutionStatus = foodResolutionStatus?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if ["needs_clarification", "needs_manual_entry", "unsupported"].contains(normalizedResolutionStatus ?? "") {
+            return []
+        }
+
+        if let pendingMeal,
+           !["saved", "cancelled"].contains(pendingMeal.status.lowercased()),
+           !pendingMeal.items.isEmpty {
+            return pendingMeal.items
+        }
+
+        if !nextStateItems.isEmpty {
+            return nextStateItems
+        }
+
+        if shouldPreserveActiveMeal(
+            currentItems: currentItems,
+            responseItems: responseItems,
+            responseSaved: responseSaved,
+            incomingUserMessage: incomingUserMessage
+        ) {
+            return currentItems
+        }
+
+        return []
     }
 
     static func canAttemptSave(items: [MealRequestItem], isSaving: Bool) -> Bool {
         !isSaving && !items.isEmpty
+    }
+
+    static func pendingMealSaveIdempotencyKey(state: MealAssistantState, items: [MealRequestItem]? = nil) -> String? {
+        guard let pendingMeal = state.pendingMeal else { return nil }
+        let terminalStatuses = ["saved", "cancelled"]
+        guard !terminalStatuses.contains(pendingMeal.status.lowercased()) else { return nil }
+        let base = "\(pendingMeal.id):v\(pendingMeal.version)"
+        guard let items, !items.isEmpty else { return base }
+        return "\(base):\(stableHash(saveSignature(for: items)))"
+    }
+
+    private static func stableHash(_ value: String) -> String {
+        var hash: UInt64 = 14695981039346656037
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1099511628211
+        }
+        return String(hash, radix: 16)
     }
 
     static func removingItems(matching target: String, from items: [MealRequestItem]) -> [MealRequestItem] {
@@ -415,6 +580,8 @@ struct MealAssistantClientLogic {
         let hasReplacementCue = normalized.hasPrefix("actually") ||
             normalized.hasPrefix("no ") ||
             normalized.hasPrefix("nah ") ||
+            normalized.contains("replace") ||
+            normalized.contains("swap") ||
             normalized.contains("meant") ||
             normalized.contains("instead") ||
             normalized.contains("change it") ||
@@ -433,12 +600,49 @@ struct MealAssistantClientLogic {
 
         return !messageTokens.isSubset(of: currentTokens)
     }
+
+    private static func looksLikeStandaloneFoodEntry(_ message: String, currentItems: [MealRequestItem]) -> Bool {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        if detectLocalCommand(normalized, hasActiveMeal: true) != nil { return false }
+        if quantityResolution(for: normalized, items: currentItems) != nil { return false }
+        if normalized.hasPrefix("and ") || normalized.hasPrefix("also ") || normalized.hasPrefix("add ") || normalized.contains(" add ") {
+            return false
+        }
+
+        let questionCues = ["?", "how many", "how much", "what are", "what is", "what's", "where are", "where's", "total"]
+        let nutritionCues = ["macro", "macros", "calorie", "calories", "protein", "carb", "carbs", "fat"]
+        if questionCues.contains(where: { normalized.contains($0) }) &&
+            nutritionCues.contains(where: { normalized.contains($0) }) {
+            return false
+        }
+
+        let ignored: Set<String> = ["i", "ate", "had", "logged", "log", "please", "for", "my", "meal", "lunch", "dinner", "breakfast", "snack", "no", "without", "hold"]
+        let messageTokens = significantTokens(in: normalized).subtracting(ignored)
+        guard !messageTokens.isEmpty else { return false }
+
+        let currentTokens = currentItems.reduce(into: Set<String>()) { partialResult, item in
+            partialResult.formUnion(significantTokens(in: item.food_name))
+        }
+        if !messageTokens.isDisjoint(with: currentTokens) { return false }
+
+        let foodCueTokens: Set<String> = [
+            "apple", "banana", "bar", "baconator", "bagel", "bowl", "burger", "burrito", "cereal",
+            "chicken", "chip", "chips", "coke", "egg", "eggs", "fairlife", "fries", "mcdouble",
+            "mcchicken", "oatmeal", "pasta", "pizza", "rice", "salad", "sandwich", "shake",
+            "skittle", "snicker", "taco", "tacos", "yogurt"
+        ]
+        let foodCuePhrases = ["big mac", "coke zero", "core power", "greek yogurt", "protein bar", "protein shake"]
+        return !messageTokens.isDisjoint(with: foodCueTokens) || foodCuePhrases.contains(where: { normalized.contains($0) })
+    }
 }
 
 struct PostMealRequest: Codable, Equatable {
     var meal_type: String
     var confidence_score: Double
     var raw_text: String?
+    var idempotency_key: String? = nil
     var source_reusable_meal_id: String? = nil
     var notes: String?
     var date: String?

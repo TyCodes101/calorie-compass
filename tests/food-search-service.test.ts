@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ParsedMealResponse } from '@/lib/ai/types';
 import {
+  buildFoodSearchSelectedResultCacheKey,
   buildFoodSearchResponse,
   resetFoodSearchCaches,
   type FoodSearchAiClient,
@@ -93,7 +94,7 @@ describe('LLM-assisted food search service', () => {
     expect(response.usedResolver).toBe(false);
     expect(response.results[0]).toMatchObject({
       name: 'Large egg',
-      sourceLabel: 'USDA verified',
+      sourceLabel: 'Generic reference',
       estimated: false,
       needsReview: false,
     });
@@ -243,6 +244,188 @@ describe('LLM-assisted food search service', () => {
     expect(second.cache.rankingHit).toBe(true);
   });
 
+  it('namespaces selected-result cache keys by identity and catalog context', () => {
+    const wendysBaconatorKey = buildFoodSearchSelectedResultCacheKey("Wendy's Baconator");
+    const plainBaconatorKey = buildFoodSearchSelectedResultCacheKey('Baconator');
+    const mcdoubleKey = buildFoodSearchSelectedResultCacheKey("McDonald's McDouble no cheese");
+
+    expect(wendysBaconatorKey).toContain('restaurant=wendys');
+    expect(wendysBaconatorKey).toContain('brand=wendys');
+    expect(wendysBaconatorKey).toContain('family=wendys_baconator');
+    expect(wendysBaconatorKey).toContain('catalog=');
+    expect(mcdoubleKey).toContain('family=mcdonalds_mcdouble');
+    expect(plainBaconatorKey).not.toBe(wendysBaconatorKey);
+    expect(mcdoubleKey).not.toBe(wendysBaconatorKey);
+  });
+
+  it('does not cache estimated fallbacks as selected source-backed results', async () => {
+    const resolveQuery = vi.fn(async () => resolverOutput({
+      normalizedQuery: 'homemade chicken pasta',
+      category: 'homemade',
+      confidence: 0.72,
+    }));
+    const options = {
+      ai: { resolveQuery },
+      providers: [{
+        id: 'empty-provider',
+        lookup: vi.fn(async () => null),
+      }],
+      catalogFoods: [],
+    };
+
+    const first = await buildFoodSearchResponse(
+      { query: 'homemade chicken pasta', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      options,
+    );
+    const second = await buildFoodSearchResponse(
+      { query: 'homemade chicken pasta', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      options,
+    );
+
+    expect(first.results[0]).toMatchObject({
+      sourceLabel: 'Estimated',
+      estimated: true,
+      needsReview: true,
+    });
+    expect(first.cache.selectedResultHit).toBe(false);
+    expect(second.cache.selectedResultHit).toBe(false);
+  });
+
+  it('enforces restaurant/product anchor tokens so Baconator cannot rank to an unrelated Wendy\'s item', async () => {
+    const resolveQuery = vi.fn(async () => resolverOutput({
+      normalizedQuery: "Wendy's Baconator",
+      aliases: ['wendys baconator'],
+      brandIntent: null,
+      restaurantIntent: "Wendy's",
+      category: 'restaurant',
+      confidence: 0.92,
+    }));
+
+    // Simulate a buggy ranker that would have picked the wrong candidate.
+    const rankCandidates = vi.fn(async (input: FoodSearchRankingInput) => ({
+      orderedCandidateIds: input.candidates.map((candidate) => candidate.id).reverse(),
+      bestCandidateId: input.candidates.at(-1)?.id ?? null,
+      confidence: 0.8,
+      reason: 'picked the wrong thing',
+      shouldAskClarification: false,
+      clarificationQuestion: null,
+    }));
+
+    const wendysChicken: NutritionLookupProvider = {
+      id: 'wendys-chicken',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: "Wendy's Spicy Chicken Sandwich",
+        calories: 490,
+        protein: 28,
+        carbs: 45,
+        fat: 19,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "Wendy's official nutrition",
+        provider_used: 'wendys-chicken',
+      }), 0.9)),
+    };
+
+    const wendysBaconator: NutritionLookupProvider = {
+      id: 'wendys-baconator',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: "Wendy's Baconator",
+        calories: 960,
+        protein: 57,
+        carbs: 40,
+        fat: 62,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "Wendy's official nutrition",
+        provider_used: 'wendys-baconator',
+      }), 0.92)),
+    };
+
+    const response = await buildFoodSearchResponse(
+      { query: 'wendys baconator', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { ai: { resolveQuery, rankCandidates }, providers: [wendysChicken, wendysBaconator], catalogFoods: [] },
+    );
+
+    expect(resolveQuery).toHaveBeenCalledTimes(1);
+    expect(response.clarificationQuestion).toBeNull();
+    expect(response.results[0]?.name.toLowerCase()).toContain('baconator');
+    expect(response.results[0]?.calories).toBeGreaterThan(700);
+  });
+
+  it('clarifies when the only restaurant candidate conflicts with the named product', async () => {
+    const resolveQuery = vi.fn(async () => resolverOutput({
+      normalizedQuery: "Wendy's Baconator",
+      aliases: ['wendys baconator'],
+      restaurantIntent: "Wendy's",
+      category: 'restaurant',
+      confidence: 0.92,
+    }));
+    const wendysChicken: NutritionLookupProvider = {
+      id: 'wendys-chicken-only',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: "Wendy's Spicy Chicken Sandwich",
+        calories: 490,
+        protein: 28,
+        carbs: 45,
+        fat: 19,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "Wendy's official nutrition",
+        provider_used: 'wendys-chicken-only',
+      }), 0.9)),
+    };
+
+    const response = await buildFoodSearchResponse(
+      { query: 'wendys baconator', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { ai: { resolveQuery }, providers: [wendysChicken], catalogFoods: [] },
+    );
+
+    expect(response.clarificationQuestion).toMatch(/wendy|baconator|specific menu item/i);
+    expect(response.results.map((result) => result.name).join(' ')).not.toMatch(/spicy chicken/i);
+  });
+
+  it('enforces anchor tokens so McDouble cannot resolve to McChicken', async () => {
+    const resolveQuery = vi.fn(async () => resolverOutput({
+      normalizedQuery: 'McDouble no cheese',
+      aliases: ['mcdonalds mcdouble no cheese'],
+      restaurantIntent: "McDonald's",
+      category: 'restaurant',
+      confidence: 0.9,
+    }));
+
+    const mcdoubleProvider: NutritionLookupProvider = {
+      id: 'mcdouble',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: 'McDouble (no cheese)',
+        calories: 360,
+        protein: 22,
+        carbs: 33,
+        fat: 16,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "McDonald's official nutrition",
+        provider_used: 'mcdouble',
+      }), 0.92)),
+    };
+
+    const mcchickenProvider: NutritionLookupProvider = {
+      id: 'mcchicken',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: 'McChicken',
+        calories: 400,
+        protein: 14,
+        carbs: 40,
+        fat: 21,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "McDonald's official nutrition",
+        provider_used: 'mcchicken',
+      }), 0.93)),
+    };
+
+    const response = await buildFoodSearchResponse(
+      { query: 'mcdouble no cheese', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { ai: { resolveQuery }, providers: [mcchickenProvider, mcdoubleProvider], catalogFoods: [] },
+    );
+
+    expect(response.results[0]?.name.toLowerCase()).toContain('mcdouble');
+  });
+
   it('lets ranking reorder candidates but never alter provider nutrition', async () => {
     const provider = (id: string, name: string, calories: number): NutritionLookupProvider => ({
       id,
@@ -255,14 +438,20 @@ describe('LLM-assisted food search service', () => {
         provider_used: id,
       }), 0.88)),
     });
-    const rankCandidates = vi.fn(async (input) => ({
-      orderedCandidateIds: [input.candidates[1]?.id, input.candidates[0]?.id].filter(Boolean) as string[],
-      bestCandidateId: input.candidates[1]?.id ?? null,
-      confidence: 0.91,
-      reason: 'Restaurant intent matched the McDonald candidate.',
-      shouldAskClarification: false,
-      clarificationQuestion: null,
-    }));
+    const rankCandidates = vi.fn(async (input) => {
+      const restaurant = input.candidates.find((candidate) => candidate.source === 'Restaurant verified');
+      return {
+        orderedCandidateIds: [
+          restaurant?.id,
+          ...input.candidates.filter((candidate) => candidate.id !== restaurant?.id).map((candidate) => candidate.id),
+        ].filter(Boolean) as string[],
+        bestCandidateId: restaurant?.id ?? null,
+        confidence: 0.91,
+        reason: 'Restaurant intent matched the McDonald candidate.',
+        shouldAskClarification: false,
+        clarificationQuestion: null,
+      };
+    });
 
     const response = await buildFoodSearchResponse(
       { query: 'big mac meal', customFoods: [], favoriteMeals: [], recentMeals: [] },
@@ -276,7 +465,7 @@ describe('LLM-assisted food search service', () => {
           })),
           rankCandidates,
         },
-        providers: [provider('usda', 'Burger meal', 780), provider('restaurant', 'Big Mac Meal', 1120)],
+        providers: [provider('usda', 'Big Mac Meal generic reference', 780), provider('restaurant', 'Big Mac Meal', 1120)],
         catalogFoods: [],
       },
     );

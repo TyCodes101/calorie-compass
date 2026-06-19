@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { assistantMemorySchema } from '@/lib/assistant-memory';
+import { pendingMealSchema } from '@/lib/ai/pendingMeal';
 import { parsedFoodItemSchema } from '@/lib/ai/types';
 
 export const mealAssistantIntentSchema = z.enum([
@@ -98,6 +99,7 @@ export const mealAssistantModelOutputSchema = z.object({
 export const mealAssistantMealTypeSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
 
 export const mealAssistantStateSchema = z.object({
+  pendingMeal: pendingMealSchema.nullable().optional(),
   currentMealItems: z.array(parsedFoodItemSchema).default([]),
   pendingClarification: z.string().nullable().default(null),
   lastAssistantQuestion: z.string().nullable().default(null),
@@ -166,6 +168,24 @@ const nutritionTotalsSchema = z.object({
   sodium: z.number().nonnegative(),
 });
 
+export const mealAssistantFoodResolutionSchema = z.object({
+  status: z.enum(['resolved', 'needs_clarification', 'needs_manual_entry', 'unsupported']),
+  normalizedQuery: z.string().default(''),
+  confidence: z.enum(['high', 'medium', 'low']),
+  sourceTrust: z.string().nullable(),
+  rejectionReasons: z.array(z.string()).default([]),
+  provenance: z.object({
+    provider: z.string(),
+    source: z.string(),
+    sourceName: z.string().nullable(),
+    sourceTrust: z.string(),
+    verified: z.boolean(),
+    estimated: z.boolean(),
+  }).nullable().optional(),
+  aiUsed: z.boolean().default(false),
+  aiRole: z.enum(['none', 'parser', 'reranker', 'estimator', 'clarification']).default('none'),
+}).passthrough();
+
 export const mealAssistantResponseSchema = mealAssistantModelOutputSchema.extend({
   meal: z.object({
     items: z.array(parsedFoodItemSchema),
@@ -173,6 +193,7 @@ export const mealAssistantResponseSchema = mealAssistantModelOutputSchema.extend
     confidence_score: z.number().min(0).max(1),
   }),
   next_state: mealAssistantStateSchema,
+  food_resolution: mealAssistantFoodResolutionSchema.optional(),
 });
 
 export type MealAssistantIntent = z.infer<typeof mealAssistantIntentSchema>;

@@ -11,7 +11,13 @@ import {
   scaleCatalogFood,
   type CatalogFoodRecord,
 } from '@/lib/nutrition/catalog';
+import {
+  chooseIdentityCandidate,
+  type FoodIdentityCandidate,
+  type FoodIdentitySourceTrust,
+} from '@/lib/nutrition/identity';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
+import { inferProductFamilyId } from '@/lib/nutrition/productFamilies';
 import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
 import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
 import { usdaProvider } from '@/lib/nutrition/providers/usda';
@@ -21,6 +27,8 @@ export type FoodSearchSourceLabel =
   | 'Brand verified'
   | 'Restaurant verified'
   | 'USDA verified'
+  | 'Generic reference'
+  | 'Database match'
   | 'Custom'
   | 'Recent'
   | 'Favorite'
@@ -137,17 +145,118 @@ type BuildFoodSearchResponseOptions = {
   catalogFoods?: SearchCatalogFood[];
 };
 
-const resolverCache = new Map<string, FoodSearchResolverOutput | null>();
-const rankingCache = new Map<string, FoodSearchRankingOutput | null>();
-const selectedResultCache = new Map<string, FoodSearchResult>();
+const FOOD_SEARCH_CACHE_VERSION = 'food-search-v2';
+const RESOLVER_CACHE_TTL_MS = 1000 * 60 * 15;
+const RANKING_CACHE_TTL_MS = 1000 * 60 * 15;
+const SELECTED_RESULT_CACHE_TTL_MS = 1000 * 60 * 5;
+
+type TimedCacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const resolverCache = new Map<string, TimedCacheEntry<FoodSearchResolverOutput | null>>();
+const rankingCache = new Map<string, TimedCacheEntry<FoodSearchRankingOutput | null>>();
+const selectedResultCache = new Map<string, TimedCacheEntry<FoodSearchResult>>();
+
+function getTimedCache<T>(cache: Map<string, TimedCacheEntry<T>>, key: string): { hit: boolean; value: T | null } {
+  const entry = cache.get(key);
+  if (!entry) return { hit: false, value: null };
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return { hit: false, value: null };
+  }
+  return { hit: true, value: entry.value };
+}
+
+function setTimedCache<T>(cache: Map<string, TimedCacheEntry<T>>, key: string, value: T, ttlMs: number) {
+  cache.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
 
 function normalizeSearchText(text: string) {
   return text
     .toLowerCase()
+    .replace(/\bbaconnator\b/g, 'baconator')
     .replace(/\bflaming\b/g, 'flamin')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function identitySourceTrust(candidate: FoodSearchResult): FoodIdentitySourceTrust {
+  if (candidate.estimated || candidate.sourceType === 'AI_ESTIMATE') return 'ai_estimate';
+  if (candidate.sourceType === 'OFFICIAL_RESTAURANT') return 'official_restaurant';
+  if (candidate.providerId?.includes('usda') && candidate.brand) return 'usda_branded';
+  if (candidate.providerId?.includes('usda')) return 'usda_generic';
+  if (candidate.sourceLabel === 'Brand verified') return 'curated_brand';
+  if (candidate.sourceLabel === 'Generic reference' || candidate.sourceLabel === 'Database match') return 'curated_generic';
+  if (candidate.sourceLabel === 'Custom') return 'manufacturer_label';
+  if (candidate.sourceLabel === 'Recent' || candidate.sourceLabel === 'Favorite') return 'curated_generic';
+  return candidate.brand ? 'commercial_verified' : 'curated_generic';
+}
+
+function enforceIntentAnchors(args: {
+  query: string;
+  resolver: FoodSearchResolverOutput | null;
+  candidates: FoodSearchResult[];
+}) {
+  // Only enforce when the user has a brand/restaurant-style query.
+  const shouldEnforce = Boolean(
+    args.resolver
+    && (args.resolver.category === 'restaurant' || args.resolver.category === 'branded' || args.resolver.brandIntent || args.resolver.restaurantIntent)
+    && args.resolver.confidence >= 0.55
+  );
+
+  if (!shouldEnforce || !args.candidates.length) return { candidates: args.candidates, forcedClarification: null as string | null };
+
+  const identityCandidates: FoodIdentityCandidate[] = args.candidates.map((candidate) => ({
+    id: candidate.id,
+    name: candidate.name,
+    restaurant: candidate.restaurant,
+    brand: candidate.brand,
+    modifiers: [],
+    servingUnit: candidate.servingUnit,
+    sourceTrust: identitySourceTrust(candidate),
+    personalHistoryBoost: candidate.sourceLabel === 'Recent' || candidate.sourceLabel === 'Favorite' ? 2 : 0,
+  }));
+  const choice = chooseIdentityCandidate(
+    {
+      text: args.query,
+      restaurant: args.resolver?.restaurantIntent,
+      brand: args.resolver?.brandIntent ?? args.resolver?.restaurantIntent,
+      modifiers: args.resolver?.modifiers ?? [],
+      servingUnit: args.resolver?.servingHint,
+    },
+    identityCandidates,
+  );
+  const byId = new Map(args.candidates.map((candidate) => [candidate.id, candidate]));
+  const eligible = choice.scoredCandidates
+    .map(({ candidate, identity }) => {
+      const result = byId.get(candidate.id);
+      if (!result) return null;
+      return {
+        ...result,
+        confidenceScore: Math.min(result.confidenceScore, identity.score / 100),
+        needsReview: result.needsReview || choice.confidence !== 'high',
+        reason: identity.reasons.join(', ') || result.reason,
+      };
+    })
+    .filter((candidate): candidate is FoodSearchResult => Boolean(candidate));
+
+  if (!eligible.length) {
+    const brand = args.resolver?.restaurantIntent ?? args.resolver?.brandIntent;
+    return {
+      candidates: eligible,
+      forcedClarification: brand
+        ? `Which specific ${brand} item do you mean?`
+        : 'Which specific menu item do you mean?',
+    };
+  }
+
+  return { candidates: eligible, forcedClarification: null };
 }
 
 const queryStopTokens = new Set([
@@ -169,7 +278,78 @@ const queryStopTokens = new Set([
 ]);
 
 function cacheKey(text: string) {
-  return normalizeSearchText(text);
+  return `${FOOD_SEARCH_CACHE_VERSION}:${normalizeSearchText(text)}`;
+}
+
+const cacheIdentityBrands = [
+  "wendy's",
+  'wendys',
+  "mcdonald's",
+  'mcdonalds',
+  'subway',
+  "arby's",
+  'arbys',
+  'chipotle',
+];
+
+function cacheIdentityToken(value: string | null | undefined) {
+  const normalized = normalizeSearchText(value ?? '');
+  if (!normalized) return 'none';
+  if (normalized === 'wendys' || normalized === 'wendy s') return 'wendys';
+  if (normalized === 'mcdonalds' || normalized === 'mcdonald s') return 'mcdonalds';
+  if (normalized === 'arbys' || normalized === 'arby s') return 'arbys';
+  return normalized;
+}
+
+function inferCacheBrand(text: string) {
+  const normalized = normalizeSearchText(text)
+    .replace(/\bwendy s\b/g, 'wendys')
+    .replace(/\bmcdonald s\b/g, 'mcdonalds')
+    .replace(/\barby s\b/g, 'arbys');
+  return cacheIdentityBrands.find((brand) => {
+    const candidate = cacheIdentityToken(brand);
+    return new RegExp(`(?:^| )${candidate}(?: |$)`).test(normalized);
+  }) ?? null;
+}
+
+function catalogCacheSignature() {
+  const versions = getCatalogFoods()
+    .map((food) => {
+      const metadata = food as SearchCatalogFood & { catalogVersion?: string | null };
+      return metadata.catalogVersion ?? 'unversioned';
+    })
+    .sort();
+
+  return `${versions.length}:${[...new Set(versions)].join(',')}`;
+}
+
+export function buildFoodSearchSelectedResultCacheKey(query: string) {
+  const brand = cacheIdentityToken(inferCacheBrand(query));
+  const productFamily = inferProductFamilyId(query) ?? 'none';
+
+  return [
+    cacheKey(query),
+    `restaurant=${brand}`,
+    `brand=${brand}`,
+    `family=${productFamily}`,
+    `catalog=${catalogCacheSignature()}`,
+  ].join('::');
+}
+
+function selectedResultCompatibleWithQuery(query: string, result: FoodSearchResult) {
+  const queryFamily = inferProductFamilyId(query);
+  const resultFamily = inferProductFamilyId(
+    result.name,
+    result.sourceName,
+    result.items.map((item) => `${item.food_name} ${item.display_name ?? ''} ${item.canonical_name ?? ''}`).join(' '),
+  );
+  if (queryFamily && resultFamily && queryFamily !== resultFamily) return false;
+
+  const queryBrand = cacheIdentityToken(inferCacheBrand(query));
+  const resultBrand = cacheIdentityToken(result.restaurant ?? result.brand);
+  if (queryBrand !== 'none' && resultBrand !== 'none' && queryBrand !== resultBrand) return false;
+
+  return true;
 }
 
 function tokens(text: string) {
@@ -256,9 +436,11 @@ function labelForTrustedItem(item: ParsedFoodItem, brand?: string | null): FoodS
 
   if (isEstimatedItem(item)) return 'Estimated';
   if (item.source_type === 'OFFICIAL_RESTAURANT') return 'Restaurant verified';
-  if (provider.includes('usda') || sourceName.includes('usda') || (!brand && sourceName.includes('generic'))) return 'USDA verified';
-  if (brand || item.source_type === 'GENERIC_REFERENCE' || sourceName) return 'Brand verified';
-  return 'USDA verified';
+  if (provider.includes('usda') || sourceName.includes('usda')) return 'USDA verified';
+  if (brand) return 'Brand verified';
+  if (item.source_type === 'GENERIC_REFERENCE' && sourceName.includes('generic')) return 'Generic reference';
+  if (item.source_type === 'GENERIC_REFERENCE') return sourceName ? 'Database match' : 'Generic reference';
+  return sourceName ? 'Database match' : 'Generic reference';
 }
 
 function labelForItems(defaultLabel: FoodSearchSourceLabel, items: ParsedFoodItem[]): FoodSearchSourceLabel {
@@ -521,10 +703,11 @@ async function defaultRankCandidates(input: FoodSearchRankingInput) {
 
 async function resolveWithCache(rawQuery: string, ai: FoodSearchAiClient | undefined, cache: FoodSearchCacheState) {
   const key = cacheKey(rawQuery);
-  if (resolverCache.has(key)) {
+  const cached = getTimedCache(resolverCache, key);
+  if (cached.hit) {
     cache.resolverHit = true;
     logFoodSearchDebug('resolver cache hit');
-    return resolverCache.get(key) ?? null;
+    return cached.value;
   }
 
   logFoodSearchDebug('resolver cache miss');
@@ -533,10 +716,10 @@ async function resolveWithCache(rawQuery: string, ai: FoodSearchAiClient | undef
     const output = await resolver({ rawQuery });
     const parsed = resolverOutputSchema.safeParse(output);
     const resolved = parsed.success ? parsed.data : null;
-    resolverCache.set(key, resolved);
+    setTimedCache(resolverCache, key, resolved, RESOLVER_CACHE_TTL_MS);
     return resolved;
   } catch {
-    resolverCache.set(key, null);
+    setTimedCache(resolverCache, key, null, RESOLVER_CACHE_TTL_MS);
     return null;
   }
 }
@@ -645,8 +828,8 @@ function needsRanking(query: string, resolver: FoodSearchResolverOutput | null, 
 }
 
 function rankingSignature(normalizedQuery: string, candidates: FoodSearchResult[]) {
-  return `${normalizeSearchText(normalizedQuery)}::${candidates
-    .map((candidate) => `${candidate.id}:${candidate.calories}:${candidate.protein}:${candidate.carbs}:${candidate.fat}`)
+  return `${FOOD_SEARCH_CACHE_VERSION}:${normalizeSearchText(normalizedQuery)}::${candidates
+    .map((candidate) => `${candidate.id}:${candidate.sourceLabel}:${candidate.sourceType ?? 'none'}:${candidate.calories}:${candidate.protein}:${candidate.carbs}:${candidate.fat}`)
     .sort()
     .join('|')}`;
 }
@@ -660,10 +843,11 @@ async function rankWithCache(
 ) {
   const normalizedQuery = resolver?.normalizedQuery ?? originalQuery;
   const key = rankingSignature(normalizedQuery, candidates);
-  if (rankingCache.has(key)) {
+  const cached = getTimedCache(rankingCache, key);
+  if (cached.hit) {
     cache.rankingHit = true;
     logFoodSearchDebug('ranking cache hit');
-    return rankingCache.get(key) ?? null;
+    return cached.value;
   }
 
   logFoodSearchDebug('ranking cache miss');
@@ -690,10 +874,10 @@ async function rankWithCache(
     const output = await ranker(input);
     const parsed = rankingOutputSchema.safeParse(output);
     const ranking = parsed.success ? parsed.data : null;
-    rankingCache.set(key, ranking);
+    setTimedCache(rankingCache, key, ranking, RANKING_CACHE_TTL_MS);
     return ranking;
   } catch {
-    rankingCache.set(key, null);
+    setTimedCache(rankingCache, key, null, RANKING_CACHE_TTL_MS);
     return null;
   }
 }
@@ -727,7 +911,8 @@ function canUseSelectedResultCache(result: FoodSearchResult) {
 
 function cacheSafeSelectedResult(query: string, results: FoodSearchResult[]) {
   if (results.length !== 1 || !canUseSelectedResultCache(results[0])) return;
-  selectedResultCache.set(cacheKey(query), results[0]);
+  if (!selectedResultCompatibleWithQuery(query, results[0])) return;
+  setTimedCache(selectedResultCache, buildFoodSearchSelectedResultCacheKey(query), results[0], SELECTED_RESULT_CACHE_TTL_MS);
 }
 
 function buildEstimatedFallback(query: string, resolver: FoodSearchResolverOutput | null): FoodSearchResult | null {
@@ -826,13 +1011,13 @@ export async function buildFoodSearchResponse(
     };
   }
 
-  const selectedResult = selectedResultCache.get(cacheKey(query));
-  if (selectedResult) {
+  const selectedResult = getTimedCache(selectedResultCache, buildFoodSearchSelectedResultCacheKey(query));
+  if (selectedResult.hit && selectedResult.value && selectedResultCompatibleWithQuery(query, selectedResult.value)) {
     cache.selectedResultHit = true;
     return {
       query,
       normalizedQuery: query,
-      results: [selectedResult],
+      results: [selectedResult.value],
       clarificationQuestion: null,
       usedResolver: false,
       usedRanking: false,
@@ -847,6 +1032,20 @@ export async function buildFoodSearchResponse(
   const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, commercialDatabaseProvider];
   const providerResults = await searchProviders(queries, providers, resolver);
   let results = dedupeResults([...localResults, ...providerResults]).slice(0, 12);
+
+  const anchored = enforceIntentAnchors({ query, resolver, candidates: results });
+  if (anchored.forcedClarification) {
+    return {
+      query,
+      normalizedQuery: resolver?.normalizedQuery ?? query,
+      results: anchored.candidates,
+      clarificationQuestion: anchored.forcedClarification,
+      usedResolver,
+      usedRanking: false,
+      cache,
+    };
+  }
+  results = anchored.candidates;
 
   let ranking: FoodSearchRankingOutput | null = null;
   let usedRanking = false;

@@ -1,17 +1,84 @@
-import { Prisma, type CachedNutritionFood } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 import { hasDatabaseConnectionString } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import type { FoodSearchResult } from '@/lib/food-search';
 import { normalizeBarcode } from '@/lib/barcode-lookup';
 
-export function cachedFoodToSearchResult(food: CachedNutritionFood): FoodSearchResult {
+// NOTE: This repo can be checked out without running `prisma generate`, so we avoid relying on
+// Prisma's exported model types here (they can be missing until generation runs).
+type CachedNutritionFood = {
+  provider: string;
+  providerId: string;
+  barcode: string | null;
+  normalizedQuery: string | null;
+  name: string;
+  brand: string | null;
+  servingQuantity: number;
+  servingUnit: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sugar: number;
+  sodium: number;
+};
+
+type CachedNutritionFoodCreateData = CachedNutritionFood & {
+  rawPayload: Prisma.InputJsonValue;
+};
+
+type CachedNutritionFoodUpdateData = Omit<
+  CachedNutritionFoodCreateData,
+  'provider' | 'providerId' | 'normalizedQuery'
+>;
+
+type CachedNutritionFoodDelegate = {
+  findFirst(args: {
+    where: { barcode: string };
+    orderBy: { updatedAt: 'desc' };
+  }): Promise<CachedNutritionFood | null>;
+  upsert(args: {
+    where: {
+      provider_providerId: {
+        provider: string;
+        providerId: string;
+      };
+    };
+    create: CachedNutritionFoodCreateData;
+    update: CachedNutritionFoodUpdateData;
+  }): Promise<CachedNutritionFood>;
+};
+
+const cachedNutritionFood = (
+  prisma as typeof prisma & { cachedNutritionFood: CachedNutritionFoodDelegate }
+).cachedNutritionFood;
+
+type CachedNutritionFoodLike = {
+  provider: string;
+  providerId: string;
+  barcode?: string | null;
+  name: string;
+  brand?: string | null;
+  servingQuantity: number;
+  servingUnit: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sugar: number;
+  sodium: number;
+};
+
+export function cachedFoodToSearchResult<T extends CachedNutritionFoodLike>(food: T): FoodSearchResult {
   return {
     id: `cache:${food.provider}:${food.providerId}`,
     name: food.name,
     brand: food.brand ?? null,
     restaurant: null,
-    sourceLabel: 'Brand verified',
+    sourceLabel: food.brand ? 'Brand verified' : 'Database match',
     sourceType: 'GENERIC_REFERENCE',
     sourceName: `${food.provider}`,
     providerId: food.providerId,
@@ -55,10 +122,10 @@ export async function getCachedFoodByBarcode(barcode: string) {
   const normalized = normalizeBarcode(barcode);
   if (!normalized) return null;
 
-  return prisma.cachedNutritionFood.findFirst({
+  return (cachedNutritionFood.findFirst({
     where: { barcode: normalized },
     orderBy: { updatedAt: 'desc' },
-  });
+  }) as Promise<CachedNutritionFood | null>);
 }
 
 export async function upsertCachedFoodFromOpenFoodFacts(options: {
@@ -82,7 +149,7 @@ export async function upsertCachedFoodFromOpenFoodFacts(options: {
   const barcode = normalizeBarcode(options.barcode);
   if (!barcode) return null;
 
-  return prisma.cachedNutritionFood.upsert({
+  return (cachedNutritionFood.upsert({
     where: {
       provider_providerId: {
         provider: 'OPEN_FOOD_FACTS',
@@ -122,5 +189,5 @@ export async function upsertCachedFoodFromOpenFoodFacts(options: {
       sodium: options.sodium ?? 0,
       rawPayload: (options.rawPayload ?? null) as Prisma.InputJsonValue,
     },
-  });
+  }) as Promise<CachedNutritionFood>);
 }

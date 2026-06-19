@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { MealAssistantModelOutput, MealAssistantState } from '@/lib/ai/mealAssistantSchema';
+import type { PendingMeal } from '@/lib/ai/pendingMeal';
 import { runMealAssistant } from '@/lib/ai/runMealAssistant';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 
@@ -180,6 +181,172 @@ describe('runMealAssistant', () => {
     expect(response.meal.items[0]?.food_name).toBe('Chipotle chicken bowl');
     expect(response.next_state.currentMealText).toContain('Chipotle chicken bowl');
     expect(response.assistant_reply).toMatch(/980 calories/i);
+  });
+
+  it('clears stale pending meal items when a standalone replacement lookup returns no items', async () => {
+    const chipotle = buildItem({ food_name: 'Chipotle Chicken Bowl' });
+    const pendingMeal: PendingMeal = {
+      id: 'pending-1',
+      version: 1,
+      items: [chipotle],
+      totals: {
+        calories: chipotle.calories,
+        protein: chipotle.protein,
+        carbs: chipotle.carbs,
+        fat: chipotle.fat,
+        fiber: chipotle.fiber,
+        sugar: chipotle.sugar,
+        sodium: chipotle.sodium,
+      },
+      aggregateConfidence: 0.96,
+      sourceSummary: {
+        sourceTypes: ['OFFICIAL_RESTAURANT'],
+        sourceNames: ['Chipotle official nutrition'],
+        trustedItemCount: 1,
+        estimatedItemCount: 0,
+      },
+      mealType: 'lunch',
+      status: 'ready_for_review',
+      clarification: null,
+      createdAt: '2026-06-16T12:00:00.000Z',
+      updatedAt: '2026-06-16T12:00:00.000Z',
+      lastResolvedAt: '2026-06-16T12:00:00.000Z',
+    };
+
+    const response = await runMealAssistant(
+      {
+        message: 'mystery branded bowl',
+        state: buildState({
+          currentMealItems: [chipotle],
+          currentMealText: 'Chipotle Chicken Bowl',
+          pendingMeal,
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            should_lookup_nutrition: true,
+            items: [
+              {
+                name: 'mystery branded bowl',
+                brand: null,
+                quantity: 1,
+                unit: 'bowl',
+                modifiers: [],
+                action: 'add',
+              },
+            ],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(buildParsedMealResponse([])),
+      },
+    );
+
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.next_state.currentMealItems).toHaveLength(0);
+    expect(response.next_state.pendingMeal).toBeNull();
+  });
+
+  it('appends known continuation foods when the classifier chooses add_to_current_meal', async () => {
+    const response = await runMealAssistant(
+      {
+        message: 'and fries',
+        state: buildState({
+          currentMealItems: [
+            buildItem({
+              food_name: 'McDouble',
+              quantity: 1,
+              unit: 'burger',
+              calories: 390,
+              protein: 22,
+              carbs: 33,
+              fat: 19,
+              source_type: 'OFFICIAL_RESTAURANT',
+              source_name: "McDonald's official nutrition",
+            }),
+          ],
+          currentMealText: 'McDouble',
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'add_to_current_meal',
+            should_lookup_nutrition: false,
+            items: [],
+          }),
+        ),
+      },
+    );
+
+    expect(response.next_state.currentMealItems.map((item) => item.food_name.toLowerCase())).toEqual(
+      expect.arrayContaining(['mcdouble', expect.stringMatching(/fr(y|ies)/)]),
+    );
+  });
+
+  it('answers explicit food calorie questions from that food instead of active pending totals', async () => {
+    const classify = vi.fn().mockResolvedValue(
+      buildDecision({
+        intent: 'new_food_item',
+        should_lookup_nutrition: true,
+        items: [
+          {
+            name: 'Baconator',
+            brand: "Wendy's",
+            quantity: 1,
+            unit: 'burger',
+            modifiers: [],
+            action: 'add',
+          },
+        ],
+      }),
+    );
+
+    const response = await runMealAssistant(
+      {
+        message: 'how many calories are in a Baconator?',
+        state: buildState({
+          currentMealItems: [
+            buildItem({
+              food_name: 'Chicken breast',
+              quantity: 1,
+              unit: 'breast',
+              calories: 165,
+              protein: 31,
+              carbs: 0,
+              fat: 4,
+              source_type: 'GENERIC_REFERENCE',
+              source_name: 'USDA FoodData Central',
+            }),
+          ],
+          currentMealText: 'Chicken breast',
+        }),
+      },
+      {
+        classify,
+        resolveItemNutrition: vi.fn().mockResolvedValue(
+          buildParsedMealResponse([
+            buildItem({
+              food_name: "Wendy's Baconator",
+              quantity: 1,
+              unit: 'burger',
+              calories: 960,
+              protein: 57,
+              carbs: 38,
+              fat: 66,
+              source_type: 'OFFICIAL_RESTAURANT',
+              source_name: "Wendy's official nutrition",
+            }),
+          ]),
+        ),
+      },
+    );
+
+    expect(classify).toHaveBeenCalled();
+    expect(response.assistant_reply).toMatch(/960|Baconator/i);
+    expect(response.assistant_reply).not.toMatch(/165/);
+    expect(response.next_state.currentMealItems[0]?.food_name).toMatch(/Baconator/i);
   });
 
   it('logs a baked potato as one specific potato item instead of duplicate potato matches', async () => {

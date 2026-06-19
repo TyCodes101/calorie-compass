@@ -268,6 +268,7 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Half the rice", items: [Self.item("chicken"), Self.item("rice")]), .target(foodName: "rice"))
         XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Make the fries large", items: [Self.item("burger"), Self.item("fries")]), .target(foodName: "fries"))
         XCTAssertEqual(MealAssistantClientLogic.quantityResolution(for: "Make it large", items: [Self.item("burger"), Self.item("fries")]), .target(foodName: "fries"))
+        XCTAssertNil(MealAssistantClientLogic.quantityResolution(for: "McDouble no cheese", items: [Self.item("Chipotle bowl")]))
     }
 
     func testBrandCorrectionUpdatesPreviousBrandItem() {
@@ -315,8 +316,11 @@ final class MealAssistantParityTests: XCTestCase {
         let currentItems = [Self.item("chicken breast"), Self.item("rice")]
 
         XCTAssertTrue(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "thanks"))
+        XCTAssertTrue(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "where are my macros"))
+        XCTAssertTrue(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "and fries"))
         XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [Self.item("broccoli")], responseSaved: false, incomingUserMessage: "thanks"))
         XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: true, incomingUserMessage: "thanks"))
+        XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "McDouble no cheese"))
     }
 
     func testReplacementClarificationDoesNotPreserveStaleReviewCard() {
@@ -324,6 +328,158 @@ final class MealAssistantParityTests: XCTestCase {
 
         XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "A skittles pack I meant"))
         XCTAssertFalse(MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: currentItems, responseItems: [], responseSaved: false, incomingUserMessage: "actually Quest BBQ protein chips"))
+    }
+
+    func testResponseReducerUsesNextStateAsPendingMealSourceOfTruth() {
+        let stale = [Self.item("Chipotle bowl")]
+        let authoritative = [Self.item("McDouble no cheese")]
+        let legacyMealItems = [Self.item("McChicken")]
+
+        let items = MealAssistantClientLogic.resolvedReviewItems(
+            currentItems: stale,
+            nextStateItems: authoritative,
+            responseItems: legacyMealItems,
+            responseSaved: false,
+            incomingUserMessage: "McDouble no cheese"
+        )
+
+        XCTAssertEqual(items.map(\.food_name), ["McDouble no cheese"])
+    }
+
+    func testResponseReducerPrefersStructuredPendingMealOverLegacyFields() {
+        let stale = [Self.item("Chipotle bowl")]
+        let pending = PendingMeal(
+            id: "pending-1",
+            version: 1,
+            items: [Self.item("Baconator")],
+            totals: MealAssistantTotals(calories: 960, protein: 59, carbs: 38, fat: 62, fiber: 2, sugar: 8, sodium: 1600),
+            aggregateConfidence: 0.97,
+            sourceSummary: PendingMealSourceSummary(sourceTypes: ["OFFICIAL_RESTAURANT"], sourceNames: ["Wendy's official nutrition"], trustedItemCount: 1, estimatedItemCount: 0),
+            mealType: "lunch",
+            status: "ready_for_review",
+            clarification: nil,
+            createdAt: "2026-06-16T12:00:00.000Z",
+            updatedAt: "2026-06-16T12:00:00.000Z",
+            lastResolvedAt: "2026-06-16T12:00:00.000Z"
+        )
+
+        let items = MealAssistantClientLogic.resolvedReviewItems(
+            currentItems: stale,
+            pendingMeal: pending,
+            nextStateItems: [Self.item("Spicy Chicken")],
+            responseItems: [Self.item("McChicken")],
+            responseSaved: false,
+            incomingUserMessage: "Wendy's Baconator"
+        )
+
+        XCTAssertEqual(items.map(\.food_name), ["Baconator"])
+    }
+
+    func testMealAssistantResponseDecodesFoodResolutionStatus() throws {
+        let data = """
+        {
+          "assistant_reply": "Review before saving.",
+          "intent": "new_food_item",
+          "should_save_meal": false,
+          "clarification_question": null,
+          "food_resolution": {
+            "status": "resolved",
+            "confidence": "high",
+            "sourceTrust": "official_restaurant",
+            "rejectionReasons": [],
+            "provenance": {
+              "provider": "local-verified-catalog",
+              "source": "OFFICIAL_RESTAURANT",
+              "sourceName": "Wendy's official nutrition",
+              "sourceTrust": "official_restaurant",
+              "verified": true,
+              "estimated": false
+            }
+          },
+          "meal": {
+            "items": [],
+            "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "sugar": 0, "sodium": 0 },
+            "confidence_score": 0.95
+          },
+          "next_state": {
+            "pendingMeal": null,
+            "currentMealItems": [],
+            "pendingClarification": null,
+            "lastAssistantQuestion": null,
+            "userCorrections": [],
+            "saved": false,
+            "mealType": "lunch",
+            "currentMealText": null,
+            "confidenceScore": 0.95
+          }
+        }
+        """.data(using: .utf8)
+
+        let response = try JSONDecoder().decode(MealAssistantResponse.self, from: try XCTUnwrap(data))
+
+        XCTAssertEqual(response.food_resolution?.status, "resolved")
+        XCTAssertEqual(response.food_resolution?.sourceTrust, "official_restaurant")
+        XCTAssertEqual(response.food_resolution?.provenance?.sourceName, "Wendy's official nutrition")
+    }
+
+    func testUnsafeFoodResolutionStatusClearsReviewItems() {
+        let stale = [Self.item("Wendy's Spicy Chicken Sandwich")]
+        let pending = PendingMeal(
+            id: "pending-clarify",
+            version: 1,
+            items: [],
+            totals: MealAssistantTotals(calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0),
+            aggregateConfidence: 0.35,
+            sourceSummary: PendingMealSourceSummary(sourceTypes: [], sourceNames: [], trustedItemCount: 0, estimatedItemCount: 0),
+            mealType: "lunch",
+            status: "needs_clarification",
+            clarification: "Which exact item should I use?",
+            createdAt: "2026-06-17T12:00:00.000Z",
+            updatedAt: "2026-06-17T12:00:00.000Z",
+            lastResolvedAt: "2026-06-17T12:00:00.000Z"
+        )
+
+        for status in ["needs_clarification", "needs_manual_entry", "unsupported"] {
+            let items = MealAssistantClientLogic.resolvedReviewItems(
+                currentItems: stale,
+                pendingMeal: pending,
+                foodResolutionStatus: status,
+                nextStateItems: [Self.item("McChicken")],
+                responseItems: [Self.item("Homestyle Chicken")],
+                responseSaved: false,
+                incomingUserMessage: "Wendys baconnator"
+            )
+
+            XCTAssertTrue(items.isEmpty, "Expected \(status) to clear unsafe review items")
+        }
+    }
+
+    func testResponseReducerPreservesPendingCardForMacroFollowUp() {
+        let current = [Self.item("grilled chicken breast"), Self.item("asparagus")]
+
+        let items = MealAssistantClientLogic.resolvedReviewItems(
+            currentItems: current,
+            nextStateItems: [],
+            responseItems: [],
+            responseSaved: false,
+            incomingUserMessage: "where are my macros"
+        )
+
+        XCTAssertEqual(items.map(\.food_name), ["grilled chicken breast", "asparagus"])
+    }
+
+    func testResponseReducerDoesNotRestoreStaleItemsAfterFailedReplacement() {
+        let current = [Self.item("Chipotle bowl")]
+
+        let items = MealAssistantClientLogic.resolvedReviewItems(
+            currentItems: current,
+            nextStateItems: [],
+            responseItems: [],
+            responseSaved: false,
+            incomingUserMessage: "McDouble no cheese"
+        )
+
+        XCTAssertTrue(items.isEmpty)
     }
 
     func testMealReviewTitleUsesShortNonTruncatedCopy() {
@@ -342,6 +498,35 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(item.protein, 20)
         XCTAssertEqual(item.source, "Nutrition catalog")
         XCTAssertEqual(item.catalogFoodID, "brand-greek-yogurt")
+    }
+
+    func testMealItemPrefersServerDisplayNameButPreservesSourceName() {
+        let requestItem = MealRequestItem(
+            food_name: "Corn, sweet, white, frozen, kernels on cob, unprepared",
+            display_name: "Buttered Corn on the Cob",
+            canonical_name: "Corn On The Cob",
+            source_food_name: "Corn, sweet, white, frozen, kernels on cob, unprepared",
+            quantity: 1,
+            unit: "ear",
+            calories: 155,
+            protein: 4,
+            carbs: 32,
+            fat: 3,
+            fiber: 3,
+            sugar: 6,
+            sodium: 120,
+            notes: nil,
+            source_type: "GENERIC_REFERENCE",
+            source_name: "USDA FoodData Central",
+            confidence_label: "Matched"
+        )
+
+        let item = MealItem(from: requestItem)
+        let roundTripped = item.asMealRequestItem()
+
+        XCTAssertEqual(item.displayName, "Buttered Corn on the Cob")
+        XCTAssertEqual(roundTripped.display_name, "Buttered Corn on the Cob")
+        XCTAssertEqual(roundTripped.source_food_name, "Corn, sweet, white, frozen, kernels on cob, unprepared")
     }
 
     func testServingUnitFormatterCleansMalformedUnits() {
@@ -798,6 +983,61 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(encodedItem["food_name"] as? String, "banana")
         XCTAssertEqual(encodedItem["is_trusted"] as? Bool, true)
         XCTAssertEqual(encodedItem["catalog_food_id"] as? String, "food-banana")
+    }
+
+    func testPostMealRequestEncodesPendingMealIdempotencyKey() throws {
+        let request = PostMealRequest(
+            meal_type: "lunch",
+            confidence_score: 0.95,
+            raw_text: "McDouble no cheese",
+            idempotency_key: "pending-1:v1",
+            source_reusable_meal_id: nil,
+            notes: nil,
+            date: nil,
+            items: [Self.item("McDouble no cheese")]
+        )
+
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any]
+
+        XCTAssertEqual(json?["idempotency_key"] as? String, "pending-1:v1")
+    }
+
+    func testConciseReplyPreservesMacroQuestionDetails() {
+        let rawReply = "That pending meal is about 370 calories, 66g protein, 7g carbs, and 7g fat."
+        let reply = MealAssistantClientLogic.conciseReply(
+            rawReply: rawReply,
+            items: [Self.item("grilled chicken breast"), Self.item("asparagus")],
+            nextState: MealAssistantState(),
+            intent: "macro_question"
+        )
+
+        XCTAssertEqual(reply, rawReply)
+    }
+
+    func testPendingMealIdempotencyKeyChangesAfterLocalReviewEdits() {
+        var state = MealAssistantState()
+        state.pendingMeal = PendingMeal(
+            id: "pending-1",
+            version: 1,
+            items: [Self.item("McDouble")],
+            totals: MealAssistantTotals(calories: 390, protein: 22, carbs: 33, fat: 19, fiber: 2, sugar: 7, sodium: 920),
+            aggregateConfidence: 0.95,
+            sourceSummary: PendingMealSourceSummary(sourceTypes: ["OFFICIAL_RESTAURANT"], sourceNames: ["McDonald's official nutrition"], trustedItemCount: 1, estimatedItemCount: 0),
+            mealType: "lunch",
+            status: "ready_for_review",
+            clarification: nil,
+            createdAt: "2026-06-16T12:00:00.000Z",
+            updatedAt: "2026-06-16T12:00:00.000Z",
+            lastResolvedAt: "2026-06-16T12:00:00.000Z"
+        )
+
+        let original = [Self.item("McDouble", quantity: 1, unit: "burger")]
+        let edited = [Self.item("McDouble", quantity: 2, unit: "burger")]
+
+        XCTAssertNotEqual(
+            MealAssistantClientLogic.pendingMealSaveIdempotencyKey(state: state, items: original),
+            MealAssistantClientLogic.pendingMealSaveIdempotencyKey(state: state, items: edited)
+        )
     }
 
     func testSaveSignaturesIgnoreWhitespaceAndCaseForDuplicateGuards() {

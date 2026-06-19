@@ -2,6 +2,7 @@ import catalogData from '@/data/nutrition-catalog.json';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import type { MealTypeValue } from '@/lib/ai/orchestrate';
+import { isIdentityCompatible } from '@/lib/nutrition/identity';
 
 export type NutritionSourceRecord = (typeof catalogData.sources)[number];
 export type CatalogFoodRecord = (typeof catalogData.foods)[number];
@@ -81,6 +82,10 @@ function extractProteinSignal(text: string) {
 
 function scoreCatalogFoodMatch(food: CatalogFoodRecord, text: string, brand?: string | null): CatalogFoodMatch | null {
   const normalized = normalizeSearchText(text);
+  if (food.brand && !isIdentityCompatible(normalized, `${food.canonicalName} ${food.aliases.join(' ')}`)) {
+    return null;
+  }
+
   const aliasScores = food.aliases.map((alias) => {
     const normalizedAlias = normalizeSearchText(alias);
     const exactAlias = normalizedAlias === normalized;
@@ -189,6 +194,10 @@ function formatSourceNote(food: CatalogFoodRecord) {
 
 export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit?: string): ParsedFoodItem {
   const source = getNutritionSourceById(food.sourceId);
+  const metadata = food as CatalogFoodRecord & {
+    lastReviewedAt?: string | null;
+    catalogVersion?: string | null;
+  };
   const normalizedUnit = normalizeUnit(unit ?? food.servingUnit);
   const normalizedServingUnit = normalizeUnit(food.servingUnit);
   const servingGrams = 'servingGrams' in food ? Number(food.servingGrams) : null;
@@ -221,6 +230,8 @@ export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit
     confidence_label: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : source?.brand ? 'Verified' : 'Matched',
     match_type: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'exact_restaurant' : source?.brand ? 'exact_branded' : 'verified_database',
     catalog_food_id: food.id,
+    lastReviewedAt: metadata.lastReviewedAt ?? null,
+    catalogVersion: metadata.catalogVersion ?? null,
   };
 }
 
