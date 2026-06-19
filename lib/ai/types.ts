@@ -34,6 +34,8 @@ export const parsedFoodItemSchema = z.object({
   normalizedOunces: z.number().nonnegative().nullable().optional(),
   sourceId: z.string().nullable().optional(),
   confidence: z.number().min(0).max(1).nullable().optional(),
+  lastReviewedAt: z.string().nullable().optional(),
+  catalogVersion: z.string().nullable().optional(),
 });
 
 export const parsedMealResponseSchema = z.object({

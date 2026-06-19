@@ -194,6 +194,10 @@ function formatSourceNote(food: CatalogFoodRecord) {
 
 export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit?: string): ParsedFoodItem {
   const source = getNutritionSourceById(food.sourceId);
+  const metadata = food as CatalogFoodRecord & {
+    lastReviewedAt?: string | null;
+    catalogVersion?: string | null;
+  };
   const normalizedUnit = normalizeUnit(unit ?? food.servingUnit);
   const normalizedServingUnit = normalizeUnit(food.servingUnit);
   const servingGrams = 'servingGrams' in food ? Number(food.servingGrams) : null;
@@ -226,6 +230,8 @@ export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit
     confidence_label: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : source?.brand ? 'Verified' : 'Matched',
     match_type: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'exact_restaurant' : source?.brand ? 'exact_branded' : 'verified_database',
     catalog_food_id: food.id,
+    lastReviewedAt: metadata.lastReviewedAt ?? null,
+    catalogVersion: metadata.catalogVersion ?? null,
   };
 }
 

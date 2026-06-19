@@ -17,6 +17,7 @@ import {
   type FoodIdentitySourceTrust,
 } from '@/lib/nutrition/identity';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
+import { inferProductFamilyId } from '@/lib/nutrition/productFamilies';
 import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
 import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
 import { usdaProvider } from '@/lib/nutrition/providers/usda';
@@ -278,6 +279,77 @@ const queryStopTokens = new Set([
 
 function cacheKey(text: string) {
   return `${FOOD_SEARCH_CACHE_VERSION}:${normalizeSearchText(text)}`;
+}
+
+const cacheIdentityBrands = [
+  "wendy's",
+  'wendys',
+  "mcdonald's",
+  'mcdonalds',
+  'subway',
+  "arby's",
+  'arbys',
+  'chipotle',
+];
+
+function cacheIdentityToken(value: string | null | undefined) {
+  const normalized = normalizeSearchText(value ?? '');
+  if (!normalized) return 'none';
+  if (normalized === 'wendys' || normalized === 'wendy s') return 'wendys';
+  if (normalized === 'mcdonalds' || normalized === 'mcdonald s') return 'mcdonalds';
+  if (normalized === 'arbys' || normalized === 'arby s') return 'arbys';
+  return normalized;
+}
+
+function inferCacheBrand(text: string) {
+  const normalized = normalizeSearchText(text)
+    .replace(/\bwendy s\b/g, 'wendys')
+    .replace(/\bmcdonald s\b/g, 'mcdonalds')
+    .replace(/\barby s\b/g, 'arbys');
+  return cacheIdentityBrands.find((brand) => {
+    const candidate = cacheIdentityToken(brand);
+    return new RegExp(`(?:^| )${candidate}(?: |$)`).test(normalized);
+  }) ?? null;
+}
+
+function catalogCacheSignature() {
+  const versions = getCatalogFoods()
+    .map((food) => {
+      const metadata = food as SearchCatalogFood & { catalogVersion?: string | null };
+      return metadata.catalogVersion ?? 'unversioned';
+    })
+    .sort();
+
+  return `${versions.length}:${[...new Set(versions)].join(',')}`;
+}
+
+export function buildFoodSearchSelectedResultCacheKey(query: string) {
+  const brand = cacheIdentityToken(inferCacheBrand(query));
+  const productFamily = inferProductFamilyId(query) ?? 'none';
+
+  return [
+    cacheKey(query),
+    `restaurant=${brand}`,
+    `brand=${brand}`,
+    `family=${productFamily}`,
+    `catalog=${catalogCacheSignature()}`,
+  ].join('::');
+}
+
+function selectedResultCompatibleWithQuery(query: string, result: FoodSearchResult) {
+  const queryFamily = inferProductFamilyId(query);
+  const resultFamily = inferProductFamilyId(
+    result.name,
+    result.sourceName,
+    result.items.map((item) => `${item.food_name} ${item.display_name ?? ''} ${item.canonical_name ?? ''}`).join(' '),
+  );
+  if (queryFamily && resultFamily && queryFamily !== resultFamily) return false;
+
+  const queryBrand = cacheIdentityToken(inferCacheBrand(query));
+  const resultBrand = cacheIdentityToken(result.restaurant ?? result.brand);
+  if (queryBrand !== 'none' && resultBrand !== 'none' && queryBrand !== resultBrand) return false;
+
+  return true;
 }
 
 function tokens(text: string) {
@@ -839,7 +911,8 @@ function canUseSelectedResultCache(result: FoodSearchResult) {
 
 function cacheSafeSelectedResult(query: string, results: FoodSearchResult[]) {
   if (results.length !== 1 || !canUseSelectedResultCache(results[0])) return;
-  setTimedCache(selectedResultCache, cacheKey(query), results[0], SELECTED_RESULT_CACHE_TTL_MS);
+  if (!selectedResultCompatibleWithQuery(query, results[0])) return;
+  setTimedCache(selectedResultCache, buildFoodSearchSelectedResultCacheKey(query), results[0], SELECTED_RESULT_CACHE_TTL_MS);
 }
 
 function buildEstimatedFallback(query: string, resolver: FoodSearchResolverOutput | null): FoodSearchResult | null {
@@ -938,8 +1011,8 @@ export async function buildFoodSearchResponse(
     };
   }
 
-  const selectedResult = getTimedCache(selectedResultCache, cacheKey(query));
-  if (selectedResult.hit && selectedResult.value) {
+  const selectedResult = getTimedCache(selectedResultCache, buildFoodSearchSelectedResultCacheKey(query));
+  if (selectedResult.hit && selectedResult.value && selectedResultCompatibleWithQuery(query, selectedResult.value)) {
     cache.selectedResultHit = true;
     return {
       query,

@@ -103,6 +103,26 @@ struct MealAssistantMeal: Codable, Equatable {
     let confidence_score: Double
 }
 
+struct FoodResolutionProvenance: Codable, Equatable {
+    let provider: String?
+    let source: String?
+    let sourceName: String?
+    let sourceTrust: String?
+    let verified: Bool?
+    let estimated: Bool?
+}
+
+struct FoodResolutionSummary: Codable, Equatable {
+    let status: String
+    let normalizedQuery: String?
+    let confidence: String?
+    let sourceTrust: String?
+    let rejectionReasons: [String]?
+    let provenance: FoodResolutionProvenance?
+    let aiUsed: Bool?
+    let aiRole: String?
+}
+
 struct MealAssistantResponse: Codable {
     let assistant_reply: String
     let meal: MealAssistantMeal
@@ -110,6 +130,7 @@ struct MealAssistantResponse: Codable {
     let intent: String?
     let should_save_meal: Bool?
     let clarification_question: String?
+    let food_resolution: FoodResolutionSummary?
 
     enum CodingKeys: String, CodingKey {
         case assistant_reply
@@ -118,6 +139,7 @@ struct MealAssistantResponse: Codable {
         case intent
         case should_save_meal
         case clarification_question
+        case food_resolution
     }
 
     init(from decoder: Decoder) throws {
@@ -128,6 +150,7 @@ struct MealAssistantResponse: Codable {
         intent = try container.decodeIfPresent(String.self, forKey: .intent)
         should_save_meal = try container.decodeIfPresent(Bool.self, forKey: .should_save_meal)
         clarification_question = try container.decodeIfPresent(String.self, forKey: .clarification_question)
+        food_resolution = try container.decodeIfPresent(FoodResolutionSummary.self, forKey: .food_resolution)
     }
 }
 
@@ -456,6 +479,7 @@ struct MealAssistantClientLogic {
         resolvedReviewItems(
             currentItems: currentItems,
             pendingMeal: response.next_state.pendingMeal,
+            foodResolutionStatus: response.food_resolution?.status,
             nextStateItems: response.next_state.currentMealItems,
             responseItems: response.meal.items,
             responseSaved: response.next_state.saved,
@@ -466,12 +490,18 @@ struct MealAssistantClientLogic {
     static func resolvedReviewItems(
         currentItems: [MealRequestItem],
         pendingMeal: PendingMeal? = nil,
+        foodResolutionStatus: String? = nil,
         nextStateItems: [MealRequestItem],
         responseItems: [MealRequestItem],
         responseSaved: Bool,
         incomingUserMessage: String
     ) -> [MealRequestItem] {
         if responseSaved {
+            return []
+        }
+
+        let normalizedResolutionStatus = foodResolutionStatus?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if ["needs_clarification", "needs_manual_entry", "unsupported"].contains(normalizedResolutionStatus ?? "") {
             return []
         }
 

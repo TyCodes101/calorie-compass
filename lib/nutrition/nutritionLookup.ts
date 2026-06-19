@@ -4,6 +4,15 @@ import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercial
 import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
 import { usdaProvider } from '@/lib/nutrition/providers/usda';
 import {
+  parsedMealResponseToFoodCandidates,
+  resolveFoodCandidates,
+  type FoodCandidate,
+  type FoodResolutionIntent,
+  type FoodResolutionResult,
+} from '@/lib/nutrition/foodResolution';
+import { detectProductFamilies } from '@/lib/nutrition/productFamilies';
+import { extractNutritionModifiers } from '@/lib/nutrition/modifiers';
+import {
   buildAccuracyClarificationQuestion,
   buildNutritionIntent,
   isAuthoritativeNutritionResult,
@@ -236,6 +245,111 @@ function makeClarificationResponse(input: NutritionLookupInput, question: string
   });
 }
 
+function buildFoodResolutionIntent(input: NutritionLookupInput, normalizedQuery: ReturnType<typeof normalizeFoodQuery>): FoodResolutionIntent {
+  const family = detectProductFamilies([
+    input.text,
+    normalizedQuery.searchText,
+    normalizedQuery.matchedQuery,
+    normalizedQuery.brandHint,
+  ].filter(Boolean).join(' '))[0];
+  const restaurant = normalizedQuery.brandHint && restaurantBrands.has(normalizedQuery.brandHint)
+    ? normalizedQuery.brandHint
+    : family?.restaurant ?? null;
+
+  return {
+    rawText: input.text,
+    searchText: normalizedQuery.searchText || normalizedQuery.matchedQuery || input.text,
+    restaurant,
+    brand: normalizedQuery.brandHint ?? family?.brand ?? restaurant,
+    modifiers: extractNutritionModifiers(input.text),
+    mealType: input.mealType,
+  };
+}
+
+function shouldFirewallResolution(intent: FoodResolutionIntent) {
+  return Boolean(
+    intent.restaurant
+    || intent.brand
+    || detectProductFamilies(`${intent.rawText} ${intent.searchText}`).length,
+  );
+}
+
+function resolutionClarification(input: NutritionLookupInput, resolution: FoodResolutionResult) {
+  if (resolution.rejectionReasons.some((reason) => reason.includes('restaurant') || reason.includes('brand') || reason.includes('product'))) {
+    return 'I found possible nutrition data, but I could not verify the exact food identity. Which exact item should I use?';
+  }
+
+  return 'I found possible nutrition data, but it needs confirmation before I can show a review card. Which exact item or serving should I use?';
+}
+
+function resolveResponseIdentity(
+  input: NutritionLookupInput,
+  normalizedQuery: ReturnType<typeof normalizeFoodQuery>,
+  providerId: string,
+  response: ParsedMealResponse,
+) {
+  const intent = buildFoodResolutionIntent(input, normalizedQuery);
+  const candidates = parsedMealResponseToFoodCandidates(response, providerId);
+  return resolveFoodCandidates({
+    intent,
+    candidates,
+    selectedCandidateId: candidates[0]?.candidateId ?? null,
+    providersSearched: [providerId],
+    normalizedQuery: normalizedQuery.searchText || normalizedQuery.matchedQuery || input.text,
+    aiUsed: false,
+    aiRole: 'none',
+  });
+}
+
+export async function resolveNutrition(
+  input: NutritionLookupInput,
+  options?: {
+    providers?: NutritionLookupProvider[];
+  },
+): Promise<FoodResolutionResult> {
+  const normalizedQuery = normalizeFoodQuery(input.text);
+  const intent = buildFoodResolutionIntent(input, normalizedQuery);
+  if (shouldClarifyBeforeLookup(buildNutritionIntent(input, normalizedQuery))) {
+    return resolveFoodCandidates({
+      intent,
+      candidates: [],
+      selectedCandidateId: null,
+      providersSearched: [],
+      normalizedQuery: normalizedQuery.searchText || normalizedQuery.matchedQuery || input.text,
+      aiUsed: false,
+      aiRole: 'none',
+    });
+  }
+
+  const context = {
+    text: input.text,
+    mealType: input.mealType,
+    normalizedQuery,
+  };
+  const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, commercialDatabaseProvider];
+  const candidates: FoodCandidate[] = [];
+  const providersSearched: string[] = [];
+
+  for (const provider of providers) {
+    providersSearched.push(provider.id);
+    const response = await provider.lookup(context);
+    if (!response || response.needs_clarification) {
+      continue;
+    }
+    candidates.push(...parsedMealResponseToFoodCandidates(response, provider.id));
+  }
+
+  return resolveFoodCandidates({
+    intent,
+    candidates,
+    selectedCandidateId: candidates[0]?.candidateId ?? null,
+    providersSearched,
+    normalizedQuery: normalizedQuery.searchText || normalizedQuery.matchedQuery || input.text,
+    aiUsed: false,
+    aiRole: 'none',
+  });
+}
+
 function shouldClarifyUnresolvedBrand(brandHint: string | null, searchText: string) {
   if (!brandHint) return false;
   if (restaurantBrands.has(brandHint)) return true;
@@ -279,6 +393,10 @@ export async function lookupNutrition(
     }
 
     if (isAuthoritativeNutritionResult(primaryResult, intent, primaryProvider.id)) {
+      const resolution = resolveResponseIdentity(input, normalizedQuery, primaryProvider.id, primaryResult);
+      if (shouldFirewallResolution(resolution.intent) && resolution.status !== 'resolved') {
+        return makeClarificationResponse(input, resolutionClarification(input, resolution));
+      }
       return withVerificationLabels(primaryResult);
     }
   }
@@ -320,6 +438,11 @@ export async function lookupNutrition(
 
   const rankedResult = resolveBestNutritionCandidate(intent, candidates);
   if (rankedResult.response) {
+    const rankedProviderId = candidates.find((candidate) => candidate.response === rankedResult.response)?.providerId ?? 'ranked-provider';
+    const resolution = resolveResponseIdentity(input, normalizedQuery, rankedProviderId, rankedResult.response);
+    if (shouldFirewallResolution(resolution.intent) && resolution.status !== 'resolved') {
+      return makeClarificationResponse(input, resolutionClarification(input, resolution));
+    }
     return rankedResult.response;
   }
 

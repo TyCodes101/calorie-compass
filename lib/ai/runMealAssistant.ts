@@ -21,8 +21,15 @@ import {
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { saveConfirmedMeal, updateSavedMeal } from '@/lib/meals';
 import { decorateFoodItemNames } from '@/lib/nutrition/displayNames';
-import { applyNutritionModifiers } from '@/lib/nutrition/modifiers';
+import { applyNutritionModifiers, extractNutritionModifiers } from '@/lib/nutrition/modifiers';
 import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
+import {
+  parsedMealResponseToFoodCandidates,
+  resolveFoodCandidates,
+  type FoodResolutionIntent,
+  type FoodResolutionResult,
+} from '@/lib/nutrition/foodResolution';
+import { detectProductFamilies } from '@/lib/nutrition/productFamilies';
 
 const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
 const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
@@ -5739,6 +5746,87 @@ function buildCompanionInsight(args: { response: MealAssistantResponse; input: M
   return null;
 }
 
+function sourceTrustFromPendingMeal(pendingMeal: MealAssistantResponse['next_state']['pendingMeal']) {
+  const sourceTypes = pendingMeal?.sourceSummary.sourceTypes ?? [];
+  if (sourceTypes.includes('OFFICIAL_RESTAURANT')) return 'official_restaurant';
+  if (sourceTypes.includes('AI_ESTIMATE')) return 'ai_estimate';
+  if (sourceTypes.includes('GENERIC_REFERENCE')) return 'curated_generic';
+  return null;
+}
+
+function foodResolutionSummary(response: MealAssistantResponse): MealAssistantResponse['food_resolution'] {
+  if (response.food_resolution) {
+    return response.food_resolution;
+  }
+
+  const pendingMeal = response.next_state.pendingMeal ?? null;
+  const sourceTrust = sourceTrustFromPendingMeal(pendingMeal);
+  const foodIntents = new Set([
+    'new_food_item',
+    'add_to_current_meal',
+    'correction',
+    'clarification_answer',
+    'repeat_meal',
+  ]);
+
+  if (pendingMeal?.status === 'ready_for_review' && pendingMeal.items.length) {
+    const aiEstimated = pendingMeal.sourceSummary.estimatedItemCount > 0
+      || pendingMeal.sourceSummary.sourceTypes.includes('AI_ESTIMATE');
+    const normalizedQuery = response.next_state.currentMealText
+      ?? pendingMeal.items.map((item) => item.food_name).join(', ');
+
+    return {
+      status: 'resolved',
+      normalizedQuery,
+      confidence: pendingMeal.aggregateConfidence >= 0.9 ? 'high' : pendingMeal.aggregateConfidence >= 0.72 ? 'medium' : 'low',
+      sourceTrust,
+      rejectionReasons: [],
+      provenance: {
+        provider: pendingMeal.items[0]?.provider_used ?? 'meal-assistant',
+        source: pendingMeal.sourceSummary.sourceTypes[0] ?? 'UNKNOWN',
+        sourceName: pendingMeal.sourceSummary.sourceNames[0] ?? null,
+        sourceTrust: sourceTrust ?? 'curated_generic',
+        verified: pendingMeal.sourceSummary.trustedItemCount > 0,
+        estimated: pendingMeal.sourceSummary.estimatedItemCount > 0,
+      },
+      aiUsed: aiEstimated,
+      aiRole: aiEstimated ? 'estimator' : 'none',
+    };
+  }
+
+  if (pendingMeal?.status === 'needs_clarification' || response.should_ask_clarification || response.clarification_question) {
+    const normalizedQuery = response.next_state.currentMealText
+      ?? pendingMeal?.items.map((item) => item.food_name).join(', ')
+      ?? '';
+
+    return {
+      status: 'needs_clarification',
+      normalizedQuery,
+      confidence: 'low',
+      sourceTrust: null,
+      rejectionReasons: [response.clarification_question ?? pendingMeal?.clarification ?? 'needs_clarification'],
+      provenance: null,
+      aiUsed: false,
+      aiRole: 'clarification',
+    };
+  }
+
+  if (foodIntents.has(response.intent) && !response.meal.items.length && !response.next_state.currentMealItems.length) {
+    return {
+      status: 'unsupported',
+      normalizedQuery: response.next_state.currentMealText ?? '',
+      confidence: 'low',
+      sourceTrust: null,
+      rejectionReasons: ['no_reviewable_food_items'],
+      provenance: null,
+      aiUsed: false,
+      aiRole: 'none',
+    };
+  }
+
+  return undefined;
+}
+
 function finalizeResponse(response: MealAssistantResponse, input: MealAssistantRunInput, context: MealAssistantContext) {
   const responseItems = response.next_state.currentMealItems.length
     ? response.next_state.currentMealItems
@@ -5765,7 +5853,7 @@ function finalizeResponse(response: MealAssistantResponse, input: MealAssistantR
         && !response.next_state.pendingClarification
       ),
   });
-  const synchronizedResponse: MealAssistantResponse = {
+  const synchronizedResponseWithoutResolution: MealAssistantResponse = {
     ...response,
     next_state: {
       ...response.next_state,
@@ -5775,6 +5863,10 @@ function finalizeResponse(response: MealAssistantResponse, input: MealAssistantR
         ? response.next_state.currentMealText ?? buildMealTextFromItems(pendingMeal.items)
         : response.next_state.currentMealText,
     },
+  };
+  const synchronizedResponse: MealAssistantResponse = {
+    ...synchronizedResponseWithoutResolution,
+    food_resolution: foodResolutionSummary(synchronizedResponseWithoutResolution),
   };
   const insight = buildCompanionInsight({ response: synchronizedResponse, input, context });
 
@@ -8614,7 +8706,77 @@ function applyRemovedItems(currentItems: ParsedFoodItem[], itemsToRemove: MealAs
 type ResolveAssistantItemsResult = {
   items: ParsedFoodItem[];
   clarificationQuestion: string | null;
+  foodResolution?: FoodResolutionResult | null;
 };
+
+function buildAssistantFoodResolutionIntent(args: {
+  item: MealAssistantItem;
+  lookupText: string;
+  mealType: MealAssistantState['mealType'];
+  message: string;
+}): FoodResolutionIntent {
+  const family = detectProductFamilies([
+    args.message,
+    args.lookupText,
+    args.item.brand,
+    args.item.name,
+  ].filter(Boolean).join(' '))[0];
+  const restaurantOrBrand = args.item.brand ?? family?.brand ?? family?.restaurant ?? null;
+
+  return {
+    rawText: args.message || args.lookupText,
+    searchText: args.lookupText || args.item.name,
+    restaurant: family?.restaurant ?? restaurantOrBrand,
+    brand: restaurantOrBrand,
+    modifiers: [...new Set([...(args.item.modifiers ?? []), ...extractNutritionModifiers(`${args.message} ${args.lookupText}`)])],
+    mealType: args.mealType,
+  };
+}
+
+function shouldGuardAssistantResolution(intent: FoodResolutionIntent) {
+  return Boolean(
+    intent.restaurant
+    || intent.brand
+    || detectProductFamilies(`${intent.rawText} ${intent.searchText}`).length,
+  );
+}
+
+function validateAssistantNutritionResponse(args: {
+  item: MealAssistantItem;
+  lookupText: string;
+  mealType: MealAssistantState['mealType'];
+  message: string;
+  response: ParsedMealResponse;
+}) {
+  const intent = buildAssistantFoodResolutionIntent(args);
+  if (!shouldGuardAssistantResolution(intent)) {
+    return null;
+  }
+
+  const provider = args.response.items[0]?.provider_used ?? 'assistant-nutrition-resolver';
+  const candidates = parsedMealResponseToFoodCandidates(args.response, provider);
+  return resolveFoodCandidates({
+    intent,
+    candidates,
+    selectedCandidateId: candidates[0]?.candidateId ?? null,
+    providersSearched: [provider],
+    normalizedQuery: intent.searchText,
+    aiUsed: true,
+    aiRole: 'parser',
+  });
+}
+
+function buildFoodResolutionClarification(resolution: FoodResolutionResult) {
+  if (resolution.rejectionReasons.some((reason) => reason.includes('product') || reason.includes('family'))) {
+    return 'I could not verify that exact item. Which exact food should I use, or would you like to enter calories/macros manually?';
+  }
+
+  if (resolution.rejectionReasons.some((reason) => reason.includes('restaurant') || reason.includes('brand'))) {
+    return 'I found a possible match, but the restaurant or brand did not line up. Which exact item should I use?';
+  }
+
+  return 'I need one more detail before I can show a safe review card. Which exact item and serving should I use?';
+}
 
 async function resolveAssistantItemsWithClarification(
   items: MealAssistantItem[],
@@ -8623,6 +8785,7 @@ async function resolveAssistantItemsWithClarification(
   message = '',
 ): Promise<ResolveAssistantItemsResult> {
   const resolved: ParsedFoodItem[] = [];
+  let lastFoodResolution: FoodResolutionResult | null = null;
   const safeItems = isNonFoodDialogueMessage(message)
     ? []
     : items.filter((item) => !isUnsafeLookupItem(item, message));
@@ -8637,6 +8800,7 @@ async function resolveAssistantItemsWithClarification(
         resolvedItems: trustedMessageResponse.items,
       }),
       clarificationQuestion: null,
+      foodResolution: null,
     };
   }
 
@@ -8650,11 +8814,46 @@ async function resolveAssistantItemsWithClarification(
       return {
         items: [],
         clarificationQuestion: response.clarifying_question ?? 'Which exact item and serving size should I use?',
+        foodResolution: null,
       };
     }
 
     if (response?.items.length) {
-      resolved.push(...response.items.map((resolvedItem) => repairResolvedNutritionItem(item, resolvedItem)));
+      const chipotleAggregate = detectChipotleBowlEstimate(message);
+      const shouldUseChipotleAggregate = Boolean(
+        chipotleAggregate
+        && /\bchipotle\b/i.test(`${message} ${lookupText}`)
+        && response.items.length > 1
+        && response.items.every((resolvedItem) => /\bchipotle\b/i.test(`${resolvedItem.food_name} ${resolvedItem.source_name ?? ''}`)),
+      );
+      const responseForIdentity: ParsedMealResponse = shouldUseChipotleAggregate
+        ? {
+            ...response,
+            items: [chipotleAggregate as ParsedFoodItem],
+          }
+        : response;
+      const foodResolution = validateAssistantNutritionResponse({
+        item,
+        lookupText,
+        mealType,
+        message,
+        response: responseForIdentity,
+      });
+
+      if (foodResolution) {
+        lastFoodResolution = foodResolution;
+        if (foodResolution.status !== 'resolved') {
+          return {
+            items: [],
+            clarificationQuestion: buildFoodResolutionClarification(foodResolution),
+            foodResolution,
+          };
+        }
+      }
+
+      resolved.push(...(shouldUseChipotleAggregate && chipotleAggregate
+        ? [chipotleAggregate]
+        : response.items.map((resolvedItem) => repairResolvedNutritionItem(item, resolvedItem))));
     }
   }
 
@@ -8664,6 +8863,7 @@ async function resolveAssistantItemsWithClarification(
       resolvedItems: resolved,
     }),
     clarificationQuestion: null,
+    foodResolution: lastFoodResolution,
   };
 }
 

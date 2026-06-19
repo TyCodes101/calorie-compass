@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ParsedMealResponse } from '@/lib/ai/types';
 import {
+  buildFoodSearchSelectedResultCacheKey,
   buildFoodSearchResponse,
   resetFoodSearchCaches,
   type FoodSearchAiClient,
@@ -241,6 +242,53 @@ describe('LLM-assisted food search service', () => {
     expect(first.cache).toEqual({ resolverHit: false, rankingHit: false, selectedResultHit: false });
     expect(second.cache.resolverHit).toBe(true);
     expect(second.cache.rankingHit).toBe(true);
+  });
+
+  it('namespaces selected-result cache keys by identity and catalog context', () => {
+    const wendysBaconatorKey = buildFoodSearchSelectedResultCacheKey("Wendy's Baconator");
+    const plainBaconatorKey = buildFoodSearchSelectedResultCacheKey('Baconator');
+    const mcdoubleKey = buildFoodSearchSelectedResultCacheKey("McDonald's McDouble no cheese");
+
+    expect(wendysBaconatorKey).toContain('restaurant=wendys');
+    expect(wendysBaconatorKey).toContain('brand=wendys');
+    expect(wendysBaconatorKey).toContain('family=wendys_baconator');
+    expect(wendysBaconatorKey).toContain('catalog=');
+    expect(mcdoubleKey).toContain('family=mcdonalds_mcdouble');
+    expect(plainBaconatorKey).not.toBe(wendysBaconatorKey);
+    expect(mcdoubleKey).not.toBe(wendysBaconatorKey);
+  });
+
+  it('does not cache estimated fallbacks as selected source-backed results', async () => {
+    const resolveQuery = vi.fn(async () => resolverOutput({
+      normalizedQuery: 'homemade chicken pasta',
+      category: 'homemade',
+      confidence: 0.72,
+    }));
+    const options = {
+      ai: { resolveQuery },
+      providers: [{
+        id: 'empty-provider',
+        lookup: vi.fn(async () => null),
+      }],
+      catalogFoods: [],
+    };
+
+    const first = await buildFoodSearchResponse(
+      { query: 'homemade chicken pasta', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      options,
+    );
+    const second = await buildFoodSearchResponse(
+      { query: 'homemade chicken pasta', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      options,
+    );
+
+    expect(first.results[0]).toMatchObject({
+      sourceLabel: 'Estimated',
+      estimated: true,
+      needsReview: true,
+    });
+    expect(first.cache.selectedResultHit).toBe(false);
+    expect(second.cache.selectedResultHit).toBe(false);
   });
 
   it('enforces restaurant/product anchor tokens so Baconator cannot rank to an unrelated Wendy\'s item', async () => {
