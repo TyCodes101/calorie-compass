@@ -10,6 +10,8 @@ describe('meal display polish', () => {
 
   it('formats user-entered meal titles professionally without changing saved data', () => {
     expect(polishMealText('a mcdonalds mcdouble')).toBe("A McDonald's McDouble");
+    expect(polishMealText('chick-fil-a chicken sandwich')).toBe('Chick-fil-A Chicken Sandwich');
+    expect(polishMealText('wendys baconator')).toBe("Wendy's Baconator");
     expect(polishMealText('1 burger McDouble, 100g Potato, french fries, NFS')).toBe('McDouble, 100g Potato, French Fries, NFS');
     expect(formatMealTitleForDisplay('qa rice cakes fixture', [{ food_name: 'rice cakes', quantity: 2, unit: 'cake' }])).toBe('2 rice cakes');
   });

@@ -10,6 +10,10 @@ const fixturePatterns = [
 const sentenceStarters = new Set(['a', 'an', 'the']);
 const lowerCaseWords = new Set(['and', 'or', 'with', 'from', 'of', 'in']);
 const brandOverrides: Array<[RegExp, string]> = [
+  [/\bchick\s*fil\s*a\b/gi, 'Chick-fil-A'],
+  [/\bchickfila\b/gi, 'Chick-fil-A'],
+  [/\bchic\s*fil\s*a\b/gi, 'Chick-fil-A'],
+  [/\bchicfila\b/gi, 'Chick-fil-A'],
   [/\bmcdonalds\b/gi, "McDonald's"],
   [/\bmcdouble\b/gi, 'McDouble'],
   [/\bwendys\b/gi, "Wendy's"],

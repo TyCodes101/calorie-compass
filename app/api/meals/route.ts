@@ -9,6 +9,29 @@ import { normalizeNutritionVerificationLabel, nutritionVerificationLabels } from
 import { prisma } from '@/lib/prisma';
 import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
 
+const sourceTypes = ['OFFICIAL_RESTAURANT', 'GENERIC_REFERENCE', 'AI_ESTIMATE'] as const;
+
+function normalizeNativeSourceType(value: unknown) {
+  if (value == null || value === '') {
+    return value;
+  }
+
+  const normalized = String(value).trim().toUpperCase();
+  if ((sourceTypes as readonly string[]).includes(normalized)) {
+    return normalized;
+  }
+
+  if (/^(?:USDA|BRAND|BRANDED|VERIFIED|DATABASE|FDC)/.test(normalized)) {
+    return 'GENERIC_REFERENCE';
+  }
+
+  if (/(?:AI|ESTIMATE|MANUAL|USER|CUSTOM)/.test(normalized)) {
+    return 'AI_ESTIMATE';
+  }
+
+  return null;
+}
+
 const parsedItemSchema = z.object({
   food_name: z.string().min(1),
   quantity: z.number().positive(),
@@ -22,7 +45,7 @@ const parsedItemSchema = z.object({
   sodium: z.number().nonnegative(),
   notes: z.string().nullable().optional(),
   is_trusted: z.boolean().optional(),
-  source_type: z.enum(['OFFICIAL_RESTAURANT', 'GENERIC_REFERENCE', 'AI_ESTIMATE']).nullable().optional(),
+  source_type: z.preprocess(normalizeNativeSourceType, z.enum(sourceTypes).nullable()).optional(),
   source_name: z.string().nullable().optional(),
   confidence_label: z.preprocess((value) => (value == null ? value : normalizeNutritionVerificationLabel(value)), z.enum(nutritionVerificationLabels).nullable()).optional(),
   match_type: z.enum(['exact_branded', 'exact_restaurant', 'fuzzy_branded', 'fuzzy_restaurant', 'verified_database', 'generic_estimate', 'ai_estimate', 'unknown']).nullable().optional(),

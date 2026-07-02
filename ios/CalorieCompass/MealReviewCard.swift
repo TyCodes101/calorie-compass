@@ -24,6 +24,10 @@ struct MealItem: Identifiable, Codable, Equatable {
     var isTrusted: Bool?
     var catalogFoodID: String?
 
+    var displayName: String {
+        FoodDisplayNameFormatter.polish(name)
+    }
+
     init(from item: MealRequestItem) {
         name = item.food_name
         quantity = item.quantity
@@ -81,6 +85,36 @@ struct MealItem: Identifiable, Codable, Equatable {
 
     private func rounded(_ value: Double) -> Double {
         (value * 100).rounded() / 100
+    }
+}
+
+enum FoodDisplayNameFormatter {
+    static func polish(_ value: String) -> String {
+        var text = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .lowercased()
+
+        text = replacing(pattern: #"\bchic?k[-\s]*fil[-\s]*a\b"#, in: text, with: "Chick-fil-A")
+        text = replacing(pattern: #"\bchic?kfila\b"#, in: text, with: "Chick-fil-A")
+        text = replacing(pattern: #"\bmcdonalds\b"#, in: text, with: "McDonald's")
+        text = replacing(pattern: #"\bmcdouble\b"#, in: text, with: "McDouble")
+        text = replacing(pattern: #"\bwendys\b"#, in: text, with: "Wendy's")
+
+        return text
+            .split(separator: " ")
+            .map { token -> String in
+                let word = String(token)
+                if ["Chick-fil-A", "McDonald's", "McDouble", "Wendy's", "USDA", "NFS"].contains(word) {
+                    return word
+                }
+                return word.prefix(1).uppercased() + String(word.dropFirst())
+            }
+            .joined(separator: " ")
+    }
+
+    private static func replacing(pattern: String, in value: String, with replacement: String) -> String {
+        value.replacingOccurrences(of: pattern, with: replacement, options: [.regularExpression, .caseInsensitive])
     }
 }
 
@@ -161,9 +195,9 @@ struct MealReviewCard: View {
                     VStack(spacing: 9) {
                         ForEach(items.indices, id: \.self) { idx in
                             HStack(alignment: .top, spacing: 10) {
-                                FoodAvatar(name: items[idx].name)
+                                FoodAvatar(name: items[idx].displayName)
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text(items[idx].name)
+                                    Text(items[idx].displayName)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundColor(MacroMeshTheme.text)
                                         .lineLimit(3)
@@ -192,7 +226,7 @@ struct MealReviewCard: View {
                                         .clipShape(Circle())
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel("Remove \(items[idx].name)")
+                                .accessibilityLabel("Remove \(items[idx].displayName)")
                             }
                             .padding(11)
                             .background(Color.white.opacity(0.92))
@@ -327,8 +361,12 @@ struct SourceBadge: View {
             Text(label)
                 .font(.caption2.weight(.bold))
                 .foregroundColor(tint)
+                .lineLimit(1)
+                .allowsTightening(true)
+                .minimumScaleFactor(0.78)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
+                .frame(minWidth: 58, alignment: .center)
                 .background(tint.opacity(0.10))
                 .clipShape(Capsule())
         }
@@ -386,8 +424,12 @@ struct ConfidenceBadge: View {
         Text(display)
             .font(.caption2.weight(.bold))
             .foregroundColor(isTrusted == false ? MacroMeshTheme.orange : MacroMeshTheme.primary)
+            .lineLimit(1)
+            .allowsTightening(true)
+            .minimumScaleFactor(0.78)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
+            .frame(minWidth: 58, alignment: .center)
             .background((isTrusted == false ? MacroMeshTheme.orange : MacroMeshTheme.primary).opacity(0.12))
             .clipShape(Capsule())
     }

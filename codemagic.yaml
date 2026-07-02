@@ -32,9 +32,9 @@ workflows:
     max_build_duration: 60
 
     environment:
-      # Use Codemagic's latest stable Xcode image by default. Pin this later if a
-      # future Xcode update introduces build instability.
-      xcode: latest
+      # App Store Connect requires uploads built with the iOS 26 SDK or later.
+      # Keep this explicit so future Codemagic image changes are intentional.
+      xcode: 26.4
       cocoapods: default
 
       groups:

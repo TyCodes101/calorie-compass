@@ -34,6 +34,14 @@ struct RetryCopy {
         "We couldn’t \(action). Nothing was deleted or overwritten. \(error.localizedDescription)"
     }
 
+    static func sendFailure(action: String, error: Error) -> String {
+        "We couldn't \(action). Your review card is still safe. \(error.localizedDescription)"
+    }
+
+    static func saveFailure(error: Error) -> String {
+        "We couldn't save this meal. The review card is still here so you can try again. \(error.localizedDescription)"
+    }
+
     static func recoveryMessage(action: String, error: Error) -> String {
         "We’re setting things up and couldn’t \(action) yet. Your guest session is safe — try again in a moment. \(error.localizedDescription)"
     }

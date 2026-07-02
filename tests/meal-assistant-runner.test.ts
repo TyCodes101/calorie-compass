@@ -423,6 +423,268 @@ describe('runMealAssistant', () => {
     expect(response.assistant_reply).toMatch(/saved|logged|that one is in/i);
   });
 
+  it('summarizes macros for the pending review meal before it is saved', async () => {
+    const pendingItems = [
+      buildItem({
+        food_name: 'Grilled chicken breast',
+        quantity: 2,
+        unit: 'breasts',
+        calories: 270,
+        protein: 52,
+        carbs: 0,
+        fat: 6,
+        source_type: 'GENERIC_REFERENCE',
+        source_name: 'Chicken breast reference',
+      }),
+      buildItem({
+        food_name: 'Asparagus',
+        quantity: 1,
+        unit: 'serving',
+        calories: 40,
+        protein: 4,
+        carbs: 7,
+        fat: 0,
+        fiber: 4,
+        source_type: 'GENERIC_REFERENCE',
+        source_name: 'Vegetable reference',
+      }),
+    ];
+
+    const response = await runMealAssistant({
+      message: "where's my macros",
+      state: buildState({
+        currentMealItems: pendingItems,
+        currentMealText: '2 grilled chicken breasts and asparagus',
+        saved: false,
+      }),
+    });
+
+    expect(response.intent).toBe('macro_question');
+    expect(response.meal.items.map((item) => item.food_name)).toEqual(['Grilled chicken breast', 'Asparagus']);
+    expect(response.next_state.saved).toBe(false);
+    expect(response.assistant_reply).toMatch(/310.*calories/i);
+    expect(response.assistant_reply).toMatch(/56g protein/i);
+    expect(response.assistant_reply).toMatch(/7g carbs/i);
+    expect(response.assistant_reply).toMatch(/6g fat/i);
+    expect(response.assistant_reply).not.toMatch(/haven'?t logged|no foods logged/i);
+  });
+
+  it.each(['what are the macros', 'calories?'])('answers "%s" from the pending review meal', async (message) => {
+    const currentItem = buildItem({
+      food_name: 'McDouble',
+      calories: 390,
+      protein: 22,
+      carbs: 33,
+      fat: 19,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: "McDonald's official nutrition",
+    });
+
+    const response = await runMealAssistant({
+      message,
+      state: buildState({ currentMealItems: [currentItem], currentMealText: 'McDouble', saved: false }),
+    });
+
+    expect(response.intent).toBe('macro_question');
+    expect(response.next_state.currentMealItems[0]?.food_name).toBe('McDouble');
+    expect(response.assistant_reply).toMatch(/390|22g protein|33g carbs|19g fat/i);
+    expect(response.assistant_reply).not.toMatch(/haven'?t logged|no foods logged/i);
+  });
+
+  it('answers no-cheese questions about a pending McDouble without mutating or resolving new food', async () => {
+    const currentItem = buildItem({
+      food_name: 'McDouble without cheese',
+      quantity: 1,
+      unit: 'burger',
+      calories: 340,
+      protein: 20,
+      carbs: 31,
+      fat: 16,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: "McDonald's official nutrition",
+      notes: 'Treated as no cheese from the original user request.',
+    });
+    const resolveItemNutrition = vi.fn();
+
+    const response = await runMealAssistant(
+      {
+        message: 'Did it have no cheese?',
+        state: buildState({
+          currentMealItems: [currentItem],
+          currentMealText: 'Mcdouble no cheese',
+          saved: false,
+        }),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'correction',
+            assistant_reply: 'Updating it.',
+            should_lookup_nutrition: true,
+            should_mutate_pending_meal: true,
+            items: [
+              { name: 'cheese', brand: null, quantity: 0, unit: 'slice', modifiers: ['no'], action: 'update' },
+            ],
+          }),
+        ),
+        resolveItemNutrition,
+      },
+    );
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(response.intent).toBe('meal_review');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]).toMatchObject(currentItem);
+    expect(response.assistant_reply).toMatch(/yes|without cheese|no cheese/i);
+    expect(response.assistant_reply).not.toMatch(/updated|couldn.?t|failed|error/i);
+    expect(response.next_state.saved).toBe(false);
+  });
+
+  it('treats save-favorite text with a food alias as save intent instead of reparsing the meal', async () => {
+    const currentItem = buildItem({
+      food_name: "Wendy's Baconator",
+      quantity: 1,
+      unit: 'sandwich',
+      calories: 960,
+      protein: 57,
+      carbs: 36,
+      fat: 62,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: "Wendy's official nutrition",
+      notes: 'Matched to Wendy Baconator from the original user request.',
+    });
+    const resolveItemNutrition = vi.fn();
+    const saveMeal = vi.fn().mockResolvedValue(undefined);
+
+    const response = await runMealAssistant(
+      {
+        message: 'Save favorite wendys baconnator',
+        state: buildState({
+          currentMealItems: [currentItem],
+          currentMealText: "Wendy's Baconator",
+          saved: false,
+        }),
+      },
+      {
+        resolveItemNutrition,
+        saveMeal,
+      },
+    );
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(saveMeal).toHaveBeenCalledTimes(1);
+    expect(response.intent).toBe('save_meal');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe("Wendy's Baconator");
+    expect(response.next_state.currentMealItems[0]?.food_name).toBe("Wendy's Baconator");
+    expect(response.next_state.saved).toBe(true);
+    expect(response.assistant_reply).toMatch(/saved/i);
+    expect(response.assistant_reply).not.toMatch(/updated|homestyle|chicken|fillet/i);
+  });
+  it('adds McDouble no cheese to the active meal without generic cheese or chicken drift', async () => {
+    const currentItem = buildItem({
+      food_name: "Wendy's Baconator",
+      quantity: 1,
+      unit: 'sandwich',
+      calories: 960,
+      protein: 57,
+      carbs: 36,
+      fat: 62,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: "Wendy's official nutrition",
+    });
+
+    const response = await runMealAssistant({
+      message: 'add McDouble no cheese',
+      state: buildState({
+        currentMealItems: [currentItem],
+        currentMealText: "Wendy's Baconator",
+        saved: false,
+      }),
+    });
+
+    expect(response.intent).toBe('add_to_current_meal');
+    expect(response.meal.items).toHaveLength(2);
+    expect(response.meal.items.map((item) => item.food_name).join(', ')).not.toMatch(/mcchicken|homestyle|fillet/i);
+    expect(response.meal.items.find((item) => /mcdouble/i.test(item.food_name))).toMatchObject({
+      food_name: "McDonald's McDouble without cheese",
+      quantity: 1,
+      unit: 'burger',
+      source_type: 'OFFICIAL_RESTAURANT',
+      confidence_label: 'Verified',
+    });
+  });
+
+  it('replaces the active meal with McDouble no cheese without leaving the stale item behind', async () => {
+    const currentItem = buildItem({
+      food_name: "Wendy's Baconator",
+      quantity: 1,
+      unit: 'sandwich',
+      calories: 960,
+      protein: 57,
+      carbs: 36,
+      fat: 62,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: "Wendy's official nutrition",
+    });
+
+    const response = await runMealAssistant({
+      message: 'replace with McDouble no cheese',
+      state: buildState({
+        currentMealItems: [currentItem],
+        currentMealText: "Wendy's Baconator",
+        saved: false,
+      }),
+    });
+
+    expect(response.intent).toMatch(/correction|edit_command/);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]).toMatchObject({
+      food_name: "McDonald's McDouble without cheese",
+      quantity: 1,
+      unit: 'burger',
+      source_type: 'OFFICIAL_RESTAURANT',
+      confidence_label: 'Verified',
+    });
+    expect(response.meal.items[0]?.food_name).not.toMatch(/wendy|chicken|homestyle|fillet/i);
+  });
+  it('keeps pre-save assistant copy in review language even when generated text says added', async () => {
+    const resolvedItem = buildItem({
+      food_name: 'Baked potato',
+      quantity: 1,
+      unit: 'potato',
+      calories: 160,
+      protein: 4,
+      carbs: 37,
+      fat: 0.2,
+      source_type: 'GENERIC_REFERENCE',
+      source_name: 'Baked potato common serving estimate',
+    });
+
+    const response = await runMealAssistant(
+      {
+        message: 'medium baked potato',
+        state: buildState(),
+      },
+      {
+        classify: vi.fn().mockResolvedValue(
+          buildDecision({
+            intent: 'new_food_item',
+            assistant_reply: "I've added a medium baked potato.",
+            should_lookup_nutrition: true,
+            items: [{ name: 'baked potato', brand: null, quantity: 1, unit: 'potato', modifiers: ['medium'], action: 'add' }],
+          }),
+        ),
+        resolveItemNutrition: vi.fn().mockResolvedValue(buildParsedMealResponse([resolvedItem])),
+        generateAssistantReply: vi.fn().mockResolvedValue("I've added a medium baked potato to your meal."),
+      },
+    );
+
+    expect(response.next_state.saved).toBe(false);
+    expect(response.assistant_reply).toMatch(/review|save/i);
+    expect(response.assistant_reply).not.toMatch(/\b(?:i(?:'|’)ve added|logged|saved)\b/i);
+  });
+
   it('preserves branded packaged-food details for lookup resolution', async () => {
     const resolveItemNutrition = vi.fn().mockResolvedValue(
       buildParsedMealResponse([
