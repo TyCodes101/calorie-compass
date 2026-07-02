@@ -32,9 +32,9 @@ workflows:
     max_build_duration: 60
 
     environment:
-      # Use Codemagic's latest stable Xcode image by default. Pin this later if a
-      # future Xcode update introduces build instability.
-      xcode: latest
+      # Pin away from Codemagic's current Xcode 26.4 default. Its altool upload
+      # path can fail to resolve the App Store Connect Apple ID from a valid IPA.
+      xcode: 16.4
       cocoapods: default
 
       groups:
