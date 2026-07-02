@@ -173,6 +173,40 @@ describe('restaurant log screenshot regressions', () => {
     expect(response.meal.items[0]?.unit).toBe('burger');
   });
 
+  it.each(["Wendy's Baconator", 'wendys baconnator'])('protects Wendy Baconator identity for %s', async (message) => {
+    const response = await runPrompt(message);
+
+    expectRestaurantMatch(response, /wendy'?s.*baconator/i);
+    expect(foodNames(response)).not.toMatch(/chicken|homestyle|fillet|spicy/i);
+    expect(response.meal.items[0]?.calories).toBeGreaterThan(800);
+    expect(response.meal.items[0]?.calories).toBeLessThan(1_100);
+    expect(response.meal.items[0]?.unit).toBe('sandwich');
+  });
+
+  it('scales plural McDouble no-cheese requests without matching chicken or generic cheese', async () => {
+    const response = await runPrompt('2 mcdoubles no cheese');
+
+    expectRestaurantMatch(response, /mcdonald'?s.*mcdouble.*without cheese/i);
+    expect(response.meal.items).toHaveLength(1);
+    expect(foodNames(response)).not.toMatch(/mcchicken|chicken/i);
+    expect(response.meal.items[0]).toMatchObject({
+      quantity: 2,
+      unit: 'burger',
+      source_type: 'OFFICIAL_RESTAURANT',
+      confidence_label: 'Verified',
+    });
+    expect(response.meal.items[0]?.calories).toBeGreaterThan(540);
+    expect(response.meal.items[0]?.calories).toBeLessThan(760);
+  });
+
+  it('asks for a realistic count instead of building absurd banana totals', async () => {
+    const response = await runPrompt('999999 bananas');
+
+    expect(response.should_ask_clarification).toBe(true);
+    expect(response.meal.items).toHaveLength(0);
+    expect(response.meal.totals.calories).toBe(0);
+    expect(response.assistant_reply).toMatch(/how many|quantity|realistic|reasonable|actual/i);
+  });
   it.each([
     ['A SUBWAY BMT SANDWICH', /subway.*b\.?m\.?t|italian b\.?m\.?t/i],
     ['A subway bmt sandwhich', /subway.*b\.?m\.?t|italian b\.?m\.?t/i],

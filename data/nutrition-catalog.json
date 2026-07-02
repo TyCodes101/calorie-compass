@@ -717,6 +717,34 @@
       ]
     },
     {
+      "id": "mcdonalds_mcdouble_no_cheese",
+      "canonicalName": "McDonald's McDouble without cheese",
+      "brand": "McDonald's",
+      "servingQuantity": 1,
+      "servingUnit": "burger",
+      "calories": 340,
+      "protein": 20,
+      "carbs": 31,
+      "fat": 16,
+      "fiber": 2,
+      "sugar": 6,
+      "sodium": 760,
+      "sourceId": "mcdonalds_official",
+      "active": true,
+      "aliases": [
+        "mcdonald's mcdouble no cheese",
+        "mcdonalds mcdouble no cheese",
+        "mcdonald's mcdouble without cheese",
+        "mcdonalds mcdouble without cheese",
+        "mcdouble no cheese",
+        "mcdoubles no cheese",
+        "mcdouble without cheese",
+        "mcdoubles without cheese",
+        "mc double no cheese",
+        "mc double without cheese"
+      ]
+    },
+    {
       "id": "mcdonalds_cheeseburger",
       "canonicalName": "McDonald's Cheeseburger",
       "brand": "McDonald's",
@@ -1243,6 +1271,33 @@
         "wendy's spicy chicken sandwich",
         "wendys spicy chicken sandwich",
         "spicy chicken sandwich"
+      ]
+    },
+    {
+      "id": "wendys_baconator",
+      "canonicalName": "Wendy's Baconator",
+      "brand": "Wendy's",
+      "servingQuantity": 1,
+      "servingUnit": "sandwich",
+      "calories": 960,
+      "protein": 57,
+      "carbs": 36,
+      "fat": 62,
+      "fiber": 2,
+      "sugar": 8,
+      "sodium": 1540,
+      "sourceId": "wendys_official",
+      "active": true,
+      "aliases": [
+        "wendy's baconator",
+        "wendys baconator",
+        "baconator",
+        "wendy's baconnator",
+        "wendys baconnator",
+        "baconnator",
+        "wendy's baconater",
+        "wendys baconater",
+        "baconater"
       ]
     },
     {

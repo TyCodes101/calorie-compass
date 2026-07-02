@@ -3849,7 +3849,7 @@ function messageHasRestaurantCue(message: string) {
   const normalized = normalizeFoodText(message);
   const compact = normalized.replace(/[^a-z0-9]+/g, '');
   return (
-    /\b(?:arby'?s?|arbys|chic?k\s*fil\s*a|chic?kfila|chipotle|mcdonalds?|mcdonald s|taco bell|starbucks|wendys|wendy s|panera|subway|white castle|cava|panda express|little caesars?)\b/.test(normalized)
+    /\b(?:arby'?s?|arbys|chic?k\s*fil\s*a|chic?kfila|chipotle|mcdonalds?|mcdonald s|mcdoubles?|mc\s*double|big\s*mac|mc\s*chicken|mcchicken|taco bell|starbucks|wendys|wendy s|baconator|baconnator|baconater|panera|subway|white castle|cava|panda express|little caesars?)\b/.test(normalized)
     || /(?:arbys|whitecastle|tacobell|mcdonalds|chickfila|chicfila|burgerking|pandaexpress|dominos|pizzahut|raisingcanes|fiveguys|jerseymikes|littlecaesars)/.test(compact)
   );
 }
@@ -3863,7 +3863,9 @@ function messageHasPackagedBrandCue(message: string) {
 }
 
 function messageHasProtectedRestaurantCatalogCue(message: string) {
-  return /\bmc\s*donald'?s?|\bmcdonalds?\b/i.test(message) && /\bfr(?:y|ies)\b/i.test(message);
+  const normalized = normalizeFoodText(message);
+  return (/\bmc\s*donald'?s?|\bmcdonalds?\b/i.test(message) && /\bfr(?:y|ies)\b/i.test(message))
+    || /\b(?:mcdoubles?|mc\s*double|big\s*mac|mc\s*chicken|mcchicken|baconator|baconnator|baconater)\b/i.test(normalized);
 }
 
 function messageNeedsForcedTrustedCatalogMatch(message: string) {
@@ -3924,6 +3926,17 @@ function trustedFallbackWouldDropKnownFood(knownItems: ParsedFoodItem[], trusted
   return knownItems.some((knownItem) => !trustedItemsCoverKnownItem(knownItem, trustedHaystack));
 }
 
+function hasProtectedRestaurantCatalogIdentity(items: ParsedFoodItem[]) {
+  return items.some((item) => {
+    const identity = normalizeFoodText(`${item.catalog_food_id ?? ''} ${item.food_name} ${item.matched_query ?? ''}`);
+    return /\bmcdonalds mcdouble without cheese\b/.test(identity)
+      || /\bmcdouble without cheese\b/.test(identity)
+      || /\bmcdouble no cheese\b/.test(identity)
+      || /\bwendys baconator\b/.test(identity)
+      || /\bbaconator\b/.test(identity);
+  });
+}
+
 function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, mealType: MealAssistantState['mealType']) {
   const knownItems = detectKnownFoodEstimates(message);
   const trustedItems = getTrustedCatalogEstimate(message, mealType)?.items ?? [];
@@ -3934,6 +3947,14 @@ function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, 
     && messageHasPackagedBrandCue(message)
     && !knownItemsAlreadyHaveReliableBrandMatch(knownItems)
     && hasHighPriorityBrandedCatalogMatch(trustedItems)
+  ) {
+    return trustedItems;
+  }
+
+  if (
+    hasRestaurantCue
+    && hasProtectedRestaurantCatalogIdentity(trustedItems)
+    && trustedItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')
   ) {
     return trustedItems;
   }
@@ -5456,6 +5477,20 @@ function buildInitialClarificationResponse(input: MealAssistantRunInput, questio
   };
 }
 
+const MAX_REASONABLE_COUNTABLE_FOOD_QUANTITY = 50;
+
+function buildAbsurdQuantityQuestion(message: string) {
+  const normalized = normalizeFoodText(stripEmotionalPreface(message));
+  const match = normalized.match(/\b(\d+(?:\.\d+)?)\s+(bananas?|apples?|eggs?|burgers?|mcdoubles?|baconators?|sandwich(?:es)?|bowls?|tacos?|cookies?|bars?)\b/i);
+  if (!match) return null;
+
+  const quantity = Number(match[1]);
+  if (!Number.isFinite(quantity) || quantity <= MAX_REASONABLE_COUNTABLE_FOOD_QUANTITY) return null;
+
+  const unit = match[2] ?? 'items';
+  return `That quantity looks unusually high. How many ${unit} did you actually have? Send a realistic quantity and I will log it.`;
+}
+
 function getClarificationContextText(state: MealAssistantState) {
   return `${state.currentMealText ?? ''} ${state.pendingClarification ?? ''} ${state.lastAssistantQuestion ?? ''}`;
 }
@@ -6451,6 +6486,16 @@ function parseSwapReplacement(message: string) {
     .replace(/\s+/g, ' ')
     .trim();
 
+  const implicitMatch = normalized.match(/^(?:swap|replace)\s+(?:it|that|this|the\s+(?:item|meal))?\s*(?:for|with|to)\s+(.+)$/i);
+  if (implicitMatch) {
+    const replacement = cleanMealMutationFoodText(implicitMatch[1] ?? '').replace(/\bguac\b/gi, 'guacamole');
+    if (!replacement || !hasStrongFoodSignal(replacement)) {
+      return null;
+    }
+
+    return { target: 'current item', replacement };
+  }
+
   const match =
     normalized.match(/^(?:swap|replace)\s+(?:the\s+)?(.+?)\s+(?:for|with|to)\s+(.+)$/i)
     ?? normalized.match(/^instead\s+of\s+(.+?)\s+(?:make it|use|do|add|log)?\s*(.+)$/i);
@@ -6539,7 +6584,7 @@ async function resolveFoodTextForMealMutation(args: {
     return [candyItem];
   }
 
-  const hasTrustedSignal = /\b(?:chipotle|taco\s*bell|tacobell|mcdonald'?s?|mc\s*donalds?|chick\s*fil\s*a|starbucks|subway|wendy'?s|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|quest|david|fairlife|core power|premier protein|quaker|daisy|oikos|chobani|kodiak|doritos|goldfish)\b/i.test(args.foodText);
+  const hasTrustedSignal = /\b(?:chipotle|taco\s*bell|tacobell|mcdonald'?s?|mc\s*donalds?|mcdoubles?|mc\s*double|big\s*mac|mc\s*chicken|mcchicken|chick\s*fil\s*a|starbucks|subway|wendy'?s|baconator|baconnator|baconater|burger\s*king|burgerking|panda express|domino'?s?|dominos|pizza hut|raising canes?|canes|popeyes|panera|dunkin|kfc|five guys|jersey mikes?|quest|david|fairlife|core power|premier protein|quaker|daisy|oikos|chobani|kodiak|doritos|goldfish)\b/i.test(args.foodText);
   const trustedEstimate = hasTrustedSignal ? getTrustedCatalogEstimate(args.foodText, args.state.mealType) : null;
   if (trustedEstimate?.items.length) {
     return trustedEstimate.items;
@@ -8916,6 +8961,10 @@ export async function runMealAssistant(
       }
     : input;
   const state = { ...workingInput.state };
+  const absurdQuantityQuestion = buildAbsurdQuantityQuestion(workingInput.message);
+  if (absurdQuantityQuestion) {
+    return finalizeResponse(buildInitialClarificationResponse(workingInput, absurdQuantityQuestion), workingInput, context);
+  }
   const shouldUseModelIntentFirst = Boolean(process.env.OPENAI_API_KEY) && !dependencies.classify;
 
   if (isPendingMealAttributeQuestion(workingInput.message, state)) {

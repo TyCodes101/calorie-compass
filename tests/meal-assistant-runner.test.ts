@@ -540,6 +540,114 @@ describe('runMealAssistant', () => {
     expect(response.next_state.saved).toBe(false);
   });
 
+  it('treats save-favorite text with a food alias as save intent instead of reparsing the meal', async () => {
+    const currentItem = buildItem({
+      food_name: "Wendy's Baconator",
+      quantity: 1,
+      unit: 'sandwich',
+      calories: 960,
+      protein: 57,
+      carbs: 36,
+      fat: 62,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: "Wendy's official nutrition",
+      notes: 'Matched to Wendy Baconator from the original user request.',
+    });
+    const resolveItemNutrition = vi.fn();
+    const saveMeal = vi.fn().mockResolvedValue(undefined);
+
+    const response = await runMealAssistant(
+      {
+        message: 'Save favorite wendys baconnator',
+        state: buildState({
+          currentMealItems: [currentItem],
+          currentMealText: "Wendy's Baconator",
+          saved: false,
+        }),
+      },
+      {
+        resolveItemNutrition,
+        saveMeal,
+      },
+    );
+
+    expect(resolveItemNutrition).not.toHaveBeenCalled();
+    expect(saveMeal).toHaveBeenCalledTimes(1);
+    expect(response.intent).toBe('save_meal');
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]?.food_name).toBe("Wendy's Baconator");
+    expect(response.next_state.currentMealItems[0]?.food_name).toBe("Wendy's Baconator");
+    expect(response.next_state.saved).toBe(true);
+    expect(response.assistant_reply).toMatch(/saved/i);
+    expect(response.assistant_reply).not.toMatch(/updated|homestyle|chicken|fillet/i);
+  });
+  it('adds McDouble no cheese to the active meal without generic cheese or chicken drift', async () => {
+    const currentItem = buildItem({
+      food_name: "Wendy's Baconator",
+      quantity: 1,
+      unit: 'sandwich',
+      calories: 960,
+      protein: 57,
+      carbs: 36,
+      fat: 62,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: "Wendy's official nutrition",
+    });
+
+    const response = await runMealAssistant({
+      message: 'add McDouble no cheese',
+      state: buildState({
+        currentMealItems: [currentItem],
+        currentMealText: "Wendy's Baconator",
+        saved: false,
+      }),
+    });
+
+    expect(response.intent).toBe('add_to_current_meal');
+    expect(response.meal.items).toHaveLength(2);
+    expect(response.meal.items.map((item) => item.food_name).join(', ')).not.toMatch(/mcchicken|homestyle|fillet/i);
+    expect(response.meal.items.find((item) => /mcdouble/i.test(item.food_name))).toMatchObject({
+      food_name: "McDonald's McDouble without cheese",
+      quantity: 1,
+      unit: 'burger',
+      source_type: 'OFFICIAL_RESTAURANT',
+      confidence_label: 'Verified',
+    });
+  });
+
+  it('replaces the active meal with McDouble no cheese without leaving the stale item behind', async () => {
+    const currentItem = buildItem({
+      food_name: "Wendy's Baconator",
+      quantity: 1,
+      unit: 'sandwich',
+      calories: 960,
+      protein: 57,
+      carbs: 36,
+      fat: 62,
+      source_type: 'OFFICIAL_RESTAURANT',
+      source_name: "Wendy's official nutrition",
+    });
+
+    const response = await runMealAssistant({
+      message: 'replace with McDouble no cheese',
+      state: buildState({
+        currentMealItems: [currentItem],
+        currentMealText: "Wendy's Baconator",
+        saved: false,
+      }),
+    });
+
+    expect(response.intent).toMatch(/correction|edit_command/);
+    expect(response.meal.items).toHaveLength(1);
+    expect(response.meal.items[0]).toMatchObject({
+      food_name: "McDonald's McDouble without cheese",
+      quantity: 1,
+      unit: 'burger',
+      source_type: 'OFFICIAL_RESTAURANT',
+      confidence_label: 'Verified',
+    });
+    expect(response.meal.items[0]?.food_name).not.toMatch(/wendy|chicken|homestyle|fillet/i);
+  });
   it('keeps pre-save assistant copy in review language even when generated text says added', async () => {
     const resolvedItem = buildItem({
       food_name: 'Baked potato',

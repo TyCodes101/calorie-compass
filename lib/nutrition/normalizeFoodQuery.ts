@@ -75,6 +75,8 @@ function cleanupFreeText(text: string) {
     .replace(/\bskitles\b/g, 'skittles')
     .replace(/\bprotien\b/g, 'protein')
     .replace(/\bmcdoublee\b/g, 'mcdouble')
+    .replace(/\bbaconnator\b/g, 'baconator')
+    .replace(/\bbaconater\b/g, 'baconator')
     .replace(/\bpremeir\b/g, 'premier')
     .replace(/\bdorittos\b/g, 'doritos')
     .replace(/\bchoclate\b/g, 'chocolate')
@@ -254,6 +256,21 @@ function detectCompoundFood(text: string) {
 }
 
 function canonicalize(text: string) {
+  if (/\bmcdouble\b/.test(text) && /\b(?:no|without) cheese\b/.test(text)) {
+    return {
+      searchText: 'mcdonalds mcdouble no cheese',
+      matchedQuery: "McDonald's McDouble without cheese",
+      unitHint: 'burger',
+    };
+  }
+
+  if (text === 'baconator' || text === 'wendys baconator') {
+    return {
+      searchText: 'wendys baconator',
+      matchedQuery: "Wendy's Baconator",
+      unitHint: 'sandwich',
+    };
+  }
   if (text === 'mcdouble' || text === 'mcdonalds mcdouble') {
     return {
       searchText: 'mcdonalds mcdouble',

@@ -82,10 +82,12 @@ function detectRestaurantBrand(text: string): KnownRestaurantBrand {
   if (text.includes('starbucks')) return 'Starbucks';
   if (text.includes('chick-fil-a') || text.includes('chick fil a') || text.includes('chic fil a') || compact.includes('chicfila')) return 'Chick-fil-A';
   if (text.includes("mcdonald") || text.includes('mc donald') || compact.includes('mcdonalds')) return "McDonald's";
+  if (/\b(?:big mac|bigmac|mcchicken|mc chicken|mcdoubles?|mc double)\b/.test(text)) return "McDonald's";
   if (text.includes('panda express')) return 'Panda Express';
   if (text.includes('subway')) return 'Subway';
   if (text.includes('taco bell') || compact.includes('tacobell')) return 'Taco Bell';
   if (text.includes("wendy's") || text.includes('wendys')) return "Wendy's";
+  if (/\b(?:baconator|baconnator|baconater)\b/.test(text)) return "Wendy's";
   if (text.includes('white castle') || compact.includes('whitecastle')) return 'White Castle';
   if (text.includes('cava')) return 'CAVA';
   if (text.includes('panera')) return 'Panera';
@@ -192,7 +194,7 @@ const countWordMap: Record<string, number> = {
 };
 
 function extractRestaurantItemQuantity(segment: string) {
-  const match = segment.match(/\b(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b\s+(?:(?:arby'?s?|arbys|white\s+castle|subway|chipotle|chick\s+fil\s+a|mcdonald'?s?|mcdonalds|taco\s+bell|wendy'?s?|wendys)\s+)?(?:soft\s+|spicy\s+|crunchy\s+|chicken\s+|potato\s+|pepperoni\s+|turkey\s+|orange\s+|mac\s+and\s+cheese\s+|big\s+mac\s+|mcchicken\s+|caniac\s+){0,6}(?:tacos?|sandwich(?:es)?|burgers?|nuggets?|lattes?|subs?|footlongs?|bowls?|combos?|slices?|pizzas?|servings?|orders?)\b/i);
+  const match = segment.match(/\b(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b\s+(?:(?:arby'?s?|arbys|white\s+castle|subway|chipotle|chick\s+fil\s+a|mcdonald'?s?|mcdonalds|taco\s+bell|wendy'?s?|wendys)\s+)?(?:soft\s+|spicy\s+|crunchy\s+|chicken\s+|potato\s+|pepperoni\s+|turkey\s+|orange\s+|mac\s+and\s+cheese\s+|big\s+mac\s+|mcchicken\s+|caniac\s+){0,6}(?:mcdoubles?|mc\s+double|mcchickens?|mc\s+chickens?|big\s+macs?|baconators?|tacos?|sandwich(?:es)?|burgers?|nuggets?|lattes?|subs?|footlongs?|bowls?|combos?|slices?|pizzas?|servings?|orders?)\b/i);
   if (!match) return 1;
   const raw = (match[1] ?? '1').toLowerCase();
   return countWordMap[raw] ?? (Number(raw) || 1);
@@ -320,8 +322,9 @@ function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[
   }
 
   if (segment.includes('mcdouble') || segment.includes('mc double')) {
-    const food = findCatalogFoodById('mcdonalds_mcdouble');
-    return food ? scaleItems([scaleCatalogFood(food, 1, 'burger')], factor) : [];
+    const food = findCatalogFoodById(/\b(?:no|without)\s+cheese\b/.test(segment) ? 'mcdonalds_mcdouble_no_cheese' : 'mcdonalds_mcdouble');
+    const quantity = extractRestaurantItemQuantity(segment);
+    return food ? scaleItems([scaleCatalogFood(food, quantity, 'burger')], factor) : [];
   }
 
   if (segment.includes('cheeseburger')) {
@@ -338,6 +341,22 @@ function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[
   if (segment.includes('coke') || segment.includes('sprite') || segment.includes('drink')) {
     const food = findCatalogFoodById('mcdonalds_soft_drink');
     return food ? scaleItems([scaleCatalogFood(food, 1, 'medium')], factor) : [];
+  }
+
+  return [];
+}
+
+function matchWendysSegment(segment: string, factor: number): ParsedFoodItem[] {
+  if (/\b(?:baconator|baconnator|baconater)\b/.test(segment)) {
+    const food = findCatalogFoodById('wendys_baconator');
+    const quantity = extractRestaurantItemQuantity(segment);
+    return food ? scaleItems([scaleCatalogFood(food, quantity, 'sandwich')], factor) : [];
+  }
+
+  if (segment.includes('spicy chicken')) {
+    const food = findCatalogFoodById('wendys_spicy_chicken_sandwich');
+    const quantity = extractRestaurantItemQuantity(segment);
+    return food ? scaleItems([scaleCatalogFood(food, quantity, 'sandwich')], factor) : [];
   }
 
   return [];
@@ -364,6 +383,7 @@ function matchRestaurantSegment(segment: string, brand: Exclude<KnownRestaurantB
   else if (brand === 'Starbucks') matchedItems = matchStarbucksSegment(segment, factor);
   else if (brand === 'Chick-fil-A') matchedItems = matchChickFilASegment(segment, factor);
   else if (brand === "McDonald's") matchedItems = matchMcDonaldsSegment(segment, factor);
+  else if (brand === "Wendy's") matchedItems = matchWendysSegment(segment, factor);
   else if (brand === 'Taco Bell' && segment.includes('crunchy tacos')) {
     const food = findCatalogFoodById('tacobell_crunchy_taco');
     matchedItems = food ? scaleItems([scaleCatalogFood(food, 1, 'taco')], factor).map((item) => ({ ...item, food_name: 'Taco Bell Crunchy Tacos' })) : [];
