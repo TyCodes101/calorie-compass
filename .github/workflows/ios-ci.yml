@@ -36,10 +36,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in "iPhone 16" "iPhone 15" "iPhone 14"; do
-            if xcrun simctl list devices available | grep -q "$name"; then
-              echo "destination=platform=iOS Simulator,name=$name" >> "$GITHUB_OUTPUT"
-              echo "Using simulator: $name"
+          devices="$(xcrun simctl list devices available)"
+          for name in "iPhone 17" "iPhone 17 Pro" "iPhone 17 Pro Max" "iPhone 16e" "iPhone 15" "iPhone 14"; do
+            line="$(printf '%s\n' "$devices" | grep -E "^[[:space:]]+${name}[[:space:]]+\(" | head -n 1 || true)"
+            if [[ -n "$line" ]]; then
+              udid="$(printf '%s' "$line" | sed -E 's/.*\(([0-9A-Fa-f-]+)\).*/\1/')"
+              echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
+              echo "Using simulator: $name ($udid)"
               exit 0
             fi
           done
