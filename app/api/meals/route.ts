@@ -40,6 +40,9 @@ const requestSchema = z.object({
   notes: z.string().nullable().optional(),
   date: z.string().optional(),
   source_reusable_meal_id: z.string().nullable().optional(),
+  pending_meal_id: z.string().nullable().optional(),
+  pending_meal_version: z.number().int().nonnegative().nullable().optional(),
+  idempotency_key: z.string().nullable().optional(),
   items: z.array(parsedItemSchema).min(1),
 });
 

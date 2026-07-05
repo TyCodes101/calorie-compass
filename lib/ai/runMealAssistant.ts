@@ -16,6 +16,28 @@ import {
   type MealAssistantTranscriptMessage,
   mealAssistantModelOutputSchema,
 } from '@/lib/ai/mealAssistantSchema';
+import {
+  buildIrrelevantModifierReply,
+  buildNoMealMacroReply,
+  buildPendingMealMacroReply,
+  buildPendingReviewReply,
+  buildSavedMealMacroReply,
+  buildStalePendingReply,
+  createReadyPendingMeal,
+  discardPendingMeal,
+  extractMealTypeCorrection,
+  getActivePendingMeal,
+  hasActivePendingMeal,
+  isIrrelevantModifierRemoval,
+  isMacroRequestMessage,
+  isPendingDiscardMessage,
+  isPendingMealExpired,
+  markPendingMealSaved,
+  markPendingMealStale,
+  migratePendingMealState,
+  syncPendingMealWithCurrentItems,
+  updatePendingMealType,
+} from '@/lib/ai/mealPendingState';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { saveConfirmedMeal, updateSavedMeal } from '@/lib/meals';
 import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
@@ -562,6 +584,32 @@ function isFoodReplacementClarification(message: string, state: MealAssistantSta
 function hasAffirmativeSaveCommand(message: string) {
   const trimmed = message.trim();
   return !/\?$/.test(trimmed) && saveRegex.test(message) && !negatedSaveRegex.test(message) && !saveQuestionRegex.test(trimmed);
+}
+
+function isSaveReviewQuestion(message: string) {
+  const trimmed = message.trim();
+  const normalized = normalizeFoodText(stripEmotionalPreface(message));
+  return saveQuestionRegex.test(normalized)
+    || (/\?$/.test(trimmed) && saveRegex.test(normalized) && !negatedSaveRegex.test(normalized));
+}
+
+function isBareSaveCommand(message: string) {
+  if (isSaveReviewQuestion(message)) {
+    return false;
+  }
+
+  const normalized = normalizeFoodText(stripEmotionalPreface(message))
+    .replace(/^please\s+/, '')
+    .replace(/\s+please$/, '')
+    .trim();
+
+  if (!hasAffirmativeSaveCommand(normalized)) {
+    return false;
+  }
+
+  return /^(?:save|log)(?:\s+(?:it|that|this|meal|entry|this meal|that meal))?$/.test(normalized)
+    || /^(?:looks good|done)$/.test(normalized)
+    || /^(?:yes|yep|yeah|ok|okay|sure)\s+(?:save|log)(?:\s+(?:it|that|this|meal|entry|this meal|that meal))?$/.test(normalized);
 }
 
 function isRecentSavedMealUndoCommand(message: string) {
@@ -1506,6 +1554,22 @@ function normalizeAssistantDecision(decision: MealAssistantModelOutput, input: M
       contains_quantity_update: false,
       should_mutate_pending_meal: false,
       should_lookup_nutrition: false,
+      should_ask_clarification: false,
+      clarification_question: null,
+    };
+  }
+
+  if (nextDecision.action === 'save_meal' && isSaveReviewQuestion(input.message)) {
+    return {
+      ...nextDecision,
+      intent: 'meal_review',
+      action: 'answer_question',
+      items: [],
+      contains_food_to_log: false,
+      contains_quantity_update: false,
+      should_mutate_pending_meal: false,
+      should_lookup_nutrition: false,
+      should_save_meal: false,
       should_ask_clarification: false,
       clarification_question: null,
     };
@@ -5833,7 +5897,11 @@ function findMatchingMemoryMeal(input: MealAssistantRunInput, context: MealAssis
 
 function getCurrentMealRepeatItems(message: string, state: MealAssistantState) {
   const normalized = message.trim().toLowerCase();
-  if (!state.saved || !state.currentMealItems.length || !repeatCueRegex.test(normalized) || repeatYesterdayRegex.test(normalized)) {
+  const savedItems = state.pendingMeal?.status === 'saved' && state.pendingMeal.items.length
+    ? state.pendingMeal.items
+    : state.currentMealItems;
+  const hasSavedMeal = state.saved || state.pendingMeal?.status === 'saved';
+  if (!hasSavedMeal || !savedItems.length || !repeatCueRegex.test(normalized) || repeatYesterdayRegex.test(normalized)) {
     return null;
   }
 
@@ -5842,8 +5910,9 @@ function getCurrentMealRepeatItems(message: string, state: MealAssistantState) {
     const targetTokens = tokenizeText(target);
     const currentText = normalizeText([
       state.currentMealText ?? '',
-      ...state.currentMealItems.map((item) => item.food_name),
-      ...state.currentMealItems.map((item) => item.source_name ?? ''),
+      state.pendingMeal?.displayTitle ?? '',
+      ...savedItems.map((item) => item.food_name),
+      ...savedItems.map((item) => item.source_name ?? ''),
     ].join(' '));
 
     if (targetTokens.length && !targetTokens.some((token) => currentText.includes(token))) {
@@ -5851,7 +5920,7 @@ function getCurrentMealRepeatItems(message: string, state: MealAssistantState) {
     }
   }
 
-  return cloneParsedItems(state.currentMealItems);
+  return cloneParsedItems(savedItems);
 }
 
 function buildMemoryLoadReply(match: MemoryMatch, message: string) {
@@ -5954,7 +6023,7 @@ function buildCasualReply(message: string, state: MealAssistantState) {
       : 'No problem - I will leave this meal open so you can keep editing it.';
   }
 
-  if (saveQuestionRegex.test(normalized)) {
+  if (isSaveReviewQuestion(normalized)) {
     return hasActiveMeal
       ? 'If the meal looks right, you can save it. I still have it open for edits.'
       : 'There is not a meal ready yet. Send what you ate first, then I can save it.';
@@ -6668,7 +6737,7 @@ async function buildAdaptiveMealMutationReply(
       resolveItemNutrition,
     });
 
-    const nextState: MealAssistantState = {
+    let nextState: MealAssistantState = {
       ...input.state,
       currentMealItems: applied.nextItems,
       userCorrections: [...input.state.userCorrections, input.message],
@@ -6681,7 +6750,7 @@ async function buildAdaptiveMealMutationReply(
 
     if (applied.shouldSaveMeal && applied.nextItems.length) {
       await saveMeal({ state: nextState, items: applied.nextItems });
-      nextState.saved = true;
+      nextState = markPendingMealSaved(nextState);
     }
 
     const responseIntent = heuristicOperations.every((operation) => operation.action === 'update_item_quantity')
@@ -7091,12 +7160,13 @@ function buildDirectResponse(args: {
       })
     : args.nextState;
   const stateMealItems = withServingMetadataForItems(updatedState.currentMealItems);
-  const nextState: MealAssistantState = {
+  let nextState: MealAssistantState = {
     ...updatedState,
     currentMealItems: stateMealItems,
     currentMealText: stateMealItems.length ? buildMealTextFromItems(stateMealItems) : updatedState.currentMealText,
     confidenceScore: getConfidenceScore(stateMealItems),
   };
+  nextState = syncPendingMealWithCurrentItems(nextState);
   const assistantReply = postProcessAssistantReply(args.assistantReply, nextState, args.message);
   const showMealItems = !(args.intent === 'recommendation_request' && nextState.saved);
   const mealItems = showMealItems ? stateMealItems : [];
@@ -7139,7 +7209,7 @@ function buildDirectFoodEstimateResponse(args: {
   const currentMealItems = intent === 'add_to_current_meal'
     ? [...args.state.currentMealItems, ...args.items]
     : args.items;
-  const nextState: MealAssistantState = {
+  const baseNextState: MealAssistantState = {
     ...args.state,
     currentMealItems,
     userCorrections: intent === 'clarification_answer' ? [...args.state.userCorrections, args.input.message] : [...args.state.userCorrections],
@@ -7152,8 +7222,21 @@ function buildDirectFoodEstimateResponse(args: {
     sourceReusableMealId: intent === 'new_food_item' ? null : args.state.sourceReusableMealId,
     editingMealId: intent === 'new_food_item' ? null : args.state.editingMealId,
   };
+  const nextState = createReadyPendingMeal({
+    state: baseNextState,
+    items: currentMealItems,
+    rawText: intent === 'add_to_current_meal'
+      ? buildMealTextFromItems(currentMealItems)
+      : args.input.message,
+    mealType: mealTypeHint ?? args.state.mealType,
+    replace: intent !== 'add_to_current_meal',
+  });
 
-  const primaryReply = buildReplyFromItems({
+  const pendingReviewReply = buildPendingReviewReply(nextState);
+  const addedLead = intent === 'add_to_current_meal'
+    ? `Added ${args.items.map((item) => formatParsedItemLabel(item)).join(' and ')}. `
+    : '';
+  const primaryReply = pendingReviewReply ? `${addedLead}${pendingReviewReply}` : buildReplyFromItems({
     intent,
     decisionReply: 'Got it.',
     resolvedItems: intent === 'add_to_current_meal' ? currentMealItems : args.items,
@@ -7252,7 +7335,7 @@ async function buildDeterministicDialogueResponse(
   const hasSaveAndMutation = hasAffirmativeSaveCommand(normalized)
     && /\b(?:add|remove|delete|make|change|update|actually|instead|no\s+\w+|without)\b/i.test(normalized);
   if (hasAffirmativeSaveCommand(normalized) && !hasSaveAndMutation) {
-    if (state.saved && state.currentMealItems.length) {
+    if ((state.saved && state.currentMealItems.length) || state.pendingMeal?.status === 'saved') {
       return buildDirectResponse({
         intent: 'save_meal',
         assistantReply: 'Already saved. Send the next meal whenever you’re ready.',
@@ -7269,24 +7352,33 @@ async function buildDeterministicDialogueResponse(
       });
     }
 
-    if (state.currentMealItems.length) {
-      await saveMeal({ state, items: state.currentMealItems });
+    const activePendingMeal = getActivePendingMeal(state);
+    const saveItems = activePendingMeal?.items.length ? activePendingMeal.items : state.currentMealItems;
+    if (saveItems.length) {
+      await saveMeal({ state, items: saveItems });
     }
+    const savedState = saveItems.length
+      ? markPendingMealSaved({
+          ...state,
+          currentMealItems: saveItems,
+          currentMealText: state.currentMealText ?? buildMealTextFromItems(saveItems),
+        })
+      : state;
 
     return buildDirectResponse({
       intent: 'save_meal',
-      assistantReply: state.currentMealItems.length ? 'Saved. Ready for the next one?' : 'There is not a meal to save yet. Send the meal whenever you are ready.',
+      assistantReply: saveItems.length ? 'Saved. Ready for the next one?' : 'There is not a meal to save yet. Send the meal whenever you are ready.',
       nextState: {
-        ...state,
-        currentMealItems: [...state.currentMealItems],
-        currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
-        confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
-        saved: Boolean(state.currentMealItems.length),
+        ...savedState,
+        currentMealItems: [...savedState.currentMealItems],
+        currentMealText: savedState.currentMealText ?? (savedState.currentMealItems.length ? buildMealTextFromItems(savedState.currentMealItems) : null),
+        confidenceScore: savedState.confidenceScore ?? getConfidenceScore(savedState.currentMealItems),
+        saved: Boolean(saveItems.length),
         pendingClarification: null,
         lastAssistantQuestion: null,
       },
       message: input.message,
-      shouldSaveMeal: Boolean(state.currentMealItems.length),
+      shouldSaveMeal: Boolean(saveItems.length),
     });
   }
 
@@ -8041,7 +8133,7 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
     };
   }
 
-  if (negatedSaveRegex.test(normalized) || saveQuestionRegex.test(normalized)) {
+  if (negatedSaveRegex.test(normalized) || isSaveReviewQuestion(message)) {
     const negatedLog = /\b(?:do not|don't|dont|never|not)\s+log\b/i.test(normalized);
     return {
       intent: 'meal_review',
@@ -8762,8 +8854,148 @@ export async function runMealAssistant(
         message: mixedIntent.foodMessage,
       }
     : input;
-  const state = { ...workingInput.state };
+  const state = migratePendingMealState({ ...workingInput.state });
+  const statefulWorkingInput: MealAssistantRunInput = { ...workingInput, state };
   const shouldUseModelIntentFirst = Boolean(process.env.OPENAI_API_KEY) && !dependencies.classify;
+  const normalizedWorkingMessage = stripEmotionalPreface(workingInput.message).toLowerCase();
+
+  if (state.pendingMeal && isPendingMealExpired(state.pendingMeal)) {
+    return finalizeResponse(buildDirectResponse({
+      intent: 'meal_review',
+      assistantReply: buildStalePendingReply(),
+      nextState: markPendingMealStale(state),
+      message: workingInput.message,
+    }), workingInput, context);
+  }
+
+  if (isPendingDiscardMessage(workingInput.message) && (hasActivePendingMeal(state) || (state.currentMealItems.length && !state.saved))) {
+    return finalizeResponse(buildDirectResponse({
+      intent: 'delete_command',
+      assistantReply: 'Discarded that pending meal. Send the food again when you are ready.',
+      nextState: discardPendingMeal(state),
+      message: workingInput.message,
+    }), workingInput, context);
+  }
+
+  const saveOnlyCommand = isBareSaveCommand(workingInput.message)
+    && !extractExplicitFoodLogCommand(workingInput.message)
+    && !/\b(?:add|remove|delete|make|change|update|actually|instead|no\s+\w+|without)\b/i.test(normalizedWorkingMessage);
+  if (saveOnlyCommand) {
+    if ((state.saved && state.currentMealItems.length) || state.pendingMeal?.status === 'saved') {
+      return finalizeResponse(buildDirectResponse({
+        intent: 'save_meal',
+        assistantReply: 'Already saved. Send the next meal whenever you are ready.',
+        nextState: {
+          ...state,
+          saved: true,
+          pendingClarification: null,
+          lastAssistantQuestion: null,
+        },
+        message: workingInput.message,
+      }), workingInput, context);
+    }
+
+    const activePendingMeal = getActivePendingMeal(state);
+    const saveItems = activePendingMeal?.items.length ? activePendingMeal.items : state.currentMealItems;
+    if (saveItems.length) {
+      await saveMeal({ state, items: saveItems });
+    }
+
+    return finalizeResponse(buildDirectResponse({
+      intent: 'save_meal',
+      assistantReply: saveItems.length ? 'Saved. Ready for the next one?' : 'There is not a meal to save yet. Send the meal whenever you are ready.',
+      nextState: saveItems.length
+        ? markPendingMealSaved({
+            ...state,
+            currentMealItems: saveItems,
+            currentMealText: state.currentMealText ?? buildMealTextFromItems(saveItems),
+          })
+        : state,
+      message: workingInput.message,
+      shouldSaveMeal: Boolean(saveItems.length),
+    }), workingInput, context);
+  }
+
+  const earlyRecommendationReply = !dependencies.classify && !extractExplicitFoodLogCommand(workingInput.message)
+    ? buildRecommendationReply({ ...workingInput, state }, context)
+    : null;
+  if (earlyRecommendationReply) {
+    return finalizeResponse(buildDirectResponse({
+      intent: 'recommendation_request',
+      assistantReply: earlyRecommendationReply,
+      nextState: {
+        ...state,
+        currentMealItems: [...state.currentMealItems],
+        currentMealText: state.currentMealText ?? (state.currentMealItems.length ? buildMealTextFromItems(state.currentMealItems) : null),
+        confidenceScore: state.confidenceScore ?? getConfidenceScore(state.currentMealItems),
+      },
+      message: workingInput.message,
+      activeQuestion: workingInput.message,
+    }), workingInput, context);
+  }
+
+  const mealTypeCorrection = extractMealTypeCorrection(workingInput.message);
+  if (
+    mealTypeCorrection
+    && !recommendationRegex.test(normalizedWorkingMessage)
+    && !dinnerSuggestionRegex.test(normalizedWorkingMessage)
+    && !snackSuggestionRegex.test(normalizedWorkingMessage)
+    && (
+      hasActivePendingMeal(state)
+      || (state.currentMealItems.length && !state.saved)
+      || /^(?:actually|make that|change that|switch|it was|that was|for)?\s*(?:breakfast|lunch|dinner|snack)[.! ]*$/i.test(workingInput.message.trim())
+    )
+  ) {
+    if (hasActivePendingMeal(state) || (state.currentMealItems.length && !state.saved)) {
+      const nextState = updatePendingMealType(state, mealTypeCorrection);
+      const pendingReply = buildPendingMealMacroReply(nextState);
+      return finalizeResponse(buildDirectResponse({
+        intent: 'correction',
+        assistantReply: pendingReply
+          ? `I updated that to ${mealTypeCorrection}. ${pendingReply}`
+          : `I updated that to ${mealTypeCorrection}.`,
+        nextState,
+        message: workingInput.message,
+      }), workingInput, context);
+    }
+
+    return finalizeResponse(buildDirectResponse({
+      intent: 'correction',
+      assistantReply: `I do not have a meal to update yet. What food should I log for ${mealTypeCorrection}?`,
+      nextState: {
+        ...state,
+        mealType: mealTypeCorrection,
+        currentMealItems: [],
+        currentMealText: null,
+        saved: false,
+      },
+      message: workingInput.message,
+    }), workingInput, context);
+  }
+
+  const hasMealStateForMacro = hasActivePendingMeal(state)
+    || state.pendingMeal?.status === 'saved'
+    || (state.saved && state.currentMealItems.length > 0);
+  if (isMacroRequestMessage(workingInput.message, hasMealStateForMacro)) {
+    const pendingReply = buildPendingMealMacroReply(state);
+    const savedReply = pendingReply ? null : buildSavedMealMacroReply(state);
+    return finalizeResponse(buildDirectResponse({
+      intent: 'macro_question',
+      assistantReply: pendingReply ?? savedReply ?? buildNoMealMacroReply(),
+      nextState: state,
+      message: workingInput.message,
+      activeQuestion: workingInput.message,
+    }), workingInput, context);
+  }
+
+  if (isIrrelevantModifierRemoval(workingInput.message, state)) {
+    return finalizeResponse(buildDirectResponse({
+      intent: 'correction',
+      assistantReply: buildIrrelevantModifierReply(workingInput.message, state),
+      nextState: state,
+      message: workingInput.message,
+    }), workingInput, context);
+  }
 
   if (state.pendingClarification && isClarificationMetaQuestion(workingInput.message)) {
     return finalizeResponse(buildDirectResponse({
@@ -8856,7 +9088,7 @@ export async function runMealAssistant(
     !state.saved &&
     (parseSwapReplacement(workingInput.message) || parseCorrectionFoodReplacement(workingInput.message) || /\b(?:make|change|update|remove|delete)\b/i.test(workingInput.message))
   ) {
-    const deterministicSwapReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition, saveMeal);
+      const deterministicSwapReply = await buildAdaptiveMealMutationReply(statefulWorkingInput, resolveItemNutrition, saveMeal);
     if (deterministicSwapReply) {
       return finalizeResponse(deterministicSwapReply, workingInput, context);
     }
@@ -8936,7 +9168,7 @@ export async function runMealAssistant(
       }
     }
 
-    const deterministicDialogueResponse = await buildDeterministicDialogueResponse(workingInput, context, resolveItemNutrition, saveMeal);
+    const deterministicDialogueResponse = await buildDeterministicDialogueResponse(statefulWorkingInput, context, resolveItemNutrition, saveMeal);
     if (deterministicDialogueResponse) {
       return finalizeResponse(deterministicDialogueResponse, workingInput, context);
     }
@@ -8980,7 +9212,7 @@ export async function runMealAssistant(
       }), workingInput, context);
     }
 
-    const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(workingInput, resolveItemNutrition, saveMeal);
+    const adaptiveMealMutationReply = await buildAdaptiveMealMutationReply(statefulWorkingInput, resolveItemNutrition, saveMeal);
     if (adaptiveMealMutationReply) {
       return finalizeResponse(adaptiveMealMutationReply, workingInput, context);
     }
@@ -9153,7 +9385,7 @@ export async function runMealAssistant(
   }
 
   let decision = await classify({
-    ...workingInput,
+    ...statefulWorkingInput,
     context,
   });
   decision = normalizeAssistantDecision(decision, workingInput);
@@ -9247,9 +9479,17 @@ export async function runMealAssistant(
     !hasCompoundOperations &&
     !(decision.items.length && decision.should_lookup_nutrition)
   ) {
-    if (nextState.currentMealItems.length) {
-      await saveMeal({ state: nextState, items: nextState.currentMealItems });
-      nextState.saved = true;
+    const activePendingMeal = getActivePendingMeal(nextState);
+    const saveItems = activePendingMeal?.items.length ? activePendingMeal.items : nextState.currentMealItems;
+    if (nextState.pendingMeal?.status === 'saved') {
+      saved = false;
+    } else if (saveItems.length) {
+      await saveMeal({ state: nextState, items: saveItems });
+      nextState = markPendingMealSaved({
+        ...nextState,
+        currentMealItems: saveItems,
+        currentMealText: nextState.currentMealText ?? buildMealTextFromItems(saveItems),
+      });
       nextState.pendingClarification = null;
       nextState.lastAssistantQuestion = null;
       saved = true;
@@ -9289,7 +9529,7 @@ export async function runMealAssistant(
 
     if (applied.shouldSaveMeal && nextState.currentMealItems.length) {
       await saveMeal({ state: nextState, items: nextState.currentMealItems });
-      nextState.saved = true;
+      nextState = markPendingMealSaved(nextState);
       nextState.pendingClarification = null;
       nextState.lastAssistantQuestion = null;
       saved = true;
@@ -9406,11 +9646,33 @@ export async function runMealAssistant(
     currentMealText: mealItems.length ? buildMealTextFromItems(mealItems) : null,
     confidenceScore: getConfidenceScore(mealItems),
   };
+  if (mealItems.length && !saved && !clarificationQuestion) {
+    const shouldReplacePendingMeal = decision.intent === 'new_food_item' && !getActivePendingMeal(state);
+    nextState = createReadyPendingMeal({
+      state: nextState,
+      items: mealItems,
+      rawText: shouldReplacePendingMeal ? workingInput.message : nextState.currentMealText ?? workingInput.message,
+      mealType: nextState.mealType,
+      replace: shouldReplacePendingMeal,
+    });
+  }
   const totals = sumTotals(mealItems);
   const compoundReply = (decision as MealAssistantModelOutput & { compound_reply?: string }).compound_reply ?? null;
+  const reviewCopyIntent = decision.intent === 'new_food_item'
+    || decision.intent === 'add_to_current_meal'
+    || decision.intent === 'clarification_answer'
+    || decision.intent === 'correction'
+    || decision.intent === 'quantity_change'
+    || decision.intent === 'remove_item';
+  const pendingReviewReply = reviewCopyIntent && mealItems.length && !saved && !clarificationQuestion
+    ? buildPendingReviewReply(nextState)
+    : null;
+  const pendingReviewAssistantReply = pendingReviewReply && decision.intent === 'add_to_current_meal' && resolvedItems.length
+    ? `Added ${resolvedItems.map((item) => formatParsedItemLabel(item)).join(' and ')}. ${pendingReviewReply}`
+    : pendingReviewReply;
   const primaryReply = validateAssistantReply({
     message: workingInput.message,
-    assistantReply: compoundReply || buildReplyFromItems({
+    assistantReply: compoundReply || pendingReviewAssistantReply || buildReplyFromItems({
       intent: decision.intent,
       decisionReply: suppressedClarification
         ? 'Got it, I’m checking that again.'

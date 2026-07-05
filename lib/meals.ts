@@ -16,6 +16,9 @@ export type SaveMealPayload = {
   notes?: string | null;
   date?: string;
   source_reusable_meal_id?: string | null;
+  pending_meal_id?: string | null;
+  pending_meal_version?: number | null;
+  idempotency_key?: string | null;
   items: ParsedFoodItem[];
 };
 

@@ -807,8 +807,85 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(MealAssistantClientLogic.saveSignature(for: [first]), MealAssistantClientLogic.saveSignature(for: [second]))
     }
 
+    func testMealTypeSelectionUpdatesActivePendingMeal() {
+        var state = MealAssistantState()
+        state.pendingMeal = Self.pendingMeal(items: [Self.item("chicken")], mealType: "snack")
+
+        let next = MealAssistantClientLogic.applyingMealType("dinner", to: state)
+
+        XCTAssertEqual(next.mealType, "dinner")
+        XCTAssertEqual(next.pendingMeal?.mealType, "dinner")
+    }
+
+    func testSavedMacroRequestPreservesSavedMealItems() {
+        var state = MealAssistantState()
+        state.currentMealItems = [Self.item("chicken"), Self.item("asparagus")]
+        state.currentMealText = "chicken with asparagus"
+        state.saved = true
+        state.pendingMeal = Self.pendingMeal(items: state.currentMealItems, mealType: "dinner", status: "saved")
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: state,
+            currentMealItems: [],
+            incomingUserMessage: "provide macros"
+        )
+
+        XCTAssertTrue(requestState.saved)
+        XCTAssertEqual(requestState.currentMealItems.map(\.food_name), ["chicken", "asparagus"])
+        XCTAssertEqual(requestState.pendingMeal?.status, "saved")
+    }
+
+    func testSavedStateStillStartsFreshForNewFoodEntry() {
+        var state = MealAssistantState()
+        state.currentMealItems = [Self.item("old shake")]
+        state.currentMealText = "old shake"
+        state.saved = true
+        state.pendingMeal = Self.pendingMeal(items: state.currentMealItems, mealType: "snack", status: "saved")
+
+        let requestState = MealAssistantClientLogic.buildRequestState(
+            assistantState: state,
+            currentMealItems: [],
+            incomingUserMessage: "one banana"
+        )
+
+        XCTAssertFalse(requestState.saved)
+        XCTAssertTrue(requestState.currentMealItems.isEmpty)
+        XCTAssertNil(requestState.pendingMeal)
+        XCTAssertEqual(requestState.currentMealText, "one banana")
+    }
+
+    func testPendingSaveMetadataUsesIdVersionKey() {
+        var state = MealAssistantState()
+        state.pendingMeal = Self.pendingMeal(items: [Self.item("chicken")], mealType: "dinner")
+
+        let metadata = MealAssistantClientLogic.pendingSaveMetadata(from: state)
+
+        XCTAssertEqual(metadata.id, "pending-test")
+        XCTAssertEqual(metadata.version, 3)
+        XCTAssertEqual(metadata.key, "pending-test:v3")
+    }
+
     private static func item(_ name: String, quantity: Double = 1, unit: String = "serving") -> MealRequestItem {
         MealRequestItem(food_name: name, quantity: quantity, unit: unit, calories: 100, protein: 10, carbs: 10, fat: 2, fiber: 0, sugar: 0, sodium: 0, notes: nil, source_type: nil, source_name: nil, confidence_label: nil)
+    }
+
+    private static func pendingMeal(items: [MealRequestItem], mealType: String, status: String = "readyForReview") -> MealAssistantPendingMeal {
+        MealAssistantPendingMeal(
+            id: "pending-test",
+            version: 3,
+            status: status,
+            mealType: mealType,
+            displayTitle: items.map(\.food_name).joined(separator: ", "),
+            rawText: nil,
+            items: items,
+            totals: MealAssistantPendingTotals(calories: 200, protein: 20, carbs: 20, fat: 4, fiber: 0, sugar: 0, sodium: 0),
+            confidenceScore: 0.9,
+            createdAt: nil,
+            updatedAt: nil,
+            expiresAt: nil,
+            savedMealId: nil,
+            idempotencyKey: nil
+        )
     }
 
     private static func trustedItem(_ name: String) -> MealRequestItem {

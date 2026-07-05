@@ -644,10 +644,12 @@ struct LogChatView: View {
                     if MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: activeItemsBeforeResponse, responseItems: resp.meal.items, responseSaved: resp.next_state.saved, incomingUserMessage: userMessage) {
                         assistantState = resp.next_state
                         assistantState.currentMealItems = activeItemsBeforeResponse
+                        selectedMealType = assistantState.mealType
                         showReviewCard = true
                         return
                     }
                     assistantState = resp.next_state
+                    selectedMealType = assistantState.mealType
                     reviewItems = resp.meal.items.map(MealItem.init(from:))
                     if !reviewItems.isEmpty {
                         syncActiveMealItems(reviewItems)
@@ -827,6 +829,9 @@ struct LogChatView: View {
             confidence_score: assistantState.confidenceScore,
             raw_text: assistantState.currentMealText,
             source_reusable_meal_id: assistantState.sourceReusableMealId,
+            pending_meal_id: MealAssistantClientLogic.pendingSaveMetadata(from: assistantState).id,
+            pending_meal_version: MealAssistantClientLogic.pendingSaveMetadata(from: assistantState).version,
+            idempotency_key: MealAssistantClientLogic.pendingSaveMetadata(from: assistantState).key,
             notes: nil,
             date: nil,
             items: requestItems
@@ -843,7 +848,7 @@ struct LogChatView: View {
                         currentMealItems: requestItems,
                         incomingUserMessage: assistantState.currentMealText ?? ""
                     )
-                    assistantState.saved = true
+                    assistantState = MealAssistantClientLogic.markPendingMealSaved(state: assistantState, items: requestItems)
                     recentSavedMeal = RecentSavedMealSnapshot(
                         id: response.meal?.id,
                         signature: saveSignature,
