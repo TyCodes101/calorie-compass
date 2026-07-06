@@ -169,6 +169,14 @@
       "notes": "Used for branded packaged snack matching"
     },
     {
+      "id": "oreo_reference",
+      "name": "Oreo nutrition reference",
+      "sourceType": "GENERIC_REFERENCE",
+      "brand": "Oreo",
+      "citation": "Oreo packaged cookie nutrition reference",
+      "notes": "Used for common packaged cookie matching"
+    },
+    {
       "id": "oikos_reference",
       "name": "Oikos nutrition reference",
       "sourceType": "GENERIC_REFERENCE",
@@ -427,6 +435,28 @@
       ]
     },
     {
+      "id": "chipotle_steak",
+      "canonicalName": "Chipotle steak",
+      "brand": "Chipotle",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 150,
+      "protein": 21,
+      "carbs": 1,
+      "fat": 6,
+      "fiber": 0,
+      "sugar": 0,
+      "sodium": 530,
+      "sourceId": "chipotle_official",
+      "active": true,
+      "aliases": [
+        "chipotle steak",
+        "steak",
+        "chipotle steak bowl",
+        "steak bowl"
+      ]
+    },
+    {
       "id": "chipotle_cheese",
       "canonicalName": "Chipotle cheese",
       "brand": "Chipotle",
@@ -651,6 +681,31 @@
         "chick-fil-a nuggets",
         "nuggets",
         "8 count nuggets"
+      ]
+    },
+    {
+      "id": "chickfila_grilled_nuggets_8",
+      "canonicalName": "Chick-fil-A Grilled Nuggets 8 Count",
+      "brand": "Chick-fil-A",
+      "servingQuantity": 8,
+      "servingUnit": "count",
+      "servingGrams": 95,
+      "calories": 130,
+      "protein": 25,
+      "carbs": 1,
+      "fat": 3,
+      "fiber": 0,
+      "sugar": 1,
+      "sodium": 440,
+      "sourceId": "chickfila_official",
+      "active": true,
+      "aliases": [
+        "chick-fil-a grilled nuggets",
+        "chick fil a grilled nuggets",
+        "chickfila grilled nuggets",
+        "chic fil a grilled nuggets",
+        "grilled nuggets",
+        "8 count grilled nuggets"
       ]
     },
     {
@@ -924,6 +979,47 @@
       ]
     },
     {
+      "id": "generic_corn_on_the_cob",
+      "canonicalName": "Corn on the cob",
+      "brand": null,
+      "servingQuantity": 1,
+      "servingUnit": "ear",
+      "calories": 90,
+      "protein": 3,
+      "carbs": 19,
+      "fat": 1,
+      "fiber": 2,
+      "sugar": 6,
+      "sodium": 15,
+      "sourceId": "generic_reference",
+      "active": true,
+      "aliases": [
+        "corn on the cob",
+        "corn cob",
+        "ear of corn"
+      ]
+    },
+    {
+      "id": "generic_butter",
+      "canonicalName": "Butter",
+      "brand": null,
+      "servingQuantity": 1,
+      "servingUnit": "tbsp",
+      "calories": 102,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 12,
+      "fiber": 0,
+      "sugar": 0,
+      "sodium": 91,
+      "sourceId": "generic_reference",
+      "active": true,
+      "aliases": [
+        "butter",
+        "buttered"
+      ]
+    },
+    {
       "id": "generic_rice_cake",
       "canonicalName": "Rice cake",
       "brand": null,
@@ -1176,6 +1272,30 @@
       ]
     },
     {
+      "id": "subway_italian_bmt_footlong",
+      "canonicalName": "Subway Italian B.M.T. Footlong",
+      "brand": "Subway",
+      "servingQuantity": 1,
+      "servingUnit": "footlong sub",
+      "servingGrams": 438,
+      "calories": 820,
+      "protein": 40,
+      "carbs": 92,
+      "fat": 32,
+      "fiber": 10,
+      "sugar": 16,
+      "sodium": 2520,
+      "sourceId": "subway_official",
+      "active": true,
+      "aliases": [
+        "subway italian bmt footlong",
+        "subway italian b.m.t. footlong",
+        "subway bmt footlong",
+        "italian bmt footlong",
+        "bmt footlong"
+      ]
+    },
+    {
       "id": "subway_meatball_marinara_6in",
       "canonicalName": "Subway Meatball Marinara 6-Inch",
       "brand": "Subway",
@@ -1203,6 +1323,30 @@
       ]
     },
     {
+      "id": "subway_meatball_marinara_footlong",
+      "canonicalName": "Subway Meatball Marinara Footlong",
+      "brand": "Subway",
+      "servingQuantity": 1,
+      "servingUnit": "footlong sub",
+      "servingGrams": 418,
+      "calories": 920,
+      "protein": 40,
+      "carbs": 112,
+      "fat": 40,
+      "fiber": 14,
+      "sugar": 18,
+      "sodium": 2360,
+      "sourceId": "subway_official",
+      "active": true,
+      "aliases": [
+        "subway meatball marinara footlong",
+        "subway meatball footlong",
+        "meatball marinara footlong",
+        "meatball footlong",
+        "footlong meatball sub"
+      ]
+    },
+    {
       "id": "tacobell_crunchy_taco",
       "canonicalName": "Taco Bell Crunchy Taco",
       "brand": "Taco Bell",
@@ -1225,6 +1369,27 @@
       ]
     },
     {
+      "id": "tacobell_soft_taco",
+      "canonicalName": "Taco Bell Soft Taco",
+      "brand": "Taco Bell",
+      "servingQuantity": 1,
+      "servingUnit": "taco",
+      "calories": 180,
+      "protein": 9,
+      "carbs": 18,
+      "fat": 8,
+      "fiber": 3,
+      "sugar": 1,
+      "sodium": 500,
+      "sourceId": "tacobell_official",
+      "active": true,
+      "aliases": [
+        "taco bell soft taco",
+        "tacobell soft taco",
+        "soft taco"
+      ]
+    },
+    {
       "id": "wendys_spicy_chicken_sandwich",
       "canonicalName": "Wendy's Spicy Chicken Sandwich",
       "brand": "Wendy's",
@@ -1243,6 +1408,55 @@
         "wendy's spicy chicken sandwich",
         "wendys spicy chicken sandwich",
         "spicy chicken sandwich"
+      ]
+    },
+    {
+      "id": "wendys_baconator",
+      "canonicalName": "Wendy's Baconator",
+      "brand": "Wendy's",
+      "servingQuantity": 1,
+      "servingUnit": "burger",
+      "calories": 960,
+      "protein": 57,
+      "carbs": 36,
+      "fat": 66,
+      "fiber": 1,
+      "sugar": 7,
+      "sodium": 1540,
+      "sourceId": "wendys_official",
+      "active": true,
+      "aliases": [
+        "wendy's baconator",
+        "wendys baconator",
+        "baconator",
+        "baconnator",
+        "wendy's baconnator",
+        "wendys baconnator"
+      ]
+    },
+    {
+      "id": "wendys_jr_bacon_cheeseburger",
+      "canonicalName": "Wendy's Jr. Bacon Cheeseburger",
+      "brand": "Wendy's",
+      "servingQuantity": 1,
+      "servingUnit": "burger",
+      "calories": 370,
+      "protein": 18,
+      "carbs": 26,
+      "fat": 23,
+      "fiber": 1,
+      "sugar": 5,
+      "sodium": 650,
+      "sourceId": "wendys_official",
+      "active": true,
+      "aliases": [
+        "wendy's jr bacon cheeseburger",
+        "wendys jr bacon cheeseburger",
+        "wendy's bacon cheeseburger",
+        "wendys bacon cheeseburger",
+        "bacon cheeseburger",
+        "jr bacon cheeseburger",
+        "jbc"
       ]
     },
     {
@@ -1474,6 +1688,7 @@
       "active": true,
       "aliases": [
         "diet coke",
+        "diet cooe",
         "diet coke can",
         "coca cola diet coke"
       ]
@@ -2029,6 +2244,53 @@
       ]
     },
     {
+      "id": "lays_classic_potato_chips",
+      "canonicalName": "Lay's Classic Potato Chips",
+      "brand": "Lay's",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 160,
+      "protein": 2,
+      "carbs": 15,
+      "fat": 10,
+      "fiber": 1,
+      "sugar": 1,
+      "sodium": 140,
+      "sourceId": "fritolay_reference",
+      "active": true,
+      "aliases": [
+        "lay's chips",
+        "lays chips",
+        "lay's classic chips",
+        "lays classic chips",
+        "lay's classic potato chips",
+        "lays classic potato chips"
+      ]
+    },
+    {
+      "id": "oreo_cookies",
+      "canonicalName": "Oreo Cookies",
+      "brand": "Oreo",
+      "servingQuantity": 3,
+      "servingUnit": "cookies",
+      "servingGrams": 34,
+      "calories": 160,
+      "protein": 1,
+      "carbs": 25,
+      "fat": 7,
+      "fiber": 1,
+      "sugar": 14,
+      "sodium": 130,
+      "sourceId": "oreo_reference",
+      "active": true,
+      "aliases": [
+        "oreo cookies",
+        "oreos",
+        "oreo",
+        "oreo cookie"
+      ]
+    },
+    {
       "fiber": 3,
       "sugar": 1,
       "sodium": 1860,
@@ -2250,6 +2512,9 @@
       "sourceId": "poptarts_reference",
       "aliases": [
         "pop-tarts frosted strawberry",
+        "pop-tarts",
+        "poptarts",
+        "pop tarts",
         "poptart strawberry",
         "pop tarts strawberry"
       ]

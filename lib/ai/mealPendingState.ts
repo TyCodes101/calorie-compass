@@ -3,7 +3,7 @@ import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 
 type Totals = ParsedMealResponse['totals'];
 
-const ACTIVE_PENDING_STATUSES = new Set<PendingMeal['status']>(['resolving', 'readyForReview', 'saving']);
+const ACTIVE_PENDING_STATUSES = new Set<PendingMeal['status']>(['resolving', 'readyForReview', 'saving', 'failed']);
 const PENDING_TTL_MS = 1000 * 60 * 60 * 18;
 
 export function sumPendingTotals(items: ParsedFoodItem[]): Totals {
@@ -247,6 +247,48 @@ export function markPendingMealSaved(state: MealAssistantState, now = new Date()
   } satisfies MealAssistantState;
 }
 
+export function markPendingMealSaveFailed(state: MealAssistantState, now = new Date()) {
+  const pendingMeal = state.pendingMeal;
+  const sourceItems = state.currentMealItems.length
+    ? cloneItems(state.currentMealItems)
+    : pendingMeal?.items.length
+      ? cloneItems(pendingMeal.items)
+      : [];
+
+  if (!pendingMeal) {
+    return {
+      ...state,
+      currentMealItems: sourceItems,
+      currentMealText: state.currentMealText ?? (sourceItems.length ? buildPendingMealDisplayTitle(null, sourceItems) : null),
+      confidenceScore: sourceItems.length ? getPendingConfidenceScore(sourceItems, state.confidenceScore) : state.confidenceScore,
+      saved: false,
+      pendingClarification: null,
+      lastAssistantQuestion: null,
+    } satisfies MealAssistantState;
+  }
+
+  const totals = sumPendingTotals(sourceItems);
+  const confidenceScore = getPendingConfidenceScore(sourceItems, state.confidenceScore);
+  return {
+    ...state,
+    pendingMeal: {
+      ...pendingMeal,
+      status: 'failed',
+      items: sourceItems,
+      totals,
+      confidenceScore,
+      displayTitle: buildPendingMealDisplayTitle(state.currentMealText ?? pendingMeal.rawText, sourceItems),
+      updatedAt: now.toISOString(),
+    },
+    currentMealItems: cloneItems(sourceItems),
+    currentMealText: buildPendingMealDisplayTitle(state.currentMealText ?? pendingMeal.rawText, sourceItems),
+    confidenceScore,
+    saved: false,
+    pendingClarification: null,
+    lastAssistantQuestion: null,
+  } satisfies MealAssistantState;
+}
+
 export function buildPendingReviewReply(state: MealAssistantState) {
   const pendingMeal = getActivePendingMeal(state);
   if (!pendingMeal) {
@@ -333,7 +375,7 @@ export function extractMealTypeCorrection(message: string): MealAssistantState['
 }
 
 export function isPendingDiscardMessage(message: string) {
-  return /^(?:delete|discard|clear)(?:\s+(?:that|it|this|meal|nvm))*[.! ]*$/i.test(message.trim());
+  return /^(?:delete|discard|clear|cancel|reset|start over)(?:\s+(?:that|it|this|meal|entry|everything|nvm|nevermind|never mind))*[.! ]*$/i.test(message.trim());
 }
 
 export function isIrrelevantModifierRemoval(message: string, state: MealAssistantState) {
@@ -468,7 +510,13 @@ function getPendingConfidenceScore(items: ParsedFoodItem[], fallback: number | n
   if (!items.length) {
     return fallback ?? 0.82;
   }
-  if (items.every((item) => item.is_trusted || item.source_type !== 'AI_ESTIMATE')) {
+  if (items.some((item) => item.source_type === 'AI_ESTIMATE' || item.used_ai_fallback || item.is_trusted === false)) {
+    return Math.min(fallback ?? 0.82, 0.82);
+  }
+  if (items.every((item) => item.source_type === 'OFFICIAL_RESTAURANT' && item.is_trusted)) {
+    return 0.95;
+  }
+  if (items.every((item) => item.is_trusted && item.source_type !== 'AI_ESTIMATE')) {
     return 0.9;
   }
   return fallback ?? 0.82;

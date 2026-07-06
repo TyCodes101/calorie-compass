@@ -266,7 +266,7 @@ struct LogChatView: View {
                                 AssistantTypingCard()
                             }
                             if showReviewCard {
-                                MealReviewCard(items: $reviewItems, showCard: $showReviewCard, onConfirm: saveMeal, onCancel: discardActiveMeal)
+                                MealReviewCard(items: $reviewItems, showCard: $showReviewCard, isSavingExternally: isSavingMeal, onConfirm: saveMeal, onCancel: discardActiveMeal)
                                     .id(reviewCardAnchorID)
                                     .onChange(of: reviewItems) { _, nextItems in
                                         syncActiveMealItems(nextItems)

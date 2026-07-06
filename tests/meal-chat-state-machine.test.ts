@@ -279,6 +279,39 @@ describe('log chat pending meal state machine', () => {
     expect(macro.assistant_reply).toMatch(/no foods logged|haven'?t logged/i);
   });
 
+  it('keeps a bare "nvm" pending meal recoverable instead of silently wiping it', async () => {
+    const initial = await runMealAssistant(
+      { message: 'Chicken with asparagus', state: buildState() },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition },
+    );
+
+    const response = await runMealAssistant(
+      { message: 'nvm', state: initial.next_state },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition },
+    );
+
+    expect(response.intent).toBe('casual_message');
+    expect(response.next_state.currentMealItems.map((item) => item.food_name)).toEqual(['Grilled chicken breast', 'Asparagus']);
+    expect((response.next_state as MealAssistantState & { pendingMeal?: PendingMealSnapshot | null }).pendingMeal?.status).toBe('readyForReview');
+    expect(response.assistant_reply).toMatch(/still have this meal|remove|change|save/i);
+  });
+
+  it('discards pending state on "start over"', async () => {
+    const initial = await runMealAssistant(
+      { message: 'Chicken with asparagus', state: buildState() },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition },
+    );
+
+    const discarded = await runMealAssistant(
+      { message: 'start over', state: initial.next_state },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition },
+    );
+
+    expect(discarded.next_state.currentMealItems).toEqual([]);
+    expect((discarded.next_state as MealAssistantState & { pendingMeal?: PendingMealSnapshot | null }).pendingMeal?.status).toBe('discarded');
+    expect(discarded.assistant_reply).toMatch(/discarded|starting fresh|send the food/i);
+  });
+
   it('adds rice to the active pending meal and updates totals', async () => {
     const addRiceClassifier = classifier({
       intent: 'add_to_current_meal',
@@ -339,6 +372,85 @@ describe('log chat pending meal state machine', () => {
     expect(saved.should_save_meal).toBe(true);
     expect(pendingMeal(saved.next_state).status).toBe('saved');
     expect(duplicate.assistant_reply).toMatch(/already saved/i);
+  });
+
+  it('treats bare yes as pending review confirmation and repeated yes saves once', async () => {
+    const saveMeal = vi.fn(async () => undefined);
+    const initial = await runMealAssistant(
+      { message: 'Chicken with asparagus', state: buildState() },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition },
+    );
+
+    const saved = await runMealAssistant(
+      { message: 'yes', state: initial.next_state },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition, saveMeal },
+    );
+    const duplicate = await runMealAssistant(
+      { message: 'yes', state: saved.next_state },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition, saveMeal },
+    );
+
+    expect(saveMeal).toHaveBeenCalledTimes(1);
+    expect(saved.should_save_meal).toBe(true);
+    expect(pendingMeal(saved.next_state).status).toBe('saved');
+    expect(duplicate.assistant_reply).toMatch(/already saved/i);
+  });
+
+  it('leaves a failed save as a recoverable pending meal and allows retry', async () => {
+    const saveMeal = vi.fn()
+      .mockRejectedValueOnce(new Error('database unavailable'))
+      .mockResolvedValueOnce(undefined);
+    const initial = await runMealAssistant(
+      { message: 'Chicken with asparagus', state: buildState() },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition },
+    );
+
+    const failed = await runMealAssistant(
+      { message: 'save it', state: initial.next_state },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition, saveMeal },
+    );
+    const retried = await runMealAssistant(
+      { message: 'save it', state: failed.next_state },
+      { classify: classifier(), resolveItemNutrition: resolveNutrition, saveMeal },
+    );
+
+    expect(saveMeal).toHaveBeenCalledTimes(2);
+    expect(failed.should_save_meal).toBe(false);
+    expect(failed.next_state.saved).toBe(false);
+    expect(pendingMeal(failed.next_state).status).toBe('failed');
+    expect(pendingMeal(failed.next_state).items).toHaveLength(2);
+    expect(failed.assistant_reply).toMatch(/could not save|try saving again/i);
+    expect(retried.should_save_meal).toBe(true);
+    expect(pendingMeal(retried.next_state).status).toBe('saved');
+  });
+
+  it('keeps pending confidence conservative when an item is estimated', async () => {
+    const resolveEstimatedNutrition = async (args: { item: { quantity: number }; mealType: MealAssistantState['mealType'] }) => meal([
+      item({
+        food_name: 'Mystery cafeteria bowl',
+        quantity: args.item.quantity,
+        unit: 'bowl',
+        calories: 640,
+        protein: 28,
+        carbs: 72,
+        fat: 24,
+        source_type: 'AI_ESTIMATE',
+        source_name: 'AI estimate',
+        confidence_label: 'Estimated',
+        is_trusted: false,
+        used_ai_fallback: true,
+      }),
+    ], args.mealType);
+
+    const response = await runMealAssistant(
+      { message: 'mystery cafeteria bowl', state: buildState({ confidenceScore: 0.98 }) },
+      { classify: classifier({
+        items: [{ name: 'mystery cafeteria bowl', brand: null, quantity: 1, unit: 'bowl', modifiers: [], action: 'add' }],
+      }), resolveItemNutrition: resolveEstimatedNutrition },
+    );
+
+    expect(pendingMeal(response.next_state).items[0]?.source_type).toBe('AI_ESTIMATE');
+    expect(pendingMeal(response.next_state).confidenceScore).toBeLessThanOrEqual(0.82);
   });
 
   it('answers macro requests from saved meal state after save', async () => {

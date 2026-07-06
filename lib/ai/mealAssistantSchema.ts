@@ -107,7 +107,7 @@ export const nutritionTotalsSchema = z.object({
   sodium: z.number().nonnegative(),
 });
 
-export const pendingMealStatusSchema = z.enum(['none', 'resolving', 'readyForReview', 'saving', 'saved', 'discarded', 'stale']);
+export const pendingMealStatusSchema = z.enum(['none', 'resolving', 'readyForReview', 'saving', 'saved', 'failed', 'discarded', 'stale']);
 
 export const pendingMealSchema = z.object({
   id: z.string().min(1),

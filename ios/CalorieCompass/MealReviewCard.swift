@@ -111,6 +111,7 @@ struct MealReviewCard: View {
     @Binding var showCard: Bool
     @State private var isSaving = false
     @State private var error: String?
+    var isSavingExternally = false
     var onConfirm: ([MealItem]) -> Void
     var onCancel: () -> Void
 
@@ -216,10 +217,10 @@ struct MealReviewCard: View {
                         Button("Cancel", action: onCancel)
                             .buttonStyle(SecondaryCTAButtonStyle())
                         Button(action: saveMeal) {
-                            if isSaving { ProgressView().tint(.white) } else { Text("Save meal") }
+                            if isSaving || isSavingExternally { ProgressView().tint(.white) } else { Text("Save meal") }
                         }
                         .buttonStyle(PrimaryCTAButtonStyle())
-                        .disabled(isSaving || items.isEmpty)
+                        .disabled(isSaving || isSavingExternally || items.isEmpty)
                     }
                 }
                 .accessibilityElement(children: .contain)
@@ -228,7 +229,7 @@ struct MealReviewCard: View {
     }
 
     private func saveMeal() {
-        guard !isSaving, !items.isEmpty else { return }
+        guard !isSaving, !isSavingExternally, !items.isEmpty else { return }
         isSaving = true
         error = nil
         onConfirm(items)

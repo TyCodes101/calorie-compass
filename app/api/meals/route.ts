@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { getDashboardData } from '@/lib/dashboard';
 import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/current-user';
-import { saveConfirmedMeal } from '@/lib/meals';
+import { DuplicateMealSaveError, saveConfirmedMeal } from '@/lib/meals';
 import { mapMealForNative } from '@/lib/native-meals';
 import { normalizeNutritionVerificationLabel, nutritionVerificationLabels } from '@/lib/nutrition/verification';
 import { prisma } from '@/lib/prisma';
@@ -100,6 +100,14 @@ export async function POST(request: Request) {
 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: getPersistenceErrorMessage('meal') }, { status: 400 });
+    }
+
+    if (error instanceof DuplicateMealSaveError) {
+      return NextResponse.json({
+        error: 'That meal was already saved.',
+        duplicate: true,
+        mealId: error.existingMealId,
+      }, { status: 409 });
     }
 
     if (isDatabaseWriteError(error)) {

@@ -249,7 +249,7 @@ struct MealAssistantClientLogic {
         guard allowed.contains(normalized) else { return state }
         var next = state
         next.mealType = normalized
-        if next.pendingMeal?.status == "readyForReview" || next.pendingMeal?.status == "resolving" || next.pendingMeal?.status == "saving" {
+        if next.pendingMeal?.status == "readyForReview" || next.pendingMeal?.status == "resolving" || next.pendingMeal?.status == "saving" || next.pendingMeal?.status == "failed" {
             next.pendingMeal?.mealType = normalized
         }
         return next
@@ -276,7 +276,7 @@ struct MealAssistantClientLogic {
             }
         } else {
             state.currentMealItems = currentMealItems
-            if let pending = state.pendingMeal, pending.status == "readyForReview" || pending.status == "resolving" || pending.status == "saving" {
+            if let pending = state.pendingMeal, pending.status == "readyForReview" || pending.status == "resolving" || pending.status == "saving" || pending.status == "failed" {
                 state.pendingMeal?.items = currentMealItems
             }
         }
