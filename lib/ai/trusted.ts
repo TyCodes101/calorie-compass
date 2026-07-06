@@ -1,6 +1,7 @@
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import type { MealTypeValue } from '@/lib/ai/orchestrate';
 import {
+  type CatalogFoodRecord,
   findCatalogFoodMatch,
   findCatalogFoodByBestMatch,
   findCatalogFoodById,
@@ -83,7 +84,7 @@ function detectRestaurantBrand(text: string): KnownRestaurantBrand {
   if (text.includes("arby's") || text.includes('arbys') || /\barby\b/.test(text)) return "Arby's";
   if (text.includes('chipotle')) return 'Chipotle';
   if (text.includes('starbucks')) return 'Starbucks';
-  if (text.includes('chick-fil-a') || text.includes('chick fil a') || text.includes('chic fil a') || compact.includes('chicfila')) return 'Chick-fil-A';
+  if (text.includes('chick-fil-a') || text.includes('chick fil a') || text.includes('chic fil a') || compact.includes('chicfila') || compact.includes('chickfila')) return 'Chick-fil-A';
   if (text.includes("mcdonald") || text.includes('mc donald') || compact.includes('mcdonalds') || /\b(?:mcdouble|mc double|mcchicken|mc chicken|big mac|bigmac)\b/.test(text)) return "McDonald's";
   if (text.includes('panda express')) return 'Panda Express';
   if (text.includes('subway')) return 'Subway';
@@ -209,6 +210,32 @@ function extractExplicitGramQuantity(segment: string) {
   if (!match) return null;
   const grams = Number(match[1]);
   return Number.isFinite(grams) && grams > 0 ? grams : null;
+}
+
+function scaleRestaurantCatalogFoodForSegment(food: CatalogFoodRecord, segment: string) {
+  const grams = extractExplicitGramQuantity(segment);
+  if (!grams) {
+    return scaleCatalogFood(food, extractRestaurantItemQuantity(segment), food.servingUnit);
+  }
+
+  const servingGrams = 'servingGrams' in food ? Number(food.servingGrams) : null;
+  if (food.servingUnit === 'g' || (servingGrams !== null && Number.isFinite(servingGrams) && servingGrams > 0)) {
+    return scaleCatalogFood(food, grams, 'g');
+  }
+
+  const standardServing = scaleCatalogFood(food, 1, food.servingUnit);
+  return {
+    ...standardServing,
+    quantity: grams,
+    unit: 'g',
+    is_trusted: false,
+    confidence_label: 'Needs Review' as const,
+    match_type: 'fuzzy_restaurant' as const,
+    notes: [
+      standardServing.notes,
+      `User requested ${grams} g, but the local restaurant catalog does not include a gram weight for this serving. Review serving size before saving.`,
+    ].filter(Boolean).join(' '),
+  };
 }
 
 function scaleItems(items: ParsedFoodItem[], factor: number) {
@@ -384,10 +411,7 @@ function matchRestaurantAlias(segment: string, brand: Exclude<KnownRestaurantBra
   const food = findCatalogFoodByBestMatch(segment, brand);
   if (!food) return [];
 
-  const grams = extractExplicitGramQuantity(segment);
-  const quantity = grams ?? extractRestaurantItemQuantity(segment);
-  const unit = grams ? 'g' : food.servingUnit;
-  return scaleItems([scaleCatalogFood(food, quantity, unit)], factor);
+  return scaleItems([scaleRestaurantCatalogFoodForSegment(food, segment)], factor);
 }
 
 function matchRestaurantSegment(segment: string, brand: Exclude<KnownRestaurantBrand, null>, factor: number) {
@@ -648,13 +672,30 @@ function matchGenericSegment(segment: string): ParsedFoodItem[] {
   if (segment.includes('greek yogurt') || (/\byogurt\b/.test(segment) && !detectPackagedBrand(segment))) {
     const greekYogurt = findCatalogFoodById('generic_greek_yogurt');
     if (greekYogurt) {
-      items.push(
-        scaleCatalogFood(
-          greekYogurt,
-          quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:greek\s+)?(?:yogurt|yogurts|cup|cups|container|containers)/, 1),
-          'cup',
-        ),
-      );
+      const grams = extractExplicitGramQuantity(segment);
+      if (grams) {
+        const standardServing = scaleCatalogFood(greekYogurt, 1, 'cup');
+        items.push({
+          ...standardServing,
+          quantity: grams,
+          unit: 'g',
+          is_trusted: false,
+          confidence_label: 'Needs Review',
+          match_type: 'generic_estimate',
+          notes: [
+            standardServing.notes,
+            `User requested ${grams} g, but the local generic yogurt reference is cup-based. Review serving size before saving.`,
+          ].filter(Boolean).join(' '),
+        });
+      } else {
+        items.push(
+          scaleCatalogFood(
+            greekYogurt,
+            quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:greek\s+)?(?:yogurt|yogurts|cup|cups|container|containers)/, 1),
+            'cup',
+          ),
+        );
+      }
     }
   }
 
