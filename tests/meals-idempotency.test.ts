@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Prisma } from '@prisma/client';
 
 import type { ParsedFoodItem } from '@/lib/ai/types';
 import { DuplicateMealSaveError, saveConfirmedMeal } from '@/lib/meals';
@@ -69,6 +70,14 @@ const payload = {
   items: [foodItem()],
 };
 
+function uniqueIdempotencyConstraintError() {
+  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed on the fields: (`userId`,`idempotencyKey`)', {
+    code: 'P2002',
+    clientVersion: 'unit-test',
+    meta: { target: ['userId', 'idempotencyKey'] },
+  });
+}
+
 describe('saveConfirmedMeal idempotency', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -102,5 +111,23 @@ describe('saveConfirmedMeal idempotency', () => {
         idempotencyKey: 'pending-abc:v2',
       }),
     }));
+  });
+
+  it('maps a concurrent idempotency race to the existing saved meal', async () => {
+    mocks.tx.meal.create.mockRejectedValueOnce(uniqueIdempotencyConstraintError());
+    mocks.prisma.meal.findFirst.mockResolvedValueOnce({ id: 'meal-existing-race' });
+
+    const promise = saveConfirmedMeal(payload);
+
+    await expect(promise).rejects.toBeInstanceOf(DuplicateMealSaveError);
+    await expect(promise).rejects.toMatchObject({ existingMealId: 'meal-existing-race' });
+    expect(mocks.prisma.meal.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        idempotencyKey: 'pending-abc:v2',
+      },
+      select: { id: true },
+    });
+    expect(mocks.upsertDailyLogForDate).not.toHaveBeenCalled();
   });
 });

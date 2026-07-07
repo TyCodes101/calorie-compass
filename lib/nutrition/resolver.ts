@@ -189,6 +189,20 @@ function pickServingValue(servingValue?: number, fallbackValue?: number) {
   return 0;
 }
 
+function hasFiniteNutritionValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function hasUsableEnergyValue(nutriments: NonNullable<OpenFoodFactsProductResponse['product']>['nutriments']) {
+  return Boolean(
+    nutriments &&
+      (
+        hasFiniteNutritionValue(nutriments['energy-kcal_serving']) ||
+        hasFiniteNutritionValue(nutriments['energy-kcal_100g'])
+      ),
+  );
+}
+
 async function resolveFromOpenFoodFacts(barcode: string, mealType: MealTypeValue) {
   const payload = await fetchJson<OpenFoodFactsProductResponse>(
     `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=product_name,nutriments,serving_quantity,serving_size`
@@ -197,7 +211,7 @@ async function resolveFromOpenFoodFacts(barcode: string, mealType: MealTypeValue
   const product = payload?.product;
   const nutriments = product?.nutriments;
 
-  if (payload?.status !== 1 || !product || !nutriments) {
+  if (payload?.status !== 1 || !product || !nutriments || !hasUsableEnergyValue(nutriments)) {
     return null;
   }
 
