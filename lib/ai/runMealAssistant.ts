@@ -2,7 +2,8 @@ import OpenAI from 'openai';
 
 import { getMockParsedMeal } from '@/lib/ai/mock';
 import { parseMealText } from '@/lib/ai/openai';
-import { mealAssistantSystemPrompt } from '@/lib/ai/mealAssistantSystemPrompt';
+import { openaiMealModel } from '@/lib/ai/openaiConfig';
+import { mapFoodIntelligenceToMealAssistantDecision, runOpenAIFoodIntelligence } from '@/lib/ai/openaiFoodIntelligence';
 import { getTrustedCatalogEstimate } from '@/lib/ai/trusted';
 import {
   type MealAssistantAction,
@@ -14,7 +15,6 @@ import {
   type MealAssistantResponse,
   type MealAssistantState,
   type MealAssistantTranscriptMessage,
-  mealAssistantModelOutputSchema,
 } from '@/lib/ai/mealAssistantSchema';
 import {
   buildIrrelevantModifierReply,
@@ -43,7 +43,7 @@ import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { saveConfirmedMeal, updateSavedMeal } from '@/lib/meals';
 import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 
-const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
+const model = openaiMealModel;
 const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
 const continuationRegex = /^(?:and|also|plus|with|anyway|wait(?:\s+also)?|i also had|and i had|also add|throw in|add)\b/i;
 const removeRegex = /^(?:(?:nvm|nevermind|never mind)\s+)?(?:remove|delete|drop|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
@@ -8589,60 +8589,12 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
 }
 
 async function classifyWithModel(input: MealAssistantRunInput): Promise<MealAssistantModelOutput> {
-  if (!process.env.OPENAI_API_KEY) {
-    return classifyFallback(input);
+  const intelligence = await runOpenAIFoodIntelligence(input);
+  if (intelligence.ok) {
+    return mapFoodIntelligenceToMealAssistantDecision(intelligence.value, input.message);
   }
 
-  let client: OpenAI;
-  try {
-    client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  } catch {
-    return classifyFallback(input);
-  }
-  const transcriptMessages = (input.conversationHistory ?? [])
-    .slice(-12)
-    .filter((message) => message.text.trim())
-    .map((message) => ({
-      role: message.role,
-      content: message.text.slice(0, 1200),
-    }));
-
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.2,
-    response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content: mealAssistantSystemPrompt,
-      },
-      ...transcriptMessages,
-      {
-        role: 'user',
-        content: [
-          'Use the conversation above like a normal chat thread. The JSON below is private app state for the latest turn.',
-          'Return only the required JSON object for the latest user message.',
-          JSON.stringify({
-            latest_user_message: input.message,
-            state: input.state,
-            context: input.context ?? emptyContext,
-            user_preferences: input.userPreferences ?? null,
-          }),
-        ].join('\n\n'),
-      },
-    ],
-  });
-
-  const content = completion.choices[0]?.message?.content;
-  if (!content) {
-    return classifyFallback(input);
-  }
-
-  try {
-    return mealAssistantModelOutputSchema.parse(JSON.parse(content));
-  } catch {
-    return classifyFallback(input);
-  }
+  return classifyFallback(input);
 }
 
 async function generateAssistantReplyWithModel(args: Parameters<AssistantReplyGenerator>[0]) {
