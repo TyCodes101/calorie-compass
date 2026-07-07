@@ -10,6 +10,18 @@ function getOpenAIClient(apiKey: string) {
   return new OpenAI({ apiKey });
 }
 
+function sanitizedErrorSummary(error: unknown) {
+  if (typeof error === 'object' && error !== null) {
+    return {
+      name: error instanceof Error ? error.name : 'UnknownError',
+      status: 'status' in error ? Number((error as { status?: unknown }).status) || null : null,
+      code: 'code' in error ? String((error as { code?: unknown }).code) : null,
+    };
+  }
+
+  return { name: typeof error, status: null, code: null };
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MacroSnapshot {
@@ -68,7 +80,7 @@ interface BatchResponse {
 
 // ─── Fallback ─────────────────────────────────────────────────────────────────
 
-function buildSafeNoMatch(reason: string, rawOutput?: string): MatchResult {
+function buildSafeNoMatch(reason: string): MatchResult {
   return {
     match_id: null,
     match_name: null,
@@ -92,7 +104,7 @@ function buildSafeNoMatch(reason: string, rawOutput?: string): MatchResult {
       input_term: null,
       suggested_canonical: null,
       confidence: 0,
-      raw_output: rawOutput?.slice(0, 200) ?? null,
+      raw_output: null,
     },
   };
 }
@@ -134,8 +146,8 @@ async function runMatch(payload: unknown): Promise<MatchResult | BatchResponse> 
 
     return JSON.parse(cleaned) as MatchResult | BatchResponse;
   } catch (err) {
-    console.error("[food-match] runMatch error:", err, "\nRaw output:", rawOutput);
-    return buildSafeNoMatch("LLM output parse failure", rawOutput);
+    console.error("[food-match] runMatch error:", sanitizedErrorSummary(err));
+    return buildSafeNoMatch("LLM output parse failure");
   }
 }
 
@@ -172,7 +184,7 @@ export async function POST(req: Request): Promise<Response> {
               input_term: "batch_size",
               suggested_canonical: null,
               confidence: 0,
-              raw_output: `Batch exceeded ${MAX_BATCH_SIZE} items (${payload.batch.length} received). Chunked automatically.`,
+              raw_output: null,
             },
           };
         }
@@ -186,7 +198,7 @@ export async function POST(req: Request): Promise<Response> {
     const result = await runMatch(payload);
     return Response.json(result);
   } catch (err) {
-    console.error("[food-match] route handler error:", err);
+    console.error("[food-match] route handler error:", sanitizedErrorSummary(err));
     return Response.json(buildSafeNoMatch("Route handler error"), {
       status: 500,
     });
