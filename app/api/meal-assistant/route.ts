@@ -5,6 +5,14 @@ import { runMealAssistant } from '@/lib/ai/runMealAssistant';
 import { ApiRequestParseError, parseJsonRequest } from '@/lib/api-request';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 
+function sanitizedErrorSummary(error: unknown) {
+  if (error instanceof Error) {
+    return { name: error.name };
+  }
+
+  return { name: typeof error };
+}
+
 export async function POST(request: Request) {
   try {
     const { message, state, context, conversationHistory } = await parseJsonRequest(
@@ -47,7 +55,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
 
-    console.error('meal-assistant error', error);
+    console.error('meal-assistant error', sanitizedErrorSummary(error));
     return NextResponse.json(
       {
         error: 'We could not update that meal right now. Please try again.',

@@ -8,6 +8,21 @@ import {
 } from '@/lib/ai/mealAssistantSchema';
 import { getOpenAIFoodIntelligenceTimeoutMs, getServerOpenAIApiKey, openaiMealModel } from '@/lib/ai/openaiConfig';
 
+const MAX_OUTPUT_ITEMS = 12;
+const MAX_MODIFIERS = 12;
+const MAX_CANDIDATE_QUERIES = 8;
+const MAX_MUST_NOT_MATCH = 8;
+const MAX_RAW_TEXT_LENGTH = 240;
+const MAX_NAME_LENGTH = 180;
+const MAX_NOTE_LENGTH = 360;
+const MAX_INPUT_MESSAGE_LENGTH = 2000;
+const MAX_CONTEXT_TEXT_LENGTH = 1200;
+const MAX_CONTEXT_ITEM_NAME_LENGTH = 180;
+const MAX_MEMORY_TITLE_LENGTH = 120;
+
+const boundedString = (maxLength: number) => z.string().trim().min(1).max(maxLength);
+const nullableBoundedString = (maxLength: number) => boundedString(maxLength).nullable();
+
 export const foodIntelligenceActionSchema = z.enum([
   'create_pending_meal',
   'add_to_pending_meal',
@@ -23,41 +38,41 @@ export const foodIntelligenceActionSchema = z.enum([
 
 const foodIntelligenceModifierSchema = z.object({
   type: z.enum(['remove', 'add', 'extra', 'light', 'substitute', 'preparation', 'size', 'serving']),
-  text: z.string().min(1),
-  target: z.string().min(1).nullable().default(null),
+  text: boundedString(MAX_NAME_LENGTH),
+  target: nullableBoundedString(MAX_NAME_LENGTH),
 }).strict();
 
 const foodIntelligenceQuantitySchema = z.object({
-  amount: z.number().positive().nullable().default(null),
-  unit: z.string().min(1).nullable().default(null),
-  servingText: z.string().min(1).nullable().default(null),
+  amount: z.number().positive().nullable(),
+  unit: nullableBoundedString(48),
+  servingText: nullableBoundedString(96),
 }).strict();
 
 const foodIntelligenceExpectedIdentitySchema = z.object({
-  restaurant: z.string().min(1).nullable().default(null),
-  brand: z.string().min(1).nullable().default(null),
-  canonicalItem: z.string().min(1).nullable().default(null),
-  mustNotMatch: z.array(z.string().min(1)).default([]),
+  restaurant: nullableBoundedString(MAX_NAME_LENGTH),
+  brand: nullableBoundedString(MAX_NAME_LENGTH),
+  canonicalItem: nullableBoundedString(MAX_NAME_LENGTH),
+  mustNotMatch: z.array(boundedString(MAX_NAME_LENGTH)).max(MAX_MUST_NOT_MATCH),
 }).strict();
 
 const foodIntelligenceNutritionExpectationSchema = z.object({
-  shouldBeZeroCalorieDrink: z.boolean().default(false),
-  shouldScaleWithQuantity: z.boolean().default(false),
-  shouldBeFootlong: z.boolean().default(false),
-  shouldBeNoCheese: z.boolean().default(false),
-  shouldBeEstimateOnly: z.boolean().default(false),
+  shouldBeZeroCalorieDrink: z.boolean(),
+  shouldScaleWithQuantity: z.boolean(),
+  shouldBeFootlong: z.boolean(),
+  shouldBeNoCheese: z.boolean(),
+  shouldBeEstimateOnly: z.boolean(),
 }).strict();
 
 const foodIntelligenceItemSchema = z.object({
-  rawText: z.string().min(1),
-  normalizedName: z.string().min(1),
-  brandOrRestaurant: z.string().min(1).nullable().default(null),
+  rawText: boundedString(MAX_RAW_TEXT_LENGTH),
+  normalizedName: boundedString(MAX_NAME_LENGTH),
+  brandOrRestaurant: nullableBoundedString(MAX_NAME_LENGTH),
   foodType: z.enum(['restaurant', 'branded', 'generic', 'homemade', 'drink', 'unknown']),
-  quantity: foodIntelligenceQuantitySchema.nullable().default(null),
-  modifiers: z.array(foodIntelligenceModifierSchema).default([]),
-  candidateQueries: z.array(z.string().min(1)).default([]),
-  expectedIdentity: foodIntelligenceExpectedIdentitySchema.nullable().default(null),
-  nutritionExpectation: foodIntelligenceNutritionExpectationSchema.nullable().default(null),
+  quantity: foodIntelligenceQuantitySchema.nullable(),
+  modifiers: z.array(foodIntelligenceModifierSchema).max(MAX_MODIFIERS),
+  candidateQueries: z.array(boundedString(MAX_NAME_LENGTH)).max(MAX_CANDIDATE_QUERIES),
+  expectedIdentity: foodIntelligenceExpectedIdentitySchema.nullable(),
+  nutritionExpectation: foodIntelligenceNutritionExpectationSchema.nullable(),
 }).strict();
 
 export const foodIntelligenceResultSchema = z.object({
@@ -65,11 +80,11 @@ export const foodIntelligenceResultSchema = z.object({
   confidence: z.number().min(0).max(1),
   ambiguity: z.object({
     isAmbiguous: z.boolean(),
-    reason: z.string().min(1).nullable().default(null),
-    clarificationQuestion: z.string().min(1).nullable().default(null),
+    reason: nullableBoundedString(MAX_NOTE_LENGTH),
+    clarificationQuestion: nullableBoundedString(MAX_NOTE_LENGTH),
   }).strict(),
-  items: z.array(foodIntelligenceItemSchema).default([]),
-  userFacingMessage: z.string().min(1).nullable().default(null),
+  items: z.array(foodIntelligenceItemSchema).max(MAX_OUTPUT_ITEMS),
+  userFacingMessage: nullableBoundedString(MAX_NOTE_LENGTH),
 }).strict();
 
 export type FoodIntelligenceResult = z.infer<typeof foodIntelligenceResultSchema>;
@@ -142,12 +157,13 @@ const responseJsonSchema = {
         required: ['isAmbiguous', 'reason', 'clarificationQuestion'],
         properties: {
           isAmbiguous: { type: 'boolean' },
-          reason: { type: ['string', 'null'] },
-          clarificationQuestion: { type: ['string', 'null'] },
+          reason: { type: ['string', 'null'], maxLength: MAX_NOTE_LENGTH },
+          clarificationQuestion: { type: ['string', 'null'], maxLength: MAX_NOTE_LENGTH },
         },
       },
       items: {
         type: 'array',
+        maxItems: MAX_OUTPUT_ITEMS,
         items: {
           type: 'object',
           additionalProperties: false,
@@ -163,9 +179,9 @@ const responseJsonSchema = {
             'nutritionExpectation',
           ],
           properties: {
-            rawText: { type: 'string' },
-            normalizedName: { type: 'string' },
-            brandOrRestaurant: { type: ['string', 'null'] },
+            rawText: { type: 'string', maxLength: MAX_RAW_TEXT_LENGTH },
+            normalizedName: { type: 'string', maxLength: MAX_NAME_LENGTH },
+            brandOrRestaurant: { type: ['string', 'null'], maxLength: MAX_NAME_LENGTH },
             foodType: { enum: ['restaurant', 'branded', 'generic', 'homemade', 'drink', 'unknown'] },
             quantity: {
               type: ['object', 'null'],
@@ -173,38 +189,41 @@ const responseJsonSchema = {
               required: ['amount', 'unit', 'servingText'],
               properties: {
                 amount: { type: ['number', 'null'], exclusiveMinimum: 0 },
-                unit: { type: ['string', 'null'] },
-                servingText: { type: ['string', 'null'] },
+                unit: { type: ['string', 'null'], maxLength: 48 },
+                servingText: { type: ['string', 'null'], maxLength: 96 },
               },
             },
             modifiers: {
               type: 'array',
+              maxItems: MAX_MODIFIERS,
               items: {
                 type: 'object',
                 additionalProperties: false,
                 required: ['type', 'text', 'target'],
                 properties: {
                   type: { enum: ['remove', 'add', 'extra', 'light', 'substitute', 'preparation', 'size', 'serving'] },
-                  text: { type: 'string' },
-                  target: { type: ['string', 'null'] },
+                  text: { type: 'string', maxLength: MAX_NAME_LENGTH },
+                  target: { type: ['string', 'null'], maxLength: MAX_NAME_LENGTH },
                 },
               },
             },
             candidateQueries: {
               type: 'array',
-              items: { type: 'string' },
+              maxItems: MAX_CANDIDATE_QUERIES,
+              items: { type: 'string', maxLength: MAX_NAME_LENGTH },
             },
             expectedIdentity: {
               type: ['object', 'null'],
               additionalProperties: false,
               required: ['restaurant', 'brand', 'canonicalItem', 'mustNotMatch'],
               properties: {
-                restaurant: { type: ['string', 'null'] },
-                brand: { type: ['string', 'null'] },
-                canonicalItem: { type: ['string', 'null'] },
+                restaurant: { type: ['string', 'null'], maxLength: MAX_NAME_LENGTH },
+                brand: { type: ['string', 'null'], maxLength: MAX_NAME_LENGTH },
+                canonicalItem: { type: ['string', 'null'], maxLength: MAX_NAME_LENGTH },
                 mustNotMatch: {
                   type: 'array',
-                  items: { type: 'string' },
+                  maxItems: MAX_MUST_NOT_MATCH,
+                  items: { type: 'string', maxLength: MAX_NAME_LENGTH },
                 },
               },
             },
@@ -229,7 +248,7 @@ const responseJsonSchema = {
           },
         },
       },
-      userFacingMessage: { type: ['string', 'null'] },
+      userFacingMessage: { type: ['string', 'null'], maxLength: MAX_NOTE_LENGTH },
     },
   },
 } as const;
@@ -257,6 +276,38 @@ function getFailureReason(error: unknown): FoodIntelligenceFailureReason {
   return 'openai_error';
 }
 
+const unsafeKeyRegex = /^(?:calories|protein|carbs?|fat|fiber|sugar|sodium|source[_-]?type|source[_-]?name|is[_-]?trusted|confidence[_-]?label|provider[_-]?used|macro(?:s)?|totals?)$/i;
+const promptInjectionTextRegex = /\b(?:ignore|disregard|override)\s+(?:all\s+)?(?:previous|prior|system|developer)\s+instructions?\b|\b(?:system|developer)\s+prompt\b|\bOPENAI_API_KEY\b|\bsk-[A-Za-z0-9_-]{8,}\b/i;
+const unsafeTrustClaimRegex = /\b(?:mark(?:ed)?|label(?:ed)?|set)\s+(?:this\s+)?(?:as\s+)?(?:verified|trusted)\b|\b(?:verified|trusted)\s+(?:even\s+)?without\s+(?:a\s+)?source\b/i;
+const unsafeNutritionClaimRegex = /\b\d+(?:\.\d+)?\s*(?:calories?|kcal)\b|\b\d+(?:\.\d+)?\s*g\s+(?:protein|carbs?|fat)\b/i;
+
+function hasUnsafeModelOutput(value: unknown, path: string[] = []): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item, index) => hasUnsafeModelOutput(item, [...path, String(index)]));
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    return Object.entries(value).some(([key, child]) => {
+      if (unsafeKeyRegex.test(key)) {
+        return true;
+      }
+      return hasUnsafeModelOutput(child, [...path, key]);
+    });
+  }
+
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  if (promptInjectionTextRegex.test(value) || unsafeTrustClaimRegex.test(value)) {
+    return true;
+  }
+
+  const lastPath = path[path.length - 1] ?? '';
+  return ['userFacingMessage', 'reason', 'clarificationQuestion'].includes(lastPath)
+    && unsafeNutritionClaimRegex.test(value);
+}
+
 function parseFoodIntelligenceContent(content: string): FoodIntelligenceOutcome {
   const trimmed = content.trim();
   if (!trimmed) {
@@ -270,6 +321,10 @@ function parseFoodIntelligenceContent(content: string): FoodIntelligenceOutcome 
     return { ok: false, reason: 'invalid_json' };
   }
 
+  if (hasUnsafeModelOutput(parsed)) {
+    return { ok: false, reason: 'unsafe_schema' };
+  }
+
   const result = foodIntelligenceResultSchema.safeParse(parsed);
   if (!result.success) {
     const hasUnsafeNutritionKeys = JSON.stringify(parsed).match(/\b(?:calories|protein|carbs|fat|source_type|is_trusted|confidence_label)\b/i);
@@ -281,14 +336,26 @@ function parseFoodIntelligenceContent(content: string): FoodIntelligenceOutcome 
 
 async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number) {
   const controller = new AbortController();
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
   const timeout = new Promise<never>((_, reject) => {
-    setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       controller.abort();
       reject(new FoodIntelligenceTimeoutError());
     }, timeoutMs);
   });
 
-  return Promise.race([operation(controller.signal), timeout]);
+  try {
+    return await Promise.race([operation(controller.signal), timeout]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+function truncateText(text: string | null | undefined, maxLength: number) {
+  if (!text) return null;
+  return text.length > maxLength ? text.slice(0, maxLength).trimEnd() : text;
 }
 
 function buildCompletionPayload(input: MealAssistantRequest, model: string) {
@@ -311,16 +378,16 @@ function buildCompletionPayload(input: MealAssistantRequest, model: string) {
       {
         role: 'user',
         content: JSON.stringify({
-          latest_user_message: input.message,
+          latest_user_message: truncateText(input.message, MAX_INPUT_MESSAGE_LENGTH),
           state: {
             mealType: input.state.mealType,
             hasPendingMeal: Boolean(input.state.pendingMeal),
             pendingMealStatus: input.state.pendingMeal?.status ?? null,
-            currentMealText: input.state.currentMealText ?? null,
-            currentMealItems: input.state.currentMealItems.map((item) => ({
-              food_name: item.food_name,
+            currentMealText: truncateText(input.state.currentMealText, MAX_CONTEXT_TEXT_LENGTH),
+            currentMealItems: input.state.currentMealItems.slice(0, MAX_OUTPUT_ITEMS).map((item) => ({
+              food_name: truncateText(item.food_name, MAX_CONTEXT_ITEM_NAME_LENGTH),
               quantity: item.quantity,
-              unit: item.unit,
+              unit: truncateText(item.unit, 48),
               source_type: item.source_type ?? null,
               confidence_label: item.confidence_label ?? null,
             })),
@@ -328,9 +395,9 @@ function buildCompletionPayload(input: MealAssistantRequest, model: string) {
             saved: input.state.saved,
           },
           context: {
-            favoriteMeals: input.context?.favoriteMeals?.slice(0, 5).map((meal) => meal.title) ?? [],
-            recentMeals: input.context?.recentMeals?.slice(0, 5).map((meal) => meal.title) ?? [],
-            nutritionPreferences: input.context?.nutritionPreferences ?? null,
+            favoriteMeals: input.context?.favoriteMeals?.slice(0, 5).map((meal) => truncateText(meal.title, MAX_MEMORY_TITLE_LENGTH)) ?? [],
+            recentMeals: input.context?.recentMeals?.slice(0, 5).map((meal) => truncateText(meal.title, MAX_MEMORY_TITLE_LENGTH)) ?? [],
+            nutritionPreferences: truncateText(input.context?.nutritionPreferences, MAX_CONTEXT_TEXT_LENGTH),
           },
         }),
       },
@@ -416,6 +483,7 @@ export function mapFoodIntelligenceToMealAssistantDecision(
   }));
 
   const mutatesMeal = ['create_pending_meal', 'add_to_pending_meal', 'replace_pending_meal', 'remove_from_pending_meal'].includes(parsed.action);
+  const decisionItems = mutatesMeal && !shouldClarify ? items : [];
   const actionMap: Record<FoodIntelligenceResult['action'], MealAssistantModelOutput['intent']> = {
     create_pending_meal: 'new_food_item',
     add_to_pending_meal: 'add_to_current_meal',
@@ -445,10 +513,10 @@ export function mapFoodIntelligenceToMealAssistantDecision(
     intent: shouldClarify ? 'unknown' : actionMap[parsed.action],
     action: shouldClarify ? 'unclear' : assistantActionMap[parsed.action],
     assistant_reply: parsed.userFacingMessage ?? parsed.ambiguity.clarificationQuestion ?? 'Got it.',
-    contains_food_to_log: items.length > 0 && mutatesMeal,
-    contains_quantity_update: parsed.items.some((item) => item.nutritionExpectation?.shouldScaleWithQuantity === true),
+    contains_food_to_log: decisionItems.length > 0 && mutatesMeal,
+    contains_quantity_update: mutatesMeal && !shouldClarify && parsed.items.some((item) => item.nutritionExpectation?.shouldScaleWithQuantity === true),
     should_mutate_pending_meal: mutatesMeal && !shouldClarify,
-    items: shouldClarify ? [] : items,
+    items: decisionItems,
     corrections: parsed.action === 'replace_pending_meal'
       ? [{ target: 'pending meal', change: message }]
       : [],
