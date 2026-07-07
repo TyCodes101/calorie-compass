@@ -9,8 +9,9 @@ import { finalizeParsedResponse, inferMealType } from '@/lib/ai/orchestrate';
 import { hydrateParsedMealWithProviders } from '@/lib/nutrition/nutritionLookup';
 import { resolveNutritionEstimate, type NutritionLabelInput } from '@/lib/nutrition/resolver';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
+import { openaiMealModel } from '@/lib/ai/openaiConfig';
 
-const model = process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
+const model = openaiMealModel;
 
 type ConversationContext = {
   mode?: 'new' | 'clarification' | 'correction';
