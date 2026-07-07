@@ -33,6 +33,33 @@ For a fuller manual QA script, including real-device, offline, keyboard, accessi
 - Confirm nutrition disclaimer copy is visible, short, and does not block meal logging.
 - Confirm no API keys or provider secrets are present in the app bundle.
 
+## Log chat pending-meal state regression
+- Launch app fresh and open Log.
+- Select Snack, type `Chicken with asaparagud.`
+- Confirm a review card appears, meal type is Snack, asparagus is normalized, and calories/protein/carbs/fat are visible.
+- Type `It was for dinner actually.`
+- Confirm the selected chip, assistant reply, and review card all move to Dinner without losing macros.
+- Type `where's my macros.`
+- Confirm the assistant says pending review macros, not that no foods are logged.
+- Tap Save.
+- Confirm Today totals and History update exactly once.
+- Return to Log and type `provide macros.`
+- Confirm the assistant reports saved meal macros.
+- Start a new pending meal, type `delete that nvm`, then type `provide macros`.
+- Confirm the pending card clears and the assistant no longer reports pending macros.
+- Type `Wendy's Baconator`; confirm it does not resolve to a chicken sandwich.
+- Type `Wendy's Baconnator`; confirm typo handling still resolves the Baconator family.
+- Type `McDouble no cheese`; confirm McDonald's restaurant verified flow and no-cheese nutrition.
+- Type `McDonald's McDouble without cheese`; confirm it matches the same no-cheese item.
+- Type `Subway meatball footlong`; confirm footlong serving and restaurant source.
+- Type `Arby's roast beef`; confirm classic roast beef restaurant source.
+- Type `Chipotle chicken bowl`; confirm Chipotle bowl identity and restaurant/source consistency.
+- Type `2 grilled chicken breasts and asparagus`; confirm generic review estimate with item breakdown.
+- Type `where's my macros`, then `yes`, then `save it`; confirm pending/saved transitions stay truthful.
+- With an active pending meal, type `add McDouble no cheese`; confirm it adds to the pending meal rather than replacing unless wording says replace.
+- With an active pending meal, type `replace with McDouble no cheese`; confirm it replaces the pending meal.
+- Type `buttered corn on the cob`; confirm generic/trusted estimate appears with review controls.
+
 ## History / meal management
 - Saved meals list loads with empty, error, retry, and success states.
 - Open meal detail from the list.

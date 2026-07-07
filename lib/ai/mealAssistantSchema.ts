@@ -97,8 +97,38 @@ export const mealAssistantModelOutputSchema = z.object({
 
 export const mealAssistantMealTypeSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
 
+export const nutritionTotalsSchema = z.object({
+  calories: z.number().nonnegative(),
+  protein: z.number().nonnegative(),
+  carbs: z.number().nonnegative(),
+  fat: z.number().nonnegative(),
+  fiber: z.number().nonnegative(),
+  sugar: z.number().nonnegative(),
+  sodium: z.number().nonnegative(),
+});
+
+export const pendingMealStatusSchema = z.enum(['none', 'resolving', 'readyForReview', 'saving', 'saved', 'failed', 'discarded', 'stale']);
+
+export const pendingMealSchema = z.object({
+  id: z.string().min(1),
+  version: z.number().int().nonnegative().default(1),
+  status: pendingMealStatusSchema,
+  mealType: mealAssistantMealTypeSchema,
+  displayTitle: z.string().min(1),
+  rawText: z.string().nullable().default(null),
+  items: z.array(parsedFoodItemSchema).default([]),
+  totals: nutritionTotalsSchema,
+  confidenceScore: z.number().min(0).max(1).default(0.82),
+  createdAt: z.string().nullable().default(null),
+  updatedAt: z.string().nullable().default(null),
+  expiresAt: z.string().nullable().optional(),
+  savedMealId: z.string().nullable().optional(),
+  idempotencyKey: z.string().nullable().optional(),
+});
+
 export const mealAssistantStateSchema = z.object({
   currentMealItems: z.array(parsedFoodItemSchema).default([]),
+  pendingMeal: pendingMealSchema.nullable().default(null),
   pendingClarification: z.string().nullable().default(null),
   lastAssistantQuestion: z.string().nullable().default(null),
   userCorrections: z.array(z.string()).default([]),
@@ -156,16 +186,6 @@ export const mealAssistantRequestSchema = z.object({
   conversationHistory: z.array(mealAssistantTranscriptMessageSchema).default([]).optional(),
 });
 
-const nutritionTotalsSchema = z.object({
-  calories: z.number().nonnegative(),
-  protein: z.number().nonnegative(),
-  carbs: z.number().nonnegative(),
-  fat: z.number().nonnegative(),
-  fiber: z.number().nonnegative(),
-  sugar: z.number().nonnegative(),
-  sodium: z.number().nonnegative(),
-});
-
 export const mealAssistantResponseSchema = mealAssistantModelOutputSchema.extend({
   meal: z.object({
     items: z.array(parsedFoodItemSchema),
@@ -183,8 +203,19 @@ export type MealAssistantCorrection = z.infer<typeof mealAssistantCorrectionSche
 export type MealAssistantOperation = z.infer<typeof mealAssistantOperationSchema>;
 export type MealAssistantTranscriptMessage = z.infer<typeof mealAssistantTranscriptMessageSchema>;
 export type MealAssistantModelOutput = z.infer<typeof mealAssistantModelOutputSchema>;
-export type MealAssistantState = z.infer<typeof mealAssistantStateSchema>;
+export type PendingMealStatus = z.infer<typeof pendingMealStatusSchema>;
+export type PendingMeal = z.infer<typeof pendingMealSchema>;
+type ParsedMealAssistantState = z.infer<typeof mealAssistantStateSchema>;
+export type MealAssistantState = Omit<ParsedMealAssistantState, 'pendingMeal'> & {
+  pendingMeal?: PendingMeal | null;
+};
 export type MealAssistantMemoryMeal = z.infer<typeof mealAssistantMemoryMealSchema>;
 export type MealAssistantContext = z.infer<typeof mealAssistantContextSchema>;
-export type MealAssistantRequest = z.infer<typeof mealAssistantRequestSchema>;
-export type MealAssistantResponse = z.infer<typeof mealAssistantResponseSchema>;
+type ParsedMealAssistantRequest = z.infer<typeof mealAssistantRequestSchema>;
+type ParsedMealAssistantResponse = z.infer<typeof mealAssistantResponseSchema>;
+export type MealAssistantRequest = Omit<ParsedMealAssistantRequest, 'state'> & {
+  state: MealAssistantState;
+};
+export type MealAssistantResponse = Omit<ParsedMealAssistantResponse, 'next_state'> & {
+  next_state: MealAssistantState;
+};

@@ -1,6 +1,7 @@
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import type { MealTypeValue } from '@/lib/ai/orchestrate';
 import {
+  type CatalogFoodRecord,
   findCatalogFoodMatch,
   findCatalogFoodByBestMatch,
   findCatalogFoodById,
@@ -39,6 +40,7 @@ type KnownPackagedBrand =
   | 'Barebells'
   | 'Celsius'
   | 'Cheez-It'
+  | 'Cheetos'
   | 'Chobani'
   | 'Clif Bar'
   | 'Coca-Cola'
@@ -50,10 +52,12 @@ type KnownPackagedBrand =
   | 'Gatorade'
   | 'Goldfish'
   | 'Kodiak'
+  | "Lay's"
   | 'Legendary Foods'
   | 'Muscle Milk'
   | 'Nature Valley'
   | 'Oikos'
+  | 'Oreo'
   | 'Pop-Tarts'
   | 'Premier Protein'
   | 'Pure Protein'
@@ -80,8 +84,8 @@ function detectRestaurantBrand(text: string): KnownRestaurantBrand {
   if (text.includes("arby's") || text.includes('arbys') || /\barby\b/.test(text)) return "Arby's";
   if (text.includes('chipotle')) return 'Chipotle';
   if (text.includes('starbucks')) return 'Starbucks';
-  if (text.includes('chick-fil-a') || text.includes('chick fil a') || text.includes('chic fil a') || compact.includes('chicfila')) return 'Chick-fil-A';
-  if (text.includes("mcdonald") || text.includes('mc donald') || compact.includes('mcdonalds')) return "McDonald's";
+  if (text.includes('chick-fil-a') || text.includes('chick fil a') || text.includes('chic fil a') || compact.includes('chicfila') || compact.includes('chickfila')) return 'Chick-fil-A';
+  if (text.includes("mcdonald") || text.includes('mc donald') || compact.includes('mcdonalds') || /\b(?:mcdouble|mc double|mcchicken|mc chicken|big mac|bigmac)\b/.test(text)) return "McDonald's";
   if (text.includes('panda express')) return 'Panda Express';
   if (text.includes('subway')) return 'Subway';
   if (text.includes('taco bell') || compact.includes('tacobell')) return 'Taco Bell';
@@ -110,19 +114,22 @@ function detectPackagedBrand(text: string): KnownPackagedBrand {
   if (text.includes("trader joe's") || text.includes('trader joes')) return "Trader Joe's";
   if (text.includes('gatorade')) return 'Gatorade';
   if (text.includes('celsius')) return 'Celsius';
-  if (text.includes('coke zero') || text.includes('coca cola') || text.includes('coke')) return 'Coca-Cola';
+  if (text.includes('coke zero') || text.includes('coca cola') || text.includes('diet cooe') || text.includes('coke')) return 'Coca-Cola';
   if (text.includes('oikos')) return 'Oikos';
   if (text.includes('chobani') || text.includes('chobanni')) return 'Chobani';
   if (text.includes('kodiak') || text.includes('kodiac')) return 'Kodiak';
   if (text.includes('david') && (text.includes('sunflower') || text.includes('seeds') || text.includes('ranch'))) return 'David';
   if (text.includes('dr pepper') || text.includes('dr peper')) return 'Dr Pepper';
   if (text.includes('doritos') || text.includes('dorittos')) return 'Doritos';
+  if (text.includes('cheetos') || text.includes('cheeots')) return 'Cheetos';
+  if (text.includes('oreo')) return 'Oreo';
+  if (text.includes("lay's") || text.includes('lays ') || text.includes('lays chips')) return "Lay's";
   if (text.includes('goldfish') || text.includes('gold fish')) return 'Goldfish';
   if (text.includes('barebells') || text.includes('barebell')) return 'Barebells';
   if (text.includes('legendary') || text.includes('legendairy')) return 'Legendary Foods';
   if (text.includes('pure protein')) return 'Pure Protein';
   if (text.includes('nature valley')) return 'Nature Valley';
-  if (text.includes('pop tart') || text.includes('poptart')) return 'Pop-Tarts';
+  if (text.includes('pop-tart') || text.includes('pop tart') || text.includes('poptart')) return 'Pop-Tarts';
   if (text.includes('cheez')) return 'Cheez-It';
   if (text.includes('clif')) return 'Clif Bar';
   if (text.includes('rxbar') || text.includes('rx bar')) return 'RXBAR';
@@ -154,9 +161,12 @@ function cleanSegment(segment: string) {
 function splitRestaurantSegments(text: string) {
   const normalized = normalizeRestaurantText(text)
     .replace(/\b(arby'?s?|arbys|white castle|subway|chipotle|chic?k fil a|mcdonald'?s?|mcdonalds|taco bell|wendy'?s?|wendys|panera|starbucks|burger king)\s*,\s*/g, '$1 ');
-  const afterWith = normalized.includes(' with ') ? normalized.split(' with ').slice(1).join(' with ') : normalized;
+  const keepBeforeWith = /\b(?:footlong|sub|sandwich|burger|mcdouble|mc double|mcchicken|mc chicken|big mac|bigmac|whopper|baconator|taco|crunchwrap|slider|roast beef)\b/.test(normalized);
+  const sourceText = normalized.includes(' with ') && !keepBeforeWith
+    ? normalized.split(' with ').slice(1).join(' with ')
+    : normalized.replace(/\bwith\b/g, ',');
 
-  return afterWith
+  return sourceText
     .replace(/\band\b/g, ',')
     .split(',')
     .map(cleanSegment)
@@ -202,12 +212,51 @@ function extractExplicitGramQuantity(segment: string) {
   return Number.isFinite(grams) && grams > 0 ? grams : null;
 }
 
+function scaleRestaurantCatalogFoodForSegment(food: CatalogFoodRecord, segment: string) {
+  const grams = extractExplicitGramQuantity(segment);
+  if (!grams) {
+    return scaleCatalogFood(food, extractRestaurantItemQuantity(segment), food.servingUnit);
+  }
+
+  const servingGrams = 'servingGrams' in food ? Number(food.servingGrams) : null;
+  if (food.servingUnit === 'g' || (servingGrams !== null && Number.isFinite(servingGrams) && servingGrams > 0)) {
+    return scaleCatalogFood(food, grams, 'g');
+  }
+
+  const standardServing = scaleCatalogFood(food, 1, food.servingUnit);
+  return {
+    ...standardServing,
+    quantity: grams,
+    unit: 'g',
+    is_trusted: false,
+    confidence_label: 'Needs Review' as const,
+    match_type: 'fuzzy_restaurant' as const,
+    notes: [
+      standardServing.notes,
+      `User requested ${grams} g, but the local restaurant catalog does not include a gram weight for this serving. Review serving size before saving.`,
+    ].filter(Boolean).join(' '),
+  };
+}
+
 function scaleItems(items: ParsedFoodItem[], factor: number) {
   if (factor === 1) {
     return items;
   }
 
   return items.map((item) => scaleParsedFoodItem(item, factor));
+}
+
+function removeCheeseModifier(item: ParsedFoodItem): ParsedFoodItem {
+  return {
+    ...item,
+    food_name: /\bwithout cheese\b/i.test(item.food_name) ? item.food_name : `${item.food_name} without cheese`,
+    calories: Math.max(0, item.calories - 50),
+    protein: Math.max(0, item.protein - 3),
+    carbs: Math.max(0, item.carbs - 2),
+    fat: Math.max(0, item.fat - 4),
+    sodium: Math.max(0, item.sodium - 180),
+    notes: [item.notes, 'Adjusted for no cheese by subtracting one standard American cheese slice.'].filter(Boolean).join(' '),
+  };
 }
 
 function extractMealPortionFactor(text: string) {
@@ -226,6 +275,10 @@ function matchChipotleSegment(segment: string, factor: number): ParsedFoodItem[]
   }
   if (segment.includes('chicken')) {
     const food = findCatalogFoodById('chipotle_chicken');
+    return food ? scaleItems([scaleCatalogFood(food, 1, 'serving')], factor) : [];
+  }
+  if (segment.includes('steak')) {
+    const food = findCatalogFoodById('chipotle_steak');
     return food ? scaleItems([scaleCatalogFood(food, 1, 'serving')], factor) : [];
   }
   if (segment.includes('cheese')) {
@@ -278,12 +331,17 @@ function matchStarbucksSegment(segment: string, factor: number): ParsedFoodItem[
 }
 
 function matchChickFilASegment(segment: string, factor: number): ParsedFoodItem[] {
-  if (segment.includes('12 count') && segment.includes('nugget')) {
+  if (segment.includes('grilled') && segment.includes('nugget')) {
+    const food = findCatalogFoodById('chickfila_grilled_nuggets_8');
+    return food ? scaleItems([scaleCatalogFood(food, 8, 'count')], factor) : [];
+  }
+
+  if (segment.includes('12 count') && (segment.includes('nugget') || segment.includes('nuggest'))) {
     const food = findCatalogFoodById('chickfila_nuggets_12');
     return food ? scaleItems([scaleCatalogFood(food, 12, 'count')], factor) : [];
   }
 
-  if (segment.includes('nugget')) {
+  if (segment.includes('nugget') || segment.includes('nuggest')) {
     const food = findCatalogFoodById('chickfila_nuggets_8');
     return food ? scaleItems([scaleCatalogFood(food, 8, 'count')], factor) : [];
   }
@@ -307,7 +365,9 @@ function matchChickFilASegment(segment: string, factor: number): ParsedFoodItem[
 function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[] {
   if (segment.includes('big mac') || segment.includes('bigmac')) {
     const food = findCatalogFoodById('mcdonalds_big_mac');
-    return food ? scaleItems([scaleCatalogFood(food, 1, 'burger')], factor) : [];
+    if (!food) return [];
+    const item = scaleCatalogFood(food, 1, 'burger');
+    return scaleItems([/\b(?:no|without|hold)\s+cheese\b/.test(segment) ? removeCheeseModifier(item) : item], factor);
   }
 
   if (segment.includes('mcchicken') || segment.includes('mc chicken')) {
@@ -317,12 +377,16 @@ function matchMcDonaldsSegment(segment: string, factor: number): ParsedFoodItem[
 
   if (segment.includes('mcdouble') || segment.includes('mc double')) {
     const food = findCatalogFoodById('mcdonalds_mcdouble');
-    return food ? scaleItems([scaleCatalogFood(food, 1, 'burger')], factor) : [];
+    if (!food) return [];
+    const item = scaleCatalogFood(food, 1, 'burger');
+    return scaleItems([/\b(?:no|without|hold)\s+cheese\b/.test(segment) ? removeCheeseModifier(item) : item], factor);
   }
 
   if (segment.includes('cheeseburger')) {
     const food = findCatalogFoodById('mcdonalds_cheeseburger');
-    return food ? scaleItems([scaleCatalogFood(food, 1, 'burger')], factor) : [];
+    if (!food) return [];
+    const item = scaleCatalogFood(food, 1, 'burger');
+    return scaleItems([/\b(?:no|without|hold)\s+cheese\b/.test(segment) ? removeCheeseModifier(item) : item], factor);
   }
 
   if (segment.includes('fries') || /\bfry\b/.test(segment)) {
@@ -347,10 +411,7 @@ function matchRestaurantAlias(segment: string, brand: Exclude<KnownRestaurantBra
   const food = findCatalogFoodByBestMatch(segment, brand);
   if (!food) return [];
 
-  const grams = extractExplicitGramQuantity(segment);
-  const quantity = grams ?? extractRestaurantItemQuantity(segment);
-  const unit = grams ? 'g' : food.servingUnit;
-  return scaleItems([scaleCatalogFood(food, quantity, unit)], factor);
+  return scaleItems([scaleRestaurantCatalogFoodForSegment(food, segment)], factor);
 }
 
 function matchRestaurantSegment(segment: string, brand: Exclude<KnownRestaurantBrand, null>, factor: number) {
@@ -374,35 +435,45 @@ function matchRestaurantSegment(segment: string, brand: Exclude<KnownRestaurantB
 
 function extractPackagedQuantity(segment: string, unit: string) {
   const quantityReadySegment = segment.replace(/\b\d+(?:\.\d+)?\s*(?:g|gram|grams)\b/g, '').trim();
+  const wordQuantityMatch = quantityReadySegment.match(/\b(a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:[a-z]+\s+){0,4}(?:servings?|bags?|packs?|bottles?|shakes?|cans?|cups?|cakes?|cookies?|bars?)\b/i);
+  const wordQuantity = wordQuantityMatch ? countWordMap[wordQuantityMatch[1]?.toLowerCase() ?? ''] : null;
 
   if (unit === 'bar') {
+    if (wordQuantity) return wordQuantity;
     return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:quest\s+)?(?:bar|bars)/, 1);
   }
 
   if (unit === 'bottle') {
+    if (wordQuantity) return wordQuantity;
     return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:bottle|bottles|shake|shakes)/, 1);
   }
 
   if (unit === 'can') {
+    if (wordQuantity) return wordQuantity;
     return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:can|cans)/, 1);
   }
 
   if (unit === 'cup') {
+    if (wordQuantity) return wordQuantity;
     return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:cup|cups)/, 1);
   }
 
   if (unit === 'cake') {
+    if (wordQuantity) return wordQuantity;
     return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s+(?:[a-z]+\s+){0,4}(?:rice cake|rice cakes|cake|cakes)/, 1);
   }
 
   if (unit === 'serving') {
+    if (wordQuantity) return wordQuantity;
     return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:serving|servings|bag|bags|pack|packs)/, /\b(?:whole|entire)\s+bag\b/.test(quantityReadySegment) ? 1 : 1);
   }
 
   if (unit === 'cookie') {
+    if (wordQuantity) return wordQuantity;
     return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)\s*(?:cookie|cookies)/, 1);
   }
 
+  if (wordQuantity) return wordQuantity;
   return quantityMatch(quantityReadySegment, /(\d+(?:\.\d+)?)/, 1);
 }
 
@@ -601,19 +672,45 @@ function matchGenericSegment(segment: string): ParsedFoodItem[] {
   if (segment.includes('greek yogurt') || (/\byogurt\b/.test(segment) && !detectPackagedBrand(segment))) {
     const greekYogurt = findCatalogFoodById('generic_greek_yogurt');
     if (greekYogurt) {
-      items.push(
-        scaleCatalogFood(
-          greekYogurt,
-          quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:greek\s+)?(?:yogurt|yogurts|cup|cups|container|containers)/, 1),
-          'cup',
-        ),
-      );
+      const grams = extractExplicitGramQuantity(segment);
+      if (grams) {
+        const standardServing = scaleCatalogFood(greekYogurt, 1, 'cup');
+        items.push({
+          ...standardServing,
+          quantity: grams,
+          unit: 'g',
+          is_trusted: false,
+          confidence_label: 'Needs Review',
+          match_type: 'generic_estimate',
+          notes: [
+            standardServing.notes,
+            `User requested ${grams} g, but the local generic yogurt reference is cup-based. Review serving size before saving.`,
+          ].filter(Boolean).join(' '),
+        });
+      } else {
+        items.push(
+          scaleCatalogFood(
+            greekYogurt,
+            quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:greek\s+)?(?:yogurt|yogurts|cup|cups|container|containers)/, 1),
+            'cup',
+          ),
+        );
+      }
     }
   }
 
   if (segment.includes('cheese')) {
     const cheese = findCatalogFoodById('generic_cheese');
     if (cheese) items.push(scaleCatalogFood(cheese, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:slice|slices)\s+(?:of\s+)?cheese/, 1), 'slice'));
+  }
+
+  if (segment.includes('corn') && segment.includes('cob')) {
+    const corn = findCatalogFoodById('generic_corn_on_the_cob');
+    if (corn) items.push(scaleCatalogFood(corn, quantityMatch(segment, /(\d+(?:\.\d+)?)\s*(?:corn|cobs?|ears?)/, 1), 'ear'));
+    if (segment.includes('butter')) {
+      const butter = findCatalogFoodById('generic_butter');
+      if (butter) items.push(scaleCatalogFood(butter, 1, 'tbsp'));
+    }
   }
 
   return items;
@@ -700,6 +797,10 @@ export function getTrustedCatalogEstimate(text: string, mealType: MealTypeValue)
         confidence_label: (item.confidence_label ?? defaultConfidenceLabel(item)) as ParsedFoodItem['confidence_label'],
         match_type: (item.match_type ?? defaultMatchType(item)) as ParsedFoodItem['match_type'],
       }) as ParsedFoodItem));
+      if (restaurantBrand && /\bchips?\b/.test(segment) && !matchedItems.some((item) => /\bchips?\b/i.test(item.food_name))) {
+        const chips = estimateFallbackSegment('chips');
+        if (chips) items.push(chips);
+      }
 
       continue;
     }

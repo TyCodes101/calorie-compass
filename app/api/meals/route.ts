@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getDashboardData } from '@/lib/dashboard';
+import { ApiRequestParseError, parseJsonRequest } from '@/lib/api-request';
 import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/current-user';
-import { saveConfirmedMeal } from '@/lib/meals';
+import { DuplicateMealSaveError, saveConfirmedMeal } from '@/lib/meals';
 import { mapMealForNative } from '@/lib/native-meals';
 import { normalizeNutritionVerificationLabel, nutritionVerificationLabels } from '@/lib/nutrition/verification';
 import { prisma } from '@/lib/prisma';
@@ -40,6 +41,9 @@ const requestSchema = z.object({
   notes: z.string().nullable().optional(),
   date: z.string().optional(),
   source_reusable_meal_id: z.string().nullable().optional(),
+  pending_meal_id: z.string().nullable().optional(),
+  pending_meal_version: z.number().int().nonnegative().nullable().optional(),
+  idempotency_key: z.string().nullable().optional(),
   items: z.array(parsedItemSchema).min(1),
 });
 
@@ -71,8 +75,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const payload = requestSchema.parse(body);
+    const payload = await parseJsonRequest(request, requestSchema, getPersistenceErrorMessage('meal'));
     if (!hasDatabaseConnectionString()) {
       const dashboard = await getDashboardData(payload.date ?? new Date());
       return NextResponse.json({
@@ -93,11 +96,23 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ meal: mapMealForNative(meal), dashboard });
   } catch (error) {
-    logWriteFailure('meal.route', error);
+    if (error instanceof ApiRequestParseError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: getPersistenceErrorMessage('meal') }, { status: 400 });
     }
+
+    if (error instanceof DuplicateMealSaveError) {
+      return NextResponse.json({
+        error: 'That meal was already saved.',
+        duplicate: true,
+        mealId: error.existingMealId,
+      }, { status: 409 });
+    }
+
+    logWriteFailure('meal.route', error);
 
     if (isDatabaseWriteError(error)) {
       return NextResponse.json({ error: getPersistenceErrorMessage('meal') }, { status: 500 });

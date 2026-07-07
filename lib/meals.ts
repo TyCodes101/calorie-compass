@@ -1,4 +1,4 @@
-import { MealType } from '@prisma/client';
+import { MealType, Prisma } from '@prisma/client';
 
 import type { ParsedFoodItem } from '@/lib/ai/types';
 import { getPersistableCatalogFoodIds } from '@/lib/catalog-persistence';
@@ -16,11 +16,26 @@ export type SaveMealPayload = {
   notes?: string | null;
   date?: string;
   source_reusable_meal_id?: string | null;
+  pending_meal_id?: string | null;
+  pending_meal_version?: number | null;
+  idempotency_key?: string | null;
   items: ParsedFoodItem[];
 };
 
+export class DuplicateMealSaveError extends Error {
+  constructor(readonly existingMealId: string) {
+    super('Meal was already saved for this pending review.');
+    this.name = 'DuplicateMealSaveError';
+  }
+}
+
 function toMealType(value: SaveMealPayload['meal_type']) {
   return value.toUpperCase() as MealType;
+}
+
+function normalizeIdempotencyKey(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 function buildStoredItemNotes(item: ParsedFoodItem) {
@@ -85,12 +100,15 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
   }
 
   const { date, mealType, normalizedItems, totals } = await normalizeMealPayload(payload);
+  const idempotencyKey = normalizeIdempotencyKey(payload.idempotency_key);
 
   logWriteStart('meal.save', {
     userId: user.id,
     mealType,
     itemCount: normalizedItems.length,
     sourceReusableMealId: payload.source_reusable_meal_id ?? null,
+    pendingMealId: payload.pending_meal_id ?? null,
+    idempotencyKey,
   });
 
   try {
@@ -101,6 +119,20 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
     });
 
     const meal = await prisma.$transaction(async (tx) => {
+      if (idempotencyKey) {
+        const existingMeal = await tx.meal.findFirst({
+          where: {
+            userId: user.id,
+            idempotencyKey,
+          },
+          select: { id: true },
+        });
+
+        if (existingMeal) {
+          throw new DuplicateMealSaveError(existingMeal.id);
+        }
+      }
+
       const createdMeal = await tx.meal.create({
         data: {
           userId: user.id,
@@ -108,6 +140,9 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
           date,
           rawText: payload.raw_text ?? null,
           notes: payload.notes ?? null,
+          pendingMealId: payload.pending_meal_id?.trim() || null,
+          pendingMealVersion: typeof payload.pending_meal_version === 'number' ? payload.pending_meal_version : null,
+          idempotencyKey,
           confidenceScore: sanitizeNumber(payload.confidence_score),
           totalCalories: totals.calories,
           totalProtein: totals.protein,
@@ -149,10 +184,25 @@ export async function saveConfirmedMeal(payload: SaveMealPayload) {
 
     return meal;
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && idempotencyKey) {
+      const existingMeal = await prisma.meal.findFirst({
+        where: {
+          userId: user.id,
+          idempotencyKey,
+        },
+        select: { id: true },
+      });
+      if (existingMeal) {
+        throw new DuplicateMealSaveError(existingMeal.id);
+      }
+    }
+
     logWriteFailure('meal.save', error, {
       userId: user.id,
       mealType,
       itemCount: normalizedItems.length,
+      pendingMealId: payload.pending_meal_id ?? null,
+      idempotencyKey,
     });
     throw error;
   }

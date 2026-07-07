@@ -10,8 +10,36 @@ struct MealAssistantTranscriptMessage: Codable, Equatable {
     let text: String
 }
 
+struct MealAssistantPendingTotals: Codable, Equatable {
+    var calories: Double
+    var protein: Double
+    var carbs: Double
+    var fat: Double
+    var fiber: Double
+    var sugar: Double
+    var sodium: Double
+}
+
+struct MealAssistantPendingMeal: Codable, Equatable {
+    var id: String
+    var version: Int
+    var status: String
+    var mealType: String
+    var displayTitle: String
+    var rawText: String?
+    var items: [MealRequestItem]
+    var totals: MealAssistantPendingTotals
+    var confidenceScore: Double
+    var createdAt: String?
+    var updatedAt: String?
+    var expiresAt: String?
+    var savedMealId: String?
+    var idempotencyKey: String?
+}
+
 struct MealAssistantState: Codable, Equatable {
     var currentMealItems: [MealRequestItem] = []
+    var pendingMeal: MealAssistantPendingMeal? = nil
     var pendingClarification: String? = nil
     var lastAssistantQuestion: String? = nil
     var userCorrections: [String] = []
@@ -221,6 +249,9 @@ struct MealAssistantClientLogic {
         guard allowed.contains(normalized) else { return state }
         var next = state
         next.mealType = normalized
+        if next.pendingMeal?.status == "readyForReview" || next.pendingMeal?.status == "resolving" || next.pendingMeal?.status == "saving" || next.pendingMeal?.status == "failed" {
+            next.pendingMeal?.mealType = normalized
+        }
         return next
     }
 
@@ -232,12 +263,22 @@ struct MealAssistantClientLogic {
     ) -> MealAssistantState {
         var state = assistantState
 
-        if state.saved {
+        if state.saved && shouldPreserveSavedMealForRequest(incomingUserMessage) {
+            if state.currentMealItems.isEmpty, let pendingItems = state.pendingMeal?.items {
+                state.currentMealItems = pendingItems
+            }
+        } else if state.saved {
             state.currentMealItems = []
             state.saved = false
             state.currentMealText = nil
+            if state.pendingMeal?.status == "saved" {
+                state.pendingMeal = nil
+            }
         } else {
             state.currentMealItems = currentMealItems
+            if let pending = state.pendingMeal, pending.status == "readyForReview" || pending.status == "resolving" || pending.status == "saving" || pending.status == "failed" {
+                state.pendingMeal?.items = currentMealItems
+            }
         }
 
         if state.currentMealText == nil || state.currentMealText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
@@ -252,6 +293,40 @@ struct MealAssistantClientLogic {
         state.activeMode = state.activeMode ?? "logging_mode"
         state.activeTopic = state.activeTopic ?? "meal"
         return state
+    }
+
+    static func markPendingMealSaved(state: MealAssistantState, items: [MealRequestItem]) -> MealAssistantState {
+        var next = state
+        next.currentMealItems = items
+        next.saved = true
+        if next.currentMealText == nil {
+            next.currentMealText = items.map(\.food_name).joined(separator: ", ")
+        }
+        if next.pendingMeal != nil {
+            next.pendingMeal?.status = "saved"
+            next.pendingMeal?.items = items
+            next.pendingMeal?.mealType = next.mealType
+        }
+        return next
+    }
+
+    static func pendingSaveMetadata(from state: MealAssistantState) -> (id: String?, version: Int?, key: String?) {
+        guard let pendingMeal = state.pendingMeal else {
+            return (nil, nil, nil)
+        }
+        return (pendingMeal.id, pendingMeal.version, pendingMeal.idempotencyKey ?? "\(pendingMeal.id):v\(pendingMeal.version)")
+    }
+
+    private static func shouldPreserveSavedMealForRequest(_ message: String) -> Bool {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+        if normalized.contains("macro") || normalized.contains("calorie") || normalized.contains("protein") || normalized.contains("carb") || normalized.contains("fat") {
+            return true
+        }
+        if normalized.contains("same") || normalized.contains("again") || normalized.contains("repeat") {
+            return true
+        }
+        return false
     }
 
     static func shouldStartNewMealDraft(message: String, activeItems: [MealRequestItem]) -> Bool {
@@ -440,6 +515,9 @@ struct PostMealRequest: Codable, Equatable {
     var confidence_score: Double
     var raw_text: String?
     var source_reusable_meal_id: String? = nil
+    var pending_meal_id: String? = nil
+    var pending_meal_version: Int? = nil
+    var idempotency_key: String? = nil
     var notes: String?
     var date: String?
     var items: [MealRequestItem]

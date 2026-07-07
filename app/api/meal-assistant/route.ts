@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server';
 
 import { mealAssistantRequestSchema } from '@/lib/ai/mealAssistantSchema';
 import { runMealAssistant } from '@/lib/ai/runMealAssistant';
+import { ApiRequestParseError, parseJsonRequest } from '@/lib/api-request';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { message, state, context, conversationHistory } = mealAssistantRequestSchema.parse(body);
+    const { message, state, context, conversationHistory } = await parseJsonRequest(
+      request,
+      mealAssistantRequestSchema,
+      'That meal update request was incomplete. Please try again.',
+    );
     const user = await getCurrentUserWithProfile();
 
     const response = await runMealAssistant({
@@ -39,6 +43,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(response);
   } catch (error) {
+    if (error instanceof ApiRequestParseError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
     console.error('meal-assistant error', error);
     return NextResponse.json(
       {

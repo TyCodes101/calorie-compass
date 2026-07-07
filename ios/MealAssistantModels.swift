@@ -125,8 +125,26 @@ struct MealAssistantContext: Codable, Equatable {
     var todayMealCount: Int?
 }
 
+struct PendingMeal: Codable, Equatable {
+    var id: String
+    var version: Int
+    var status: String
+    var mealType: MealType
+    var displayTitle: String
+    var rawText: String?
+    var items: [FoodItem]
+    var totals: NutritionTotals
+    var confidenceScore: Double
+    var createdAt: String?
+    var updatedAt: String?
+    var expiresAt: String?
+    var savedMealId: String?
+    var idempotencyKey: String?
+}
+
 struct MealAssistantState: Codable, Equatable {
     var currentMealItems: [FoodItem] = []
+    var pendingMeal: PendingMeal?
     var pendingClarification: String?
     var lastAssistantQuestion: String?
     var userCorrections: [String] = []
@@ -197,6 +215,9 @@ struct SaveMealRequest: Codable {
     var notes: String?
     var date: String?
     var sourceReusableMealId: String?
+    var pendingMealId: String? = nil
+    var pendingMealVersion: Int? = nil
+    var idempotencyKey: String? = nil
     var items: [FoodItem]
 
     enum CodingKeys: String, CodingKey {
@@ -206,6 +227,9 @@ struct SaveMealRequest: Codable {
         case notes
         case date
         case sourceReusableMealId = "source_reusable_meal_id"
+        case pendingMealId = "pending_meal_id"
+        case pendingMealVersion = "pending_meal_version"
+        case idempotencyKey = "idempotency_key"
         case items
     }
 }
