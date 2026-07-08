@@ -1223,6 +1223,46 @@
       ]
     },
     {
+      "id": "pandaexpress_beijing_beef",
+      "canonicalName": "Panda Express Beijing Beef",
+      "brand": "Panda Express",
+      "servingQuantity": 1,
+      "servingUnit": "serving",
+      "calories": 470,
+      "protein": 13,
+      "carbs": 46,
+      "fat": 26,
+      "fiber": 2,
+      "sugar": 24,
+      "sodium": 660,
+      "sourceId": "pandaexpress_official",
+      "active": true,
+      "aliases": [
+        "panda express beijing beef",
+        "beijing beef"
+      ]
+    },
+    {
+      "id": "pandaexpress_chow_mein",
+      "canonicalName": "Panda Express Chow Mein",
+      "brand": "Panda Express",
+      "servingQuantity": 1,
+      "servingUnit": "side",
+      "calories": 510,
+      "protein": 13,
+      "carbs": 80,
+      "fat": 20,
+      "fiber": 6,
+      "sugar": 9,
+      "sodium": 860,
+      "sourceId": "pandaexpress_official",
+      "active": true,
+      "aliases": [
+        "panda express chow mein",
+        "chow mein"
+      ]
+    },
+    {
       "id": "subway_turkey_6in",
       "canonicalName": "Subway Turkey 6-Inch",
       "brand": "Subway",
