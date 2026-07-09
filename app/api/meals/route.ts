@@ -8,7 +8,7 @@ import { DuplicateMealSaveError, saveConfirmedMeal } from '@/lib/meals';
 import { mapMealForNative } from '@/lib/native-meals';
 import { normalizeNutritionVerificationLabel, nutritionVerificationLabels } from '@/lib/nutrition/verification';
 import { prisma } from '@/lib/prisma';
-import { getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
+import { createPersistenceTraceId, getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
 
 const parsedItemSchema = z.object({
   food_name: z.string().min(1),
@@ -48,8 +48,12 @@ const requestSchema = z.object({
 });
 
 export async function GET() {
+  const traceId = createPersistenceTraceId('meal-history');
+  let userId: string | null = null;
+
   try {
     const user = await getCurrentUserWithProfile();
+    userId = user?.id ?? null;
 
     if (!user) {
       return NextResponse.json({ meals: [] });
@@ -68,14 +72,25 @@ export async function GET() {
 
     return NextResponse.json({ meals: meals.map(mapMealForNative) });
   } catch (error) {
-    logWriteFailure('meal.route.get', error);
-    return NextResponse.json({ error: 'We couldn’t load your saved meals right now. Please try again.' }, { status: 500 });
+    logWriteFailure('meal.route.get', error, {
+      traceId,
+      stage: 'meal.history.load',
+      userId,
+    });
+    return NextResponse.json({
+      error: 'We couldn’t load your saved meals right now. Please try again.',
+      code: 'MEAL_HISTORY_LOAD_FAILED',
+      traceId,
+    }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  const traceId = createPersistenceTraceId('meal-save');
+  let payload: z.infer<typeof requestSchema> | null = null;
+
   try {
-    const payload = await parseJsonRequest(request, requestSchema, getPersistenceErrorMessage('meal'));
+    payload = await parseJsonRequest(request, requestSchema, getPersistenceErrorMessage('meal'));
     if (!hasDatabaseConnectionString()) {
       const dashboard = await getDashboardData(payload.date ?? new Date());
       return NextResponse.json({
@@ -112,12 +127,28 @@ export async function POST(request: Request) {
       }, { status: 409 });
     }
 
-    logWriteFailure('meal.route', error);
+    logWriteFailure('meal.route', error, {
+      traceId,
+      stage: 'meal.save',
+      pendingMealId: payload?.pending_meal_id ?? null,
+      pendingMealVersion: payload?.pending_meal_version ?? null,
+      idempotencyKey: payload?.idempotency_key ?? null,
+      itemCount: payload?.items.length ?? null,
+      mealType: payload?.meal_type ?? null,
+    });
 
     if (isDatabaseWriteError(error)) {
-      return NextResponse.json({ error: getPersistenceErrorMessage('meal') }, { status: 500 });
+      return NextResponse.json({
+        error: getPersistenceErrorMessage('meal'),
+        code: 'MEAL_SAVE_FAILED',
+        traceId,
+      }, { status: 500 });
     }
 
-    return NextResponse.json({ error: getPersistenceErrorMessage('meal') }, { status: 500 });
+    return NextResponse.json({
+      error: getPersistenceErrorMessage('meal'),
+      code: 'MEAL_SAVE_FAILED',
+      traceId,
+    }, { status: 500 });
   }
 }

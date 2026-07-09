@@ -15,11 +15,15 @@ export function normalizeNutritionVerificationLabel(
   label: unknown,
   context?: Pick<ParsedFoodItem, 'source_type' | 'is_trusted' | 'match_type'>,
 ): NutritionVerificationLabel {
+  const normalized = cleanLabel(label);
+
   if (context?.source_type === 'AI_ESTIMATE') {
+    if (normalized === 'needs review' || normalized === 'low confidence' || normalized === 'low') {
+      return 'Needs Review';
+    }
+
     return 'Estimated';
   }
-
-  const normalized = cleanLabel(label);
 
   if (normalized === 'verified' || normalized === 'very high') {
     return 'Verified';

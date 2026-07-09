@@ -161,10 +161,13 @@ function cleanSegment(segment: string) {
 function splitRestaurantSegments(text: string) {
   const normalized = normalizeRestaurantText(text)
     .replace(/\b(arby'?s?|arbys|white castle|subway|chipotle|chic?k fil a|mcdonald'?s?|mcdonalds|taco bell|wendy'?s?|wendys|panera|starbucks|burger king)\s*,\s*/g, '$1 ');
-  const keepBeforeWith = /\b(?:footlong|sub|sandwich|burger|mcdouble|mc double|mcchicken|mc chicken|big mac|bigmac|whopper|baconator|taco|crunchwrap|slider|roast beef)\b/.test(normalized);
-  const sourceText = normalized.includes(' with ') && !keepBeforeWith
-    ? normalized.split(' with ').slice(1).join(' with ')
-    : normalized.replace(/\bwith\b/g, ',');
+  const modifierProtectedText = normalized
+    .replace(/\b(extra\s+(?:grilled\s+)?onions?)\s+and\s+((?:extra\s+)?(?:grilled\s+)?mushrooms?)\b/g, '$1 $2')
+    .replace(/\b(extra\s+(?:grilled\s+)?mushrooms?)\s+and\s+((?:extra\s+)?(?:grilled\s+)?onions?)\b/g, '$1 $2');
+  const keepBeforeWith = /\b(?:footlong|sub|sandwich|burger|mcdouble|mc double|mcchicken|mc chicken|big mac|bigmac|whopper|baconator|taco|crunchwrap|slider|roast beef)\b/.test(modifierProtectedText);
+  const sourceText = modifierProtectedText.includes(' with ') && !keepBeforeWith
+    ? modifierProtectedText.split(' with ').slice(1).join(' with ')
+    : modifierProtectedText.replace(/\bwith\b/g, ',');
 
   return sourceText
     .replace(/\band\b/g, ',')
@@ -256,6 +259,71 @@ function removeCheeseModifier(item: ParsedFoodItem): ParsedFoodItem {
     fat: Math.max(0, item.fat - 4),
     sodium: Math.max(0, item.sodium - 180),
     notes: [item.notes, 'Adjusted for no cheese by subtracting one standard American cheese slice.'].filter(Boolean).join(' '),
+  };
+}
+
+type RestaurantModifierDelta = Partial<Pick<ParsedFoodItem, 'calories' | 'protein' | 'carbs' | 'fat' | 'fiber' | 'sugar' | 'sodium'>>;
+
+function applyModifierDelta(item: ParsedFoodItem, delta: RestaurantModifierDelta): ParsedFoodItem {
+  return {
+    ...item,
+    calories: Math.max(0, Math.round((item.calories + (delta.calories ?? 0)) * 100) / 100),
+    protein: Math.max(0, Math.round((item.protein + (delta.protein ?? 0)) * 100) / 100),
+    carbs: Math.max(0, Math.round((item.carbs + (delta.carbs ?? 0)) * 100) / 100),
+    fat: Math.max(0, Math.round((item.fat + (delta.fat ?? 0)) * 100) / 100),
+    fiber: Math.max(0, Math.round((item.fiber + (delta.fiber ?? 0)) * 100) / 100),
+    sugar: Math.max(0, Math.round((item.sugar + (delta.sugar ?? 0)) * 100) / 100),
+    sodium: Math.max(0, Math.round((item.sodium + (delta.sodium ?? 0)) * 100) / 100),
+  };
+}
+
+function applyFiveGuysModifierGraph(item: ParsedFoodItem, segment: string): ParsedFoodItem {
+  const modifiers: string[] = [];
+  let next = item;
+
+  if (/\bbacon\s+cheeseburger\b/.test(segment) && !/\bbacon\b/i.test(next.food_name)) {
+    next = applyModifierDelta(next, { calories: 80, protein: 6, fat: 7, sodium: 260 });
+    modifiers.push('add bacon');
+  }
+
+  if (/\b(?:no|without|hold)\s+bun\b|\blettuce\s+wrap(?:ped)?\b/.test(segment)) {
+    next = applyModifierDelta(next, { calories: -220, protein: -7, carbs: -39, fat: -3, fiber: -2, sugar: -7, sodium: -330 });
+    modifiers.push('no bun');
+  }
+
+  if (/\bextra\s+grilled\s+onions?\b/.test(segment)) {
+    next = applyModifierDelta(next, { calories: 20, carbs: 4, sodium: 10 });
+    modifiers.push('extra grilled onions');
+  }
+
+  if (/\bextra\s+(?:grilled\s+)?mushrooms?\b|\bmushrooms?\b/.test(segment)) {
+    next = applyModifierDelta(next, { calories: 15, protein: 1, carbs: 2, sodium: 10 });
+    modifiers.push(/\bextra\s+(?:grilled\s+)?mushrooms?\b/.test(segment) ? 'extra mushrooms' : 'mushrooms');
+  }
+
+  if (!modifiers.length) {
+    return next;
+  }
+
+  const displayName = modifiers.includes('add bacon') && /\bcheeseburger\b/i.test(next.food_name)
+    ? next.food_name.replace(/\bCheeseburger\b/i, 'Bacon Cheeseburger')
+    : next.food_name;
+  const modifierText = modifiers.join(', ');
+
+  return {
+    ...next,
+    food_name: displayName,
+    notes: [
+      next.notes,
+      `Base item matched to Five Guys official nutrition. Estimated modifier deltas applied for: ${modifierText}. Review before saving.`,
+    ].filter(Boolean).join(' '),
+    is_trusted: false,
+    source_type: 'AI_ESTIMATE',
+    source_name: 'Five Guys official nutrition + estimated modifiers',
+    confidence_label: 'Needs Review',
+    match_type: 'fuzzy_restaurant',
+    provider_used: 'local-verified-catalog',
+    used_ai_fallback: true,
   };
 }
 
@@ -411,7 +479,10 @@ function matchRestaurantAlias(segment: string, brand: Exclude<KnownRestaurantBra
   const food = findCatalogFoodByBestMatch(segment, brand);
   if (!food) return [];
 
-  return scaleItems([scaleRestaurantCatalogFoodForSegment(food, segment)], factor);
+  const item = scaleRestaurantCatalogFoodForSegment(food, segment);
+  const modifiedItem = brand === 'Five Guys' ? applyFiveGuysModifierGraph(item, segment) : item;
+
+  return scaleItems([modifiedItem], factor);
 }
 
 function matchRestaurantSegment(segment: string, brand: Exclude<KnownRestaurantBrand, null>, factor: number) {
@@ -811,11 +882,11 @@ export function getTrustedCatalogEstimate(text: string, mealType: MealTypeValue)
     }
   }
 
-  const trustedItemCount = items.filter((item) => item.is_trusted).length;
-  if (!trustedItemCount) {
+  const sourceBackedItemCount = items.filter((item) => item.is_trusted || /official nutrition/i.test(item.source_name ?? '')).length;
+  if (!sourceBackedItemCount) {
     return null;
   }
 
-  const confidenceScore = trustedItemCount === items.length ? 0.9 : 0.78;
+  const confidenceScore = sourceBackedItemCount === items.length && items.every((item) => item.is_trusted) ? 0.9 : 0.78;
   return makeCatalogMealResponse(mealType, items, confidenceScore);
 }
