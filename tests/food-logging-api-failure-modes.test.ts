@@ -94,6 +94,42 @@ describe('food logging API failure modes', () => {
     expect(mocks.runMealAssistant).not.toHaveBeenCalled();
   });
 
+  it('sanitizes lower-level OpenAI errors before returning meal assistant failures', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.getCurrentUserWithProfile.mockResolvedValue(null);
+    mocks.runMealAssistant.mockRejectedValue(
+      new Error('OpenAI 401 invalid key sk-test-secret-key raw prompt: Wendy Baconator model=gpt-4.1-mini'),
+    );
+
+    const response = await postMealAssistant(request('/api/meal-assistant', {
+      message: "Wendy's Baconator",
+      state: {
+        currentMealItems: [],
+        pendingMeal: null,
+        pendingClarification: null,
+        lastAssistantQuestion: null,
+        userCorrections: [],
+        saved: false,
+        mealType: 'dinner',
+        userName: null,
+        currentMealText: null,
+        confidenceScore: 0.82,
+      },
+      context: {
+        favoriteMeals: [],
+        recentMeals: [],
+        nutritionPreferences: null,
+      },
+      conversationHistory: [],
+    }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload).toEqual({ error: 'We could not update that meal right now. Please try again.' });
+    expect(JSON.stringify(payload)).not.toMatch(/sk-test-secret-key|Wendy Baconator|gpt-4\.1|OpenAI|raw prompt|401/i);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toMatch(/sk-test-secret-key|Wendy Baconator|raw prompt/i);
+  });
+
   it('rejects malformed save JSON as a client error before persistence', async () => {
     const response = await postMeal(request('/api/meals', '{"items":'));
     const payload = await response.json();
