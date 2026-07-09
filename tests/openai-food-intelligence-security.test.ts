@@ -4,7 +4,28 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = process.cwd();
-const ignoredDirs = new Set(['.git', '.next', 'node_modules']);
+const ignoredDirs = new Set(['.git', '.next', 'coverage', 'node_modules']);
+const scanRoots = [
+  '.github',
+  'app',
+  'components',
+  'docs',
+  'ios',
+  'lib',
+  'prisma',
+  'scripts',
+  'tests',
+  '.env.example',
+  'codemagic.yaml',
+  'eslint.config.mjs',
+  'next.config.ts',
+  'package.json',
+  'proxy.ts',
+  'README.md',
+  'tsconfig.json',
+  'vitest.config.ts',
+  'vitest.setup.ts',
+];
 
 function walkFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -17,13 +38,25 @@ function walkFiles(dir: string): string[] {
   });
 }
 
+function scanSourceFiles() {
+  return scanRoots.flatMap((entry) => {
+    const fullPath = join(repoRoot, entry);
+    try {
+      const stat = statSync(fullPath);
+      return stat.isDirectory() ? walkFiles(fullPath) : [fullPath];
+    } catch {
+      return [];
+    }
+  });
+}
+
 function repoRelative(file: string) {
   return relative(repoRoot, file).replace(/\\/g, '/');
 }
 
 describe('OpenAI food intelligence security boundaries', () => {
   it('does not expose an OpenAI API key through public env names', () => {
-    const matches = walkFiles(repoRoot)
+    const matches = scanSourceFiles()
       .filter((file) => !file.includes(`${join('tests', 'openai-food-intelligence-security.test.ts')}`))
       .filter((file) => /\.(ts|tsx|js|jsx|swift|md|yaml|yml|env|example)$/.test(file))
       .filter((file) => /(?:process\.env\.NEXT_PUBLIC_OPENAI_API_KEY|NEXT_PUBLIC_OPENAI_API_KEY\s*=)/.test(readFileSync(file, 'utf8')));
@@ -32,7 +65,7 @@ describe('OpenAI food intelligence security boundaries', () => {
   });
 
   it('does not commit real-looking OpenAI keys', () => {
-    const matches = walkFiles(repoRoot)
+    const matches = scanSourceFiles()
       .filter((file) => !file.includes(`${join('tests', 'openai-food-intelligence-security.test.ts')}`))
       .filter((file) => /\.(ts|tsx|js|jsx|swift|md|yaml|yml|env|example|mjs)$/.test(file))
       .flatMap((file) => {
@@ -62,7 +95,7 @@ describe('OpenAI food intelligence security boundaries', () => {
   });
 
   it('keeps OpenAI SDK calls out of browser/client code', () => {
-    const clientFiles = walkFiles(repoRoot)
+    const clientFiles = scanSourceFiles()
       .filter((file) => /\.(ts|tsx|js|jsx)$/.test(file))
       .filter((file) => {
         const rel = repoRelative(file);

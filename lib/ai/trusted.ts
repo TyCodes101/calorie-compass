@@ -150,17 +150,18 @@ function normalizeRestaurantText(text: string) {
 
 function cleanSegment(segment: string) {
   return segment
+    .replace(/^\s*(?:panda\s+express|five\s+guys|taco\s+bell|mcdonald'?s?|mc\s*donalds?|wendy'?s?|subway|chipotle)\s+/i, '')
+    .replace(/\b(?:bigger plate|plate|combo|meal)\s*:\s*/gi, '')
     .replace(/^\s*(i(?:'ve|ve)?\s+(?:also\s+)?(?:got|had|ate|drank)|also\s+add|throw\s+in|plus|add|got|had|ate|drank|with|and|also|only|a|an)\s+/i, '')
     .replace(/\s+(?:from|at)\s+(?:arby'?s?|arbys|white\s+castle|taco\s*bell|tacobell|mc\s*donald'?s?|mcdonalds|chic?k\s*fil\s*a|chipotle|starbucks|subway|wendy'?s?|wendys|burger\s*king|panda\s+express|domino'?s?|pizza\s+hut|raising\s+cane'?s?|canes|popeyes|panera|dunkin|kfc|five\s+guys|jersey\s+mike'?s?)\b/gi, '')
-    .replace(/\bmeal\b/gi, '')
-    .replace(/\bcombo\b/gi, '')
+    .replace(/\b(?:bigger plate|plate|meal|combo)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 function splitRestaurantSegments(text: string) {
   const normalized = normalizeRestaurantText(text)
-    .replace(/\b(arby'?s?|arbys|white castle|subway|chipotle|chic?k fil a|mcdonald'?s?|mcdonalds|taco bell|wendy'?s?|wendys|panera|starbucks|burger king)\s*,\s*/g, '$1 ');
+    .replace(/\b(arby'?s?|arbys|white castle|subway|chipotle|chic?k fil a|mcdonald'?s?|mcdonalds|taco bell|wendy'?s?|wendys|panera|starbucks|burger king|panda express|five guys)\s*,\s*/g, '$1 ');
   const keepBeforeWith = /\b(?:footlong|sub|sandwich|burger|mcdouble|mc double|mcchicken|mc chicken|big mac|bigmac|whopper|baconator|taco|crunchwrap|slider|roast beef)\b/.test(normalized);
   const sourceText = normalized.includes(' with ') && !keepBeforeWith
     ? normalized.split(' with ').slice(1).join(' with ')
