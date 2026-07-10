@@ -79,6 +79,7 @@ describe('food logging API failure modes', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(400);
+    expect(response.headers.get('x-macromesh-request-id')).toMatch(/^[a-z0-9-]{36}$/i);
     expect(payload.error).toMatch(/request/i);
     expect(mocks.getCurrentUserWithProfile).not.toHaveBeenCalled();
     expect(mocks.runMealAssistant).not.toHaveBeenCalled();

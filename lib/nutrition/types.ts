@@ -1,5 +1,6 @@
 import type { ParsedMealResponse } from '@/lib/ai/types';
 import type { MealTypeValue } from '@/lib/ai/orchestrate';
+import type { FoodPipelineTrace } from '@/lib/ai/foodPipelineTrace';
 
 export type NutritionLabelInput = {
   name?: string | null;
@@ -43,5 +44,10 @@ export type NutritionLookupContext = {
 
 export type NutritionLookupProvider = {
   id: string;
+  getStatus?: () => { configured: boolean; reason?: string };
   lookup: (context: NutritionLookupContext) => Promise<ParsedMealResponse | null> | ParsedMealResponse | null;
+};
+
+export type NutritionLookupTraceOptions = {
+  trace?: FoodPipelineTrace;
 };

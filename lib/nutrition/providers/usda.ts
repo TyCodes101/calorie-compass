@@ -212,8 +212,12 @@ async function fetchJson<T>(url: string, init?: RequestInit) {
 
 export const usdaProvider: NutritionLookupProvider = {
   id: 'usda-fdc',
+  getStatus() {
+    const configured = Boolean(process.env.USDA_FDC_API_KEY?.trim() || process.env.FDC_API_KEY?.trim());
+    return { configured, reason: configured ? undefined : 'usda_not_configured' };
+  },
   async lookup({ mealType, normalizedQuery }) {
-    const apiKey = process.env.USDA_FDC_API_KEY || process.env.FDC_API_KEY || (process.env.NODE_ENV === 'test' ? null : 'DEMO_KEY');
+    const apiKey = process.env.USDA_FDC_API_KEY?.trim() || process.env.FDC_API_KEY?.trim() || null;
     if (!apiKey) {
       return null;
     }

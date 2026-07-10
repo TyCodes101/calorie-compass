@@ -4,6 +4,7 @@ import type { MealTypeValue } from '@/lib/ai/orchestrate';
 import { getCurrentUserId, hasDatabaseConnectionString } from '@/lib/current-user';
 import { lookupNutrition } from '@/lib/nutrition/nutritionLookup';
 import type { NutritionLabelInput } from '@/lib/nutrition/types';
+import type { FoodPipelineTrace } from '@/lib/ai/foodPipelineTrace';
 import { prisma } from '@/lib/prisma';
 
 export type { NutritionLabelInput } from '@/lib/nutrition/types';
@@ -13,6 +14,7 @@ export type NutritionResolverInput = {
   mealType: MealTypeValue;
   nutritionLabel?: NutritionLabelInput | null;
   barcode?: string | null;
+  trace?: FoodPipelineTrace;
 };
 
 function normalizeLookupText(text: string) {
@@ -249,7 +251,7 @@ async function resolveFromOpenFoodFacts(barcode: string, mealType: MealTypeValue
   );
 }
 
-export async function resolveNutritionEstimate({ text, mealType, nutritionLabel = null, barcode = null }: NutritionResolverInput) {
+export async function resolveNutritionEstimate({ text, mealType, nutritionLabel = null, barcode = null, trace }: NutritionResolverInput) {
   // If the user includes add-ons/modifiers ("with butter", "with ranch", etc.), avoid returning a
   // single-item deterministic estimate that can silently drop the modifier. Let the LLM parse
   // the components and then hydrate each one.
@@ -259,7 +261,9 @@ export async function resolveNutritionEstimate({ text, mealType, nutritionLabel 
   }
 
   if (nutritionLabel) {
-    return lookupNutrition({ text, mealType, nutritionLabel, barcode });
+    return trace
+      ? lookupNutrition({ text, mealType, nutritionLabel, barcode }, { trace })
+      : lookupNutrition({ text, mealType, nutritionLabel, barcode });
   }
 
   const detectedBarcode = barcode || extractBarcode(text);
@@ -275,5 +279,7 @@ export async function resolveNutritionEstimate({ text, mealType, nutritionLabel 
     return savedCorrection;
   }
 
-  return lookupNutrition({ text, mealType, nutritionLabel, barcode });
+  return trace
+    ? lookupNutrition({ text, mealType, nutritionLabel, barcode }, { trace })
+    : lookupNutrition({ text, mealType, nutritionLabel, barcode });
 }

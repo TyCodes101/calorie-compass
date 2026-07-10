@@ -369,7 +369,7 @@ describe('lookupNutrition', () => {
     expect(response?.totals.calories).toBe(84);
   });
 
-  it('uses the USDA DEMO_KEY fallback outside test mode when no private key is configured', async () => {
+  it('does not use USDA DEMO_KEY when no private key is configured', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('USDA_FDC_API_KEY', '');
     vi.stubEnv('FDC_API_KEY', '');
@@ -377,9 +377,8 @@ describe('lookupNutrition', () => {
 
     const response = await lookupNutrition({ text: 'cottage cheese', mealType: 'snack' });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('api_key=DEMO_KEY');
-    expect(response?.items[0]?.provider_used).toBe('usda-fdc');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response).toBeNull();
   });
 
   it('scales USDA FoodData Central matches by explicit gram amounts', async () => {

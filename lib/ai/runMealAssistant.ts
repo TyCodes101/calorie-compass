@@ -2,7 +2,9 @@ import OpenAI from 'openai';
 
 import { getMockParsedMeal } from '@/lib/ai/mock';
 import { parseMealText } from '@/lib/ai/openai';
-import { openaiMealModel } from '@/lib/ai/openaiConfig';
+import { getOpenAIMealModel, getServerOpenAIApiKey } from '@/lib/ai/openaiConfig';
+import { isMockMealParserAllowed } from '@/lib/ai/runtimeConfig';
+import { createFoodPipelineTrace, recordOpenAIIntent, type FoodPipelineTrace } from '@/lib/ai/foodPipelineTrace';
 import { mapFoodIntelligenceToMealAssistantDecision, runOpenAIFoodIntelligence } from '@/lib/ai/openaiFoodIntelligence';
 import { getTrustedCatalogEstimate } from '@/lib/ai/trusted';
 import {
@@ -43,7 +45,6 @@ import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { saveConfirmedMeal, updateSavedMeal } from '@/lib/meals';
 import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 
-const model = openaiMealModel;
 const greetingRegex = /^(?:hi|hello|hey|yo|sup|good morning|good afternoon|good evening)\b/i;
 const continuationRegex = /^(?:and|also|plus|with|anyway|wait(?:\s+also)?|i also had|and i had|also add|throw in|add)\b/i;
 const removeRegex = /^(?:(?:nvm|nevermind|never mind)\s+)?(?:remove|delete|drop|without|hold the|skip the)\s+(.+)$|^no\s+(?!i\b|actually\b|instead\b|make\b|change\b|update\b|that\b|this\b|it\b|just\b)(.+)$/i;
@@ -152,8 +153,8 @@ type MealAssistantRunInput = {
   conversationHistory?: MealAssistantTranscriptMessage[];
 };
 
-type NutritionResolver = (args: { item: MealAssistantItem; mealType: MealAssistantState['mealType'] }) => Promise<ParsedMealResponse | null>;
-type ModelClassifier = (args: MealAssistantRunInput) => Promise<MealAssistantModelOutput>;
+type NutritionResolver = (args: { item: MealAssistantItem; mealType: MealAssistantState['mealType']; trace?: FoodPipelineTrace }) => Promise<ParsedMealResponse | null>;
+type ModelClassifier = (args: MealAssistantRunInput, trace?: FoodPipelineTrace) => Promise<MealAssistantModelOutput>;
 type SaveExecutor = (args: { state: MealAssistantState; items: ParsedFoodItem[] }) => Promise<void>;
 type NormalizedMealAssistantOperation = {
   action: MealAssistantAction;
@@ -191,6 +192,7 @@ type MealAssistantDependencies = {
   resolveItemNutrition?: NutritionResolver;
   saveMeal?: SaveExecutor;
   generateAssistantReply?: AssistantReplyGenerator;
+  trace?: FoodPipelineTrace;
 };
 
 type MemoryEntry = MealAssistantMemoryMeal & {
@@ -8245,14 +8247,14 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
   return null;
 }
 
-async function defaultResolveItemNutrition({ item, mealType }: { item: MealAssistantItem; mealType: MealAssistantState['mealType'] }) {
+async function defaultResolveItemNutrition({ item, mealType, trace }: { item: MealAssistantItem; mealType: MealAssistantState['mealType']; trace?: FoodPipelineTrace }) {
   const candyResponse = buildCandyMealResponse(item, mealType);
   if (candyResponse) {
     return candyResponse;
   }
 
   const query = buildItemLookupText(item);
-  const resolved = await resolveNutritionEstimate({ text: query, mealType });
+  const resolved = await resolveNutritionEstimate({ text: query, mealType, trace });
 
   if (resolved?.items.length) {
     return resolved;
@@ -8263,7 +8265,12 @@ async function defaultResolveItemNutrition({ item, mealType }: { item: MealAssis
     return parsed;
   }
 
-  return getMockParsedMeal(query, mealType);
+  if (isMockMealParserAllowed()) {
+    if (trace) trace.usedMock = true;
+    return getMockParsedMeal(query, mealType);
+  }
+
+  return null;
 }
 
 async function attemptPendingMealSave(args: {
@@ -8937,8 +8944,17 @@ function classifyFallback({ message, state }: MealAssistantRunInput): MealAssist
   };
 }
 
-async function classifyWithModel(input: MealAssistantRunInput): Promise<MealAssistantModelOutput> {
+async function classifyWithModel(input: MealAssistantRunInput, trace?: FoodPipelineTrace): Promise<MealAssistantModelOutput> {
+  const startedAt = Date.now();
   const intelligence = await runOpenAIFoodIntelligence(input);
+  if (trace) {
+    recordOpenAIIntent(trace, {
+      succeeded: intelligence.ok,
+      model: intelligence.ok ? intelligence.model : getOpenAIMealModel().name,
+      failureReason: intelligence.ok ? null : intelligence.reason,
+      durationMs: Date.now() - startedAt,
+    });
+  }
   if (intelligence.ok) {
     return mapFoodIntelligenceToMealAssistantDecision(intelligence.value, input.message);
   }
@@ -8956,7 +8972,7 @@ async function generateAssistantReplyWithModel(args: Parameters<AssistantReplyGe
 
   try {
     const completion = await client.chat.completions.create({
-      model,
+      model: getOpenAIMealModel().name,
       temperature: 0.35,
       messages: [
         {
@@ -9060,6 +9076,9 @@ function inferFallbackNutrition(normalized: string) {
   }
   if (/\bbacon\b/.test(normalized)) {
     return { calories: 90, protein: 6, carbs: 0, fat: 7, fiber: 0, sugar: 0, sodium: 340 };
+  }
+  if (/\beggs?\b/.test(normalized)) {
+    return { calories: 70, protein: 6, carbs: 0.5, fat: 5, fiber: 0, sugar: 0, sodium: 70 };
   }
   if (/\btoast\b/.test(normalized)) {
     return { calories: 100, protein: 4, carbs: 19, fat: 1, fiber: 2, sugar: 2, sodium: 160 };
@@ -9739,7 +9758,8 @@ export async function runMealAssistant(
   dependencies: MealAssistantDependencies = {},
 ): Promise<MealAssistantResponse> {
   const classify = dependencies.classify ?? classifyWithModel;
-  const resolveItemNutrition = dependencies.resolveItemNutrition ?? defaultResolveItemNutrition;
+  const trace = dependencies.trace ?? createFoodPipelineTrace();
+  const resolveItemNutrition = dependencies.resolveItemNutrition ?? ((args: Parameters<typeof defaultResolveItemNutrition>[0]) => defaultResolveItemNutrition({ ...args, trace }));
   const saveMeal = dependencies.saveMeal ?? defaultSaveMeal;
   const generateAssistantReply = dependencies.generateAssistantReply ?? generateAssistantReplyWithModel;
   const context = input.context ?? emptyContext;
@@ -9752,7 +9772,7 @@ export async function runMealAssistant(
     : input;
   const state = migratePendingMealState({ ...workingInput.state });
   const statefulWorkingInput: MealAssistantRunInput = { ...workingInput, state };
-  const shouldUseModelIntentFirst = Boolean(process.env.OPENAI_API_KEY) && !dependencies.classify;
+  const shouldUseModelIntentFirst = Boolean(getServerOpenAIApiKey()) && !dependencies.classify;
   const normalizedWorkingMessage = stripEmotionalPreface(workingInput.message).toLowerCase();
 
   if (state.pendingMeal && isPendingMealExpired(state.pendingMeal)) {
@@ -10032,11 +10052,11 @@ export async function runMealAssistant(
   const initialClarificationQuestion = !state.pendingClarification && !state.currentMealItems.length
     ? buildInitialClarificationQuestion(workingInput.message)
     : null;
-  const fallbackDecompositionItems = !dependencies.classify
+  const fallbackDecompositionItems = !dependencies.classify && !shouldUseModelIntentFirst
     ? buildFallbackDecompositionItemsForMessage(workingInput.message, state)
     : [];
   const shouldResolveByDecomposition = fallbackDecompositionItems.length > 1;
-  const trustedInitialRestaurantItems = !shouldResolveByDecomposition && !dependencies.classify && !state.pendingClarification && !state.currentMealItems.length
+  const trustedInitialRestaurantItems = !shouldResolveByDecomposition && !shouldUseModelIntentFirst && !dependencies.classify && !state.pendingClarification && !state.currentMealItems.length
     ? detectKnownFoodEstimatesWithTrustedRestaurantFallback(workingInput.message, state.mealType)
     : [];
   if (trustedInitialRestaurantItems.some(isSourceBackedRestaurantItem)) {
@@ -10149,7 +10169,7 @@ export async function runMealAssistant(
     const canUseDirectKnownFood =
       !shouldResolveByDecomposition
       && !dependencies.classify
-      && !process.env.OPENAI_API_KEY
+      && !getServerOpenAIApiKey()
       && !state.pendingClarification
       && (
         !state.currentMealItems.length
@@ -10358,10 +10378,13 @@ export async function runMealAssistant(
     }
   }
 
-  let decision = await classify({
+  const classifierInput = {
     ...statefulWorkingInput,
     context,
-  });
+  };
+  let decision = dependencies.classify
+    ? await classify(classifierInput)
+    : await classify(classifierInput, trace);
   decision = normalizeAssistantDecision(decision, workingInput);
   decision = guardAssistantDecision(decision, workingInput);
   if (state.pendingClarification && decision.intent === 'new_food_item' && decision.should_lookup_nutrition) {

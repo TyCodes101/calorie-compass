@@ -29,6 +29,7 @@ type ValidationResult = {
 type ResolutionResult = {
   response: ParsedMealResponse | null;
   clarificationQuestion: string | null;
+  providerId?: string | null;
 };
 
 const restaurantBrands = new Set([
@@ -327,6 +328,7 @@ export function resolveBestNutritionCandidate(intent: NutritionIntent, candidate
     return {
       response: withVerificationLabels(validCandidates[0].candidate.response),
       clarificationQuestion: null,
+      providerId: validCandidates[0].candidate.providerId,
     };
   }
 
@@ -340,10 +342,11 @@ export function resolveBestNutritionCandidate(intent: NutritionIntent, candidate
     return {
       response: null,
       clarificationQuestion: buildAccuracyClarificationQuestion(intent, fallback),
+      providerId: null,
     };
   }
 
-  return { response: null, clarificationQuestion: null };
+  return { response: null, clarificationQuestion: null, providerId: null };
 }
 
 export function isAuthoritativeNutritionResult(response: ParsedMealResponse, intent: NutritionIntent, providerId: string) {

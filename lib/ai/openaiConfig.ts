@@ -1,13 +1,11 @@
-export const openaiMealModel = process.env.OPENAI_MEAL_MODEL?.trim() || 'gpt-4.1-mini';
+import {
+  getOpenAIFoodIntelligenceTimeoutMs,
+  getOpenAIMealModel,
+  getServerOpenAIApiKey,
+} from '@/lib/ai/runtimeConfig';
 
-type OpenAIEnv = Record<string, string | undefined>;
+export { getOpenAIFoodIntelligenceTimeoutMs, getOpenAIMealModel, getServerOpenAIApiKey };
 
-export function getServerOpenAIApiKey(env: OpenAIEnv = process.env) {
-  const apiKey = env.OPENAI_API_KEY?.trim();
-  return apiKey || null;
-}
-
-export function getOpenAIFoodIntelligenceTimeoutMs(env: OpenAIEnv = process.env) {
-  const raw = Number(env.OPENAI_FOOD_INTELLIGENCE_TIMEOUT_MS);
-  return Number.isFinite(raw) && raw > 0 ? raw : 4500;
-}
+// Kept for compatibility with callers that import the old constant. Runtime code
+// uses getOpenAIMealModel() so tests and server environments can change config safely.
+export const openaiMealModel = getOpenAIMealModel().name;

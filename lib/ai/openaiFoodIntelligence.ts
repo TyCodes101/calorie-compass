@@ -6,7 +6,7 @@ import {
   type MealAssistantRequest,
   mealAssistantModelOutputSchema,
 } from '@/lib/ai/mealAssistantSchema';
-import { getOpenAIFoodIntelligenceTimeoutMs, getServerOpenAIApiKey, openaiMealModel } from '@/lib/ai/openaiConfig';
+import { getOpenAIFoodIntelligenceTimeoutMs, getOpenAIMealModel, getServerOpenAIApiKey } from '@/lib/ai/openaiConfig';
 
 const MAX_OUTPUT_ITEMS = 12;
 const MAX_MODIFIERS = 12;
@@ -550,7 +550,7 @@ function parseFoodIntelligenceContent(content: string): FoodIntelligenceOutcome 
     return { ok: false, reason: hasUnsafeNutritionKeys ? 'unsafe_schema' : 'schema_invalid' };
   }
 
-  return { ok: true, value: result.data, model: openaiMealModel };
+  return { ok: true, value: result.data, model: getOpenAIMealModel().name };
 }
 
 async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number) {
@@ -637,7 +637,7 @@ export async function runOpenAIFoodIntelligence(
     return { ok: false, reason: 'missing_api_key' };
   }
 
-  const model = dependencies.model ?? openaiMealModel;
+  const model = dependencies.model ?? getOpenAIMealModel().name;
   const createChatCompletion = dependencies.createChatCompletion ?? (async (params, options) => {
     const client = new OpenAI({ apiKey });
     return client.chat.completions.create(params as never, options as never) as Promise<ChatCompletionLike>;
