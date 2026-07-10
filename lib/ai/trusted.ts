@@ -169,11 +169,6 @@ function splitRestaurantSegments(text: string) {
   const sourceText = modifierProtectedText.includes(' with ') && !keepBeforeWith
     ? modifierProtectedText.split(' with ').slice(1).join(' with ')
     : modifierProtectedText.replace(/\bwith\b/g, ',');
-    .replace(/\b(arby'?s?|arbys|white castle|subway|chipotle|chic?k fil a|mcdonald'?s?|mcdonalds|taco bell|wendy'?s?|wendys|panera|starbucks|burger king|panda express|five guys)\s*,\s*/g, '$1 ');
-  const keepBeforeWith = /\b(?:footlong|sub|sandwich|burger|mcdouble|mc double|mcchicken|mc chicken|big mac|bigmac|whopper|baconator|taco|crunchwrap|slider|roast beef)\b/.test(normalized);
-  const sourceText = normalized.includes(' with ') && !keepBeforeWith
-    ? normalized.split(' with ').slice(1).join(' with ')
-    : normalized.replace(/\bwith\b/g, ',');
 
   return sourceText
     .replace(/\band\b/g, ',')
