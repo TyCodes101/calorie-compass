@@ -87,17 +87,16 @@ struct ProgressScreenView: View {
     }
 
     private var heroCard: some View {
-        AppCard(padding: 18) {
+        VStack(alignment: .leading, spacing: 10) {
+            MacroMeshGradientHeader(
+                eyebrow: "MacroMesh",
+                title: "Progress",
+                subtitle: latestWeight == nil
+                    ? "Log a weigh-in to start seeing trends."
+                    : "Trends update as you log weigh-ins and meals."
+            )
+            AppCard(padding: 18) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Progress")
-                        .font(.title2.weight(.bold))
-                        .foregroundColor(MacroMeshTheme.text)
-                    Spacer()
-                    Badge("TestFlight Beta", color: MacroMeshTheme.orange)
-                        .accessibilityHidden(true)
-                }
-
                 HStack(alignment: .lastTextBaseline, spacing: 10) {
                     Text(latestWeight.map { String(format: "%.1f", $0) } ?? "—")
                         .font(.system(size: 44, weight: .bold, design: .rounded))
@@ -108,11 +107,11 @@ struct ProgressScreenView: View {
                         .font(.headline)
                         .foregroundColor(MacroMeshTheme.muted)
                     Spacer()
+                    MacroMeshBadge(text: "TestFlight Beta", tone: .warning)
+                        .accessibilityHidden(true)
                 }
 
-                Text(latestWeight == nil ? "Log a weigh-in to start seeing trends." : "Trends update as you log weigh-ins and meals.")
-                    .font(.subheadline)
-                    .foregroundColor(MacroMeshTheme.muted)
+            }
             }
         }
     }

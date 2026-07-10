@@ -51,6 +51,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <section className="app-card relative overflow-hidden rounded-[34px] p-6 md:p-7">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-teal-50/90 to-transparent" />
           <div className="relative">
+            <div className="mb-4">
+              <div className="app-brand-lockup" aria-label="MacroMesh">
+                <span className="app-brand-mark" aria-hidden="true">M</span>
+                <span>MacroMesh</span>
+              </div>
+            </div>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 space-y-3">
                 <p className="app-section-label">Today</p>
@@ -83,7 +89,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 { label: 'Meals logged', value: `${dashboard.mealCount}`, detail: 'Logged today' },
                 { label: 'Trust', value: dashboard.trustSummary.headline, detail: dashboard.trustSummary.totalCount ? dashboard.trustSummary.estimatedSummary : 'Sources appear after your first meal' },
               ].map((stat) => (
-                <div key={stat.label} className="rounded-[22px] border border-slate-200/80 bg-slate-50/78 px-4 py-3.5">
+                <div key={stat.label} className="app-stat-card">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{stat.label}</p>
                   <p className="mt-2 text-lg font-semibold text-slate-950">{stat.value}</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">{stat.detail}</p>

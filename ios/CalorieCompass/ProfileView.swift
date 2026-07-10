@@ -78,6 +78,11 @@ struct ProfileView: View {
                                     }
                                 )
                             } else {
+                                MacroMeshGradientHeader(
+                                    eyebrow: "MacroMesh",
+                                    title: "Your profile",
+                                    subtitle: "Keep your targets, preferences, and account settings in one calm place."
+                                )
                                 let model = ProfileDashboardModel.build(
                                     profile: profile,
                                     isGuest: sessionStore.state.authSession.isGuest,

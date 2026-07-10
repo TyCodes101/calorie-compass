@@ -4,9 +4,9 @@ import SwiftUI
 
 // Elevation, Spacing, Radius tokens
 public enum DesignTokens {
-    public static let radiusLarge: CGFloat = 28
-    public static let radiusMedium: CGFloat = 20
-    public static let radiusSmall: CGFloat = 12
+    public static let radiusLarge: CGFloat = 24
+    public static let radiusMedium: CGFloat = 16
+    public static let radiusSmall: CGFloat = 10
     public static let spacing: CGFloat = 16
     public static let elevation: CGFloat = 8
 

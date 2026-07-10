@@ -256,6 +256,11 @@ struct LogChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
+                            MacroMeshGradientHeader(
+                                eyebrow: "MacroMesh",
+                                title: "LogBot",
+                                subtitle: "Describe the meal naturally. Review every item before anything is saved."
+                            )
                             if messages.isEmpty && !showReviewCard {
                                 introCard
                             }
@@ -491,7 +496,7 @@ struct LogChatView: View {
                             .minimumScaleFactor(0.86)
                             .frame(minWidth: 76)
                             .padding(.vertical, 9)
-                            .background(selectedMealType == mealType ? MacroMeshTheme.primary : Color.white.opacity(0.72))
+                            .background(selectedMealType == mealType ? MacroMeshTheme.primary : MacroMeshTheme.card.opacity(0.82))
                             .foregroundColor(selectedMealType == mealType ? .white : MacroMeshTheme.primaryDark)
                             .clipShape(Capsule())
                             .overlay(
@@ -1901,7 +1906,7 @@ struct FoodSearchResultRow: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(result.estimated ? MacroMeshTheme.cardSubtle : Color.white)
+            .background(result.estimated ? MacroMeshTheme.cardSubtle : MacroMeshTheme.card)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(MacroMeshTheme.border, lineWidth: 1))
         }
@@ -1937,7 +1942,7 @@ struct FoodSearchBadge: View {
             .foregroundColor(emphasized ? MacroMeshTheme.primaryDark : MacroMeshTheme.muted)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(emphasized ? MacroMeshTheme.cardSubtle : Color.white)
+            .background(emphasized ? MacroMeshTheme.cardSubtle : MacroMeshTheme.card)
             .clipShape(Capsule())
             .overlay(Capsule().stroke(MacroMeshTheme.border, lineWidth: 1))
     }
@@ -2000,7 +2005,7 @@ struct AssistantTypingCard: View {
             Spacer()
         }
         .padding(14)
-        .background(Color.white)
+        .background(MacroMeshTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: MacroMeshTheme.shadow, radius: 10, x: 0, y: 6)
         .transition(.opacity.combined(with: .move(edge: .bottom)))

@@ -126,29 +126,13 @@ struct DashboardView: View {
     }
 
     private var heroV1: some View {
-        AppCard(padding: 20) {
-            HStack(alignment: .center, spacing: 14) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("MacroMesh")
-                        .font(.caption.weight(.bold))
-                        .foregroundColor(MacroMeshTheme.primary)
-                        .textCase(.uppercase)
-                        .tracking(1.2)
-                    Text("Today's nutrition")
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundColor(MacroMeshTheme.text)
-                        .minimumScaleFactor(0.82)
-                    Text(hasLoggedMeal ? "Momentum is building. Keep protein visible and servings reviewed." : "Start with one meal and build a clean picture of the day.")
-                        .font(.subheadline)
-                        .foregroundColor(MacroMeshTheme.muted)
-                }
-                Spacer(minLength: 8)
-                Image(systemName: "leaf.circle.fill")
-                    .font(.system(size: 44, weight: .semibold))
-                    .foregroundColor(MacroMeshTheme.primary)
-                    .accessibilityHidden(true)
-            }
-        }
+        MacroMeshGradientHeader(
+            eyebrow: "MacroMesh",
+            title: "Today's nutrition",
+            subtitle: hasLoggedMeal
+                ? "Momentum is building. Keep protein visible and servings reviewed."
+                : "Start with one meal and build a clean picture of the day."
+        )
     }
 
     private var calorieSummaryCard: some View {
@@ -158,7 +142,7 @@ struct DashboardView: View {
         return AppCard(padding: 20) {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .center, spacing: 18) {
-                    CalorieRing(value: used, goal: goal, size: 132)
+                    MacroMeshProgressRing(value: used, goal: goal, size: 132)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Remaining")
                             .font(.caption.weight(.bold))
@@ -178,8 +162,8 @@ struct DashboardView: View {
                     Spacer()
                 }
                 HStack(spacing: 10) {
-                    MetricPill(title: "Protein", value: "\(Int(dashboard?.displayedProtein ?? 0))g", icon: "bolt.heart.fill", tint: MacroMeshTheme.primary)
-                    MetricPill(title: "Meals", value: "\(dashboard?.mealCount ?? dashboard?.recentMeals?.count ?? 0)", icon: "fork.knife", tint: MacroMeshTheme.orange)
+                    MacroMeshStatCard(title: "Protein", value: "\(Int(dashboard?.displayedProtein ?? 0))g", icon: "bolt.heart.fill", tint: MacroMeshTheme.primary)
+                    MacroMeshStatCard(title: "Meals", value: "\(dashboard?.mealCount ?? dashboard?.recentMeals?.count ?? 0)", icon: "fork.knife", tint: MacroMeshTheme.orange)
                 }
             }
         }
@@ -249,9 +233,9 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader("Streaks", subtitle: dashboard?.streaks?.summary ?? "Build consistency one saved meal at a time.")
                 HStack(spacing: 10) {
-                    MetricPill(title: "Current", value: "\(dashboard?.streaks?.currentStreakDays ?? 0)d", icon: "flame.fill", tint: MacroMeshTheme.orange)
-                    MetricPill(title: "This week", value: "\(dashboard?.streaks?.mealsLoggedThisWeek ?? 0)", icon: "calendar", tint: MacroMeshTheme.primary)
-                    MetricPill(title: "Protein", value: "\(dashboard?.streaks?.proteinGoalHitDaysThisWeek ?? 0)/7", icon: "bolt.fill", tint: MacroMeshTheme.blue)
+                    MacroMeshStatCard(title: "Current", value: "\(dashboard?.streaks?.currentStreakDays ?? 0)d", icon: "flame.fill", tint: MacroMeshTheme.orange)
+                    MacroMeshStatCard(title: "This week", value: "\(dashboard?.streaks?.mealsLoggedThisWeek ?? 0)", icon: "calendar", tint: MacroMeshTheme.primary)
+                    MacroMeshStatCard(title: "Protein", value: "\(dashboard?.streaks?.proteinGoalHitDaysThisWeek ?? 0)/7", icon: "bolt.fill", tint: MacroMeshTheme.blue)
                 }
             }
         }
