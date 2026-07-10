@@ -76,8 +76,20 @@ struct ContentView: View {
     private func configureTabBarAppearance() {
         let appearance = UITabBarAppearance()
         appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = UIColor.white.withAlphaComponent(0.96)
-        appearance.shadowColor = UIColor.black.withAlphaComponent(0.08)
+        appearance.backgroundColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.035, green: 0.07, blue: 0.08, alpha: 0.98)
+                : UIColor(red: 0.98, green: 0.99, blue: 0.98, alpha: 0.98)
+        }
+        appearance.shadowColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor.white.withAlphaComponent(0.08)
+                : UIColor.black.withAlphaComponent(0.08)
+        }
+        appearance.stackedLayoutAppearance.selected.iconColor = UIColor(red: 0.08, green: 0.57, blue: 0.34, alpha: 1)
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: UIColor(red: 0.08, green: 0.57, blue: 0.34, alpha: 1)]
+        appearance.stackedLayoutAppearance.normal.iconColor = .secondaryLabel
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor.secondaryLabel]
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
     }

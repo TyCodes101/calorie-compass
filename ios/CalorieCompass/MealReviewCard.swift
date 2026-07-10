@@ -196,7 +196,7 @@ struct MealReviewCard: View {
                                 .accessibilityLabel("Remove \(items[idx].name)")
                             }
                             .padding(11)
-                            .background(Color.white.opacity(0.92))
+                            .background(MacroMeshTheme.card.opacity(0.92))
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -289,7 +289,7 @@ struct ServingAdjuster: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .frame(width: 82)
-                .background(Color.white)
+                .background(MacroMeshTheme.card)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)

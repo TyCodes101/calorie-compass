@@ -28,7 +28,7 @@ struct PremiumHistoryView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Color(.systemGroupedBackground).ignoresSafeArea()
+                MacroMeshTheme.background.ignoresSafeArea()
                 if loading && meals.isEmpty {
                     HistoryEmptyStateCard(icon: "clock.arrow.circlepath", title: "Loading meals", message: "Your saved meals will appear here in a moment.", buttonTitle: nil, action: nil)
                 } else if let error = error, meals.isEmpty {
@@ -38,14 +38,11 @@ struct PremiumHistoryView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 18) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("History")
-                                    .font(.title2.weight(.bold))
-                                    .foregroundColor(MacroMeshTheme.text)
-                                Text("Your saved meals, grouped by day.")
-                                    .font(.caption)
-                                    .foregroundColor(MacroMeshTheme.muted)
-                            }
+                            MacroMeshGradientHeader(
+                                eyebrow: "MacroMesh",
+                                title: "History",
+                                subtitle: "Your saved meals, grouped by day."
+                            )
 
                             HistoryWeeklySummaryCard(summary: weeklySummary)
 
