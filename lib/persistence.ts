@@ -6,6 +6,12 @@ type EnvLike = Partial<Record<'DATABASE_URL' | 'DATABASE_URL_UNPOOLED' | 'VERCEL
 
 type LogDetails = Record<string, unknown>;
 
+export function createPersistenceTraceId(prefix = 'persist') {
+  const normalizedPrefix = prefix.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'persist';
+  const randomId = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${normalizedPrefix}-${randomId}`;
+}
+
 function redactConnectionUrl(connectionUrl: string | undefined) {
   if (!connectionUrl) {
     return {

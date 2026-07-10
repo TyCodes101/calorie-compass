@@ -124,10 +124,16 @@ struct HistoryMealCard: View {
 private enum MealTrustBadgeBuilder {
     static func badgeText(meal: MealResponse) -> String {
         let types = (meal.items ?? []).compactMap { $0.source_type?.uppercased() }
-        if types.contains(where: { $0.contains("OFFICIAL_RESTAURANT") }) { return "Restaurant" }
+        let hasEstimated = types.contains(where: { $0.contains("AI") || $0.contains("ESTIMATE") })
+            || (meal.items ?? []).contains(where: { ($0.confidence_label ?? "").localizedCaseInsensitiveContains("Needs Review") })
+            || (meal.estimatedCount ?? 0) > 0
+        let hasOfficial = types.contains(where: { $0.contains("OFFICIAL_RESTAURANT") })
+        let hasStructured = types.contains(where: { $0.contains("USDA") || $0.contains("BRAND") })
+        if hasEstimated && (hasOfficial || hasStructured || (meal.trustedCount ?? 0) > 0) { return "Mixed" }
+        if hasEstimated { return "Estimated" }
+        if hasOfficial { return "Restaurant" }
         if types.contains(where: { $0.contains("USDA") }) { return "USDA" }
         if types.contains(where: { $0.contains("BRAND") }) { return "Brand" }
-        if types.contains(where: { $0.contains("AI") }) { return "Estimated" }
         return "Verified"
     }
 }

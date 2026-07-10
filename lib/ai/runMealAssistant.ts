@@ -2231,8 +2231,27 @@ function buildUserTextSpan(item: ParsedFoodItem) {
   return [formatDisplayQuantity(item.quantity), unitLabel, item.food_name].filter(Boolean).join(' ');
 }
 
+function inferNaturalServingUnit(item: ParsedFoodItem) {
+  const identityText = normalizeFoodText([
+    item.food_name,
+    item.matched_query,
+    item.original_user_text,
+  ].filter(Boolean).join(' '));
+
+  if (/\bfootlong\b/.test(identityText)) return 'footlong';
+  if (/\b(?:6\s*inch|six\s*inch)\b/.test(identityText)) return '6-inch sub';
+  if (/\b(?:burger|cheeseburger|baconator|mcdouble|big mac|whopper)\b/.test(identityText)) return 'burger';
+  if (/\b(?:mcgriddle|mcchicken|sandwich|sub)\b/.test(identityText)) return 'sandwich';
+  if (/\b(?:bowl|salad)\b/.test(identityText)) return 'bowl';
+  if (/\b(?:tacos?|crunchwrap)\b/.test(identityText)) return 'taco';
+  if (/\b(?:burrito|wrap)\b/.test(identityText)) return 'burrito';
+  if (/\b(?:diet coke|coke zero|soda|drink|beverage)\b/.test(identityText)) return 'can';
+
+  return null;
+}
+
 function withServingMetadata(item: ParsedFoodItem): ParsedFoodItem {
-  const normalizedUnit = normalizeQuantityUnit(item.unit) ?? item.unit;
+  const normalizedUnit = normalizeQuantityUnit(item.unit) ?? item.unit ?? inferNaturalServingUnit(item);
   const userUnit = normalizedUnit || item.unit?.trim();
   const normalizedGrams = inferNormalizedGrams(item);
   const normalizedOunces = normalizedGrams !== null
@@ -4200,8 +4219,13 @@ function messageHasRestaurantCue(message: string) {
   return Boolean(detectRestaurantCue(message));
 }
 
+function isSourceBackedRestaurantItem(item: ParsedFoodItem) {
+  return item.source_type === 'OFFICIAL_RESTAURANT'
+    || /official nutrition/i.test(item.source_name ?? '');
+}
+
 function officialItemsMatchRestaurantCue(items: ParsedFoodItem[], cue: (typeof restaurantIdentityCues)[number]) {
-  const officialItems = items.filter((item) => item.source_type === 'OFFICIAL_RESTAURANT');
+  const officialItems = items.filter(isSourceBackedRestaurantItem);
   return officialItems.length > 0 && officialItems.every((item) => {
     const itemText = normalizeFoodText(`${item.food_name} ${item.source_name ?? ''} ${item.notes ?? ''} ${item.matched_query ?? ''}`);
     return cue.item.test(itemText);
@@ -4305,7 +4329,7 @@ function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, 
   if (
     hasRestaurantCue
     && shouldPreferTrustedRestaurantFallback(message)
-    && trustedItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')
+    && trustedItems.some(isSourceBackedRestaurantItem)
     && trustedItemsMatchRestaurantCue
     && !trustedFallbackWouldDropKnownFood(knownItems, trustedItems)
   ) {
@@ -4316,7 +4340,7 @@ function detectKnownFoodEstimatesWithTrustedRestaurantFallback(message: string, 
     return knownItems;
   }
 
-  return trustedItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT') && trustedItemsMatchRestaurantCue ? trustedItems : knownItems;
+  return trustedItems.some(isSourceBackedRestaurantItem) && trustedItemsMatchRestaurantCue ? trustedItems : knownItems;
 }
 
 function shouldAskPizzaPortion(message: string, items: MealAssistantItem[]) {
@@ -10015,7 +10039,7 @@ export async function runMealAssistant(
   const trustedInitialRestaurantItems = !shouldResolveByDecomposition && !dependencies.classify && !state.pendingClarification && !state.currentMealItems.length
     ? detectKnownFoodEstimatesWithTrustedRestaurantFallback(workingInput.message, state.mealType)
     : [];
-  if (trustedInitialRestaurantItems.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')) {
+  if (trustedInitialRestaurantItems.some(isSourceBackedRestaurantItem)) {
     const hydratedItems = applyUserModifiersToResolvedItems(
       workingInput.message,
       await hydrateKnownEstimatesWithProviders(trustedInitialRestaurantItems, state.mealType),

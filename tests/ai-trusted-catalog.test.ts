@@ -158,6 +158,49 @@ describe('trusted nutrition catalog matching', () => {
     expect([potatoTacos, mcdonalds, subway, canes, dominos, panera].every((response) => response?.items.every((item) => item.is_trusted))).toBe(true);
   });
 
+  it('preserves Five Guys bacon cheeseburger modifiers without claiming the final item is fully verified', () => {
+    const response = getTrustedCatalogEstimate('Five Guys bacon cheeseburger no bun extra grilled onions and mushrooms', 'dinner');
+
+    expect(response).not.toBeNull();
+    expect(response?.items).toHaveLength(1);
+    const item = response?.items[0];
+    const searchable = `${item?.food_name ?? ''} ${item?.notes ?? ''} ${item?.source_name ?? ''}`;
+
+    expect(item?.food_name).toMatch(/five guys/i);
+    expect(item?.food_name).toMatch(/bacon cheeseburger/i);
+    expect(searchable).toMatch(/no bun|without bun/i);
+    expect(searchable).toMatch(/grilled onions/i);
+    expect(searchable).toMatch(/mushrooms/i);
+    expect(item?.source_type).toBe('AI_ESTIMATE');
+    expect(item?.source_name).toMatch(/five guys/i);
+    expect(item?.source_name).toMatch(/estimated modifiers/i);
+    expect(item?.confidence_label).toBe('Needs Review');
+    expect(item?.is_trusted).toBe(false);
+    expect(item?.calories).toBeGreaterThan(0);
+    expect(item?.calories).toBeLessThan(980);
+  });
+
+  it.each([
+    'Diet Coke',
+    'Coca-Cola Diet Coke',
+    'Coca Cola Diet Coke',
+    'one can Diet Coke',
+    'diet cooe',
+  ])('keeps %s matched to Coca-Cola Diet Coke rather than unrelated drinks', (prompt) => {
+    const response = getTrustedCatalogEstimate(prompt, 'snack');
+
+    expect(response).not.toBeNull();
+    expect(response?.items).toHaveLength(1);
+    const item = response?.items[0];
+    expect(item?.food_name).toMatch(/diet coke/i);
+    expect(item?.source_name).toMatch(/coca-cola/i);
+    expect(item?.food_name).not.toMatch(/nos|monster|energy/i);
+    expect(`${item?.source_name ?? ''} ${item?.notes ?? ''}`).not.toMatch(/nos|monster|energy/i);
+    expect(item?.calories).toBeLessThanOrEqual(5);
+    expect(item?.carbs).toBeLessThanOrEqual(1);
+    expect(item?.source_type).toBe('GENERIC_REFERENCE');
+  });
+
   it('keeps homemade mixed meals usable with partial trusted matching', () => {
     const response = getTrustedCatalogEstimate('homemade chicken Alfredo', 'dinner');
 
