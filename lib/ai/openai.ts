@@ -9,9 +9,8 @@ import { finalizeParsedResponse, inferMealType } from '@/lib/ai/orchestrate';
 import { hydrateParsedMealWithProviders } from '@/lib/nutrition/nutritionLookup';
 import { resolveNutritionEstimate, type NutritionLabelInput } from '@/lib/nutrition/resolver';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
-import { openaiMealModel } from '@/lib/ai/openaiConfig';
-
-const model = openaiMealModel;
+import { getOpenAIMealModel, getServerOpenAIApiKey } from '@/lib/ai/openaiConfig';
+import { isMockMealParserAllowed } from '@/lib/ai/runtimeConfig';
 
 type ConversationContext = {
   mode?: 'new' | 'clarification' | 'correction';
@@ -35,6 +34,22 @@ function buildEffectiveMealText(text: string, conversation?: ConversationContext
 async function finalizeDatabaseFirstResponse(analysis: ReturnType<typeof analyzeMealText>, response: ParsedMealResponse) {
   const hydrated = await hydrateParsedMealWithProviders(response);
   return finalizeParsedResponse(analysis, hydrated);
+}
+
+function buildUnavailableResponse(text: string, mealType: string | undefined, question?: string | null) {
+  return normalizeParsedMealResponse({
+    needs_clarification: true,
+    clarifying_question: question ?? 'I could not verify that food right now. Please retry, add a brand or serving size, or enter the nutrition label manually.',
+    meal_type: inferMealType(mealType, text),
+    confidence_score: 0.2,
+    items: [],
+  });
+}
+
+function buildExplicitMockOrUnavailable(text: string, mealType: string | undefined, question?: string | null) {
+  return isMockMealParserAllowed()
+    ? getMockParsedMeal(text, mealType)
+    : buildUnavailableResponse(text, mealType, question);
 }
 
 export async function parseMealText(
@@ -79,14 +94,18 @@ export async function parseMealText(
     }
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return finalizeDatabaseFirstResponse(analysis, getMockParsedMeal(effectiveText, mealType));
+  if (!getServerOpenAIApiKey()) {
+    return buildExplicitMockOrUnavailable(
+      effectiveText,
+      mealType,
+      clarification.needsClarification ? clarification.question : null,
+    );
   }
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = new OpenAI({ apiKey: getServerOpenAIApiKey() as string });
 
   const completion = await client.chat.completions.create({
-    model,
+    model: getOpenAIMealModel().name,
     temperature: 0.15,
     response_format: { type: 'json_object' },
     messages: [
@@ -133,7 +152,7 @@ export async function parseMealText(
 
   const content = completion.choices[0]?.message?.content;
   if (!content) {
-    return getMockParsedMeal(effectiveText, mealType);
+    return buildExplicitMockOrUnavailable(effectiveText, mealType, clarification.question);
   }
 
   try {
@@ -152,6 +171,6 @@ export async function parseMealText(
 
     return finalizeDatabaseFirstResponse(analysis, normalized);
   } catch {
-    return finalizeDatabaseFirstResponse(analysis, getMockParsedMeal(effectiveText, mealType));
+    return buildExplicitMockOrUnavailable(effectiveText, mealType, clarification.question);
   }
 }

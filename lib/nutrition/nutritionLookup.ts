@@ -13,6 +13,8 @@ import {
 } from '@/lib/nutrition/accuracyEngine';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
 import type { NutritionLookupInput, NutritionLookupProvider } from '@/lib/nutrition/types';
+import { recordProviderAttempt } from '@/lib/ai/foodPipelineTrace';
+import type { FoodPipelineTrace } from '@/lib/ai/foodPipelineTrace';
 
 function makeLabelResponse(input: NutritionLookupInput) {
   if (!input.nutritionLabel) {
@@ -248,6 +250,7 @@ export async function lookupNutrition(
   options?: {
     providers?: NutritionLookupProvider[];
     aiEstimateProvider?: NutritionLookupProvider | null;
+    trace?: FoodPipelineTrace;
   },
 ) {
   const labelResponse = makeLabelResponse(input);
@@ -271,14 +274,69 @@ export async function lookupNutrition(
   const usingDefaultProviders = !options?.providers;
   const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, commercialDatabaseProvider];
   const [primaryProvider, ...supportingProviders] = providers;
-  const primaryResult = primaryProvider ? await primaryProvider.lookup(context) : null;
+  const runProvider = async (provider: NutritionLookupProvider | undefined) => {
+    if (!provider) return null;
+
+    const status = provider.getStatus?.() ?? { configured: true };
+    if (!status.configured) {
+      if (options?.trace) {
+        recordProviderAttempt(options.trace, {
+          provider: provider.id,
+          configured: false,
+          succeeded: false,
+          outcome: 'not_configured',
+          durationMs: 0,
+        });
+      }
+      return null;
+    }
+
+    const startedAt = Date.now();
+    try {
+      const result = await provider.lookup(context);
+      if (options?.trace) {
+        recordProviderAttempt(options.trace, {
+          provider: provider.id,
+          configured: true,
+          succeeded: Boolean(result?.items.length),
+          outcome: result?.items.length ? 'matched' : 'no_match',
+          durationMs: Date.now() - startedAt,
+        });
+      }
+      return result;
+    } catch {
+      if (options?.trace) {
+        recordProviderAttempt(options.trace, {
+          provider: provider.id,
+          configured: true,
+          succeeded: false,
+          outcome: 'failed',
+          durationMs: Date.now() - startedAt,
+        });
+      }
+      return null;
+    }
+  };
+
+  const markSelected = (provider: NutritionLookupProvider | undefined, response: ParsedMealResponse | null) => {
+    if (!options?.trace || !provider || !response?.items.length) return;
+    options.trace.selectedProvider = provider.id;
+    options.trace.selectedMatchType = response.items[0]?.match_type ?? null;
+    if (response.items.some((item) => item.source_type === 'AI_ESTIMATE' || item.used_ai_fallback)) {
+      options.trace.usedAiEstimate = true;
+    }
+  };
+
+  const primaryResult = await runProvider(primaryProvider);
 
   if (primaryResult) {
     if (primaryResult.needs_clarification) {
+      if (options?.trace) options.trace.clarificationRequired = true;
       return primaryResult;
     }
 
     if (isAuthoritativeNutritionResult(primaryResult, intent, primaryProvider.id)) {
+      markSelected(primaryProvider, primaryResult);
       return withVerificationLabels(primaryResult);
     }
   }
@@ -289,7 +347,7 @@ export async function lookupNutrition(
   const candidates = primaryResult ? [{ providerId: primaryProvider?.id ?? 'primary', response: primaryResult }] : [];
 
   for (const provider of supportingProviders) {
-    const result = await provider.lookup(context);
+    const result = await runProvider(provider);
     if (!result) {
       continue;
     }
@@ -297,6 +355,7 @@ export async function lookupNutrition(
     candidates.push({ providerId: provider.id, response: result });
 
     if (shouldProtectBrandIntent && !responseMatchesBrand(result, normalizedQuery.brandHint)) {
+      if (options?.trace) options.trace.clarificationRequired = true;
       return makeClarificationResponse(
         input,
         `I found possible nutrition data, but not a clear ${normalizedQuery.brandHint} match. Which exact item or serving should I use?`,
@@ -304,6 +363,7 @@ export async function lookupNutrition(
     }
 
     if (!responseMatchesCategory(result, normalizedQuery.searchText)) {
+      if (options?.trace) options.trace.clarificationRequired = true;
       return makeClarificationResponse(
         input,
         'I found possible nutrition data, but not a clear match for the food type you described. Which exact item or serving should I use?',
@@ -311,6 +371,7 @@ export async function lookupNutrition(
     }
 
     if (!responseMatchesPlausibility(result, lookupIntent)) {
+      if (options?.trace) options.trace.clarificationRequired = true;
       return makeClarificationResponse(
         input,
         'I found possible nutrition data, but the serving or macros do not look right for what you described. Which exact item or serving should I use?',
@@ -320,14 +381,20 @@ export async function lookupNutrition(
 
   const rankedResult = resolveBestNutritionCandidate(intent, candidates);
   if (rankedResult.response) {
+    markSelected(
+      providers.find((provider) => provider.id === rankedResult.providerId),
+      rankedResult.response,
+    );
     return rankedResult.response;
   }
 
   if (rankedResult.clarificationQuestion) {
+    if (options?.trace) options.trace.clarificationRequired = true;
     return makeClarificationResponse(input, rankedResult.clarificationQuestion);
   }
 
   if (shouldProtectBrandIntent) {
+    if (options?.trace) options.trace.clarificationRequired = true;
     return makeClarificationResponse(
       input,
       `I could not find a clear ${normalizedQuery.brandHint} match. Which exact item or serving should I use?`,
@@ -335,7 +402,10 @@ export async function lookupNutrition(
   }
 
   if (options?.aiEstimateProvider) {
-    const aiResponse = await options.aiEstimateProvider.lookup(context);
+    const aiResponse = await runProvider(options.aiEstimateProvider);
+    if (options?.trace && aiResponse?.items.some((item) => item.source_type === 'AI_ESTIMATE' || item.used_ai_fallback)) {
+      options.trace.usedAiEstimate = true;
+    }
     return aiResponse ? withVerificationLabels(aiResponse) : aiResponse;
   }
 
@@ -346,6 +416,7 @@ export async function hydrateParsedMealWithProviders(
   response: ParsedMealResponse,
   options?: {
     providers?: NutritionLookupProvider[];
+    trace?: FoodPipelineTrace;
   },
 ) {
   if (response.needs_clarification || !response.items.length) {
@@ -363,6 +434,7 @@ export async function hydrateParsedMealWithProviders(
       },
       {
         providers: options?.providers,
+        trace: options?.trace,
       },
     );
 

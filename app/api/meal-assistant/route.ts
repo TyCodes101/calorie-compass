@@ -4,6 +4,13 @@ import { mealAssistantRequestSchema } from '@/lib/ai/mealAssistantSchema';
 import { runMealAssistant } from '@/lib/ai/runMealAssistant';
 import { ApiRequestParseError, parseJsonRequest } from '@/lib/api-request';
 import { getCurrentUserWithProfile } from '@/lib/current-user';
+import {
+  createFoodPipelineTrace,
+  finishFoodPipelineTrace,
+  logFoodPipelineTrace,
+  sanitizedFoodPipelineTrace,
+} from '@/lib/ai/foodPipelineTrace';
+import { getFoodPipelineEnvironmentStatus } from '@/lib/ai/runtimeConfig';
 
 function sanitizedErrorSummary(error: unknown) {
   if (error instanceof Error) {
@@ -14,6 +21,21 @@ function sanitizedErrorSummary(error: unknown) {
 }
 
 export async function POST(request: Request) {
+  const headerRequestId = request.headers.get('x-request-id')?.trim();
+  const requestId = headerRequestId && /^[a-zA-Z0-9._:-]{1,128}$/.test(headerRequestId) ? headerRequestId : undefined;
+  const trace = createFoodPipelineTrace({ requestId });
+  const makeResponse = (body: unknown, status = 200) => {
+    finishFoodPipelineTrace(trace, {
+      usedAiEstimate: trace.usedAiEstimate,
+      usedMock: trace.usedMock,
+      clarificationRequired: trace.clarificationRequired,
+    });
+    logFoodPipelineTrace(trace);
+    const response = NextResponse.json(body, { status });
+    response.headers.set('x-macromesh-request-id', trace.requestId);
+    return response;
+  };
+
   try {
     const { message, state, context, conversationHistory } = await parseJsonRequest(
       request,
@@ -47,20 +69,30 @@ export async function POST(request: Request) {
       },
       userPreferences: context?.nutritionPreferences ?? user?.profile?.aiPreferenceNotes ?? null,
       conversationHistory: conversationHistory ?? [],
-    });
+    }, { trace });
 
-    return NextResponse.json(response);
+    finishFoodPipelineTrace(trace, {
+      clarificationRequired: Boolean(response.next_state.pendingClarification),
+      usedAiEstimate: response.meal.items.some((item) => item.source_type === 'AI_ESTIMATE' || item.used_ai_fallback),
+    });
+    const environment = getFoodPipelineEnvironmentStatus();
+    const responseBody = environment.foodPipelineDebug && environment.nodeEnv !== 'production'
+      ? { ...response, pipeline_debug: sanitizedFoodPipelineTrace(trace) }
+      : response;
+    return makeResponse(responseBody);
   } catch (error) {
     if (error instanceof ApiRequestParseError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      trace.failureReasons.push('invalid_request');
+      return makeResponse({ error: error.message }, error.status);
     }
 
+    trace.failureReasons.push('route_error');
     console.error('meal-assistant error', sanitizedErrorSummary(error));
-    return NextResponse.json(
+    return makeResponse(
       {
         error: 'We could not update that meal right now. Please try again.',
       },
-      { status: 500 },
+      500,
     );
   }
 }

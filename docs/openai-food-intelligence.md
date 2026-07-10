@@ -39,7 +39,7 @@ After changing env vars, redeploy the target branch or production deployment. Th
 
 ## Local Setup
 
-For normal tests, no OpenAI key is required. The wrapper falls back to deterministic logic when the key is absent.
+For normal tests, no OpenAI key is required because tests explicitly inject the deterministic fixture policy. Production does not silently fall back to mock results when the key is absent.
 
 For a real smoke run:
 
@@ -127,7 +127,7 @@ The wrapper returns safe failure reasons for:
 - Schema-invalid output.
 - Unsafe output.
 
-`runMealAssistant` falls back to the deterministic classifier/resolver path. The failure object contains only a safe reason and never returns raw OpenAI errors, prompts, keys, or model internals to the client.
+`runMealAssistant` records the typed failure and uses only safe provider/clarification behavior. A deterministic fixture is available only to tests or when `ALLOW_MOCK_MEAL_PARSER=true` outside production. The failure object contains only a safe reason and never returns raw OpenAI errors, prompts, keys, or model internals to the client.
 
 ## Security Tests
 

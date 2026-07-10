@@ -47,9 +47,17 @@ async function fetchJson<T>(url: string, init?: RequestInit) {
 
 export const commercialDatabaseProvider: NutritionLookupProvider = {
   id: 'commercial-database-slot',
+  getStatus() {
+    const hasAppId = Boolean(process.env.NUTRITIONIX_APP_ID?.trim());
+    const hasApiKey = Boolean(process.env.NUTRITIONIX_API_KEY?.trim());
+    return {
+      configured: hasAppId && hasApiKey,
+      reason: hasAppId && hasApiKey ? undefined : 'nutritionix_not_configured',
+    };
+  },
   async lookup({ mealType, normalizedQuery }) {
-    const appId = process.env.NUTRITIONIX_APP_ID;
-    const apiKey = process.env.NUTRITIONIX_API_KEY;
+    const appId = process.env.NUTRITIONIX_APP_ID?.trim();
+    const apiKey = process.env.NUTRITIONIX_API_KEY?.trim();
     if (!appId || !apiKey) {
       return null;
     }
