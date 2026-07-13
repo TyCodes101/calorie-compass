@@ -43,6 +43,7 @@ printStatus('NUTRITIONIX_APP_ID', nonEmpty('NUTRITIONIX_APP_ID'));
 printStatus('NUTRITIONIX_API_KEY', nonEmpty('NUTRITIONIX_API_KEY'));
 printStatus('FATSECRET_CLIENT_ID', nonEmpty('FATSECRET_CLIENT_ID'));
 printStatus('FATSECRET_CLIENT_SECRET', nonEmpty('FATSECRET_CLIENT_SECRET'));
+printStatus('CALORIE_API_KEY', nonEmpty('CALORIE_API_KEY'));
 console.log(`ALLOW_MOCK_MEAL_PARSER: ${mockEnabled ? 'enabled (non-production only)' : 'disabled'}`);
 console.log(`FOOD_PIPELINE_DEBUG: ${/^(?:1|true|yes|on)$/i.test(process.env.FOOD_PIPELINE_DEBUG?.trim() ?? '') ? 'enabled' : 'disabled'}`);
 
@@ -106,6 +107,26 @@ if (fatSecretClientId && fatSecretClientSecret) {
   }
 } else {
   console.log('FatSecret live check: skipped because credentials are missing');
+}
+
+const calorieApiKey = process.env.CALORIE_API_KEY?.trim();
+if (calorieApiKey) {
+  try {
+    const response = await fetch('https://calorieapiadmin.com/api/v1/search/foods?q=banana&limit=1', {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-API-Key': calorieApiKey,
+        'X-API-Usage-Type': 'commercial',
+      },
+    });
+    if (!response.ok) failures.push(`Calorie API health check returned HTTP ${response.status}`);
+    else console.log('Calorie API live check: reachable');
+  } catch {
+    failures.push('Calorie API health check failed');
+  }
+} else {
+  console.log('Calorie API live check: skipped because the key is missing');
 }
 
 if (failures.length) {

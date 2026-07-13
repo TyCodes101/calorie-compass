@@ -28,7 +28,8 @@ Provider configuration:
 
 - `USDA_FDC_API_KEY` is canonical; `FDC_API_KEY` remains a compatibility alias.
 - `NUTRITIONIX_APP_ID` and `NUTRITIONIX_API_KEY` are optional. Missing or partial credentials report `nutritionix_not_configured` and are not retried.
-- `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` are optional server-only credentials. `FATSECRET_SCOPE` defaults to `premier`; `FATSECRET_REGION` defaults to `US`. FatSecret credentials must remain behind the backend and may require the fixed egress/proxy configuration required by the FatSecret account.
+- `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` are optional server-only credentials. `FATSECRET_SCOPE` defaults to `premier` because current food-search methods require that scope; add `barcode` only when the account has barcode access. `FATSECRET_REGION` defaults to `US`.
+- `CALORIE_API_KEY` is optional and server-only. A missing key disables only this provider. `CALORIE_API_ENABLED` defaults to true when a key is configured, and `CALORIE_API_TIMEOUT_MS` defaults to 3500 ms.
 - `ALLOW_MOCK_MEAL_PARSER` defaults to false and is ignored in production. Tests set it explicitly through the test setup.
 - `FOOD_PIPELINE_DEBUG` is development-only response tracing; production logs remain sanitized.
 
@@ -41,7 +42,7 @@ npm run check:food-pipeline
 npm run check:food-pipeline -- --live
 ```
 
-The default command only reports presence/configuration and never makes network calls. `--live` performs explicit health requests to OpenAI and USDA when credentials are present. It never prints credential values.
+The default command only reports presence/configuration and never makes network calls. `--live` performs explicit health requests for configured providers. It never prints credential values or response bodies.
 
 ## Provider Priority and Labels
 
@@ -49,8 +50,9 @@ The default command only reports presence/configuration and never makes network 
 2. Local verified catalog, including exact official restaurant and branded records.
 3. USDA FoodData Central.
 4. FatSecret Platform when configured.
-5. Configured commercial provider.
-6. A cautious AI estimate only when no reliable provider match exists.
+5. Calorie API when configured and its candidate passes identity, serving, and nutrition plausibility gates.
+6. Configured commercial provider.
+7. A cautious AI estimate only when no reliable provider match exists.
 
 `Verified` is reserved for an exact authoritative record, `Matched` is used for strong database matches such as USDA, `Estimated` is used for AI or derived approximations, and `Needs Review` is used for ambiguity or identity/serving conflicts. An AI estimate can never become `Verified`.
 
@@ -66,7 +68,9 @@ Each meal-assistant request gets an `x-macromesh-request-id` response header. Sa
 
 ## Vercel Checklist
 
-Set `OPENAI_API_KEY`, `OPENAI_MEAL_MODEL`, `USDA_FDC_API_KEY`, and the timeout in the target Vercel environment. Add Nutritionix variables only after approval. Redeploy after changing environment variables. The iOS binary contains no provider credentials.
+Set provider credentials only in the intended Vercel environments and redeploy after changing them. Preview does not need production credentials unless live preview verification is intentional. The iOS binary contains no provider credentials.
+
+See [NUTRITION_PROVIDER_INTEGRATION.md](./NUTRITION_PROVIDER_INTEGRATION.md) for endpoint, scope, cache, deployment, rotation, and rollback details.
 
 ## Manual TestFlight QA
 
