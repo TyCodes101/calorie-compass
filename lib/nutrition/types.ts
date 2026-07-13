@@ -40,6 +40,7 @@ export type NutritionLookupContext = {
   text: string;
   mealType: MealTypeValue;
   normalizedQuery: NormalizedFoodQuery;
+  trace?: FoodPipelineTrace;
 };
 
 export type NutritionLookupProvider = {

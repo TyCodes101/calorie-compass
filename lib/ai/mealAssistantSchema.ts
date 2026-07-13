@@ -109,6 +109,19 @@ export const nutritionTotalsSchema = z.object({
 
 export const pendingMealStatusSchema = z.enum(['none', 'resolving', 'readyForReview', 'saving', 'saved', 'failed', 'discarded', 'stale']);
 
+export const pendingClarificationDetailsSchema = z.object({
+  itemId: z.string().nullable().optional(),
+  itemIdentity: z.object({
+    brand: z.string().nullable().optional(),
+    canonicalName: z.string().nullable().optional(),
+  }).optional(),
+  knownFields: z.record(z.string(), z.string()).default({}),
+  missingFields: z.array(z.string()).default([]),
+  question: z.string().min(1),
+  turnCount: z.number().int().nonnegative().default(0),
+  lastQuestionFingerprint: z.string().nullable().default(null),
+});
+
 export const pendingMealSchema = z.object({
   id: z.string().min(1),
   version: z.number().int().nonnegative().default(1),
@@ -130,6 +143,7 @@ export const mealAssistantStateSchema = z.object({
   currentMealItems: z.array(parsedFoodItemSchema).default([]),
   pendingMeal: pendingMealSchema.nullable().default(null),
   pendingClarification: z.string().nullable().default(null),
+  pendingClarificationDetails: pendingClarificationDetailsSchema.nullable().optional(),
   lastAssistantQuestion: z.string().nullable().default(null),
   userCorrections: z.array(z.string()).default([]),
   saved: z.boolean().default(false),
@@ -204,6 +218,7 @@ export type MealAssistantOperation = z.infer<typeof mealAssistantOperationSchema
 export type MealAssistantTranscriptMessage = z.infer<typeof mealAssistantTranscriptMessageSchema>;
 export type MealAssistantModelOutput = z.infer<typeof mealAssistantModelOutputSchema>;
 export type PendingMealStatus = z.infer<typeof pendingMealStatusSchema>;
+export type PendingClarificationDetails = z.infer<typeof pendingClarificationDetailsSchema>;
 export type PendingMeal = z.infer<typeof pendingMealSchema>;
 type ParsedMealAssistantState = z.infer<typeof mealAssistantStateSchema>;
 export type MealAssistantState = Omit<ParsedMealAssistantState, 'pendingMeal'> & {

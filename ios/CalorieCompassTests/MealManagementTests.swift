@@ -331,6 +331,12 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertLessThanOrEqual(MealReviewCard.reviewTitle.count, 16)
     }
 
+    func testEstimatedItemsUseDistinctSourceAndConfidenceLabels() {
+        XCTAssertEqual(ConfidenceBadge.label(label: "Estimated", isTrusted: false), "Review")
+        XCTAssertEqual(SourceBadge.label(sourceType: "AI_ESTIMATE", sourceName: "AI estimate"), "AI estimate")
+        XCTAssertNotEqual(ConfidenceBadge.label(label: "Estimated", isTrusted: false), SourceBadge.label(sourceType: "AI_ESTIMATE", sourceName: "AI estimate"))
+    }
+
     func testMealItemServingScalingPreservesSourceMetadata() {
         var item = MealItem(from: Self.trustedItem("Greek yogurt"))
 

@@ -1,5 +1,7 @@
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import { scaleParsedFoodItem } from '@/lib/nutrition/catalog';
+import { recordServingScaling } from '@/lib/ai/foodPipelineTrace';
+import { computeServingScaleFactor } from '@/lib/nutrition/scaling';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
 type UsdaFood = {
@@ -97,37 +99,6 @@ function pickServingQuantity(food: UsdaFood) {
   return food.servingSize && Number.isFinite(food.servingSize) ? food.servingSize : 1;
 }
 
-function getScaleFactor(food: UsdaFood, quantity: number, quantityUnit: string | null) {
-  if (quantity <= 1 && !quantityUnit) {
-    return 1;
-  }
-
-  const requestedUnit = normalizeUnit(quantityUnit);
-  const servingUnit =
-    normalizeUnit(food.servingSizeUnit) ??
-    normalizeUnit(food.householdServingFullText) ??
-    (!food.servingSize && !food.servingSizeUnit && /foundation|survey|sr legacy/i.test(food.dataType ?? '') ? 'g' : null);
-  const servingQuantity = pickServingQuantity(food);
-
-  if (requestedUnit && servingUnit && requestedUnit === servingUnit && servingQuantity > 0) {
-    return quantity / servingQuantity;
-  }
-
-  if (requestedUnit === 'oz' && servingUnit === 'g' && servingQuantity > 0) {
-    return (quantity * 28.3495) / servingQuantity;
-  }
-
-  if (requestedUnit === 'g' && servingUnit === 'oz' && servingQuantity > 0) {
-    return quantity / (servingQuantity * 28.3495);
-  }
-
-  if (requestedUnit && requestedUnit !== servingUnit) {
-    return null;
-  }
-
-  return quantity > 1 ? quantity : 1;
-}
-
 function getQuantityUnitOverride(food: UsdaFood, quantityUnit: string | null) {
   const requestedUnit = normalizeUnit(quantityUnit);
   if (requestedUnit) {
@@ -216,7 +187,7 @@ export const usdaProvider: NutritionLookupProvider = {
     const configured = Boolean(process.env.USDA_FDC_API_KEY?.trim() || process.env.FDC_API_KEY?.trim());
     return { configured, reason: configured ? undefined : 'usda_not_configured' };
   },
-  async lookup({ mealType, normalizedQuery }) {
+  async lookup({ mealType, normalizedQuery, trace }) {
     const apiKey = process.env.USDA_FDC_API_KEY?.trim() || process.env.FDC_API_KEY?.trim() || null;
     if (!apiKey) {
       return null;
@@ -273,19 +244,26 @@ export const usdaProvider: NutritionLookupProvider = {
       provider_used: 'usda-fdc',
       used_ai_fallback: false,
       catalog_food_id: null,
+      providerCandidateId: bestMatch.fdcId ? `usda:${bestMatch.fdcId}` : `usda:${normalizedQuery.matchedQuery}`,
     };
 
-    const scaleFactor = getScaleFactor(bestMatch, normalizedQuery.quantity, normalizedQuery.quantityUnit);
-    if (scaleFactor === null) {
+    const scale = computeServingScaleFactor({
+      requestedQuantity: normalizedQuery.quantity,
+      requestedUnit: normalizedQuery.quantityUnit,
+      providerServingQuantity: pickServingQuantity(bestMatch),
+      providerServingUnit: pickServingText(bestMatch),
+    });
+    if (!scale) {
       return null;
     }
+    if (trace) recordServingScaling(trace, scale);
 
-    const item = scaleFactor !== 1
-      ? scaleParsedFoodItem(baseItem, scaleFactor, getQuantityUnitOverride(bestMatch, normalizedQuery.quantityUnit))
+    const item = scale.scaleFactor !== 1 || Boolean(normalizedQuery.quantityUnit)
+      ? scaleParsedFoodItem(baseItem, scale.scaleFactor, getQuantityUnitOverride(bestMatch, normalizedQuery.quantityUnit))
       : {
           ...baseItem,
-          quantity: normalizedQuery.quantityUnit ? normalizedQuery.quantity : baseItem.quantity,
-          unit: getQuantityUnitOverride(bestMatch, normalizedQuery.quantityUnit),
+          quantity: baseItem.quantity,
+          unit: pickServingText(bestMatch),
         };
 
     return normalizeParsedMealResponse({

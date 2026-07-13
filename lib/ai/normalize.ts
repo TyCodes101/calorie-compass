@@ -69,6 +69,11 @@ function normalizeItem(item: Record<string, unknown>) {
           ? sanitizeNumber(item.normalized_ounces)
           : null,
     sourceId: item.sourceId ? String(item.sourceId) : item.source_id ? String(item.source_id) : null,
+    providerCandidateId: item.providerCandidateId
+      ? String(item.providerCandidateId)
+      : item.provider_candidate_id
+        ? String(item.provider_candidate_id)
+        : null,
     confidence:
       typeof item.confidence === 'number'
         ? Math.max(0, Math.min(1, sanitizeNumber(item.confidence)))

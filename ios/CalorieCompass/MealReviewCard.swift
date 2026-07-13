@@ -342,12 +342,16 @@ struct SourceBadge: View {
     }
 
     private var displayLabel: String? {
+        Self.label(sourceType: sourceType, sourceName: sourceName)
+    }
+
+    static func label(sourceType: String?, sourceName: String?) -> String? {
         let normalizedType = sourceType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
         if normalizedType.contains("USDA") { return "USDA match" }
         if normalizedType.contains("OFFICIAL_RESTAURANT") { return "Restaurant verified" }
         if normalizedType.contains("BRAND") { return "Brand verified" }
         if normalizedType.contains("GENERIC_REFERENCE") { return "Generic reference" }
-        if normalizedType.contains("AI") { return "Estimated" }
+        if normalizedType.contains("AI") { return "AI estimate" }
 
         if let name = sourceName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
             if name.localizedCaseInsensitiveContains("FoodData Central") { return "USDA match" }
@@ -394,10 +398,15 @@ struct ConfidenceBadge: View {
     }
 
     private var display: String {
+        Self.label(label: label, isTrusted: isTrusted)
+    }
+
+    static func label(label: String?, isTrusted: Bool?) -> String {
         if let label, !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return label == "Needs Review" ? "Review" : label
+            if label == "Needs Review" || label == "Estimated" { return "Review" }
+            return label
         }
-        return isTrusted == false ? "Estimated" : "High confidence"
+        return isTrusted == false ? "Review" : "High confidence"
     }
 }
 

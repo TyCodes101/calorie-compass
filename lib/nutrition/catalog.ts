@@ -221,6 +221,8 @@ export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit
     confidence_label: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : source?.brand ? 'Verified' : 'Matched',
     match_type: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'exact_restaurant' : source?.brand ? 'exact_branded' : 'verified_database',
     catalog_food_id: food.id,
+    userQuantity: quantity,
+    userUnit: normalizedUnit,
   };
 }
 
@@ -236,6 +238,8 @@ export function scaleParsedFoodItem(item: ParsedFoodItem, factor: number, unitOv
     fiber: Math.round(item.fiber * factor * 100) / 100,
     sugar: Math.round(item.sugar * factor * 100) / 100,
     sodium: Math.round(item.sodium * factor * 100) / 100,
+    userQuantity: Math.round(item.quantity * factor * 100) / 100,
+    userUnit: unitOverride ?? item.unit,
   };
 }
 
