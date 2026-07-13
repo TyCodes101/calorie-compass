@@ -155,6 +155,64 @@ describe('food logging API failure modes', () => {
     expect(mocks.getDashboardData).not.toHaveBeenCalled();
   });
 
+  it('accepts and preserves structured serving and modifier metadata in save payloads', async () => {
+    mocks.hasDatabaseConnectionString.mockReturnValue(false);
+    mocks.getDashboardData.mockResolvedValue({ totals: { calories: 390 } });
+    const response = await postMeal(request('/api/meals', {
+      meal_type: 'lunch',
+      confidence_score: 0.72,
+      items: [{
+        food_name: 'McDouble',
+        quantity: 1,
+        unit: 'burger',
+        calories: 390,
+        protein: 22,
+        carbs: 33,
+        fat: 19,
+        fiber: 2,
+        sugar: 7,
+        sodium: 850,
+        source_type: 'OFFICIAL_RESTAURANT',
+        source_name: "McDonald's official nutrition",
+        confidence_label: 'Needs Review',
+        providerCandidateId: 'catalog:mcdouble',
+        requested_modifiers: ['no cheese', 'no ketchup'],
+        modifier_resolution: 'unresolved',
+        review_status: 'required',
+        nutrition_basis: {
+          type: 'per_unit',
+          provider_quantity: 1,
+          provider_unit: 'burger',
+          scale_factor: 1,
+          base_nutrition: {
+            calories: 390,
+            protein: 22,
+            carbs: 33,
+            fat: 19,
+            fiber: 2,
+            sugar: 7,
+            sodium: 850,
+          },
+        },
+      }],
+    }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.meal.items[0]).toMatchObject({
+      providerCandidateId: 'catalog:mcdouble',
+      requested_modifiers: ['no cheese', 'no ketchup'],
+      modifier_resolution: 'unresolved',
+      review_status: 'required',
+      nutrition_basis: {
+        provider_quantity: 1,
+        provider_unit: 'burger',
+        scale_factor: 1,
+      },
+    });
+    expect(mocks.saveConfirmedMeal).not.toHaveBeenCalled();
+  });
+
   it('returns a traceable save failure when meal persistence fails', async () => {
     const databaseError = new Error('column "pendingMealId" of relation "Meal" does not exist');
     mocks.isDatabaseWriteError.mockReturnValue(true);

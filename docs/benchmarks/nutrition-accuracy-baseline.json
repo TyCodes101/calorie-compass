@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-09T20:48:10.841Z",
+  "generatedAt": "2026-07-13T23:32:35.300Z",
   "total": 1000,
   "passed": 1000,
   "failed": 0,
@@ -10021,7 +10021,7 @@
       "mode": "golden",
       "prompt": "2 eggs and toast",
       "expectedIdentity": "eggs-and-toast",
-      "actualIdentity": "Eggs, Toast",
+      "actualIdentity": "eggs, toast",
       "passed": true,
       "notes": "Golden dataset case passed."
     },

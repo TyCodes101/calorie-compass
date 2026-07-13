@@ -2,6 +2,25 @@ import { z } from 'zod';
 
 const verificationLabelSchema = z.enum(['Verified', 'Matched', 'Estimated', 'Needs Review']);
 
+const nutritionValuesSchema = z.object({
+  calories: z.number().nonnegative(),
+  protein: z.number().nonnegative(),
+  carbs: z.number().nonnegative(),
+  fat: z.number().nonnegative(),
+  fiber: z.number().nonnegative(),
+  sugar: z.number().nonnegative(),
+  sodium: z.number().nonnegative(),
+});
+
+const nutritionBasisSchema = z.object({
+  type: z.enum(['per_100g', 'per_serving', 'per_unit', 'as_provided']),
+  provider_quantity: z.number().positive(),
+  provider_unit: z.string().min(1),
+  provider_weight_grams: z.number().positive().nullable().optional(),
+  scale_factor: z.number().positive(),
+  base_nutrition: nutritionValuesSchema,
+});
+
 export const parsedFoodItemSchema = z.object({
   food_name: z.string().min(1),
   quantity: z.number().nonnegative(),
@@ -32,6 +51,10 @@ export const parsedFoodItemSchema = z.object({
   sourceId: z.string().nullable().optional(),
   providerCandidateId: z.string().nullable().optional(),
   confidence: z.number().min(0).max(1).nullable().optional(),
+  requested_modifiers: z.array(z.string()).optional(),
+  modifier_resolution: z.enum(['official_component', 'deterministic_database', 'estimated', 'unresolved']).nullable().optional(),
+  review_status: z.enum(['none', 'recommended', 'required']).nullable().optional(),
+  nutrition_basis: nutritionBasisSchema.nullable().optional(),
 });
 
 export const parsedMealResponseSchema = z.object({

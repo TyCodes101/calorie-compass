@@ -10,6 +10,25 @@ import { normalizeNutritionVerificationLabel, nutritionVerificationLabels } from
 import { prisma } from '@/lib/prisma';
 import { createPersistenceTraceId, getPersistenceErrorMessage, isDatabaseWriteError, logWriteFailure } from '@/lib/persistence';
 
+const nutritionValuesSchema = z.object({
+  calories: z.number().nonnegative(),
+  protein: z.number().nonnegative(),
+  carbs: z.number().nonnegative(),
+  fat: z.number().nonnegative(),
+  fiber: z.number().nonnegative(),
+  sugar: z.number().nonnegative(),
+  sodium: z.number().nonnegative(),
+});
+
+const nutritionBasisSchema = z.object({
+  type: z.enum(['per_100g', 'per_serving', 'per_unit', 'as_provided']),
+  provider_quantity: z.number().positive(),
+  provider_unit: z.string().min(1),
+  provider_weight_grams: z.number().positive().nullable().optional(),
+  scale_factor: z.number().positive(),
+  base_nutrition: nutritionValuesSchema,
+});
+
 const parsedItemSchema = z.object({
   food_name: z.string().min(1),
   quantity: z.number().positive(),
@@ -32,6 +51,18 @@ const parsedItemSchema = z.object({
   provider_used: z.string().nullable().optional(),
   used_ai_fallback: z.boolean().nullable().optional(),
   catalog_food_id: z.string().nullable().optional(),
+  userQuantity: z.number().nonnegative().nullable().optional(),
+  userUnit: z.string().nullable().optional(),
+  userTextSpan: z.string().nullable().optional(),
+  normalizedGrams: z.number().nonnegative().nullable().optional(),
+  normalizedOunces: z.number().nonnegative().nullable().optional(),
+  sourceId: z.string().nullable().optional(),
+  providerCandidateId: z.string().nullable().optional(),
+  confidence: z.number().min(0).max(1).nullable().optional(),
+  requested_modifiers: z.array(z.string()).optional(),
+  modifier_resolution: z.enum(['official_component', 'deterministic_database', 'estimated', 'unresolved']).nullable().optional(),
+  review_status: z.enum(['none', 'recommended', 'required']).nullable().optional(),
+  nutrition_basis: nutritionBasisSchema.nullable().optional(),
 });
 
 const requestSchema = z.object({

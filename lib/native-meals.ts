@@ -32,8 +32,13 @@ export type NativeMealRecord = {
   items: NativeMealItemRecord[];
 };
 
+function extractStoredTraceValue(notes: string | null, key: string) {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return notes?.match(new RegExp(`\\b${escapedKey}=([^|\\n]+)`, 'i'))?.[1]?.trim() ?? null;
+}
+
 function extractStoredConfidenceLabel(notes: string | null) {
-  return notes?.match(/\bconfidence=([^|\n]+)/i)?.[1]?.trim() ?? null;
+  return extractStoredTraceValue(notes, 'confidence');
 }
 
 function normalizeStoredSourceType(sourceType: string | null): ParsedFoodItem['source_type'] | null {
@@ -45,7 +50,19 @@ function normalizeStoredSourceType(sourceType: string | null): ParsedFoodItem['s
 export function mapMealForNative(meal: NativeMealRecord) {
   const items = meal.items.map((item) => {
     const sourceType = normalizeStoredSourceType(item.nutritionSourceType);
-    const isTrusted = Boolean(sourceType && sourceType !== 'AI_ESTIMATE');
+    const reviewStatus = extractStoredTraceValue(item.notes, 'reviewStatus');
+    const modifierResolution = extractStoredTraceValue(item.notes, 'modifierResolution');
+    const requestedModifiers = extractStoredTraceValue(item.notes, 'modifiers')
+      ?.split(';')
+      .map((modifier) => modifier.trim())
+      .filter(Boolean) ?? [];
+    const isTrusted = Boolean(
+      sourceType
+      && sourceType !== 'AI_ESTIMATE'
+      && reviewStatus !== 'required'
+      && modifierResolution !== 'estimated'
+      && modifierResolution !== 'unresolved',
+    );
     const confidenceLabel = normalizeNutritionVerificationLabel(extractStoredConfidenceLabel(item.notes), {
       source_type: sourceType,
       is_trusted: isTrusted,
@@ -68,6 +85,11 @@ export function mapMealForNative(meal: NativeMealRecord) {
       source_name: item.nutritionSourceName,
       confidence_label: confidenceLabel,
       catalog_food_id: item.catalogFoodId ?? null,
+      provider_used: extractStoredTraceValue(item.notes, 'provider'),
+      providerCandidateId: extractStoredTraceValue(item.notes, 'candidate'),
+      requested_modifiers: requestedModifiers,
+      modifier_resolution: modifierResolution,
+      review_status: reviewStatus,
     };
   });
   const trustedCount = items.filter((item) => item.is_trusted).length;

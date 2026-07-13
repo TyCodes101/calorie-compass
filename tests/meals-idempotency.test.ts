@@ -113,6 +113,27 @@ describe('saveConfirmedMeal idempotency', () => {
     }));
   });
 
+  it('persists modifier truthfulness and structured candidate provenance in item notes', async () => {
+    await saveConfirmedMeal({
+      ...payload,
+      items: [foodItem({
+        requested_modifiers: ['no cheese', 'no ketchup'],
+        modifier_resolution: 'unresolved',
+        review_status: 'required',
+        providerCandidateId: 'catalog:mcdouble',
+        confidence_label: 'Needs Review',
+        is_trusted: false,
+      })],
+    });
+
+    const createCall = mocks.tx.meal.create.mock.calls.at(-1)?.[0];
+    const storedNotes = createCall?.data?.items?.create?.[0]?.notes;
+    expect(storedNotes).toContain('candidate=catalog:mcdouble');
+    expect(storedNotes).toContain('modifiers=no cheese;no ketchup');
+    expect(storedNotes).toContain('modifierResolution=unresolved');
+    expect(storedNotes).toContain('reviewStatus=required');
+  });
+
   it('maps a concurrent idempotency race to the existing saved meal', async () => {
     mocks.tx.meal.create.mockRejectedValueOnce(uniqueIdempotencyConstraintError());
     mocks.prisma.meal.findFirst.mockResolvedValueOnce({ id: 'meal-existing-race' });

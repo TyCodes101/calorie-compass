@@ -14,6 +14,12 @@ type UsdaFood = {
   householdServingFullText?: string;
   dataType?: string;
   gtinUpc?: string;
+  foodMeasures?: Array<{
+    disseminationText?: string;
+    gramWeight?: number;
+    measureUnitName?: string;
+    modifier?: string;
+  }>;
   foodNutrients?: Array<{ nutrientName?: string; nutrientNumber?: string; unitName?: string; value?: number }>;
 };
 
@@ -63,25 +69,80 @@ function normalizeUnit(unit: string | null | undefined) {
   return normalized;
 }
 
-const naturalServingPattern = /(?:^|\b)(\d+(?:\.\d+)?)\s*(bar|bottle|can|slice|piece|cake|egg|sandwich|burger|bowl|cup|tbsp|tablespoon|tsp|teaspoon|package|pack|bag)s?\b/i;
+const preparationTerms = ['cooked', 'raw', 'uncooked', 'dry', 'prepared', 'grilled', 'fried', 'roasted', 'baked', 'boiled', 'scrambled'] as const;
+const incompatiblePreparationTerms: Record<string, readonly string[]> = {
+  cooked: ['raw', 'uncooked', 'dry'],
+  raw: ['cooked', 'prepared', 'grilled', 'fried', 'roasted', 'baked', 'boiled', 'scrambled'],
+  uncooked: ['cooked', 'prepared', 'grilled', 'fried', 'roasted', 'baked', 'boiled', 'scrambled'],
+  dry: ['cooked', 'prepared'],
+  grilled: ['raw', 'uncooked', 'fried'],
+  fried: ['raw', 'uncooked', 'grilled'],
+  roasted: ['raw', 'uncooked'],
+  baked: ['raw', 'uncooked'],
+  boiled: ['raw', 'uncooked'],
+  scrambled: ['raw', 'uncooked'],
+};
 
-function pickNaturalServing(food: UsdaFood) {
-  const household = food.householdServingFullText?.trim() ?? '';
-  const match = household.match(naturalServingPattern);
-  if (!match) return null;
-  return {
-    quantity: Number(match[1]),
-    unit: normalizeUnit(match[2]) ?? 'serving',
-  };
+function scoreIdentityConstraints(queryTokens: string[], descriptionTokens: string[]) {
+  const querySet = new Set(queryTokens);
+  const descriptionSet = new Set(descriptionTokens);
+  let score = 0;
+
+  for (const term of preparationTerms) {
+    if (!querySet.has(term)) continue;
+    score += descriptionSet.has(term) ? 70 : -24;
+    if ((incompatiblePreparationTerms[term] ?? []).some((value) => descriptionSet.has(value))) {
+      score -= 140;
+    }
+  }
+
+  for (const protectedTerm of ['white', 'brown', 'whole', 'large', 'small', 'skinless', 'boneless', 'breast']) {
+    if (!querySet.has(protectedTerm)) continue;
+    score += descriptionSet.has(protectedTerm) ? 22 : -10;
+  }
+
+  if (querySet.has('white') && descriptionSet.has('brown')) score -= 90;
+  if (querySet.has('brown') && descriptionSet.has('white')) score -= 90;
+  return score;
 }
 
-function getServingWeightGrams(food: UsdaFood) {
+const naturalServingPattern = /(?:^|\b)(\d+(?:\.\d+)?)\s*(?:large\s+|medium\s+|small\s+)?(bar|bottle|can|slice|piece|cake|egg|sandwich|burger|bowl|cup|tbsp|tablespoon|tsp|teaspoon|package|pack|bag)s?\b/i;
+
+function pickNaturalServing(food: UsdaFood) {
+  const candidates = [
+    ...(food.foodMeasures ?? []).map((measure) => ({
+      text: [measure.disseminationText, measure.modifier, measure.measureUnitName].filter(Boolean).join(' '),
+      weightGrams: Number(measure.gramWeight),
+    })),
+    {
+      text: food.householdServingFullText?.trim() ?? '',
+      weightGrams: getDirectServingWeightGrams(food),
+    },
+  ];
+  for (const candidate of candidates) {
+    const match = candidate.text.match(naturalServingPattern);
+    if (!match) continue;
+    const weightGrams = Number(candidate.weightGrams);
+    return {
+      quantity: Number(match[1]),
+      unit: normalizeUnit(match[2]) ?? 'serving',
+      weightGrams: Number.isFinite(weightGrams) && weightGrams > 0 ? weightGrams : null,
+    };
+  }
+  return null;
+}
+
+function getDirectServingWeightGrams(food: UsdaFood) {
   const amount = Number(food.servingSize);
   const unit = normalizeUnit(food.servingSizeUnit);
   if (!Number.isFinite(amount) || amount <= 0) return null;
   if (unit === 'g') return amount;
   if (unit === 'oz') return amount * 28.3495;
   return null;
+}
+
+function getServingWeightGrams(food: UsdaFood) {
+  return getDirectServingWeightGrams(food) ?? pickNaturalServing(food)?.weightGrams ?? null;
 }
 
 function findUsdaNutrient(food: UsdaFood, names: string[], nutrientNumbers: string[] = []) {
@@ -97,12 +158,12 @@ function findUsdaNutrient(food: UsdaFood, names: string[], nutrientNumbers: stri
 }
 
 function pickServingText(food: UsdaFood) {
+  const naturalServing = pickNaturalServing(food);
+  if (naturalServing) return naturalServing.unit;
+
   if (!food.servingSize && !food.servingSizeUnit && /foundation|survey|sr legacy/i.test(food.dataType ?? '')) {
     return 'g';
   }
-
-  const naturalServing = pickNaturalServing(food);
-  if (naturalServing) return naturalServing.unit;
 
   const servingSizeUnit = normalizeUnit(food.servingSizeUnit);
   if (servingSizeUnit === 'g' || servingSizeUnit === 'oz') {
@@ -118,20 +179,22 @@ function pickServingText(food: UsdaFood) {
 }
 
 function pickServingQuantity(food: UsdaFood) {
+  const naturalServing = pickNaturalServing(food);
+  if (naturalServing) return naturalServing.quantity;
+
   if (!food.servingSize && !food.servingSizeUnit && /foundation|survey|sr legacy/i.test(food.dataType ?? '')) {
     return 100;
   }
-
-  const naturalServing = pickNaturalServing(food);
-  if (naturalServing) return naturalServing.quantity;
 
   return food.servingSize && Number.isFinite(food.servingSize) ? food.servingSize : 1;
 }
 
 function nutrientScaleForServing(food: UsdaFood) {
-  if (!/branded/i.test(food.dataType ?? '')) return 1;
   const servingWeight = getServingWeightGrams(food);
-  return servingWeight ? servingWeight / 100 : 1;
+  if (/branded/i.test(food.dataType ?? '')) {
+    return servingWeight ? servingWeight / 100 : 1;
+  }
+  return pickNaturalServing(food)?.weightGrams ? (pickNaturalServing(food)?.weightGrams ?? 100) / 100 : 1;
 }
 
 function scoreUsdaFood(food: UsdaFood, searchText: string, brandHint: string | null, unitHint: string | null) {
@@ -139,7 +202,11 @@ function scoreUsdaFood(food: UsdaFood, searchText: string, brandHint: string | n
   const normalizedDescription = normalizeText(food.description ?? '');
   const normalizedBrand = normalizeText(food.brandOwner ?? '');
   const queryTokens = tokenize(normalizedQuery);
-  const descriptionTokens = tokenize(normalizedDescription);
+  const descriptionTokens = tokenize([
+    normalizedDescription,
+    food.householdServingFullText ?? '',
+    ...(food.foodMeasures ?? []).flatMap((measure) => [measure.disseminationText ?? '', measure.modifier ?? '', measure.measureUnitName ?? '']),
+  ].join(' '));
   const servingText = normalizeText(`${food.servingSizeUnit ?? ''} ${food.householdServingFullText ?? ''}`);
   const isBranded = Boolean(food.brandOwner) || /branded/i.test(food.dataType ?? '');
   const calories = findUsdaNutrient(food, ['Energy']);
@@ -149,6 +216,7 @@ function scoreUsdaFood(food: UsdaFood, searchText: string, brandHint: string | n
   if (normalizedDescription === normalizedQuery) score += 140;
   else if (normalizedDescription.includes(normalizedQuery) || normalizedQuery.includes(normalizedDescription)) score += 92;
   score += countOverlap(queryTokens, descriptionTokens) * 10;
+  score += scoreIdentityConstraints(queryTokens, descriptionTokens);
 
   if (brandHint) {
     const normalizedHint = normalizeText(brandHint);

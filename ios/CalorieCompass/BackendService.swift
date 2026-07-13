@@ -124,6 +124,25 @@ struct MealAssistantMeal: Codable, Equatable {
     let confidence_score: Double
 }
 
+struct MealNutritionValues: Codable, Equatable {
+    var calories: Double
+    var protein: Double
+    var carbs: Double
+    var fat: Double
+    var fiber: Double
+    var sugar: Double
+    var sodium: Double
+}
+
+struct MealNutritionBasis: Codable, Equatable {
+    var type: String
+    var provider_quantity: Double
+    var provider_unit: String
+    var provider_weight_grams: Double?
+    var scale_factor: Double
+    var base_nutrition: MealNutritionValues
+}
+
 struct MealAssistantResponse: Codable {
     let assistant_reply: String
     let meal: MealAssistantMeal
@@ -170,6 +189,23 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
     var confidence_label: String?
     var is_trusted: Bool?
     var catalog_food_id: String?
+    var match_type: String?
+    var matched_query: String?
+    var original_user_text: String?
+    var provider_used: String?
+    var used_ai_fallback: Bool?
+    var userQuantity: Double?
+    var userUnit: String?
+    var userTextSpan: String?
+    var normalizedGrams: Double?
+    var normalizedOunces: Double?
+    var sourceId: String?
+    var providerCandidateId: String?
+    var confidence: Double?
+    var requested_modifiers: [String]?
+    var modifier_resolution: String?
+    var review_status: String?
+    var nutrition_basis: MealNutritionBasis?
 
     init(
         food_name: String,
@@ -187,7 +223,24 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         source_name: String?,
         confidence_label: String?,
         is_trusted: Bool? = nil,
-        catalog_food_id: String? = nil
+        catalog_food_id: String? = nil,
+        match_type: String? = nil,
+        matched_query: String? = nil,
+        original_user_text: String? = nil,
+        provider_used: String? = nil,
+        used_ai_fallback: Bool? = nil,
+        userQuantity: Double? = nil,
+        userUnit: String? = nil,
+        userTextSpan: String? = nil,
+        normalizedGrams: Double? = nil,
+        normalizedOunces: Double? = nil,
+        sourceId: String? = nil,
+        providerCandidateId: String? = nil,
+        confidence: Double? = nil,
+        requested_modifiers: [String]? = nil,
+        modifier_resolution: String? = nil,
+        review_status: String? = nil,
+        nutrition_basis: MealNutritionBasis? = nil
     ) {
         self.food_name = food_name
         self.quantity = quantity
@@ -205,6 +258,23 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         self.confidence_label = confidence_label
         self.is_trusted = is_trusted
         self.catalog_food_id = catalog_food_id
+        self.match_type = match_type
+        self.matched_query = matched_query
+        self.original_user_text = original_user_text
+        self.provider_used = provider_used
+        self.used_ai_fallback = used_ai_fallback
+        self.userQuantity = userQuantity
+        self.userUnit = userUnit
+        self.userTextSpan = userTextSpan
+        self.normalizedGrams = normalizedGrams
+        self.normalizedOunces = normalizedOunces
+        self.sourceId = sourceId
+        self.providerCandidateId = providerCandidateId
+        self.confidence = confidence
+        self.requested_modifiers = requested_modifiers
+        self.modifier_resolution = modifier_resolution
+        self.review_status = review_status
+        self.nutrition_basis = nutrition_basis
     }
 
     enum CodingKeys: String, CodingKey {
@@ -224,6 +294,23 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         case confidence_label
         case is_trusted
         case catalog_food_id
+        case match_type
+        case matched_query
+        case original_user_text
+        case provider_used
+        case used_ai_fallback
+        case userQuantity
+        case userUnit
+        case userTextSpan
+        case normalizedGrams
+        case normalizedOunces
+        case sourceId
+        case providerCandidateId
+        case confidence
+        case requested_modifiers
+        case modifier_resolution
+        case review_status
+        case nutrition_basis
     }
 
     init(from decoder: Decoder) throws {
@@ -244,6 +331,23 @@ struct MealRequestItem: Codable, Equatable, Identifiable {
         confidence_label = try container.decodeIfPresent(String.self, forKey: .confidence_label)
         is_trusted = try container.decodeIfPresent(Bool.self, forKey: .is_trusted)
         catalog_food_id = try container.decodeIfPresent(String.self, forKey: .catalog_food_id)
+        match_type = try container.decodeIfPresent(String.self, forKey: .match_type)
+        matched_query = try container.decodeIfPresent(String.self, forKey: .matched_query)
+        original_user_text = try container.decodeIfPresent(String.self, forKey: .original_user_text)
+        provider_used = try container.decodeIfPresent(String.self, forKey: .provider_used)
+        used_ai_fallback = try container.decodeIfPresent(Bool.self, forKey: .used_ai_fallback)
+        userQuantity = try container.decodeIfPresent(Double.self, forKey: .userQuantity)
+        userUnit = try container.decodeIfPresent(String.self, forKey: .userUnit)
+        userTextSpan = try container.decodeIfPresent(String.self, forKey: .userTextSpan)
+        normalizedGrams = try container.decodeIfPresent(Double.self, forKey: .normalizedGrams)
+        normalizedOunces = try container.decodeIfPresent(Double.self, forKey: .normalizedOunces)
+        sourceId = try container.decodeIfPresent(String.self, forKey: .sourceId)
+        providerCandidateId = try container.decodeIfPresent(String.self, forKey: .providerCandidateId)
+        confidence = try container.decodeIfPresent(Double.self, forKey: .confidence)
+        requested_modifiers = try container.decodeIfPresent([String].self, forKey: .requested_modifiers)
+        modifier_resolution = try container.decodeIfPresent(String.self, forKey: .modifier_resolution)
+        review_status = try container.decodeIfPresent(String.self, forKey: .review_status)
+        nutrition_basis = try container.decodeIfPresent(MealNutritionBasis.self, forKey: .nutrition_basis)
     }
 }
 
@@ -259,6 +363,36 @@ enum MealAssistantQuantityResolution: Equatable {
 }
 
 struct MealAssistantClientLogic {
+    static func shouldApplyResponse(requestID: UUID, activeRequestID: UUID?) -> Bool {
+        requestID == activeRequestID
+    }
+
+    static func authoritativeItems(responseItems: [MealRequestItem], state: MealAssistantState) -> [MealRequestItem] {
+        if let pending = state.pendingMeal,
+           ["resolving", "readyForReview", "saving", "failed"].contains(pending.status) {
+            return pending.items
+        }
+        if !state.currentMealItems.isEmpty {
+            return state.currentMealItems
+        }
+        return responseItems
+    }
+
+    static func reconciledAssistantReply(
+        _ reply: String,
+        responseItems: [MealRequestItem],
+        authoritativeItems: [MealRequestItem],
+        saved: Bool
+    ) -> String {
+        guard !saved,
+              !authoritativeItems.isEmpty,
+              saveSignature(for: responseItems) != saveSignature(for: authoritativeItems) else {
+            return reply
+        }
+        let names = authoritativeItems.map(\.food_name).joined(separator: " and ")
+        return "I found \(names). Review \(authoritativeItems.count == 1 ? "it" : "them") below before saving."
+    }
+
     static func applyingMealType(_ mealType: String, to state: MealAssistantState) -> MealAssistantState {
         let normalized = mealType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let allowed = ["breakfast", "lunch", "dinner", "snack"]
@@ -1276,8 +1410,13 @@ class BackendService {
         perform(urlRequest, completion: completion)
     }
 
-    static func sendMealAssistant(request body: MealAssistantRequest, completion: @escaping (Result<MealAssistantResponse, Error>) -> Void) {
+    static func sendMealAssistant(
+        request body: MealAssistantRequest,
+        requestID: UUID = UUID(),
+        completion: @escaping (Result<MealAssistantResponse, Error>) -> Void
+    ) {
         guard var urlRequest = request(path: "api/meal-assistant", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        urlRequest.setValue(requestID.uuidString, forHTTPHeaderField: "X-Request-ID")
         do { urlRequest.httpBody = try JSONEncoder().encode(body) } catch { completion(.failure(error)); return }
         perform(urlRequest, completion: completion)
     }

@@ -42,6 +42,20 @@ export function providerTextTokens(value: string | null | undefined) {
     .filter((token) => token.length > 1);
 }
 
+export function buildProviderDisplayName(brand: string | null | undefined, name: string) {
+  const trimmedBrand = brand?.trim() ?? '';
+  const trimmedName = name.trim();
+  if (!trimmedBrand) return trimmedName;
+
+  const normalizedBrand = normalizeProviderText(trimmedBrand);
+  const normalizedName = normalizeProviderText(trimmedName);
+  if (normalizedName === normalizedBrand || normalizedName.startsWith(`${normalizedBrand} `)) {
+    return trimmedName;
+  }
+
+  return `${trimmedBrand} ${trimmedName}`.trim();
+}
+
 function singularProviderToken(token: string) {
   return token.length > 4 && token.endsWith('s') ? token.slice(0, -1) : token;
 }
@@ -138,7 +152,7 @@ export function buildProviderMealResponse(args: {
   const { candidate, normalizedQuery } = args;
   const requestedUnit = normalizedQuery.quantityUnit ?? normalizedQuery.unitHint;
   const baseItem = {
-    food_name: [candidate.brand, candidate.name].filter(Boolean).join(' ').trim(),
+    food_name: buildProviderDisplayName(candidate.brand, candidate.name),
     quantity: candidate.servingQuantity,
     unit: candidate.servingUnit,
     calories: candidate.nutrition.calories,

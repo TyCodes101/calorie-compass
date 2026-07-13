@@ -44,7 +44,11 @@ function buildStoredItemNotes(item: ParsedFoodItem) {
     item.original_user_text ? `input=${item.original_user_text}` : null,
     item.matched_query ? `matched=${item.matched_query}` : null,
     item.provider_used ? `provider=${item.provider_used}` : null,
+    item.providerCandidateId ? `candidate=${item.providerCandidateId}` : null,
     item.confidence_label ? `confidence=${item.confidence_label}` : null,
+    item.requested_modifiers?.length ? `modifiers=${item.requested_modifiers.join(';')}` : null,
+    item.modifier_resolution ? `modifierResolution=${item.modifier_resolution}` : null,
+    item.review_status ? `reviewStatus=${item.review_status}` : null,
     typeof item.used_ai_fallback === 'boolean' ? `aiFallback=${item.used_ai_fallback ? 'yes' : 'no'}` : null,
   ].filter(Boolean);
 

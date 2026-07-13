@@ -43,4 +43,46 @@ describe('native meals route mapping', () => {
       catalog_food_id: 'coke_zero_can',
     });
   });
+
+  it('keeps official provenance but restores required review for unresolved modifiers', () => {
+    const mapped = mapMealForNative({
+      id: 'meal-2',
+      mealType: 'LUNCH',
+      rawText: 'McDouble no cheese no ketchup',
+      date: new Date('2026-07-13T00:00:00.000Z'),
+      createdAt: new Date('2026-07-13T12:00:00.000Z'),
+      confidenceScore: 0.72,
+      totalCalories: 390,
+      totalProtein: 22,
+      totalCarbs: 33,
+      totalFat: 19,
+      items: [{
+        foodName: 'McDouble',
+        quantity: 1,
+        unit: 'burger',
+        calories: 390,
+        protein: 22,
+        carbs: 33,
+        fat: 19,
+        fiber: 2,
+        sugar: 7,
+        sodium: 850,
+        notes: 'Official base item.\n\nTrace: provider=local-catalog | candidate=catalog:mcdouble | confidence=Needs Review | modifiers=no cheese;no ketchup | modifierResolution=unresolved | reviewStatus=required | aiFallback=no',
+        nutritionSourceType: 'OFFICIAL_RESTAURANT',
+        nutritionSourceName: "McDonald's official nutrition",
+        catalogFoodId: null,
+      }],
+    });
+
+    expect(mapped.items[0]).toMatchObject({
+      source_type: 'OFFICIAL_RESTAURANT',
+      is_trusted: false,
+      confidence_label: 'Needs Review',
+      provider_used: 'local-catalog',
+      providerCandidateId: 'catalog:mcdouble',
+      requested_modifiers: ['no cheese', 'no ketchup'],
+      modifier_resolution: 'unresolved',
+      review_status: 'required',
+    });
+  });
 });
