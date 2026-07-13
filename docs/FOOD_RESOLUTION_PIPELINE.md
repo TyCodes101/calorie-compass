@@ -28,6 +28,7 @@ Provider configuration:
 
 - `USDA_FDC_API_KEY` is canonical; `FDC_API_KEY` remains a compatibility alias.
 - `NUTRITIONIX_APP_ID` and `NUTRITIONIX_API_KEY` are optional. Missing or partial credentials report `nutritionix_not_configured` and are not retried.
+- `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` are optional server-only credentials. `FATSECRET_SCOPE` defaults to `premier`; `FATSECRET_REGION` defaults to `US`. FatSecret credentials must remain behind the backend and may require the fixed egress/proxy configuration required by the FatSecret account.
 - `ALLOW_MOCK_MEAL_PARSER` defaults to false and is ignored in production. Tests set it explicitly through the test setup.
 - `FOOD_PIPELINE_DEBUG` is development-only response tracing; production logs remain sanitized.
 
@@ -46,9 +47,10 @@ The default command only reports presence/configuration and never makes network 
 
 1. User-provided nutrition label or barcode.
 2. Local verified catalog, including exact official restaurant and branded records.
-3. Configured commercial provider.
-4. USDA FoodData Central.
-5. A cautious AI estimate only when no reliable provider match exists.
+3. USDA FoodData Central.
+4. FatSecret Platform when configured.
+5. Configured commercial provider.
+6. A cautious AI estimate only when no reliable provider match exists.
 
 `Verified` is reserved for an exact authoritative record, `Matched` is used for strong database matches such as USDA, `Estimated` is used for AI or derived approximations, and `Needs Review` is used for ambiguity or identity/serving conflicts. An AI estimate can never become `Verified`.
 

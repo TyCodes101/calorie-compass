@@ -39,6 +39,8 @@ export type FoodPipelineEnvironmentStatus = {
   usdaApiKey: { present: boolean; nonEmpty: boolean; variable: 'USDA_FDC_API_KEY' | 'FDC_API_KEY' | null };
   nutritionixAppId: { present: boolean; nonEmpty: boolean };
   nutritionixApiKey: { present: boolean; nonEmpty: boolean };
+  fatSecretClientId: { present: boolean; nonEmpty: boolean };
+  fatSecretClientSecret: { present: boolean; nonEmpty: boolean };
   allowMockMealParser: boolean;
   foodPipelineDebug: boolean;
 };
@@ -50,6 +52,8 @@ export function getFoodPipelineEnvironmentStatus(env: RuntimeEnv = process.env):
   const compatibilityUsdaApiKey = readNonEmpty(env, 'FDC_API_KEY');
   const nutritionixAppId = readNonEmpty(env, 'NUTRITIONIX_APP_ID');
   const nutritionixApiKey = readNonEmpty(env, 'NUTRITIONIX_API_KEY');
+  const fatSecretClientId = readNonEmpty(env, 'FATSECRET_CLIENT_ID');
+  const fatSecretClientSecret = readNonEmpty(env, 'FATSECRET_CLIENT_SECRET');
 
   return {
     nodeEnv: env.NODE_ENV ?? 'development',
@@ -66,6 +70,8 @@ export function getFoodPipelineEnvironmentStatus(env: RuntimeEnv = process.env):
     },
     nutritionixAppId: { present: nutritionixAppId !== null, nonEmpty: nutritionixAppId !== null },
     nutritionixApiKey: { present: nutritionixApiKey !== null, nonEmpty: nutritionixApiKey !== null },
+    fatSecretClientId: { present: fatSecretClientId !== null, nonEmpty: fatSecretClientId !== null },
+    fatSecretClientSecret: { present: fatSecretClientSecret !== null, nonEmpty: fatSecretClientSecret !== null },
     allowMockMealParser: isMockMealParserAllowed(env),
     foodPipelineDebug: parseBoolean(env.FOOD_PIPELINE_DEBUG),
   };

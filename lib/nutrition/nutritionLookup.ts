@@ -1,6 +1,7 @@
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
+import { fatSecretProvider } from '@/lib/nutrition/providers/fatsecret';
 import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
 import { usdaProvider } from '@/lib/nutrition/providers/usda';
 import {
@@ -273,7 +274,7 @@ export async function lookupNutrition(
   };
 
   const usingDefaultProviders = !options?.providers;
-  const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, commercialDatabaseProvider];
+  const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, fatSecretProvider, commercialDatabaseProvider];
   const [primaryProvider, ...supportingProviders] = providers;
   const runProvider = async (provider: NutritionLookupProvider | undefined) => {
     if (!provider) return null;
