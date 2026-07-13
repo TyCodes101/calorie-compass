@@ -37,10 +37,26 @@ struct MealAssistantPendingMeal: Codable, Equatable {
     var idempotencyKey: String?
 }
 
+struct MealAssistantClarificationDetails: Codable, Equatable {
+    var itemId: String?
+    var itemIdentity: MealAssistantClarificationIdentity?
+    var knownFields: [String: String]
+    var missingFields: [String]
+    var question: String
+    var turnCount: Int
+    var lastQuestionFingerprint: String?
+}
+
+struct MealAssistantClarificationIdentity: Codable, Equatable {
+    var brand: String?
+    var canonicalName: String?
+}
+
 struct MealAssistantState: Codable, Equatable {
     var currentMealItems: [MealRequestItem] = []
     var pendingMeal: MealAssistantPendingMeal? = nil
     var pendingClarification: String? = nil
+    var pendingClarificationDetails: MealAssistantClarificationDetails? = nil
     var lastAssistantQuestion: String? = nil
     var userCorrections: [String] = []
     var saved: Bool = false

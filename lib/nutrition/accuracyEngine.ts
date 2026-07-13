@@ -13,6 +13,7 @@ export type NutritionIntent = {
   wantsDietSoda: boolean;
   wantsProteinProduct: boolean;
   wantsCandy: boolean;
+  expectedCategory: 'protein_bar' | 'protein_drink' | 'kombucha' | 'popcorn' | 'restaurant_burger' | 'generic' | null;
 };
 
 type CandidateResult = {
@@ -153,6 +154,17 @@ export function buildNutritionIntent(input: NutritionLookupInput, normalizedQuer
     : restaurantIntent;
   const normalized = normalizeComparableText(combined);
   const partialIntent = { brandIntent, restaurantIntent };
+  const expectedCategory = /\bprotein\s+bars?\b/.test(normalized)
+    ? 'protein_bar'
+    : /\bkombucha\b/.test(normalized)
+      ? 'kombucha'
+      : /\b(?:protein\s+shake|protein\s+drink)\b/.test(normalized)
+        ? 'protein_drink'
+        : /\bpopcorn\b/.test(normalized)
+          ? 'popcorn'
+          : /\b(?:burger|cheeseburger|butterburger|baconator|mcdouble|whopper)\b/.test(normalized)
+            ? 'restaurant_burger'
+            : null;
 
   return {
     brandIntent,
@@ -164,6 +176,7 @@ export function buildNutritionIntent(input: NutritionLookupInput, normalizedQuer
     wantsDietSoda: /\b(?:zero|diet|sugar free|no sugar)\b/.test(normalized) && /\b(?:coke|cola|soda|dr pepper|gatorade)\b/.test(normalized),
     wantsProteinProduct: /\b(?:protein|shake|core power|fairlife|quest|premier|muscle milk|barebells)\b/.test(normalized),
     wantsCandy: /\b(?:skittles?|snickers?|m\s*m|mms?|candy|candies)\b/.test(normalized),
+    expectedCategory,
   };
 }
 
@@ -233,6 +246,43 @@ function itemMatchesCandyIntent(item: ParsedFoodItem, intent: NutritionIntent) {
   return Number(item.protein || 0) <= 10;
 }
 
+function categoryPlausibilityIssues(item: ParsedFoodItem, intent: NutritionIntent) {
+  const calories = Number(item.calories || 0);
+  const quantity = Number(item.quantity || 0);
+  const unit = normalizeComparableText(item.unit);
+  const requestedUnit = normalizeComparableText(intent.servingUnit);
+  const weightUnits = new Set(['g', 'gram', 'grams', 'oz', 'ounce', 'ounces']);
+  const countableUnits = new Set(['bar', 'bottle', 'can', 'serving', 'bag', 'burger', 'sandwich', 'bowl', 'slice', 'piece']);
+  const issues: string[] = [];
+
+  if (![calories, quantity, item.protein, item.carbs, item.fat].every(Number.isFinite)) {
+    issues.push('non_finite_nutrients');
+  }
+  if ([item.calories, item.protein, item.carbs, item.fat].some((value) => Number(value ?? 0) < 0)) {
+    issues.push('negative_nutrients');
+  }
+  if (requestedUnit && countableUnits.has(requestedUnit) && weightUnits.has(unit)) {
+    issues.push('serving_unit_mismatch');
+  }
+  if (intent.expectedCategory === 'protein_bar' && ['bar', 'serving', 'piece'].includes(unit) && quantity <= 2 && calories > 450) {
+    issues.push('category_calorie_outlier');
+  }
+  if (intent.expectedCategory === 'kombucha' && ['bottle', 'serving'].includes(unit) && quantity <= 4 && calories > 300) {
+    issues.push('category_calorie_outlier');
+  }
+  if (intent.expectedCategory === 'popcorn' && ['bag', 'serving'].includes(unit) && quantity <= 4 && calories > 900) {
+    issues.push('category_calorie_outlier');
+  }
+  if (intent.expectedCategory === 'restaurant_burger' && unit === 'burger' && quantity <= 2 && calories > 1800) {
+    issues.push('category_calorie_outlier');
+  }
+  if (countableUnits.has(unit) && quantity > 20) {
+    issues.push('quantity_scale_suspicious');
+  }
+
+  return issues;
+}
+
 function validateItem(item: ParsedFoodItem, intent: NutritionIntent) {
   const reasons: string[] = [];
 
@@ -242,8 +292,9 @@ function validateItem(item: ParsedFoodItem, intent: NutritionIntent) {
   if (!itemMatchesDietSodaIntent(item, intent)) reasons.push('diet_soda_mismatch');
   if (!itemMatchesProteinIntent(item, intent)) reasons.push('protein_product_mismatch');
   if (!itemMatchesCandyIntent(item, intent)) reasons.push('candy_mismatch');
+  reasons.push(...categoryPlausibilityIssues(item, intent));
 
-  return reasons;
+  return [...new Set(reasons)];
 }
 
 function validationScore(response: ParsedMealResponse, intent: NutritionIntent, providerId: string) {

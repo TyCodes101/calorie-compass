@@ -13,7 +13,7 @@ import {
 } from '@/lib/nutrition/accuracyEngine';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
 import type { NutritionLookupInput, NutritionLookupProvider } from '@/lib/nutrition/types';
-import { recordProviderAttempt } from '@/lib/ai/foodPipelineTrace';
+import { recordCandidateSelection, recordProviderAttempt, recordPlausibility } from '@/lib/ai/foodPipelineTrace';
 import type { FoodPipelineTrace } from '@/lib/ai/foodPipelineTrace';
 
 function makeLabelResponse(input: NutritionLookupInput) {
@@ -269,6 +269,7 @@ export async function lookupNutrition(
     text: input.text,
     mealType: input.mealType,
     normalizedQuery,
+    trace: options?.trace,
   };
 
   const usingDefaultProviders = !options?.providers;
@@ -322,6 +323,11 @@ export async function lookupNutrition(
     if (!options?.trace || !provider || !response?.items.length) return;
     options.trace.selectedProvider = provider.id;
     options.trace.selectedMatchType = response.items[0]?.match_type ?? null;
+    recordCandidateSelection(options.trace, {
+      id: response.items[0]?.providerCandidateId ?? response.items[0]?.catalog_food_id ?? response.items[0]?.sourceId ?? null,
+      identity: response.items[0]?.food_name ?? null,
+    });
+    recordPlausibility(options.trace, { outcome: 'passed' });
     if (response.items.some((item) => item.source_type === 'AI_ESTIMATE' || item.used_ai_fallback)) {
       options.trace.usedAiEstimate = true;
     }
@@ -355,27 +361,27 @@ export async function lookupNutrition(
     candidates.push({ providerId: provider.id, response: result });
 
     if (shouldProtectBrandIntent && !responseMatchesBrand(result, normalizedQuery.brandHint)) {
-      if (options?.trace) options.trace.clarificationRequired = true;
-      return makeClarificationResponse(
-        input,
-        `I found possible nutrition data, but not a clear ${normalizedQuery.brandHint} match. Which exact item or serving should I use?`,
-      );
+      if (options?.trace) {
+        options.trace.clarificationRequired = true;
+        recordPlausibility(options.trace, { outcome: 'rejected', reasons: ['brand_identity_mismatch'] });
+      }
+      continue;
     }
 
     if (!responseMatchesCategory(result, normalizedQuery.searchText)) {
-      if (options?.trace) options.trace.clarificationRequired = true;
-      return makeClarificationResponse(
-        input,
-        'I found possible nutrition data, but not a clear match for the food type you described. Which exact item or serving should I use?',
-      );
+      if (options?.trace) {
+        options.trace.clarificationRequired = true;
+        recordPlausibility(options.trace, { outcome: 'rejected', reasons: ['category_identity_mismatch'] });
+      }
+      continue;
     }
 
     if (!responseMatchesPlausibility(result, lookupIntent)) {
-      if (options?.trace) options.trace.clarificationRequired = true;
-      return makeClarificationResponse(
-        input,
-        'I found possible nutrition data, but the serving or macros do not look right for what you described. Which exact item or serving should I use?',
-      );
+      if (options?.trace) {
+        options.trace.clarificationRequired = true;
+        recordPlausibility(options.trace, { outcome: 'rejected', reasons: ['candidate_plausibility_failed'] });
+      }
+      continue;
     }
   }
 
@@ -389,7 +395,10 @@ export async function lookupNutrition(
   }
 
   if (rankedResult.clarificationQuestion) {
-    if (options?.trace) options.trace.clarificationRequired = true;
+    if (options?.trace) {
+      options.trace.clarificationRequired = true;
+      recordPlausibility(options.trace, { outcome: 'rejected', reasons: ['candidate_validation_failed'] });
+    }
     return makeClarificationResponse(input, rankedResult.clarificationQuestion);
   }
 

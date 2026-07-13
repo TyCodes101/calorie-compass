@@ -135,6 +135,7 @@ export function createReadyPendingMeal(args: {
     currentMealText: displayTitle,
     confidenceScore: pendingMeal.confidenceScore,
     pendingClarification: null,
+    pendingClarificationDetails: null,
     lastAssistantQuestion: null,
     saved: false,
   } satisfies MealAssistantState;
@@ -184,6 +185,7 @@ export function updatePendingMealType(state: MealAssistantState, mealType: MealA
     confidenceScore: pendingMeal.confidenceScore,
     saved: false,
     pendingClarification: null,
+    pendingClarificationDetails: null,
     lastAssistantQuestion: null,
   } satisfies MealAssistantState;
 }
@@ -221,6 +223,7 @@ export function markPendingMealSaved(state: MealAssistantState, now = new Date()
       currentMealItems: sourceItems,
       saved: true,
       pendingClarification: null,
+      pendingClarificationDetails: null,
       lastAssistantQuestion: null,
     };
   }
@@ -243,6 +246,7 @@ export function markPendingMealSaved(state: MealAssistantState, now = new Date()
     confidenceScore,
     saved: true,
     pendingClarification: null,
+    pendingClarificationDetails: null,
     lastAssistantQuestion: null,
   } satisfies MealAssistantState;
 }
@@ -263,6 +267,7 @@ export function markPendingMealSaveFailed(state: MealAssistantState, now = new D
       confidenceScore: sourceItems.length ? getPendingConfidenceScore(sourceItems, state.confidenceScore) : state.confidenceScore,
       saved: false,
       pendingClarification: null,
+      pendingClarificationDetails: null,
       lastAssistantQuestion: null,
     } satisfies MealAssistantState;
   }
@@ -285,6 +290,7 @@ export function markPendingMealSaveFailed(state: MealAssistantState, now = new D
     confidenceScore,
     saved: false,
     pendingClarification: null,
+    pendingClarificationDetails: null,
     lastAssistantQuestion: null,
   } satisfies MealAssistantState;
 }

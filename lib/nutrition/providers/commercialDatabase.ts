@@ -1,5 +1,7 @@
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import { scaleParsedFoodItem } from '@/lib/nutrition/catalog';
+import { computeServingScaleFactor } from '@/lib/nutrition/scaling';
+import { recordServingScaling } from '@/lib/ai/foodPipelineTrace';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
 type NutritionixResponse = {
@@ -15,6 +17,7 @@ type NutritionixResponse = {
     nf_sugars?: number;
     nf_sodium?: number;
     brand_name?: string;
+    nix_item_id?: string;
   }>;
 };
 
@@ -55,7 +58,7 @@ export const commercialDatabaseProvider: NutritionLookupProvider = {
       reason: hasAppId && hasApiKey ? undefined : 'nutritionix_not_configured',
     };
   },
-  async lookup({ mealType, normalizedQuery }) {
+  async lookup({ mealType, normalizedQuery, trace }) {
     const appId = process.env.NUTRITIONIX_APP_ID?.trim();
     const apiKey = process.env.NUTRITIONIX_API_KEY?.trim();
     if (!appId || !apiKey) {
@@ -98,9 +101,26 @@ export const commercialDatabaseProvider: NutritionLookupProvider = {
       provider_used: 'commercial-database',
       used_ai_fallback: false,
       catalog_food_id: null,
+      providerCandidateId: food.nix_item_id ? `nutritionix:${food.nix_item_id}` : `nutritionix:${normalizedQuery.matchedQuery}`,
     };
 
-    const item = normalizedQuery.quantity > 1 ? scaleParsedFoodItem(baseItem, normalizedQuery.quantity) : baseItem;
+    const scale = computeServingScaleFactor({
+      requestedQuantity: normalizedQuery.quantity,
+      requestedUnit: normalizedQuery.quantityUnit,
+      providerServingQuantity: food.serving_qty ?? 1,
+      providerServingUnit: food.serving_unit ?? 'serving',
+    });
+    if (!scale) return null;
+    if (trace) {
+      recordServingScaling(trace, scale);
+    }
+    const item = scale.scaleFactor !== 1 || Boolean(normalizedQuery.quantityUnit)
+      ? scaleParsedFoodItem(baseItem, scale.scaleFactor, normalizedQuery.quantityUnit ?? baseItem.unit)
+      : {
+          ...baseItem,
+          quantity: baseItem.quantity,
+          unit: baseItem.unit,
+        };
 
     return normalizeParsedMealResponse({
       needs_clarification: false,

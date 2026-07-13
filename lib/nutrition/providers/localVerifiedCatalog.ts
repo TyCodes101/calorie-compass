@@ -7,6 +7,8 @@ import {
   scaleCatalogFood,
 } from '@/lib/nutrition/catalog';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
+import { computeServingScaleFactor } from '@/lib/nutrition/scaling';
+import { recordServingScaling } from '@/lib/ai/foodPipelineTrace';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
 const officialRestaurantBrands = new Set([
@@ -51,6 +53,28 @@ function looksLikeCompoundMeal(text: string) {
   return normalized.includes(' with ') || normalized.includes(' and ') || normalized.includes(',');
 }
 
+const productIdentityStopWords = new Set([
+  'a', 'an', 'one', 'two', 'three', 'four', 'five', 'six', 'of', 'the', 'with', 'and',
+  'had', 'have', 'i', 'my', 'eat', 'ate', 'drink', 'drank', 'food', 'item', 'product',
+  'protein', 'bar', 'bars', 'bottle', 'bottles', 'serving', 'servings',
+  'pack', 'package', 'bag', 'bags', 'can', 'cans', 'oz', 'ounce', 'ounces', 'g', 'gram', 'grams',
+]);
+
+function hasProductIdentityOverlap(normalizedQuery: ReturnType<typeof normalizeFoodQuery>, match: NonNullable<ReturnType<typeof findCatalogFoodMatch>>) {
+  const brandTokens = new Set((normalizedQuery.brandHint ?? '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  const requestedTokens = normalizedQuery.searchText
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 2 && !productIdentityStopWords.has(token) && !brandTokens.has(token));
+
+  if (!requestedTokens.length) return true;
+
+  const candidateText = [match.food.canonicalName, ...match.food.aliases]
+    .join(' ')
+    .toLowerCase();
+  return requestedTokens.some((token) => candidateText.includes(token));
+}
+
 function isOfficialRestaurantBrand(brandHint: string | null) {
   return brandHint ? officialRestaurantBrands.has(brandHint) : false;
 }
@@ -78,26 +102,64 @@ function decorateTrustedCatalogResponse(text: string, response: ReturnType<typeo
 
 export const localVerifiedCatalogProvider: NutritionLookupProvider = {
   id: 'local-verified-catalog',
-  lookup({ text, mealType, normalizedQuery }) {
+  lookup({ text, mealType, normalizedQuery, trace }) {
     const match = findCatalogFoodMatch(normalizedQuery.searchText, normalizedQuery.brandHint);
 
     if (match) {
       const source = getNutritionSourceById(match.food.sourceId);
-      if (source && (match.exactAlias || match.exactProduct) && (source.sourceType === 'OFFICIAL_RESTAURANT' || Boolean(source.brand))) {
+      const exactMatch = match.exactAlias || match.exactProduct;
+      const isBrandedSource = source?.sourceType === 'OFFICIAL_RESTAURANT' || Boolean(source?.brand);
+      const safeFuzzyBrandMatch = !exactMatch
+        && match.score >= 90
+        && Boolean(source?.brand)
+        && (source?.sourceType !== 'OFFICIAL_RESTAURANT' || isOfficialRestaurantBrand(normalizedQuery.brandHint))
+        && hasProductIdentityOverlap(normalizedQuery, match);
+      if (source && (exactMatch || safeFuzzyBrandMatch) && isBrandedSource) {
         const item = scaleCatalogFood(
           match.food,
           normalizedQuery.quantity,
           normalizedQuery.quantityUnit === 'g' ? 'g' : match.food.servingUnit,
         );
+        const servingGrams = 'servingGrams' in match.food ? Number(match.food.servingGrams) : null;
+        const hasServingGrams = servingGrams !== null && Number.isFinite(servingGrams) && servingGrams > 0;
+        const requestedUnit = normalizedQuery.quantityUnit ?? normalizedQuery.unitHint ?? match.food.servingUnit;
+        const providerServingQuantity = normalizedQuery.quantityUnit === 'g' && match.food.servingUnit !== 'g' && hasServingGrams
+          ? servingGrams ?? match.food.servingQuantity
+          : match.food.servingQuantity;
+        const providerServingUnit = normalizedQuery.quantityUnit === 'g' && match.food.servingUnit !== 'g' && hasServingGrams
+          ? 'g'
+          : match.food.servingUnit;
+        const scaling = computeServingScaleFactor({
+          requestedQuantity: normalizedQuery.quantity,
+          requestedUnit,
+          providerServingQuantity,
+          providerServingUnit,
+        });
+        if (trace && scaling) {
+          recordServingScaling(trace, {
+            requestedQuantity: normalizedQuery.quantity,
+            requestedUnit,
+            providerServingQuantity,
+            providerServingUnit,
+            scaleFactor: scaling.scaleFactor,
+          });
+        }
+        const missingDescriptorReview = safeFuzzyBrandMatch && !exactMatch;
 
         return makeCatalogMealResponse(
           mealType,
           [
             {
               ...item,
-              notes: buildLocalMatchNotes(match.food.canonicalName, source.name ?? null, normalizedQuery.matchedQuery),
-              confidence_label: getConfidenceLabel(source.sourceType, Boolean(source.brand)),
-              match_type: getMatchType(source.sourceType, Boolean(source.brand), match.exactAlias || match.exactProduct),
+              is_trusted: item.is_trusted && !missingDescriptorReview,
+              notes: [
+                buildLocalMatchNotes(match.food.canonicalName, source.name ?? null, normalizedQuery.matchedQuery),
+                missingDescriptorReview ? 'The brand/product family matched, but an exact flavor or descriptor was not confirmed. Review before saving.' : null,
+              ].filter(Boolean).join(' '),
+              confidence_label: missingDescriptorReview
+                ? 'Needs Review'
+                : getConfidenceLabel(source.sourceType, Boolean(source.brand)),
+              match_type: getMatchType(source.sourceType, Boolean(source.brand), exactMatch),
               matched_query: normalizedQuery.matchedQuery,
               original_user_text: text,
               provider_used: 'local-verified-catalog',

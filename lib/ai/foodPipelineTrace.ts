@@ -29,6 +29,20 @@ export type FoodPipelineTrace = {
   usedMock: boolean;
   clarificationRequired: boolean;
   failureReasons: string[];
+  parsedRequestedQuantity: number | null;
+  parsedRequestedUnit: string | null;
+  providerServingQuantity: number | null;
+  providerServingUnit: string | null;
+  computedScaleFactor: number | null;
+  scalingAppliedCount: number;
+  selectedCandidateId: string | null;
+  selectedCandidateIdentity: string | null;
+  plausibilityOutcome: 'passed' | 'rejected' | 'not_checked' | null;
+  plausibilityReasons: string[];
+  clarificationFieldsKnown: Record<string, string | number | boolean | null>;
+  clarificationFieldsMissing: string[];
+  conversationTransition: string | null;
+  stateResetReason: string | null;
 };
 
 export function createFoodPipelineTrace(args: { requestId?: string; endpoint?: string; routeVersion?: string } = {}): FoodPipelineTrace {
@@ -52,7 +66,54 @@ export function createFoodPipelineTrace(args: { requestId?: string; endpoint?: s
     usedMock: false,
     clarificationRequired: false,
     failureReasons: [],
+    parsedRequestedQuantity: null,
+    parsedRequestedUnit: null,
+    providerServingQuantity: null,
+    providerServingUnit: null,
+    computedScaleFactor: null,
+    scalingAppliedCount: 0,
+    selectedCandidateId: null,
+    selectedCandidateIdentity: null,
+    plausibilityOutcome: null,
+    plausibilityReasons: [],
+    clarificationFieldsKnown: {},
+    clarificationFieldsMissing: [],
+    conversationTransition: null,
+    stateResetReason: null,
   };
+}
+
+export function recordServingScaling(trace: FoodPipelineTrace, args: {
+  requestedQuantity: number;
+  requestedUnit: string | null;
+  providerServingQuantity: number;
+  providerServingUnit: string | null;
+  scaleFactor: number;
+}) {
+  trace.parsedRequestedQuantity = args.requestedQuantity;
+  trace.parsedRequestedUnit = args.requestedUnit;
+  trace.providerServingQuantity = args.providerServingQuantity;
+  trace.providerServingUnit = args.providerServingUnit;
+  trace.computedScaleFactor = args.scaleFactor;
+  trace.scalingAppliedCount += 1;
+}
+
+export function recordCandidateSelection(trace: FoodPipelineTrace, args: { id?: string | null; identity?: string | null }) {
+  trace.selectedCandidateId = args.id ?? null;
+  trace.selectedCandidateIdentity = args.identity ?? null;
+}
+
+export function recordPlausibility(trace: FoodPipelineTrace, args: { outcome: 'passed' | 'rejected' | 'not_checked'; reasons?: string[] }) {
+  trace.plausibilityOutcome = args.outcome;
+  trace.plausibilityReasons = [...new Set(args.reasons ?? [])];
+}
+
+export function recordClarificationFields(trace: FoodPipelineTrace, args: {
+  known?: Record<string, string | number | boolean | null>;
+  missing?: string[];
+}) {
+  trace.clarificationFieldsKnown = { ...args.known };
+  trace.clarificationFieldsMissing = [...new Set(args.missing ?? [])];
 }
 
 export function recordOpenAIIntent(trace: FoodPipelineTrace, result: {

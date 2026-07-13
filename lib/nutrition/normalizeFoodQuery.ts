@@ -32,12 +32,16 @@ const brandHints = [
   { pattern: /\bquest\b/, brand: 'Quest' },
   { pattern: /\bpremier protein\b/, brand: 'Premier Protein' },
   { pattern: /\bquaker(?: oats)?\b/, brand: 'Quaker' },
+  { pattern: /\btrader joe'?s\b|\btrader joes\b/, brand: "Trader Joe's" },
   { pattern: /\bchobani\b/, brand: 'Chobani' },
   { pattern: /\bkodiak\b/, brand: 'Kodiak' },
   { pattern: /\bgatorade\b/, brand: 'Gatorade' },
   { pattern: /\bnature valley\b/, brand: 'Nature Valley' },
   { pattern: /\bmuscle milk\b|\bmusclemilk\b/, brand: 'Muscle Milk' },
   { pattern: /\bbarebells?\b/, brand: 'Barebells' },
+  { pattern: /\bgt'?s\b|\bgt s\b/, brand: "GT's" },
+  { pattern: /\blesser\s*evil\b/, brand: 'LesserEvil' },
+  { pattern: /\bdavid\b/, brand: 'David' },
   { pattern: /\bdoritos\b/, brand: 'Doritos' },
   { pattern: /\bgoldfish\b|\bgold fish\b/, brand: 'Goldfish' },
   { pattern: /\bcheez it\b|\bcheezit\b/, brand: 'Cheez-It' },
@@ -211,9 +215,10 @@ function buildBrandedPackagedSearch(text: string) {
   const hasRiceCakes = /\brice cake\b/.test(text);
   const hasWhiteCheddar = /\bwhite cheddar\b/.test(text);
   const hasQuaker = /\bquaker(?: oats)?\b/.test(text);
+  const quakerSearchName = /\bquaker\s+oats\b/.test(text) ? 'quaker oats' : 'quaker';
 
   if (hasRiceCakes) {
-    const parts = [hasQuaker ? 'quaker oats' : null, hasWhiteCheddar ? 'white cheddar' : null, 'rice cake'].filter(Boolean);
+    const parts = [hasQuaker ? quakerSearchName : null, hasWhiteCheddar ? 'white cheddar' : null, 'rice cake'].filter(Boolean);
     return {
       searchText: parts.join(' '),
       matchedQuery: titleCase(parts.join(' ')).replace(/Quaker Oats/, 'Quaker Oats').replace(/Rice Cake$/, 'Rice cakes'),
@@ -223,7 +228,13 @@ function buildBrandedPackagedSearch(text: string) {
 
   const hasProteinBar = /\bprotein bar\b/.test(text);
   if (hasProteinBar) {
-    const brandedProteinBar = [text.includes('quest') ? 'quest' : null, 'protein bar'].filter(Boolean).join(' ');
+    const brand = detectBrandHint(text);
+    const descriptor = text
+      .replace(/\b(?:protein\s+bars?|bars?)\b/g, ' ')
+      .replace(brand ? new RegExp(`\\b${brand.replace(/[^a-z0-9]+/gi, '\\s+')}\\b`, 'i') : /$^/, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const brandedProteinBar = [brand?.toLowerCase() ?? null, descriptor || null, 'protein bar'].filter(Boolean).join(' ');
     return {
       searchText: brandedProteinBar,
       matchedQuery: titleCase(brandedProteinBar),
