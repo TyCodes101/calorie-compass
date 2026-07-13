@@ -2,6 +2,7 @@ import { calorieApiProvider } from '@/lib/nutrition/providers/calorieApi';
 import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
 import { fatSecretProvider } from '@/lib/nutrition/providers/fatsecret';
 import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
+import { openFoodFactsProvider } from '@/lib/nutrition/providers/openFoodFacts';
 import { usdaProvider } from '@/lib/nutrition/providers/usda';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
@@ -11,12 +12,15 @@ import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 export const defaultNutritionProviders: NutritionLookupProvider[] = [
   localVerifiedCatalogProvider,
   usdaProvider,
+  openFoodFactsProvider,
   fatSecretProvider,
   calorieApiProvider,
   commercialDatabaseProvider,
 ];
 
 export const defaultBarcodeProviders: NutritionLookupProvider[] = [
+  openFoodFactsProvider,
+  usdaProvider,
   fatSecretProvider,
   calorieApiProvider,
 ];

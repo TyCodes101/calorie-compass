@@ -256,7 +256,7 @@ function labelForTrustedItem(item: ParsedFoodItem, brand?: string | null): FoodS
   if (isEstimatedItem(item)) return 'Estimated';
   if (item.source_type === 'OFFICIAL_RESTAURANT') return 'Restaurant verified';
   if (provider.includes('usda') || sourceName.includes('usda') || (!brand && sourceName.includes('generic'))) return 'USDA verified';
-  if (provider.includes('fatsecret') || provider.includes('calorie-api') || provider.includes('commercial')) return 'Database match';
+  if (provider.includes('fatsecret') || provider.includes('calorie-api') || provider.includes('open-food-facts') || provider.includes('commercial')) return 'Database match';
   if (brand || item.source_type === 'GENERIC_REFERENCE' || sourceName) return 'Brand verified';
   return 'USDA verified';
 }
@@ -303,6 +303,7 @@ function sourceStrength(result: FoodSearchResult) {
   if (result.providerId === 'fatsecret') return 90;
   if (result.providerId === 'commercial-database') return 88;
   if (result.providerId === 'usda-fdc') return 84;
+  if (result.providerId === 'open-food-facts') return 76;
   if (result.providerId === 'calorie-api') return 72;
   if (result.estimated) return 10;
   return 60;

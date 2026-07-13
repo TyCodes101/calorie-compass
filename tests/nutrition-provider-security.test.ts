@@ -32,9 +32,19 @@ describe('nutrition provider secret boundaries', () => {
       'lib/nutrition/providers/providerConfig.ts',
       'lib/nutrition/providers/calorieApi.ts',
       'lib/nutrition/providers/fatsecret.ts',
+      'lib/nutrition/providers/upcDatabase.ts',
     ];
     const contents = files.map((file) => readFileSync(join(root, file), 'utf8')).join('\n');
-    expect(contents).not.toMatch(/NEXT_PUBLIC_(?:CALORIE_API|FATSECRET)/);
+    expect(contents).not.toMatch(/NEXT_PUBLIC_(?:CALORIE_API|FATSECRET|UPC_DATABASE)/);
+  });
+
+  it('keeps UPC Database and Open Food Facts server-side', () => {
+    const nativeContents = [
+      'ios/CalorieCompassApp.swift',
+      'ios/APIClient.swift',
+      'ios/CalorieCompass/BackendService.swift',
+    ].map((file) => readFileSync(join(root, file), 'utf8')).join('\n');
+    expect(nativeContents).not.toMatch(/UPC_DATABASE_API_KEY|api\.upcdatabase\.org|openfoodfacts\.org/i);
   });
 
   it('does not import server nutrition providers from client components', () => {

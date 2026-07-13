@@ -1,7 +1,8 @@
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
-import { scaleParsedFoodItem } from '@/lib/nutrition/catalog';
 import { recordServingScaling } from '@/lib/ai/foodPipelineTrace';
-import { computeServingScaleFactor } from '@/lib/nutrition/scaling';
+import { computeServingScaleFactor, scaleNutritionItemOnce } from '@/lib/nutrition/scaling';
+import { normalizeBarcode } from '@/lib/nutrition/barcode';
+import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
 type UsdaFood = {
@@ -12,6 +13,7 @@ type UsdaFood = {
   servingSizeUnit?: string;
   householdServingFullText?: string;
   dataType?: string;
+  gtinUpc?: string;
   foodNutrients?: Array<{ nutrientName?: string; nutrientNumber?: string; unitName?: string; value?: number }>;
 };
 
@@ -61,6 +63,27 @@ function normalizeUnit(unit: string | null | undefined) {
   return normalized;
 }
 
+const naturalServingPattern = /(?:^|\b)(\d+(?:\.\d+)?)\s*(bar|bottle|can|slice|piece|cake|egg|sandwich|burger|bowl|cup|tbsp|tablespoon|tsp|teaspoon|package|pack|bag)s?\b/i;
+
+function pickNaturalServing(food: UsdaFood) {
+  const household = food.householdServingFullText?.trim() ?? '';
+  const match = household.match(naturalServingPattern);
+  if (!match) return null;
+  return {
+    quantity: Number(match[1]),
+    unit: normalizeUnit(match[2]) ?? 'serving',
+  };
+}
+
+function getServingWeightGrams(food: UsdaFood) {
+  const amount = Number(food.servingSize);
+  const unit = normalizeUnit(food.servingSizeUnit);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (unit === 'g') return amount;
+  if (unit === 'oz') return amount * 28.3495;
+  return null;
+}
+
 function findUsdaNutrient(food: UsdaFood, names: string[], nutrientNumbers: string[] = []) {
   const nutrient = food.foodNutrients?.find((entry) => {
     const nameMatches = names.includes(entry.nutrientName ?? '');
@@ -77,6 +100,9 @@ function pickServingText(food: UsdaFood) {
   if (!food.servingSize && !food.servingSizeUnit && /foundation|survey|sr legacy/i.test(food.dataType ?? '')) {
     return 'g';
   }
+
+  const naturalServing = pickNaturalServing(food);
+  if (naturalServing) return naturalServing.unit;
 
   const servingSizeUnit = normalizeUnit(food.servingSizeUnit);
   if (servingSizeUnit === 'g' || servingSizeUnit === 'oz') {
@@ -96,16 +122,16 @@ function pickServingQuantity(food: UsdaFood) {
     return 100;
   }
 
+  const naturalServing = pickNaturalServing(food);
+  if (naturalServing) return naturalServing.quantity;
+
   return food.servingSize && Number.isFinite(food.servingSize) ? food.servingSize : 1;
 }
 
-function getQuantityUnitOverride(food: UsdaFood, quantityUnit: string | null) {
-  const requestedUnit = normalizeUnit(quantityUnit);
-  if (requestedUnit) {
-    return requestedUnit;
-  }
-
-  return pickServingText(food);
+function nutrientScaleForServing(food: UsdaFood) {
+  if (!/branded/i.test(food.dataType ?? '')) return 1;
+  const servingWeight = getServingWeightGrams(food);
+  return servingWeight ? servingWeight / 100 : 1;
 }
 
 function scoreUsdaFood(food: UsdaFood, searchText: string, brandHint: string | null, unitHint: string | null) {
@@ -181,27 +207,91 @@ async function fetchJson<T>(url: string, init?: RequestInit) {
   }
 }
 
+function getUsdaApiKey() {
+  return process.env.USDA_FDC_API_KEY?.trim() || process.env.FDC_API_KEY?.trim() || null;
+}
+
+async function searchUsdaFoods(query: string, dataType: string[]) {
+  const apiKey = getUsdaApiKey();
+  if (!apiKey) return [];
+  const payload = await fetchJson<UsdaSearchResponse>(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, pageSize: 12, dataType }),
+  });
+  return payload?.foods ?? [];
+}
+
+function buildUsdaResponse(
+  bestMatch: UsdaFood,
+  normalizedQuery: ReturnType<typeof normalizeFoodQuery>,
+  mealType: Parameters<NutritionLookupProvider['lookup']>[0]['mealType'],
+  trace?: Parameters<NutritionLookupProvider['lookup']>[0]['trace'],
+) {
+  const nutrientScale = nutrientScaleForServing(bestMatch);
+  const nutrient = (names: string[], numbers: string[] = []) => (
+    findUsdaNutrient(bestMatch, names, numbers) * nutrientScale
+  );
+  const baseItem = {
+    food_name: bestMatch.brandOwner
+      ? `${bestMatch.brandOwner} ${bestMatch.description ?? ''}`.trim()
+      : bestMatch.description?.trim() || normalizedQuery.matchedQuery,
+    quantity: pickServingQuantity(bestMatch),
+    unit: pickServingText(bestMatch),
+    calories: nutrient(['Energy'], ['1008']),
+    protein: nutrient(['Protein'], ['1003']),
+    carbs: nutrient(['Carbohydrate, by difference'], ['1005']),
+    fat: nutrient(['Total lipid (fat)'], ['1004']),
+    fiber: nutrient(['Fiber, total dietary'], ['1079']),
+    sugar: nutrient(['Sugars, total including NLEA', 'Sugars, total'], ['2000', '1063']),
+    sodium: nutrient(['Sodium, Na'], ['1093']),
+    notes: `Matched using USDA FoodData Central${bestMatch.fdcId ? ` FDC ${bestMatch.fdcId}` : ''}. Query: ${normalizedQuery.matchedQuery}.`,
+    is_trusted: true,
+    source_type: 'GENERIC_REFERENCE' as const,
+    source_name: 'USDA FoodData Central',
+    confidence_label: 'Matched' as const,
+    matched_query: normalizedQuery.matchedQuery,
+    original_user_text: normalizedQuery.rawText,
+    provider_used: 'usda-fdc',
+    used_ai_fallback: false,
+    catalog_food_id: null,
+    providerCandidateId: bestMatch.fdcId ? `usda:${bestMatch.fdcId}` : `usda:${normalizedQuery.matchedQuery}`,
+    sourceId: bestMatch.gtinUpc ?? (bestMatch.fdcId ? String(bestMatch.fdcId) : null),
+    normalizedGrams: getServingWeightGrams(bestMatch),
+  };
+
+  const scaleRequest = {
+    requestedQuantity: normalizedQuery.quantity,
+    requestedUnit: normalizedQuery.quantityUnit,
+    providerServingQuantity: pickServingQuantity(bestMatch),
+    providerServingUnit: pickServingText(bestMatch),
+    providerServingWeightGrams: getServingWeightGrams(bestMatch),
+  };
+  const scale = computeServingScaleFactor(scaleRequest);
+  if (!scale) return null;
+  if (trace) recordServingScaling(trace, scale);
+
+  const item = scaleNutritionItemOnce(baseItem, scaleRequest);
+  if (!item) return null;
+
+  return normalizeParsedMealResponse({
+    needs_clarification: false,
+    clarifying_question: null,
+    meal_type: mealType,
+    confidence_score: 0.84,
+    items: [item],
+  });
+}
+
 export const usdaProvider: NutritionLookupProvider = {
   id: 'usda-fdc',
+  capabilities: { search: true, barcode: true, details: false, suggest: false },
   getStatus() {
-    const configured = Boolean(process.env.USDA_FDC_API_KEY?.trim() || process.env.FDC_API_KEY?.trim());
+    const configured = Boolean(getUsdaApiKey());
     return { configured, reason: configured ? undefined : 'usda_not_configured' };
   },
   async lookup({ mealType, normalizedQuery, trace }) {
-    const apiKey = process.env.USDA_FDC_API_KEY?.trim() || process.env.FDC_API_KEY?.trim() || null;
-    if (!apiKey) {
-      return null;
-    }
-
-    const fetchSearch = (dataType: string[]) => fetchJson<UsdaSearchResponse>(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: normalizedQuery.searchText,
-        pageSize: 12,
-        dataType,
-      }),
-    });
+    if (!getUsdaApiKey()) return null;
 
     const chooseBestMatch = (foods: UsdaFood[] = []) => foods
       .map((food) => ({
@@ -212,66 +302,33 @@ export const usdaProvider: NutritionLookupProvider = {
       .sort((left, right) => right.score - left.score)[0]?.food;
 
     const primaryDataTypes = normalizedQuery.brandHint ? allUsdaDataTypes : genericUsdaDataTypes;
-    const primaryPayload = await fetchSearch(primaryDataTypes);
-    const primaryMatch = chooseBestMatch(primaryPayload?.foods ?? []);
-    const fallbackPayload = !primaryMatch && !normalizedQuery.brandHint ? await fetchSearch(allUsdaDataTypes) : null;
-    const bestMatch = primaryMatch ?? chooseBestMatch(fallbackPayload?.foods ?? []);
+    const primaryFoods = await searchUsdaFoods(normalizedQuery.searchText, primaryDataTypes);
+    const primaryMatch = chooseBestMatch(primaryFoods);
+    const fallbackFoods = !primaryMatch && !normalizedQuery.brandHint
+      ? await searchUsdaFoods(normalizedQuery.searchText, allUsdaDataTypes)
+      : [];
+    const bestMatch = primaryMatch ?? chooseBestMatch(fallbackFoods);
 
     if (!bestMatch) {
       return null;
     }
 
-    const baseItem = {
-      food_name: bestMatch.brandOwner
-        ? `${bestMatch.brandOwner} ${bestMatch.description ?? ''}`.trim()
-        : bestMatch.description?.trim() || normalizedQuery.matchedQuery,
-      quantity: pickServingQuantity(bestMatch),
-      unit: pickServingText(bestMatch),
-      calories: findUsdaNutrient(bestMatch, ['Energy'], ['1008']),
-      protein: findUsdaNutrient(bestMatch, ['Protein'], ['1003']),
-      carbs: findUsdaNutrient(bestMatch, ['Carbohydrate, by difference'], ['1005']),
-      fat: findUsdaNutrient(bestMatch, ['Total lipid (fat)'], ['1004']),
-      fiber: findUsdaNutrient(bestMatch, ['Fiber, total dietary'], ['1079']),
-      sugar: findUsdaNutrient(bestMatch, ['Sugars, total including NLEA', 'Sugars, total'], ['2000', '1063']),
-      sodium: findUsdaNutrient(bestMatch, ['Sodium, Na'], ['1093']),
-      notes: `Matched using USDA FoodData Central${bestMatch.fdcId ? ` FDC ${bestMatch.fdcId}` : ''}. Query: ${normalizedQuery.matchedQuery}.`,
-      is_trusted: true,
-      source_type: 'GENERIC_REFERENCE' as const,
-      source_name: 'USDA FoodData Central',
-      confidence_label: 'Matched' as const,
-      matched_query: normalizedQuery.matchedQuery,
-      original_user_text: normalizedQuery.rawText,
-      provider_used: 'usda-fdc',
-      used_ai_fallback: false,
-      catalog_food_id: null,
-      providerCandidateId: bestMatch.fdcId ? `usda:${bestMatch.fdcId}` : `usda:${normalizedQuery.matchedQuery}`,
-    };
-
-    const scale = computeServingScaleFactor({
-      requestedQuantity: normalizedQuery.quantity,
-      requestedUnit: normalizedQuery.quantityUnit,
-      providerServingQuantity: pickServingQuantity(bestMatch),
-      providerServingUnit: pickServingText(bestMatch),
+    return buildUsdaResponse(bestMatch, normalizedQuery, mealType, trace);
+  },
+  async lookupBarcode({ barcode, mealType, trace }) {
+    const normalized = normalizeBarcode(barcode);
+    if (!normalized || !getUsdaApiKey()) return null;
+    const foods = await searchUsdaFoods(normalized, ['Branded']);
+    const bestMatch = foods.find((food) => {
+      const candidate = normalizeBarcode(food.gtinUpc ?? null);
+      return candidate && candidate.padStart(14, '0') === normalized.padStart(14, '0');
     });
-    if (!scale) {
-      return null;
-    }
-    if (trace) recordServingScaling(trace, scale);
-
-    const item = scale.scaleFactor !== 1 || Boolean(normalizedQuery.quantityUnit)
-      ? scaleParsedFoodItem(baseItem, scale.scaleFactor, getQuantityUnitOverride(bestMatch, normalizedQuery.quantityUnit))
-      : {
-          ...baseItem,
-          quantity: baseItem.quantity,
-          unit: pickServingText(bestMatch),
-        };
-
-    return normalizeParsedMealResponse({
-      needs_clarification: false,
-      clarifying_question: null,
-      meal_type: mealType,
-      confidence_score: 0.84,
-      items: [item],
-    });
+    if (!bestMatch) return null;
+    const query = normalizeFoodQuery(bestMatch.description ?? normalized);
+    query.rawText = normalized;
+    query.quantity = pickServingQuantity(bestMatch);
+    query.quantityUnit = pickServingText(bestMatch);
+    query.unitHint = pickServingText(bestMatch);
+    return buildUsdaResponse(bestMatch, query, mealType, trace);
   },
 };

@@ -51,6 +51,7 @@ describe('multi-provider resolver integration', () => {
     expect(defaultNutritionProviders.map((entry) => entry.id)).toEqual([
       'local-verified-catalog',
       'usda-fdc',
+      'open-food-facts',
       'fatsecret',
       'calorie-api',
       'commercial-database-slot',
@@ -148,5 +149,21 @@ describe('multi-provider resolver integration', () => {
 
     expect(response.results).toHaveLength(1);
     expect(response.results[0]).toMatchObject({ providerId: 'fatsecret', sourceLabel: 'Database match', calories: 200, protein: 20 });
+  });
+
+  it('requires review when strong providers materially disagree on the same product', async () => {
+    const result = await lookupNutrition(
+      { text: 'one Barebells creamy crisp protein bar', mealType: 'snack' },
+      {
+        providers: [
+          provider('primary-empty', vi.fn().mockResolvedValue(null)),
+          provider('fatsecret', vi.fn().mockResolvedValue(providerResponse('fatsecret', { calories: 200, protein: 20, carbs: 18, fat: 7 }))),
+          provider('open-food-facts', vi.fn().mockResolvedValue(providerResponse('open-food-facts', { calories: 360, protein: 21, carbs: 35, fat: 15 }))),
+        ],
+      },
+    );
+
+    expect(result).toMatchObject({ needs_clarification: true, items: [] });
+    expect(result?.clarifying_question).toMatch(/conflicting nutrition records/i);
   });
 });

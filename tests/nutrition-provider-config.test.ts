@@ -5,6 +5,10 @@ import {
   fatSecretScopeSupports,
   getCalorieApiConfiguration,
   getFatSecretConfiguration,
+  getOpenFoodFactsConfiguration,
+  getUpcDatabaseConfiguration,
+  OPEN_FOOD_FACTS_DEFAULT_BASE_URL,
+  UPC_DATABASE_API_BASE_URL,
 } from '@/lib/nutrition/providers/providerConfig';
 
 describe('nutrition provider configuration', () => {
@@ -51,5 +55,39 @@ describe('nutrition provider configuration', () => {
     expect(fatSecretScopeSupports('premier', 'search')).toBe(true);
     expect(fatSecretScopeSupports('basic', 'barcode')).toBe(false);
     expect(fatSecretScopeSupports('basic barcode', 'barcode')).toBe(true);
+  });
+
+  it('enables Open Food Facts without a key and enforces its official HTTPS origin', () => {
+    expect(getOpenFoodFactsConfiguration({})).toMatchObject({
+      configured: true,
+      enabled: true,
+      baseUrl: OPEN_FOOD_FACTS_DEFAULT_BASE_URL,
+    });
+    expect(getOpenFoodFactsConfiguration({ OPEN_FOOD_FACTS_BASE_URL: 'https://evil.example' })).toMatchObject({
+      configured: false,
+      reason: 'untrusted_base_url',
+    });
+    expect(getOpenFoodFactsConfiguration({ OPEN_FOOD_FACTS_CONTACT: 'bad\r\nheader' })).toMatchObject({
+      configured: false,
+      reason: 'invalid_contact',
+    });
+  });
+
+  it('keeps UPC Database opt-in and metadata-only', () => {
+    expect(getUpcDatabaseConfiguration({ UPC_DATABASE_API_KEY: 'key' })).toMatchObject({
+      configured: false,
+      enabled: false,
+      reason: 'disabled',
+    });
+    expect(getUpcDatabaseConfiguration({ UPC_DATABASE_ENABLED: 'true', UPC_DATABASE_API_KEY: '  key  ' })).toMatchObject({
+      configured: true,
+      enabled: true,
+      apiKey: 'key',
+      baseUrl: UPC_DATABASE_API_BASE_URL,
+    });
+    expect(getUpcDatabaseConfiguration({ UPC_DATABASE_ENABLED: 'true', UPC_DATABASE_API_KEY: ' ' })).toMatchObject({
+      configured: false,
+      reason: 'missing_key',
+    });
   });
 });

@@ -9,6 +9,9 @@ process.env.ALLOW_MOCK_MEAL_PARSER = 'false';
 process.env.CALORIE_API_KEY = '';
 process.env.FATSECRET_CLIENT_ID = '';
 process.env.FATSECRET_CLIENT_SECRET = '';
+process.env.OPEN_FOOD_FACTS_ENABLED = 'false';
+process.env.UPC_DATABASE_ENABLED = 'false';
+process.env.UPC_DATABASE_API_KEY = '';
 
 afterEach(() => {
   cleanup();

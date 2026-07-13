@@ -20,6 +20,10 @@ export type NormalizedProviderFood = {
   nutrition: NutritionFacts;
   sourceName: string;
   confidence: number;
+  qualityLevel?: 'high' | 'medium' | 'low';
+  isTrusted?: boolean;
+  confidenceLabel?: 'Matched' | 'Needs Review';
+  notes?: string | null;
   exactBrandMatch?: boolean;
   exactRestaurantMatch?: boolean;
 };
@@ -144,11 +148,11 @@ export function buildProviderMealResponse(args: {
     fiber: candidate.nutrition.fiber ?? 0,
     sugar: candidate.nutrition.sugar ?? 0,
     sodium: candidate.nutrition.sodium ?? 0,
-    notes: `Database match from ${candidate.sourceName}. Serving: ${candidate.servingDescription ?? `${candidate.servingQuantity} ${candidate.servingUnit}`}. Review before saving.`,
-    is_trusted: true,
+    notes: candidate.notes ?? `Database match from ${candidate.sourceName}. Serving: ${candidate.servingDescription ?? `${candidate.servingQuantity} ${candidate.servingUnit}`}. Review before saving.`,
+    is_trusted: candidate.isTrusted ?? true,
     source_type: 'GENERIC_REFERENCE' as const,
     source_name: candidate.sourceName,
-    confidence_label: 'Matched' as const,
+    confidence_label: candidate.confidenceLabel ?? (candidate.confidence < 0.72 ? 'Needs Review' as const : 'Matched' as const),
     match_type: candidate.exactRestaurantMatch
       ? 'exact_restaurant' as const
       : candidate.exactBrandMatch
@@ -170,6 +174,7 @@ export function buildProviderMealResponse(args: {
     requestedUnit,
     providerServingQuantity: candidate.servingQuantity,
     providerServingUnit: candidate.servingUnit,
+    providerServingWeightGrams: candidate.servingWeightGrams,
   };
   const scale = computeServingScaleFactor(scaleRequest);
   const scaled = scaleNutritionItemOnce(baseItem, scaleRequest);
@@ -205,8 +210,8 @@ export function buildBarcodeMealResponse(args: {
       normalizedText: args.candidate.name,
       searchText: args.candidate.name,
       matchedQuery: args.candidate.name,
-      quantity: 1,
-      quantityUnit: null,
+      quantity: args.candidate.servingQuantity,
+      quantityUnit: args.candidate.servingUnit,
       unitHint: args.candidate.servingUnit,
       brandHint: args.candidate.brand ?? null,
     },

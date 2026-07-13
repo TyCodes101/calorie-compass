@@ -44,6 +44,9 @@ printStatus('NUTRITIONIX_API_KEY', nonEmpty('NUTRITIONIX_API_KEY'));
 printStatus('FATSECRET_CLIENT_ID', nonEmpty('FATSECRET_CLIENT_ID'));
 printStatus('FATSECRET_CLIENT_SECRET', nonEmpty('FATSECRET_CLIENT_SECRET'));
 printStatus('CALORIE_API_KEY', nonEmpty('CALORIE_API_KEY'));
+console.log(`OPEN_FOOD_FACTS_ENABLED: ${/^(?:0|false|no|off)$/i.test(process.env.OPEN_FOOD_FACTS_ENABLED?.trim() ?? '') ? 'disabled' : 'enabled'}`);
+printStatus('UPC_DATABASE_API_KEY', nonEmpty('UPC_DATABASE_API_KEY'));
+console.log(`UPC_DATABASE_ENABLED: ${/^(?:1|true|yes|on)$/i.test(process.env.UPC_DATABASE_ENABLED?.trim() ?? '') ? 'enabled' : 'disabled'}`);
 console.log(`ALLOW_MOCK_MEAL_PARSER: ${mockEnabled ? 'enabled (non-production only)' : 'disabled'}`);
 console.log(`FOOD_PIPELINE_DEBUG: ${/^(?:1|true|yes|on)$/i.test(process.env.FOOD_PIPELINE_DEBUG?.trim() ?? '') ? 'enabled' : 'disabled'}`);
 
@@ -127,6 +130,36 @@ if (calorieApiKey) {
   }
 } else {
   console.log('Calorie API live check: skipped because the key is missing');
+}
+
+if (!/^(?:0|false|no|off)$/i.test(process.env.OPEN_FOOD_FACTS_ENABLED?.trim() ?? '')) {
+  try {
+    const contact = process.env.OPEN_FOOD_FACTS_CONTACT?.trim() || 'https://github.com/TyCodes101/calorie-compass';
+    const response = await fetch('https://world.openfoodfacts.org/api/v3/product/3017620422003?fields=code,product_name,nutriments,serving_size,serving_quantity', {
+      headers: { Accept: 'application/json', 'User-Agent': `MacroMesh/1.0 (${contact.replace(/[\r\n]/g, '')})` },
+    });
+    if (!response.ok) failures.push(`Open Food Facts health check returned HTTP ${response.status}`);
+    else console.log('Open Food Facts live check: reachable');
+  } catch {
+    failures.push('Open Food Facts health check failed');
+  }
+} else {
+  console.log('Open Food Facts live check: skipped because the provider is disabled');
+}
+
+const upcDatabaseEnabled = /^(?:1|true|yes|on)$/i.test(process.env.UPC_DATABASE_ENABLED?.trim() ?? '');
+if (upcDatabaseEnabled && nonEmpty('UPC_DATABASE_API_KEY')) {
+  try {
+    const response = await fetch('https://api.upcdatabase.org/product/012345678905', {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${process.env.UPC_DATABASE_API_KEY}` },
+    });
+    if (![200, 404].includes(response.status)) failures.push(`UPC Database health check returned HTTP ${response.status}`);
+    else console.log('UPC Database live check: reachable');
+  } catch {
+    failures.push('UPC Database health check failed');
+  }
+} else {
+  console.log('UPC Database live check: skipped because the provider is disabled or the key is missing');
 }
 
 if (failures.length) {
