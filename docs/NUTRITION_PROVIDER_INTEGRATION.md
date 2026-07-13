@@ -12,12 +12,13 @@ Text lookup order:
 
 1. User nutrition label, custom/recent/favorite data, and local verified catalog.
 2. USDA FoodData Central.
-3. FatSecret.
-4. Calorie API.
-5. Nutritionix when configured.
-6. Clarification or an explicit reviewable estimate.
+3. Open Food Facts for explicit packaged products.
+4. FatSecret.
+5. Calorie API.
+6. Nutritionix when configured.
+7. Clarification or an explicit reviewable estimate.
 
-Barcode lookup keeps local/custom and existing cached matches first, then FatSecret and Calorie API when their capabilities are configured, then Open Food Facts. Exact barcodes remain strings and preserve leading zeroes.
+Barcode lookup keeps local/custom matches first, then Open Food Facts, USDA, FatSecret, and Calorie API. If all direct nutrition providers miss, optional UPC Database metadata can drive exactly one secondary nutrition search. Exact barcodes remain strings and preserve leading zeroes. UPC Database metadata never supplies nutrition or replaces the selected nutrition provider's provenance.
 
 Calorie API is intentionally a supporting provider. Its `is_verified` field does not bypass MacroMesh identity, serving, macro-calorie, numeric-safety, or outlier checks. A provider record is never automatically saved or promoted from `Matched` to `Verified` merely because the provider marks it verified.
 
@@ -42,6 +43,18 @@ FatSecret:
 
 FatSecret food search and barcode access require the corresponding account scopes. Search uses the current v5 endpoint and hydrates only the selected provider record when a details fetch is needed. A Basic-only client cannot participate in text search; MacroMesh fails over to the remaining providers.
 
+Open Food Facts:
+
+- Product read: `GET https://world.openfoodfacts.org/api/v3/product/{code}`
+- Narrow branded text search: official legacy `GET /cgi/search.pl` until a current full-text endpoint exists
+- Authentication: none; a descriptive server-side `User-Agent` is sent
+
+UPC Database:
+
+- Metadata lookup: `GET https://api.upcdatabase.org/product/{barcode}`
+- Authentication: optional server-side Bearer key
+- Role: identity metadata rescue only, never nutrition
+
 ## Environment Variables
 
 Local development values belong in ignored `.env.local`:
@@ -52,6 +65,10 @@ FATSECRET_CLIENT_SECRET=your_client_secret_here
 FATSECRET_SCOPE=premier
 FATSECRET_REGION=US
 CALORIE_API_KEY=your_real_key_here
+OPEN_FOOD_FACTS_ENABLED=true
+OPEN_FOOD_FACTS_CONTACT=https://github.com/TyCodes101/calorie-compass
+UPC_DATABASE_ENABLED=false
+UPC_DATABASE_API_KEY=your_optional_key_here
 ```
 
 Optional controls:
@@ -61,6 +78,8 @@ FATSECRET_ENABLED=true
 FATSECRET_TIMEOUT_MS=3500
 CALORIE_API_ENABLED=true
 CALORIE_API_TIMEOUT_MS=3500
+OPEN_FOOD_FACTS_TIMEOUT_MS=3000
+UPC_DATABASE_TIMEOUT_MS=2500
 ```
 
 `CALORIE_API_BASE_URL` is supported only for the official HTTPS origin and `/api/v1` path. Insecure or arbitrary origins disable the provider. Never use a `NEXT_PUBLIC_` prefix for either provider.
@@ -95,6 +114,8 @@ Cache keys contain versioned SHA-256 digests, not raw queries or credentials. Id
 - Food details: 6 hours.
 - Successful barcode: 6 hours.
 - Confirmed barcode miss: 5 minutes.
+- Open Food Facts product: 24 hours; packaged text search: 30 minutes.
+- UPC Database metadata: 6 hours in memory; confirmed miss: 5 minutes.
 - Timeout, rate limit, authorization, quota, server, and schema failures: never negative cached.
 
 FatSecret nutrition caching stays below its documented 24-hour storage limit. Only top FatSecret search candidates are hydrated. Resolver aliases are capped and each provider stops after its first accepted query result.
@@ -117,6 +138,8 @@ Rotation requires no source-code change.
 
 ## Rollback and Limitations
 
-Set `CALORIE_API_ENABLED=false` or `FATSECRET_ENABLED=false` and redeploy to disable a provider immediately. A code rollback removes the adapters without a database rollback because this integration adds no migration and persists no provider secrets or raw payloads.
+Set `OPEN_FOOD_FACTS_ENABLED=false`, `UPC_DATABASE_ENABLED=false`, `CALORIE_API_ENABLED=false`, or `FATSECRET_ENABLED=false` and redeploy to disable a provider immediately. A code rollback removes the adapters without a database rollback because this integration adds no migration and persists no provider secrets or raw payloads.
+
+See [FREE_NUTRITION_PROVIDER_AUDIT.md](./FREE_NUTRITION_PROVIDER_AUDIT.md), [NUTRITION_DATA_LICENSING.md](./NUTRITION_DATA_LICENSING.md), and [SPOONACULAR_PROVIDER_DECISION.md](./SPOONACULAR_PROVIDER_DECISION.md).
 
 Provider coverage, freshness, licensing, and restaurant modifier accuracy remain external constraints. FatSecret Premier/barcode features require paid scopes. Calorie API commercial use requires an eligible plan. Homemade meals and unsupported servings can still require clarification or a visible estimate. MacroMesh prevents silent substitution; it does not claim perfect nutrition accuracy.
