@@ -13,6 +13,7 @@ import {
 } from '@/lib/nutrition/catalog';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
 import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
+import { fatSecretProvider } from '@/lib/nutrition/providers/fatsecret';
 import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
 import { usdaProvider } from '@/lib/nutrition/providers/usda';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
@@ -844,7 +845,7 @@ export async function buildFoodSearchResponse(
   const usedResolver = Boolean(resolver);
   const queries = searchQueries(query, resolver);
   const localResults = localResultsForQueries(input, queries, options?.catalogFoods);
-  const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, commercialDatabaseProvider];
+  const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, fatSecretProvider, commercialDatabaseProvider];
   const providerResults = await searchProviders(queries, providers, resolver);
   let results = dedupeResults([...localResults, ...providerResults]).slice(0, 12);
 

@@ -9,6 +9,7 @@ import {
 import { createFoodPipelineTrace, finishFoodPipelineTrace, recordOpenAIIntent, recordProviderAttempt } from '@/lib/ai/foodPipelineTrace';
 import { parseMealText } from '@/lib/ai/openai';
 import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
+import { fatSecretProvider } from '@/lib/nutrition/providers/fatsecret';
 import { usdaProvider } from '@/lib/nutrition/providers/usda';
 
 describe('food pipeline runtime policy', () => {
@@ -25,6 +26,8 @@ describe('food pipeline runtime policy', () => {
       FDC_API_KEY: '  ',
       NUTRITIONIX_APP_ID: '\t',
       NUTRITIONIX_API_KEY: undefined,
+      FATSECRET_CLIENT_ID: ' ',
+      FATSECRET_CLIENT_SECRET: undefined,
     });
 
     expect(status.openaiApiKey).toEqual({ present: false, nonEmpty: false });
@@ -32,6 +35,8 @@ describe('food pipeline runtime policy', () => {
     expect(status.usdaApiKey).toMatchObject({ present: false, nonEmpty: false, variable: null });
     expect(status.nutritionixAppId).toEqual({ present: false, nonEmpty: false });
     expect(status.nutritionixApiKey).toEqual({ present: false, nonEmpty: false });
+    expect(status.fatSecretClientId).toEqual({ present: false, nonEmpty: false });
+    expect(status.fatSecretClientSecret).toEqual({ present: false, nonEmpty: false });
   });
 
   it('detects configured values without returning any credential value', () => {
@@ -43,6 +48,8 @@ describe('food pipeline runtime policy', () => {
       USDA_FDC_API_KEY: 'usda-test',
       NUTRITIONIX_APP_ID: 'app-test',
       NUTRITIONIX_API_KEY: 'nutritionix-test',
+      FATSECRET_CLIENT_ID: 'fatsecret-client-test',
+      FATSECRET_CLIENT_SECRET: 'fatsecret-secret-test',
     });
 
     expect(status.openaiApiKey).toEqual({ present: true, nonEmpty: true });
@@ -50,6 +57,9 @@ describe('food pipeline runtime policy', () => {
     expect(status.usdaApiKey).toMatchObject({ present: true, nonEmpty: true, variable: 'USDA_FDC_API_KEY' });
     expect(JSON.stringify(status)).not.toContain(secret);
     expect(JSON.stringify(status)).not.toContain('usda-test');
+    expect(JSON.stringify(status)).not.toContain('fatsecret-secret-test');
+    expect(status.fatSecretClientId).toEqual({ present: true, nonEmpty: true });
+    expect(status.fatSecretClientSecret).toEqual({ present: true, nonEmpty: true });
   });
 
   it('uses explicit mock policy only outside production', () => {
@@ -107,6 +117,14 @@ describe('nutrition provider availability', () => {
     expect(commercialDatabaseProvider.getStatus?.()).toMatchObject({ configured: false, reason: 'nutritionix_not_configured' });
     vi.stubEnv('NUTRITIONIX_APP_ID', 'app');
     expect(commercialDatabaseProvider.getStatus?.()).toMatchObject({ configured: false, reason: 'nutritionix_not_configured' });
+  });
+
+  it('keeps FatSecret optional when credentials are absent or partial', () => {
+    vi.stubEnv('FATSECRET_CLIENT_ID', '');
+    vi.stubEnv('FATSECRET_CLIENT_SECRET', '');
+    expect(fatSecretProvider.getStatus?.()).toMatchObject({ configured: false, reason: 'fatsecret_not_configured' });
+    vi.stubEnv('FATSECRET_CLIENT_ID', 'client');
+    expect(fatSecretProvider.getStatus?.()).toMatchObject({ configured: false, reason: 'fatsecret_not_configured' });
   });
 });
 

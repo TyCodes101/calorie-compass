@@ -41,6 +41,8 @@ printStatus('USDA_FDC_API_KEY', nonEmpty('USDA_FDC_API_KEY'));
 printStatus('FDC_API_KEY', nonEmpty('FDC_API_KEY'));
 printStatus('NUTRITIONIX_APP_ID', nonEmpty('NUTRITIONIX_APP_ID'));
 printStatus('NUTRITIONIX_API_KEY', nonEmpty('NUTRITIONIX_API_KEY'));
+printStatus('FATSECRET_CLIENT_ID', nonEmpty('FATSECRET_CLIENT_ID'));
+printStatus('FATSECRET_CLIENT_SECRET', nonEmpty('FATSECRET_CLIENT_SECRET'));
 console.log(`ALLOW_MOCK_MEAL_PARSER: ${mockEnabled ? 'enabled (non-production only)' : 'disabled'}`);
 console.log(`FOOD_PIPELINE_DEBUG: ${/^(?:1|true|yes|on)$/i.test(process.env.FOOD_PIPELINE_DEBUG?.trim() ?? '') ? 'enabled' : 'disabled'}`);
 
@@ -78,6 +80,32 @@ if (usdaKey) {
   }
 } else {
   console.log('USDA live check: skipped because no USDA key is configured');
+}
+
+const fatSecretClientId = process.env.FATSECRET_CLIENT_ID?.trim();
+const fatSecretClientSecret = process.env.FATSECRET_CLIENT_SECRET?.trim();
+if (fatSecretClientId && fatSecretClientSecret) {
+  try {
+    const authorization = Buffer.from(`${fatSecretClientId}:${fatSecretClientSecret}`).toString('base64');
+    const response = await fetch('https://oauth.fatsecret.com/connect/token', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Basic ${authorization}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        scope: process.env.FATSECRET_SCOPE?.trim() || 'premier',
+      }).toString(),
+    });
+    if (!response.ok) failures.push(`FatSecret health check returned HTTP ${response.status}`);
+    else console.log('FatSecret live check: reachable');
+  } catch {
+    failures.push('FatSecret health check failed');
+  }
+} else {
+  console.log('FatSecret live check: skipped because credentials are missing');
 }
 
 if (failures.length) {
