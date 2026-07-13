@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { buildBarcodeLookupResult, normalizeBarcode } from '@/lib/barcode-lookup';
+import { buildBarcodeLookupResult, lookupBarcodeWithProviders, normalizeBarcode } from '@/lib/barcode-lookup';
 import { buildCustomFoodSummaryFromReusableMealRecord } from '@/lib/custom-foods';
+import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
+import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
 describe('barcode lookup helpers', () => {
   it('normalizes valid UPC and EAN inputs', () => {
@@ -77,5 +79,44 @@ describe('barcode lookup helpers', () => {
     const result = buildBarcodeLookupResult({ barcode: '999999999999', customFoods: [], catalogFoods: [] });
 
     expect(result).toEqual({ found: false, result: null });
+  });
+
+  it('falls through a failed barcode provider and preserves the exact barcode on the next match', async () => {
+    const failing: NutritionLookupProvider = {
+      id: 'failing',
+      capabilities: { search: false, barcode: true, details: false, suggest: false },
+      lookup: vi.fn().mockResolvedValue(null),
+      lookupBarcode: vi.fn().mockRejectedValue(new Error('provider down')),
+    };
+    const succeeding: NutritionLookupProvider = {
+      id: 'succeeding',
+      capabilities: { search: false, barcode: true, details: false, suggest: false },
+      lookup: vi.fn().mockResolvedValue(null),
+      lookupBarcode: vi.fn().mockResolvedValue(normalizeParsedMealResponse({
+        needs_clarification: false,
+        clarifying_question: null,
+        meal_type: 'snack',
+        confidence_score: 0.9,
+        items: [{
+          food_name: 'Barcode Product', quantity: 1, unit: 'bar', calories: 200, protein: 20, carbs: 18, fat: 7,
+          fiber: 2, sugar: 2, sodium: 150, is_trusted: true, source_type: 'GENERIC_REFERENCE',
+          source_name: 'Provider barcode database', confidence_label: 'Matched', provider_used: 'succeeding',
+        }],
+      })),
+    };
+
+    const result = await lookupBarcodeWithProviders('012345678905', [failing, succeeding]);
+    expect(result.result).toMatchObject({ barcode: '012345678905', providerId: 'succeeding', sourceLabel: 'Database match' });
+    expect(succeeding.lookupBarcode).toHaveBeenCalledWith(expect.objectContaining({ barcode: '012345678905' }));
+  });
+
+  it('returns a normal miss when all configured barcode providers miss', async () => {
+    const provider: NutritionLookupProvider = {
+      id: 'missing',
+      capabilities: { search: false, barcode: true, details: false, suggest: false },
+      lookup: vi.fn().mockResolvedValue(null),
+      lookupBarcode: vi.fn().mockResolvedValue(null),
+    };
+    expect(await lookupBarcodeWithProviders('999999999999', [provider])).toEqual({ found: false, result: null });
   });
 });

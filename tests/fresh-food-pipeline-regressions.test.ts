@@ -128,6 +128,17 @@ describe('fresh food pipeline regressions', () => {
     expect(oneBarFromWeight).toBeNull();
   });
 
+  it('converts requested gram weight against a countable provider serving when its weight is known', () => {
+    const result = computeServingScaleFactor({
+      requestedQuantity: 110,
+      requestedUnit: 'g',
+      providerServingQuantity: 1,
+      providerServingUnit: 'bar',
+      providerServingWeightGrams: 55,
+    });
+    expect(result?.scaleFactor).toBe(2);
+  });
+
   it('rejects an implausible protein-bar candidate and selects the next valid provider candidate', async () => {
     const rejectedProvider: NutritionLookupProvider = {
       id: 'bad-provider',

@@ -1,9 +1,9 @@
-import { Prisma, type CachedNutritionFood } from '@prisma/client';
+import type { CachedNutritionFood } from '@prisma/client';
 
 import { hasDatabaseConnectionString } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import type { FoodSearchResult } from '@/lib/food-search';
-import { normalizeBarcode } from '@/lib/barcode-lookup';
+import { normalizeBarcode } from '@/lib/nutrition/barcode';
 
 export function cachedFoodToSearchResult(food: CachedNutritionFood): FoodSearchResult {
   return {
@@ -56,71 +56,9 @@ export async function getCachedFoodByBarcode(barcode: string) {
   if (!normalized) return null;
 
   return prisma.cachedNutritionFood.findFirst({
-    where: { barcode: normalized },
+    // Legacy Open Food Facts rows may contain per-100g values represented as a
+    // serving. The guarded provider now uses a bounded in-memory cache instead.
+    where: { barcode: normalized, provider: { not: 'OPEN_FOOD_FACTS' } },
     orderBy: { updatedAt: 'desc' },
-  });
-}
-
-export async function upsertCachedFoodFromOpenFoodFacts(options: {
-  providerId: string;
-  barcode: string;
-  name: string;
-  brand?: string | null;
-  servingQuantity?: number;
-  servingUnit?: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  fiber?: number;
-  sugar?: number;
-  sodium?: number;
-  rawPayload?: unknown;
-}) {
-  if (!hasDatabaseConnectionString()) return null;
-
-  const barcode = normalizeBarcode(options.barcode);
-  if (!barcode) return null;
-
-  return prisma.cachedNutritionFood.upsert({
-    where: {
-      provider_providerId: {
-        provider: 'OPEN_FOOD_FACTS',
-        providerId: options.providerId,
-      },
-    },
-    create: {
-      provider: 'OPEN_FOOD_FACTS',
-      providerId: options.providerId,
-      barcode,
-      normalizedQuery: null,
-      name: options.name,
-      brand: options.brand ?? null,
-      servingQuantity: options.servingQuantity ?? 1,
-      servingUnit: options.servingUnit ?? 'serving',
-      calories: options.calories,
-      protein: options.protein,
-      carbs: options.carbs,
-      fat: options.fat,
-      fiber: options.fiber ?? 0,
-      sugar: options.sugar ?? 0,
-      sodium: options.sodium ?? 0,
-      rawPayload: (options.rawPayload ?? null) as Prisma.InputJsonValue,
-    },
-    update: {
-      barcode,
-      name: options.name,
-      brand: options.brand ?? null,
-      servingQuantity: options.servingQuantity ?? 1,
-      servingUnit: options.servingUnit ?? 'serving',
-      calories: options.calories,
-      protein: options.protein,
-      carbs: options.carbs,
-      fat: options.fat,
-      fiber: options.fiber ?? 0,
-      sugar: options.sugar ?? 0,
-      sodium: options.sodium ?? 0,
-      rawPayload: (options.rawPayload ?? null) as Prisma.InputJsonValue,
-    },
   });
 }

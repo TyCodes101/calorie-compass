@@ -1,3 +1,5 @@
+import { getCalorieApiConfiguration, getFatSecretConfiguration } from '@/lib/nutrition/providers/providerConfig';
+
 type RuntimeEnv = Record<string, string | undefined>;
 
 const DEFAULT_MEAL_MODEL = 'gpt-4.1-mini';
@@ -39,6 +41,9 @@ export type FoodPipelineEnvironmentStatus = {
   usdaApiKey: { present: boolean; nonEmpty: boolean; variable: 'USDA_FDC_API_KEY' | 'FDC_API_KEY' | null };
   nutritionixAppId: { present: boolean; nonEmpty: boolean };
   nutritionixApiKey: { present: boolean; nonEmpty: boolean };
+  fatSecretClientId: { present: boolean; nonEmpty: boolean };
+  fatSecretClientSecret: { present: boolean; nonEmpty: boolean };
+  calorieApiKey: { present: boolean; nonEmpty: boolean; enabled: boolean; configured: boolean };
   allowMockMealParser: boolean;
   foodPipelineDebug: boolean;
 };
@@ -50,6 +55,8 @@ export function getFoodPipelineEnvironmentStatus(env: RuntimeEnv = process.env):
   const compatibilityUsdaApiKey = readNonEmpty(env, 'FDC_API_KEY');
   const nutritionixAppId = readNonEmpty(env, 'NUTRITIONIX_APP_ID');
   const nutritionixApiKey = readNonEmpty(env, 'NUTRITIONIX_API_KEY');
+  const fatSecret = getFatSecretConfiguration(env);
+  const calorieApi = getCalorieApiConfiguration(env);
 
   return {
     nodeEnv: env.NODE_ENV ?? 'development',
@@ -66,6 +73,14 @@ export function getFoodPipelineEnvironmentStatus(env: RuntimeEnv = process.env):
     },
     nutritionixAppId: { present: nutritionixAppId !== null, nonEmpty: nutritionixAppId !== null },
     nutritionixApiKey: { present: nutritionixApiKey !== null, nonEmpty: nutritionixApiKey !== null },
+    fatSecretClientId: { present: fatSecret.clientId !== null, nonEmpty: fatSecret.clientId !== null },
+    fatSecretClientSecret: { present: fatSecret.clientSecret !== null, nonEmpty: fatSecret.clientSecret !== null },
+    calorieApiKey: {
+      present: calorieApi.apiKey !== null,
+      nonEmpty: calorieApi.apiKey !== null,
+      enabled: calorieApi.enabled,
+      configured: calorieApi.configured,
+    },
     allowMockMealParser: isMockMealParserAllowed(env),
     foodPipelineDebug: parseBoolean(env.FOOD_PIPELINE_DEBUG),
   };

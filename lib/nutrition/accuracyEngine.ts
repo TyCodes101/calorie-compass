@@ -302,6 +302,10 @@ function validationScore(response: ParsedMealResponse, intent: NutritionIntent, 
   const joinedItems = response.items.map(itemHaystack).join(' ');
 
   if (providerId.includes('local')) score += 12;
+  if (providerId === 'usda-fdc') score += 8;
+  if (providerId === 'fatsecret') score += 6;
+  if (providerId === 'calorie-api') score += 3;
+  if (providerId === 'open-food-facts') score -= 4;
   if (response.items.some((item) => item.source_type === 'OFFICIAL_RESTAURANT')) score += 24;
   if (response.items.some((item) => item.match_type === 'exact_branded' || item.match_type === 'exact_restaurant')) score += 22;
   if (response.items.some((item) => item.is_trusted)) score += 10;
@@ -351,6 +355,10 @@ export function buildAccuracyClarificationQuestion(intent: NutritionIntent, fall
     return 'Which chips did you mean, and about how much did you have?';
   }
 
+  if (intent.wantsDietSoda) {
+    return `I could not validate a ${titleCase(intent.searchText)} match. Which exact product and serving should I use?`;
+  }
+
   if (intent.restaurantIntent) {
     return `I could not validate a ${intent.restaurantIntent} nutrition match. Which exact item and serving should I use?`;
   }
@@ -359,11 +367,33 @@ export function buildAccuracyClarificationQuestion(intent: NutritionIntent, fall
     return `I could not validate a ${intent.brandIntent} match. Which exact item and serving should I use?`;
   }
 
-  if (intent.wantsDietSoda) {
-    return `I could not validate a ${titleCase(intent.searchText)} match. Which exact product and serving should I use?`;
-  }
-
   return fallback;
+}
+
+function responsesShareIdentity(left: ParsedMealResponse, right: ParsedMealResponse) {
+  if (left.items.length !== 1 || right.items.length !== 1) return false;
+  const leftTokens = new Set(tokens(left.items[0]?.food_name));
+  const rightTokens = new Set(tokens(right.items[0]?.food_name));
+  if (!leftTokens.size || !rightTokens.size) return false;
+  const overlap = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  return overlap / Math.max(leftTokens.size, rightTokens.size) >= 0.75;
+}
+
+function valuesMateriallyConflict(left: number, right: number) {
+  const maximum = Math.max(Math.abs(left), Math.abs(right));
+  if (maximum < 1) return false;
+  return Math.abs(left - right) / maximum > 0.35;
+}
+
+export function nutritionCandidatesConflict(left: ParsedMealResponse, right: ParsedMealResponse) {
+  if (!responsesShareIdentity(left, right)) return false;
+  const leftItem = left.items[0];
+  const rightItem = right.items[0];
+  if (!leftItem || !rightItem) return false;
+  return valuesMateriallyConflict(leftItem.calories, rightItem.calories)
+    || valuesMateriallyConflict(leftItem.protein, rightItem.protein)
+    || valuesMateriallyConflict(leftItem.carbs, rightItem.carbs)
+    || valuesMateriallyConflict(leftItem.fat, rightItem.fat);
 }
 
 export function resolveBestNutritionCandidate(intent: NutritionIntent, candidates: CandidateResult[]): ResolutionResult {
@@ -374,6 +404,22 @@ export function resolveBestNutritionCandidate(intent: NutritionIntent, candidate
   const validCandidates = validations
     .filter((entry) => entry.validation.valid)
     .sort((left, right) => right.validation.score - left.validation.score);
+
+  if (
+    validCandidates[0]
+    && validCandidates[1]
+    && !validCandidates[0].candidate.providerId.includes('local')
+    && nutritionCandidatesConflict(
+      validCandidates[0].candidate.response,
+      validCandidates[1].candidate.response,
+    )
+  ) {
+    return {
+      response: null,
+      clarificationQuestion: 'I found conflicting nutrition records for this product. Which serving or package label should I use?',
+      providerId: null,
+    };
+  }
 
   if (validCandidates[0]) {
     return {

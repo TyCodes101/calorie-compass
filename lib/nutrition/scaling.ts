@@ -5,6 +5,7 @@ export type ServingScaleRequest = {
   requestedUnit: string | null;
   providerServingQuantity: number;
   providerServingUnit: string | null;
+  providerServingWeightGrams?: number | null;
 };
 
 export type ServingScaleResult = {
@@ -31,6 +32,12 @@ const unitAliases: Record<string, string> = {
   pieces: 'piece',
   cups: 'cup',
   scoops: 'scoop',
+  bags: 'bag',
+  packages: 'package',
+  packs: 'package',
+  eggs: 'egg',
+  tacos: 'taco',
+  burritos: 'burrito',
 };
 
 export function normalizeServingUnit(unit: string | null | undefined) {
@@ -51,6 +58,8 @@ const countableUnits = new Set([
   'piece',
   'cup',
   'scoop',
+  'bag',
+  'package',
   'egg',
   'taco',
   'burrito',
@@ -85,11 +94,23 @@ export function computeServingScaleFactor(request: ServingScaleRequest): Serving
   }
 
   if (requestedUnit && providerServingUnit && requestedUnit !== providerServingUnit) {
-    const weightConversion = requestedUnit === 'oz' && providerServingUnit === 'g'
+    const servingWeightGrams = Number(request.providerServingWeightGrams);
+    const requestedWeightGrams = requestedUnit === 'g'
+      ? requestedQuantity
+      : requestedUnit === 'oz'
+        ? requestedQuantity * 28.3495
+        : null;
+    const countableWeightConversion = requestedWeightGrams !== null
+      && isCountableServingUnit(providerServingUnit)
+      && Number.isFinite(servingWeightGrams)
+      && servingWeightGrams > 0
+      ? requestedWeightGrams / (providerServingQuantity * servingWeightGrams)
+      : null;
+    const weightConversion = countableWeightConversion ?? (requestedUnit === 'oz' && providerServingUnit === 'g'
       ? (requestedQuantity * 28.3495) / providerServingQuantity
       : requestedUnit === 'g' && providerServingUnit === 'oz'
         ? requestedQuantity / (providerServingQuantity * 28.3495)
-        : null;
+        : null);
 
     if (weightConversion === null) return null;
     return {
@@ -118,9 +139,12 @@ export function scaleNutritionItemOnce(item: ParsedFoodItem, request: ServingSca
   if (!result) return null;
 
   const factor = result.scaleFactor;
+  const displayQuantity = result.requestedUnit
+    ? result.requestedQuantity
+    : Math.round(item.quantity * factor * 100) / 100;
   return {
     ...item,
-    quantity: result.requestedQuantity,
+    quantity: displayQuantity,
     unit: result.requestedUnit ?? item.unit,
     calories: Math.round(item.calories * factor * 100) / 100,
     protein: Math.round(item.protein * factor * 100) / 100,

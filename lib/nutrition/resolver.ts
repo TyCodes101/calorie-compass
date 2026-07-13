@@ -6,6 +6,7 @@ import { lookupNutrition } from '@/lib/nutrition/nutritionLookup';
 import type { NutritionLabelInput } from '@/lib/nutrition/types';
 import type { FoodPipelineTrace } from '@/lib/ai/foodPipelineTrace';
 import { prisma } from '@/lib/prisma';
+import { resolveBarcodeNutrition } from '@/lib/nutrition/barcodeResolver';
 
 export type { NutritionLabelInput } from '@/lib/nutrition/types';
 
@@ -39,33 +40,6 @@ function buildMealResponse(mealType: MealTypeValue, items: ParsedFoodItem[], con
 function extractBarcode(text: string) {
   const match = text.match(/\b\d{8,14}\b/);
   return match?.[0] ?? null;
-}
-
-async function fetchJson<T>(url: string, init?: RequestInit) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3500);
-
-  try {
-    const response = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        ...(init?.headers ?? {}),
-      },
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    return (await response.json()) as T;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 async function resolveFromSavedCorrection(text: string, mealType: MealTypeValue) {
@@ -152,105 +126,6 @@ async function resolveFromSavedCorrection(text: string, mealType: MealTypeValue)
   }
 }
 
-type OpenFoodFactsProductResponse = {
-  status?: number;
-  product?: {
-    product_name?: string;
-    nutriments?: {
-      'energy-kcal_serving'?: number;
-      'energy-kcal_100g'?: number;
-      proteins_serving?: number;
-      proteins_100g?: number;
-      carbohydrates_serving?: number;
-      carbohydrates_100g?: number;
-      fat_serving?: number;
-      fat_100g?: number;
-      fiber_serving?: number;
-      fiber_100g?: number;
-      sugars_serving?: number;
-      sugars_100g?: number;
-      sodium_serving?: number;
-      sodium_100g?: number;
-      salt_serving?: number;
-      salt_100g?: number;
-    };
-    serving_quantity?: number;
-    serving_size?: string;
-  };
-};
-
-function pickServingValue(servingValue?: number, fallbackValue?: number) {
-  if (typeof servingValue === 'number' && Number.isFinite(servingValue)) {
-    return servingValue;
-  }
-
-  if (typeof fallbackValue === 'number' && Number.isFinite(fallbackValue)) {
-    return fallbackValue;
-  }
-
-  return 0;
-}
-
-function hasFiniteNutritionValue(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function hasUsableEnergyValue(nutriments: NonNullable<OpenFoodFactsProductResponse['product']>['nutriments']) {
-  return Boolean(
-    nutriments &&
-      (
-        hasFiniteNutritionValue(nutriments['energy-kcal_serving']) ||
-        hasFiniteNutritionValue(nutriments['energy-kcal_100g'])
-      ),
-  );
-}
-
-async function resolveFromOpenFoodFacts(barcode: string, mealType: MealTypeValue) {
-  const payload = await fetchJson<OpenFoodFactsProductResponse>(
-    `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=product_name,nutriments,serving_quantity,serving_size`
-  );
-
-  const product = payload?.product;
-  const nutriments = product?.nutriments;
-
-  if (payload?.status !== 1 || !product || !nutriments || !hasUsableEnergyValue(nutriments)) {
-    return null;
-  }
-
-  const sodium =
-    pickServingValue(nutriments.sodium_serving, nutriments.sodium_100g) ||
-    pickServingValue(nutriments.salt_serving, nutriments.salt_100g) / 2.5;
-
-  return buildMealResponse(
-    mealType,
-    [
-      {
-        food_name: product.product_name?.trim() || 'Barcode product',
-        quantity: product.serving_quantity ?? 1,
-        unit: product.serving_size?.trim() || 'serving',
-        calories: pickServingValue(nutriments['energy-kcal_serving'], nutriments['energy-kcal_100g']),
-        protein: pickServingValue(nutriments.proteins_serving, nutriments.proteins_100g),
-        carbs: pickServingValue(nutriments.carbohydrates_serving, nutriments.carbohydrates_100g),
-        fat: pickServingValue(nutriments.fat_serving, nutriments.fat_100g),
-        fiber: pickServingValue(nutriments.fiber_serving, nutriments.fiber_100g),
-        sugar: pickServingValue(nutriments.sugars_serving, nutriments.sugars_100g),
-        sodium,
-        notes: `Barcode match for ${product.product_name?.trim() || 'this product'}. Adjust if your serving differs.`,
-        is_trusted: true,
-        source_type: 'GENERIC_REFERENCE',
-        source_name: 'Open Food Facts barcode match',
-        confidence_label: 'Verified',
-        matched_query: barcode,
-        original_user_text: barcode,
-        provider_used: 'open-food-facts',
-        used_ai_fallback: false,
-        catalog_food_id: null,
-      },
-    ],
-    0.92,
-  );
-}
-
 export async function resolveNutritionEstimate({ text, mealType, nutritionLabel = null, barcode = null, trace }: NutritionResolverInput) {
   // If the user includes add-ons/modifiers ("with butter", "with ranch", etc.), avoid returning a
   // single-item deterministic estimate that can silently drop the modifier. Let the LLM parse
@@ -268,10 +143,15 @@ export async function resolveNutritionEstimate({ text, mealType, nutritionLabel 
 
   const detectedBarcode = barcode || extractBarcode(text);
   if (detectedBarcode) {
-    const barcodeResult = await resolveFromOpenFoodFacts(detectedBarcode, mealType);
-    if (barcodeResult) {
-      return barcodeResult;
+    const providerResult = await resolveBarcodeNutrition(detectedBarcode, mealType);
+    if (providerResult.found && providerResult.result) {
+      return buildMealResponse(
+        mealType,
+        providerResult.result.items,
+        providerResult.result.confidenceScore,
+      );
     }
+
   }
 
   const savedCorrection = await resolveFromSavedCorrection(text, mealType);
