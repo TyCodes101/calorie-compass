@@ -1,9 +1,6 @@
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
-import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
-import { fatSecretProvider } from '@/lib/nutrition/providers/fatsecret';
-import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
-import { usdaProvider } from '@/lib/nutrition/providers/usda';
+import { defaultNutritionProviders } from '@/lib/nutrition/providerRegistry';
 import {
   buildAccuracyClarificationQuestion,
   buildNutritionIntent,
@@ -59,6 +56,8 @@ function inferProviderUsed(item: ParsedFoodItem) {
   const sourceName = item.source_name?.toLowerCase() ?? '';
 
   if (sourceName.includes('usda')) return 'usda-fdc';
+  if (sourceName.includes('fatsecret')) return 'fatsecret';
+  if (sourceName.includes('calorie api')) return 'calorie-api';
   if (sourceName.includes('nutritionix')) return 'commercial-database';
   if (sourceName.includes('open food facts')) return 'open-food-facts';
   if (sourceName.includes('user-provided nutrition label')) return 'nutrition-label';
@@ -274,7 +273,7 @@ export async function lookupNutrition(
   };
 
   const usingDefaultProviders = !options?.providers;
-  const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, fatSecretProvider, commercialDatabaseProvider];
+  const providers = options?.providers ?? defaultNutritionProviders;
   const [primaryProvider, ...supportingProviders] = providers;
   const runProvider = async (provider: NutritionLookupProvider | undefined) => {
     if (!provider) return null;
@@ -359,8 +358,6 @@ export async function lookupNutrition(
       continue;
     }
 
-    candidates.push({ providerId: provider.id, response: result });
-
     if (shouldProtectBrandIntent && !responseMatchesBrand(result, normalizedQuery.brandHint)) {
       if (options?.trace) {
         options.trace.clarificationRequired = true;
@@ -384,6 +381,8 @@ export async function lookupNutrition(
       }
       continue;
     }
+
+    candidates.push({ providerId: provider.id, response: result });
   }
 
   const rankedResult = resolveBestNutritionCandidate(intent, candidates);

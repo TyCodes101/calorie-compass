@@ -12,16 +12,14 @@ import {
   type CatalogFoodRecord,
 } from '@/lib/nutrition/catalog';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
-import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
-import { fatSecretProvider } from '@/lib/nutrition/providers/fatsecret';
-import { localVerifiedCatalogProvider } from '@/lib/nutrition/providers/localVerifiedCatalog';
-import { usdaProvider } from '@/lib/nutrition/providers/usda';
+import { defaultNutritionProviders } from '@/lib/nutrition/providerRegistry';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
 export type FoodSearchSourceLabel =
   | 'Brand verified'
   | 'Restaurant verified'
   | 'USDA verified'
+  | 'Database match'
   | 'Custom'
   | 'Recent'
   | 'Favorite'
@@ -258,6 +256,7 @@ function labelForTrustedItem(item: ParsedFoodItem, brand?: string | null): FoodS
   if (isEstimatedItem(item)) return 'Estimated';
   if (item.source_type === 'OFFICIAL_RESTAURANT') return 'Restaurant verified';
   if (provider.includes('usda') || sourceName.includes('usda') || (!brand && sourceName.includes('generic'))) return 'USDA verified';
+  if (provider.includes('fatsecret') || provider.includes('calorie-api') || provider.includes('commercial')) return 'Database match';
   if (brand || item.source_type === 'GENERIC_REFERENCE' || sourceName) return 'Brand verified';
   return 'USDA verified';
 }
@@ -297,14 +296,51 @@ function hasStrongExactMatch(query: string, results: FoodSearchResult[]) {
   });
 }
 
+function sourceStrength(result: FoodSearchResult) {
+  if (result.id.startsWith('catalog:')) return 120;
+  if (result.sourceLabel === 'Custom' || result.sourceLabel === 'Favorite' || result.sourceLabel === 'Recent') return 115;
+  if (result.sourceLabel === 'Restaurant verified') return 110;
+  if (result.providerId === 'fatsecret') return 90;
+  if (result.providerId === 'commercial-database') return 88;
+  if (result.providerId === 'usda-fdc') return 84;
+  if (result.providerId === 'calorie-api') return 72;
+  if (result.estimated) return 10;
+  return 60;
+}
+
+function resultIdentityKey(result: FoodSearchResult) {
+  if (result.sourceLabel === 'Custom' || result.sourceLabel === 'Favorite' || result.sourceLabel === 'Recent') {
+    return `user:${result.sourceLabel}:${result.id}`;
+  }
+  if (result.barcode) return `barcode:${result.barcode}`;
+  const brand = normalizeSearchText(result.brand ?? result.restaurant ?? '');
+  let name = normalizeSearchText(result.name);
+  if (brand) {
+    const brandTokens = new Set(tokens(brand));
+    name = name.split(' ').filter((token) => !brandTokens.has(token)).join(' ');
+  }
+  const serving = `${Math.round(result.servingQuantity * 100) / 100}:${normalizeSearchText(result.servingUnit)}`;
+  const genericFingerprint = brand
+    ? ''
+    : `:${Math.round(result.calories / 10)}:${Math.round(result.protein / 5)}:${Math.round(result.carbs / 5)}:${Math.round(result.fat / 5)}`;
+  return `food:${brand}:${name}:${serving}${genericFingerprint}`;
+}
+
 function dedupeResults(results: FoodSearchResult[]) {
-  const seen = new Set<string>();
-  return results.filter((result) => {
-    const key = `${result.sourceLabel}:${normalizeSearchText(result.name)}:${result.calories}:${result.servingQuantity}:${result.servingUnit}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const byIdentity = new Map<string, FoodSearchResult>();
+  for (const result of results) {
+    const key = resultIdentityKey(result);
+    const current = byIdentity.get(key);
+    if (!current) {
+      byIdentity.set(key, result);
+      continue;
+    }
+
+    const currentScore = sourceStrength(current) + current.confidenceScore * 10 - (current.needsReview ? 8 : 0);
+    const candidateScore = sourceStrength(result) + result.confidenceScore * 10 - (result.needsReview ? 8 : 0);
+    if (candidateScore > currentScore) byIdentity.set(key, result);
+  }
+  return [...byIdentity.values()];
 }
 
 export function catalogFoodToSearchResult(food: SearchCatalogFood): FoodSearchResult {
@@ -557,7 +593,7 @@ function searchQueries(originalQuery: string, resolver: FoodSearchResolverOutput
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
-  });
+  }).slice(0, 3);
 }
 
 function providerResultToSearchResult(
@@ -615,9 +651,12 @@ async function searchProviders(
 ) {
   const results: FoodSearchResult[] = [];
 
-  for (const query of queries) {
-    const normalizedQuery = normalizeFoodQuery(query);
-    for (const provider of providers) {
+  for (const provider of providers) {
+    const status = provider.getStatus?.() ?? { configured: true };
+    if (!status.configured) continue;
+
+    for (const query of queries) {
+      const normalizedQuery = normalizeFoodQuery(query);
       try {
         const response = await provider.lookup({
           text: query,
@@ -627,6 +666,7 @@ async function searchProviders(
         const result = response ? providerResultToSearchResult(response, provider.id, query, resolver) : null;
         if (result) {
           results.push(result);
+          break;
         }
       } catch {
         // Search should fail soft when any provider is unavailable.
@@ -845,7 +885,7 @@ export async function buildFoodSearchResponse(
   const usedResolver = Boolean(resolver);
   const queries = searchQueries(query, resolver);
   const localResults = localResultsForQueries(input, queries, options?.catalogFoods);
-  const providers = options?.providers ?? [localVerifiedCatalogProvider, usdaProvider, fatSecretProvider, commercialDatabaseProvider];
+  const providers = options?.providers ?? defaultNutritionProviders;
   const providerResults = await searchProviders(queries, providers, resolver);
   let results = dedupeResults([...localResults, ...providerResults]).slice(0, 12);
 

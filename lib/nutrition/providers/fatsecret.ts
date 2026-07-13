@@ -1,44 +1,98 @@
-import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
-import { scaleParsedFoodItem } from '@/lib/nutrition/catalog';
-import { computeServingScaleFactor } from '@/lib/nutrition/scaling';
-import { recordServingScaling } from '@/lib/ai/foodPipelineTrace';
-import type { NutritionLookupProvider } from '@/lib/nutrition/types';
+import { z } from 'zod';
 
-type FatSecretServing = {
-  serving_id?: string;
-  serving_description?: string;
-  measurement_description?: string;
-  metric_serving_amount?: string | number;
-  metric_serving_unit?: string;
-  number_of_units?: string | number;
-  is_default?: string | number;
-  calories?: string | number;
-  protein?: string | number;
-  carbohydrate?: string | number;
-  fat?: string | number;
-  fiber?: string | number;
-  sugar?: string | number;
-  sodium?: string | number;
-};
+import type { NormalizedFoodQuery, NutritionLookupProvider } from '@/lib/nutrition/types';
+import { normalizeServingUnit } from '@/lib/nutrition/scaling';
+import {
+  buildBarcodeMealResponse,
+  buildProviderMealResponse,
+  normalizeProviderText,
+  parseServingText,
+  providerTokenMatches,
+  providerTextTokens,
+  type NormalizedProviderFood,
+} from '@/lib/nutrition/providers/providerNormalization';
+import { validateNutritionFacts, type NutritionFacts } from '@/lib/nutrition/providers/nutritionPlausibility';
+import { buildProviderCacheKey, withProviderCache } from '@/lib/nutrition/providers/providerCache';
+import {
+  FATSECRET_API_BASE_URL,
+  FATSECRET_TOKEN_URL,
+  fatSecretScopeSupports,
+  getFatSecretConfiguration,
+} from '@/lib/nutrition/providers/providerConfig';
+import { NutritionProviderError, requestProviderJson } from '@/lib/nutrition/providers/providerHttp';
 
-type FatSecretFood = {
-  food_id?: string;
-  food_name?: string;
-  brand_name?: string;
-  food_type?: string;
-  servings?: { serving?: FatSecretServing | FatSecretServing[] };
-};
+const FATSECRET_API_ORIGIN = 'https://platform.fatsecret.com';
+const FATSECRET_OAUTH_ORIGIN = 'https://oauth.fatsecret.com';
+const SEARCH_CACHE_TTL_MS = 15 * 60 * 1_000;
+const DETAILS_CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
+const BARCODE_CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
+const BARCODE_MISS_TTL_MS = 5 * 60 * 1_000;
 
-type FatSecretSearchResponse = {
-  foods_search?: {
-    results?: { food?: FatSecretFood | FatSecretFood[] };
-  };
-};
+const numericValue = z.preprocess((value) => {
+  if (typeof value === 'string' && value.trim()) return Number(value);
+  return value;
+}, z.number().finite().nonnegative());
 
-type FatSecretTokenResponse = {
-  access_token?: string;
-  expires_in?: number;
-};
+const optionalNumericValue = numericValue.nullable().optional();
+
+const tokenSchema = z.object({
+  access_token: z.string().trim().min(1),
+  expires_in: numericValue.optional().default(3_600),
+  token_type: z.string().optional(),
+}).passthrough();
+
+const fatSecretServingSchema = z.object({
+  serving_id: z.union([z.string(), z.number()]).transform(String).optional(),
+  serving_description: z.string().trim().min(1).optional(),
+  measurement_description: z.string().trim().min(1).optional(),
+  metric_serving_amount: optionalNumericValue,
+  metric_serving_unit: z.string().trim().min(1).optional(),
+  number_of_units: optionalNumericValue,
+  is_default: z.union([z.string(), z.number()]).optional(),
+  calories: numericValue,
+  protein: numericValue,
+  carbohydrate: numericValue,
+  fat: numericValue,
+  fiber: numericValue.optional().default(0),
+  sugar: numericValue.optional().default(0),
+  sodium: numericValue.optional().default(0),
+}).passthrough();
+
+const oneOrManyServingsSchema = z.union([
+  fatSecretServingSchema,
+  z.array(fatSecretServingSchema),
+]);
+
+const fatSecretFoodSchema = z.object({
+  food_id: z.union([z.string(), z.number()]).transform(String),
+  food_name: z.string().trim().min(1),
+  brand_name: z.string().trim().min(1).optional(),
+  food_type: z.string().optional(),
+  food_url: z.string().url().optional(),
+  servings: z.object({ serving: oneOrManyServingsSchema }).optional(),
+}).passthrough();
+
+const oneOrManyFoodsSchema = z.union([fatSecretFoodSchema, z.array(fatSecretFoodSchema)]);
+
+const fatSecretErrorSchema = z.object({
+  code: z.union([z.string(), z.number()]).transform(String).optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+const searchResponseSchema = z.object({
+  foods_search: z.object({
+    results: z.object({ food: oneOrManyFoodsSchema }).optional(),
+  }).optional(),
+  error: fatSecretErrorSchema.optional(),
+}).passthrough();
+
+const foodResponseSchema = z.object({
+  food: fatSecretFoodSchema.optional(),
+  error: fatSecretErrorSchema.optional(),
+}).passthrough();
+
+type FatSecretFood = z.infer<typeof fatSecretFoodSchema>;
+type FatSecretServing = z.infer<typeof fatSecretServingSchema>;
 
 type TokenCache = {
   clientId: string;
@@ -49,272 +103,329 @@ type TokenCache = {
 
 let tokenCache: TokenCache | null = null;
 
-function asArray<T>(value: T | T[] | null | undefined) {
+function asArray<T>(value: T | T[] | null | undefined): T[] {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
 }
 
-function toNumber(value: unknown) {
-  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
-  return Number.isFinite(parsed) ? parsed : null;
+function throwForFatSecretError(error: z.infer<typeof fatSecretErrorSchema> | undefined, notFoundIsNull = false) {
+  if (!error) return false;
+  if (notFoundIsNull && error.code === '211') return true;
+  if (error.code === '13') throw new NutritionProviderError('unauthorized');
+  if (error.code === '14') throw new NutritionProviderError('forbidden');
+  if (error.code === '107') throw new NutritionProviderError('invalid_request');
+  throw new NutritionProviderError('provider_unavailable');
 }
 
-function normalizeText(value: string | null | undefined) {
-  return (value ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+function identityScore(food: FatSecretFood, query: NormalizedFoodQuery) {
+  const candidateText = normalizeProviderText(`${food.brand_name ?? ''} ${food.food_name}`);
+  const candidateTokens = providerTextTokens(candidateText);
+  const queryText = normalizeProviderText(query.searchText);
+  const queryTokens = providerTextTokens(queryText).filter((token) => !['food', 'serving', 'one', 'two'].includes(token));
+  const brandTokens = providerTextTokens(query.brandHint);
+  if (brandTokens.length && !brandTokens.every((token) => candidateText.includes(token))) return null;
 
-function compactText(value: string | null | undefined) {
-  return normalizeText(value).replace(/\s+/g, '');
-}
-
-function tokens(value: string | null | undefined) {
-  return normalizeText(value).split(' ').filter((token) => token.length > 1);
-}
-
-const identityStopWords = new Set([
-  'a', 'an', 'one', 'two', 'three', 'four', 'five', 'six', 'of', 'the', 'with',
-  'and', 'had', 'have', 'eat', 'ate', 'drink', 'drank', 'log', 'add', 'track',
-  'please', 'food', 'item', 'product', 'serving', 'servings', 'count', 'counts',
-  'g', 'gram', 'grams', 'oz', 'ounce', 'ounces', 'ml', 'milliliter', 'milliliters',
-]);
-
-function candidateIdentityScore(food: FatSecretFood, searchText: string, brandHint: string | null) {
-  const foodName = food.food_name?.trim() ?? '';
-  const brandName = food.brand_name?.trim() ?? '';
-  if (!foodName) return null;
-
-  if (brandHint && !compactText(`${brandName} ${foodName}`).includes(compactText(brandHint))) {
-    return null;
-  }
-
-  const queryTokens = tokens(searchText).filter((token) => !identityStopWords.has(token));
-  const brandTokens = new Set(tokens(brandHint));
-  const productTokens = queryTokens.filter((token) => !brandTokens.has(token));
-  const candidateText = normalizeText(`${foodName} ${brandName}`);
-  const overlap = productTokens.filter((token) => candidateText.includes(token));
-
-  if (productTokens.length && overlap.length < Math.max(1, Math.ceil(productTokens.length * 0.5))) {
-    return null;
-  }
+  const productTokens = queryTokens.filter((token) => !brandTokens.includes(token));
+  const overlap = productTokens.filter((token) => providerTokenMatches(token, candidateTokens));
+  if (productTokens.length && overlap.length / productTokens.length < 0.6) return null;
 
   let score = overlap.length * 18;
-  if (brandHint) score += 45;
-  if (normalizeText(searchText) && candidateText.includes(normalizeText(searchText))) score += 30;
-  if (food.food_type?.toLowerCase() === 'brand') score += 8;
+  if (brandTokens.length) score += 45;
+  if (candidateText === queryText) score += 40;
+  else if (candidateText.includes(queryText) || queryText.includes(candidateText)) score += 25;
+  if (food.food_type?.toLowerCase() === 'brand') score += 6;
   return score;
 }
 
-function servingContainsUnit(serving: FatSecretServing, unit: string) {
-  const text = normalizeText(`${serving.serving_description ?? ''} ${serving.measurement_description ?? ''}`);
-  return text.includes(unit);
+function servingMatchesUnit(serving: FatSecretServing, unit: string) {
+  const description = normalizeProviderText(`${serving.serving_description ?? ''} ${serving.measurement_description ?? ''}`);
+  return description.includes(normalizeProviderText(unit));
 }
 
-function normalizeServingUnit(unit: string | null | undefined) {
-  const normalized = normalizeText(unit);
-  if (normalized === 'bars') return 'bar';
-  if (normalized === 'bottles') return 'bottle';
-  if (normalized === 'cans') return 'can';
-  if (normalized === 'bags') return 'bag';
-  if (normalized === 'servings') return 'serving';
-  if (normalized === 'grams' || normalized === 'gram') return 'g';
-  if (normalized === 'ounces' || normalized === 'ounce') return 'oz';
-  return normalized || null;
+function servingNutrition(serving: FatSecretServing): NutritionFacts {
+  return {
+    calories: serving.calories,
+    protein: serving.protein,
+    carbs: serving.carbohydrate,
+    fat: serving.fat,
+    fiber: serving.fiber,
+    sugar: serving.sugar,
+    sodium: serving.sodium,
+  };
 }
 
-function chooseServing(food: FatSecretFood, searchText: string, requestedUnit: string | null) {
+function foodToCandidate(food: FatSecretFood, query: NormalizedFoodQuery, barcode?: string | null): NormalizedProviderFood | null {
   const servings = asArray(food.servings?.serving);
   if (!servings.length) return null;
 
-  const normalizedRequestedUnit = normalizeServingUnit(requestedUnit);
-  const metricServing = normalizedRequestedUnit && ['g', 'oz', 'ml'].includes(normalizedRequestedUnit)
-    ? servings.find((serving) => normalizeServingUnit(serving.metric_serving_unit) === normalizedRequestedUnit)
+  const requestedUnit = normalizeServingUnit(query.quantityUnit ?? query.unitHint);
+  const metricServing = requestedUnit && ['g', 'oz', 'ml'].includes(requestedUnit)
+    ? servings.find((serving) => normalizeServingUnit(serving.metric_serving_unit) === requestedUnit)
     : null;
-  const matchingNaturalServing = normalizedRequestedUnit && !['g', 'oz', 'ml'].includes(normalizedRequestedUnit)
-    ? servings.find((serving) => servingContainsUnit(serving, normalizedRequestedUnit))
+  const naturalServing = requestedUnit && !['g', 'oz', 'ml'].includes(requestedUnit)
+    ? servings.find((serving) => servingMatchesUnit(serving, requestedUnit))
     : null;
-  const defaultServing = servings.find((serving) => String(serving.is_default ?? '') === '1') ?? servings[0];
-  const serving = metricServing ?? matchingNaturalServing ?? defaultServing;
-  const calories = toNumber(serving.calories);
-  const protein = toNumber(serving.protein);
-  const carbs = toNumber(serving.carbohydrate);
-  const fat = toNumber(serving.fat);
-  if ([calories, protein, carbs].some((value) => value === null) || fat === null) return null;
+  const selected = metricServing
+    ?? naturalServing
+    ?? servings.find((serving) => String(serving.is_default ?? '') === '1')
+    ?? servings[0];
+  if (!selected) return null;
 
-  const metricUnit = normalizeServingUnit(serving.metric_serving_unit);
-  const metricAmount = toNumber(serving.metric_serving_amount);
-  const numberOfUnits = toNumber(serving.number_of_units) ?? 1;
-  let providerServingQuantity = numberOfUnits;
-  let providerServingUnit = normalizeServingUnit(serving.measurement_description) ?? 'serving';
+  const nutrition = servingNutrition(selected);
+  const metricAmount = selected.metric_serving_amount ?? null;
+  const metricUnit = normalizeServingUnit(selected.metric_serving_unit);
+  const parsedServing = parseServingText(selected.serving_description);
+  const numberOfUnits = selected.number_of_units && selected.number_of_units > 0 ? selected.number_of_units : parsedServing.quantity;
+  let servingQuantity = numberOfUnits;
+  let servingUnit = normalizeServingUnit(selected.measurement_description) ?? parsedServing.unit;
 
-  if (normalizedRequestedUnit && metricServing && metricAmount !== null) {
-    providerServingQuantity = metricAmount;
-    providerServingUnit = metricUnit ?? normalizedRequestedUnit;
-  } else if (normalizedRequestedUnit && matchingNaturalServing) {
-    providerServingQuantity = numberOfUnits;
-    providerServingUnit = normalizedRequestedUnit;
-  } else if (normalizedRequestedUnit && providerServingUnit === 'serving') {
-    // A branded result may label a single natural product as "1 serving".
-    // Only reinterpret it when the product/query itself names that unit.
-    const identityText = normalizeText(`${food.food_name ?? ''} ${searchText}`);
-    if (numberOfUnits === 1 && identityText.includes(normalizedRequestedUnit)) {
-      providerServingUnit = normalizedRequestedUnit;
-    }
+  if (metricServing && metricAmount && metricUnit) {
+    servingQuantity = metricAmount;
+    servingUnit = metricUnit;
+  } else if (naturalServing && requestedUnit) {
+    servingQuantity = numberOfUnits;
+    servingUnit = requestedUnit;
+  } else if (parsedServing.unit !== 'serving') {
+    servingQuantity = parsedServing.quantity;
+    servingUnit = parsedServing.unit;
+  } else if (requestedUnit && numberOfUnits === 1 && normalizeProviderText(food.food_name).includes(requestedUnit)) {
+    servingUnit = requestedUnit;
   }
 
+  const servingWeightGrams = metricAmount && metricUnit === 'g'
+    ? metricAmount
+    : metricAmount && metricUnit === 'oz'
+      ? metricAmount * 28.3495
+      : null;
+  if (!validateNutritionFacts(nutrition, { servingWeightGrams }).valid) return null;
+
   return {
-    source: serving,
-    providerServingQuantity,
-    providerServingUnit,
-    calories: calories ?? 0,
-    protein: protein ?? 0,
-    carbs: carbs ?? 0,
-    fat: fat ?? 0,
-    fiber: toNumber(serving.fiber) ?? 0,
-    sugar: toNumber(serving.sugar) ?? 0,
-    sodium: toNumber(serving.sodium) ?? 0,
+    providerId: 'fatsecret',
+    providerFoodId: food.food_id,
+    providerServingId: selected.serving_id ?? null,
+    name: food.food_name,
+    brand: food.brand_name ?? null,
+    barcode: barcode ?? null,
+    servingQuantity,
+    servingUnit,
+    servingWeightGrams,
+    servingDescription: selected.serving_description ?? `${servingQuantity} ${servingUnit}`,
+    nutrition,
+    sourceName: barcode ? 'FatSecret barcode database' : 'FatSecret Platform',
+    confidence: barcode ? 0.92 : query.brandHint ? 0.86 : 0.82,
+    exactBrandMatch: Boolean(query.brandHint && identityScore(food, query) !== null),
   };
 }
 
-async function fetchJson<T>(url: string, init?: RequestInit) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3500);
-
-  try {
-    const response = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        ...(init?.headers ?? {}),
-      },
-      cache: 'no-store',
-    });
-    if (!response.ok) return null;
-    return (await response.json()) as T;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function getAccessToken(clientId: string, clientSecret: string, scope: string) {
+async function getAccessToken() {
+  const config = getFatSecretConfiguration();
+  if (!config.configured || !config.clientId || !config.clientSecret) return null;
   const now = Date.now();
-  if (tokenCache && tokenCache.clientId === clientId && tokenCache.scope === scope && tokenCache.expiresAt > now + 60_000) {
+  if (
+    tokenCache
+    && tokenCache.clientId === config.clientId
+    && tokenCache.scope === config.scope
+    && tokenCache.expiresAt > now + 60_000
+  ) {
     return tokenCache.accessToken;
   }
 
-  const authorization = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const response = await fetchJson<FatSecretTokenResponse>('https://oauth.fatsecret.com/connect/token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${authorization}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ grant_type: 'client_credentials', scope }).toString(),
+  const authorization = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
+  const body = new URLSearchParams({
+    grant_type: 'client_credentials',
+    scope: config.scope,
   });
-  const accessToken = response?.access_token?.trim();
-  if (!accessToken) return null;
-  const expiresIn = Number(response?.expires_in ?? 3600);
+  const result = await requestProviderJson({
+    url: FATSECRET_TOKEN_URL,
+    allowedOrigins: [FATSECRET_OAUTH_ORIGIN],
+    init: {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${authorization}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    },
+    schema: tokenSchema,
+    timeoutMs: config.timeoutMs,
+    retries: 0,
+  });
+  if (!result) return null;
 
   tokenCache = {
-    clientId,
-    scope,
-    accessToken,
-    expiresAt: now + Math.max(60, expiresIn) * 1000,
+    clientId: config.clientId,
+    scope: config.scope,
+    accessToken: result.data.access_token,
+    expiresAt: now + Math.max(60, result.data.expires_in) * 1_000,
   };
-  return accessToken;
+  return tokenCache.accessToken;
+}
+
+async function searchFoods(query: NormalizedFoodQuery) {
+  const config = getFatSecretConfiguration();
+  if (!config.configured || !fatSecretScopeSupports(config.scope, 'search')) return [];
+  const accessToken = await getAccessToken();
+  if (!accessToken) return [];
+
+  const key = buildProviderCacheKey('fatsecret:v1:search', {
+    query: normalizeProviderText(query.searchText),
+    brand: normalizeProviderText(query.brandHint),
+    region: config.region,
+  });
+  const cached = await withProviderCache({
+    key,
+    ttlMs: SEARCH_CACHE_TTL_MS,
+    load: async () => {
+      const url = new URL(`${FATSECRET_API_BASE_URL}/foods/search/v5`);
+      url.searchParams.set('search_expression', query.searchText.slice(0, 180));
+      url.searchParams.set('max_results', '20');
+      url.searchParams.set('flag_default_serving', 'true');
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('region', config.region);
+      if (query.brandHint) url.searchParams.set('food_type', 'brand');
+
+      const result = await requestProviderJson({
+        url: url.toString(),
+        allowedOrigins: [FATSECRET_API_ORIGIN],
+        init: { headers: { Authorization: `Bearer ${accessToken}` } },
+        schema: searchResponseSchema,
+        timeoutMs: config.timeoutMs,
+      });
+      if (!result) return [];
+      throwForFatSecretError(result.data.error);
+      return asArray(result.data.foods_search?.results?.food);
+    },
+  });
+  return cached.value ?? [];
+}
+
+async function getFood(providerFoodId: string) {
+  if (!/^\d{1,20}$/.test(providerFoodId)) return null;
+  const config = getFatSecretConfiguration();
+  if (!config.configured) return null;
+  const accessToken = await getAccessToken();
+  if (!accessToken) return null;
+  const key = buildProviderCacheKey('fatsecret:v1:food', providerFoodId);
+  const cached = await withProviderCache({
+    key,
+    ttlMs: DETAILS_CACHE_TTL_MS,
+    load: async () => {
+      const url = new URL(`${FATSECRET_API_BASE_URL}/food/v5`);
+      url.searchParams.set('food_id', providerFoodId);
+      url.searchParams.set('format', 'json');
+      if (config.scope.split(/\s+/).includes('premier')) {
+        url.searchParams.set('flag_default_serving', 'true');
+        url.searchParams.set('region', config.region);
+      }
+      const result = await requestProviderJson({
+        url: url.toString(),
+        allowedOrigins: [FATSECRET_API_ORIGIN],
+        init: { headers: { Authorization: `Bearer ${accessToken}` } },
+        schema: foodResponseSchema,
+        timeoutMs: config.timeoutMs,
+        notFoundIsNull: true,
+      });
+      if (!result) return null;
+      if (throwForFatSecretError(result.data.error, true)) return null;
+      return result.data.food ?? null;
+    },
+  });
+  return cached.value;
+}
+
+async function getBarcodeFood(barcode: string) {
+  if (!/^\d{8,13}$/.test(barcode)) return null;
+  const config = getFatSecretConfiguration();
+  if (!config.configured || !fatSecretScopeSupports(config.scope, 'barcode')) return null;
+  const accessToken = await getAccessToken();
+  if (!accessToken) return null;
+  const gtin13 = barcode.padStart(13, '0');
+  const key = buildProviderCacheKey('fatsecret:v1:barcode', gtin13);
+  const cached = await withProviderCache({
+    key,
+    ttlMs: BARCODE_CACHE_TTL_MS,
+    negativeTtlMs: BARCODE_MISS_TTL_MS,
+    load: async () => {
+      const url = new URL(`${FATSECRET_API_BASE_URL}/food/barcode/find-by-id/v2`);
+      url.searchParams.set('barcode', gtin13);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('flag_default_serving', 'true');
+      url.searchParams.set('region', config.region);
+      const result = await requestProviderJson({
+        url: url.toString(),
+        allowedOrigins: [FATSECRET_API_ORIGIN],
+        init: { headers: { Authorization: `Bearer ${accessToken}` } },
+        schema: foodResponseSchema,
+        timeoutMs: config.timeoutMs,
+        notFoundIsNull: true,
+      });
+      if (!result) return null;
+      if (throwForFatSecretError(result.data.error, true)) return null;
+      return result.data.food ?? null;
+    },
+  });
+  return cached.value ? { food: cached.value, gtin13 } : null;
+}
+
+export function resetFatSecretProviderState() {
+  tokenCache = null;
 }
 
 export const fatSecretProvider: NutritionLookupProvider = {
   id: 'fatsecret',
+  capabilities: { search: true, barcode: true, details: true, suggest: false },
   getStatus() {
-    const clientId = Boolean(process.env.FATSECRET_CLIENT_ID?.trim());
-    const clientSecret = Boolean(process.env.FATSECRET_CLIENT_SECRET?.trim());
+    const config = getFatSecretConfiguration();
     return {
-      configured: clientId && clientSecret,
-      reason: clientId && clientSecret ? undefined : 'fatsecret_not_configured',
+      configured: config.configured,
+      reason: config.configured ? undefined : `fatsecret_${config.reason ?? 'not_configured'}`,
     };
   },
   async lookup({ mealType, normalizedQuery, trace }) {
-    const clientId = process.env.FATSECRET_CLIENT_ID?.trim();
-    const clientSecret = process.env.FATSECRET_CLIENT_SECRET?.trim();
-    if (!clientId || !clientSecret) return null;
-
-    const scope = process.env.FATSECRET_SCOPE?.trim() || 'premier';
-    const accessToken = await getAccessToken(clientId, clientSecret, scope);
-    if (!accessToken) return null;
-
-    const params = new URLSearchParams({
-      search_expression: normalizedQuery.searchText,
-      max_results: '20',
-      flag_default_serving: 'true',
-      format: 'json',
-    });
-    if (normalizedQuery.brandHint) params.set('food_type', 'brand');
-    else params.set('food_type', 'generic');
-    if (process.env.FATSECRET_REGION?.trim()) params.set('region', process.env.FATSECRET_REGION.trim());
-
-    const payload = await fetchJson<FatSecretSearchResponse>(`https://platform.fatsecret.com/rest/foods/search/v5?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const foods = asArray(payload?.foods_search?.results?.food);
-    const bestFood = foods
-      .map((food) => ({ food, score: candidateIdentityScore(food, normalizedQuery.searchText, normalizedQuery.brandHint) }))
-      .filter((candidate): candidate is { food: FatSecretFood; score: number } => candidate.score !== null)
-      .sort((left, right) => right.score - left.score)[0]?.food;
-    if (!bestFood) return null;
-
-    const selectedServing = chooseServing(bestFood, normalizedQuery.searchText, normalizedQuery.quantityUnit ?? normalizedQuery.unitHint);
-    if (!selectedServing) return null;
-
-    const scale = computeServingScaleFactor({
-      requestedQuantity: normalizedQuery.quantity,
-      requestedUnit: normalizedQuery.quantityUnit,
-      providerServingQuantity: selectedServing.providerServingQuantity,
-      providerServingUnit: selectedServing.providerServingUnit,
-    });
-    if (!scale) return null;
-    if (trace) recordServingScaling(trace, scale);
-
-    const baseItem = {
-      food_name: [bestFood.brand_name, bestFood.food_name].filter(Boolean).join(' ').trim(),
-      quantity: selectedServing.providerServingQuantity,
-      unit: selectedServing.providerServingUnit,
-      calories: selectedServing.calories,
-      protein: selectedServing.protein,
-      carbs: selectedServing.carbs,
-      fat: selectedServing.fat,
-      fiber: selectedServing.fiber,
-      sugar: selectedServing.sugar,
-      sodium: selectedServing.sodium,
-      notes: `Matched using FatSecret Platform. Query: ${normalizedQuery.matchedQuery}. Serving: ${selectedServing.source.serving_description ?? selectedServing.providerServingUnit}.`,
-      is_trusted: true,
-      source_type: 'GENERIC_REFERENCE' as const,
-      source_name: 'FatSecret Platform',
-      confidence_label: 'Matched' as const,
-      match_type: 'verified_database' as const,
-      matched_query: normalizedQuery.matchedQuery,
-      original_user_text: normalizedQuery.rawText,
-      provider_used: 'fatsecret',
-      used_ai_fallback: false,
-      catalog_food_id: null,
-      providerCandidateId: `fatsecret:${bestFood.food_id ?? 'unknown'}:${selectedServing.source.serving_id ?? 'default'}`,
+    const foods = await searchFoods(normalizedQuery);
+    const rankedFoods = foods
+      .map((food) => ({ food, score: identityScore(food, normalizedQuery) }))
+      .filter((entry): entry is { food: FatSecretFood; score: number } => entry.score !== null)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 3);
+    let candidate: NormalizedProviderFood | null = null;
+    for (const entry of rankedFoods) {
+      const food = entry.food.servings ? entry.food : await getFood(entry.food.food_id);
+      candidate = food ? foodToCandidate(food, normalizedQuery) : null;
+      if (candidate) break;
+    }
+    return candidate ? buildProviderMealResponse({ candidate, normalizedQuery, mealType, trace }) : null;
+  },
+  async lookupBarcode({ barcode, mealType }) {
+    const result = await getBarcodeFood(barcode);
+    if (!result) return null;
+    const query: NormalizedFoodQuery = {
+      rawText: barcode,
+      normalizedText: result.food.food_name,
+      searchText: result.food.food_name,
+      matchedQuery: result.food.food_name,
+      quantity: 1,
+      quantityUnit: null,
+      unitHint: null,
+      brandHint: result.food.brand_name ?? null,
     };
-    const item = scale.scaleFactor !== 1 || Boolean(normalizedQuery.quantityUnit)
-      ? scaleParsedFoodItem(baseItem, scale.scaleFactor, normalizedQuery.quantityUnit ?? selectedServing.providerServingUnit)
-      : baseItem;
-
-    return normalizeParsedMealResponse({
-      needs_clarification: false,
-      clarifying_question: null,
-      meal_type: mealType,
-      confidence_score: 0.82,
-      items: [item],
-    });
+    const candidate = foodToCandidate(result.food, query, result.gtin13);
+    return candidate ? buildBarcodeMealResponse({ candidate, mealType }) : null;
+  },
+  async getFoodDetails({ providerFoodId, mealType }) {
+    const food = await getFood(providerFoodId);
+    if (!food) return null;
+    const query: NormalizedFoodQuery = {
+      rawText: food.food_name,
+      normalizedText: food.food_name,
+      searchText: food.food_name,
+      matchedQuery: food.food_name,
+      quantity: 1,
+      quantityUnit: null,
+      unitHint: null,
+      brandHint: food.brand_name ?? null,
+    };
+    const candidate = foodToCandidate(food, query);
+    return candidate ? buildProviderMealResponse({ candidate, normalizedQuery: query, mealType }) : null;
   },
 };

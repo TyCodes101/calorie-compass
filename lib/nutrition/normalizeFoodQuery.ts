@@ -43,6 +43,8 @@ const brandHints = [
   { pattern: /\blesser\s*evil\b/, brand: 'LesserEvil' },
   { pattern: /\bdavid\b/, brand: 'David' },
   { pattern: /\bdoritos\b/, brand: 'Doritos' },
+  { pattern: /\bcheetos\b|\bcheeots\b/, brand: 'Cheetos' },
+  { pattern: /\bcoca cola\b|\bdiet coke\b|\bcoke zero\b|\bcoke\b/, brand: 'Coca-Cola' },
   { pattern: /\bgoldfish\b|\bgold fish\b/, brand: 'Goldfish' },
   { pattern: /\bcheez it\b|\bcheezit\b/, brand: 'Cheez-It' },
   { pattern: /\bskittles?\b/, brand: 'Skittles' },
@@ -130,6 +132,22 @@ function extractConversationParts(text: string) {
 }
 
 function extractQuantity(text: string) {
+  const articleMeasurementMatch = text.match(/^(?:a|an|one)\s+(\d+(?:\.\d+)?)\s*(g|grams?|oz|ounces?|ml|milliliters?|cups?|tbsp|tablespoons?|tsp|teaspoons?)\s+(.+)$/);
+  if (articleMeasurementMatch) {
+    return {
+      quantity: Number(articleMeasurementMatch[1]),
+      remainder: articleMeasurementMatch[3].trim(),
+    };
+  }
+
+  const measurementMatch = text.match(/^(\d+(?:\.\d+)?)\s*(g|grams?|oz|ounces?|ml|milliliters?|cups?|tbsp|tablespoons?|tsp|teaspoons?)\s+(.+)$/);
+  if (measurementMatch) {
+    return {
+      quantity: Number(measurementMatch[1]),
+      remainder: measurementMatch[3].trim(),
+    };
+  }
+
   const numericMatch = text.match(/^(\d+(?:\.\d+)?)\s+(.+)$/);
   if (numericMatch) {
     return {
@@ -166,13 +184,16 @@ function normalizeQuantityUnit(unit: string | undefined) {
   if (normalized === 'cup' || normalized === 'cups') return 'cup';
   if (normalized === 'tbsp' || normalized === 'tablespoon' || normalized === 'tablespoons') return 'tbsp';
   if (normalized === 'tsp' || normalized === 'teaspoon' || normalized === 'teaspoons') return 'tsp';
+  if (normalized === 'milliliter' || normalized === 'milliliters' || normalized === 'ml') return 'ml';
+  if (normalized === 'small' || normalized === 'medium' || normalized === 'large') return normalized;
 
   return normalized;
 }
 
 function extractQuantityUnit(text: string) {
-  const match = text.match(/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|slices?|pieces?|cakes?|bars?|bottles?|eggs?|cups?|tbsp|tablespoons?|tsp|teaspoons?)\b/);
-  return normalizeQuantityUnit(match?.[1]);
+  const match = text.match(/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|ml|milliliters?|slices?|pieces?|cakes?|bars?|bottles?|eggs?|cups?|tbsp|tablespoons?|tsp|teaspoons?|small|medium|large)\b/);
+  if (match) return normalizeQuantityUnit(match[1]);
+  return normalizeQuantityUnit(text.match(/\b(small|medium|large)\b/)?.[1]);
 }
 
 function singularize(text: string) {
@@ -198,7 +219,7 @@ function buildBrandedPackagedSearch(text: string) {
   const hasQuest = /\bquest\b/.test(text);
   const hasProteinChips = /\bprotein\b/.test(text) && /\bchips?\b/.test(text);
 
-  if (hasQuest && hasProteinChips) {
+  if (hasQuest && (hasProteinChips || /\bchips?\b/.test(text))) {
     const flavor = /\b(?:bbq|barbecue)\b/.test(text)
       ? 'bbq'
       : /\bnacho\b/.test(text)
@@ -289,6 +310,14 @@ function canonicalize(text: string) {
     };
   }
 
+  if (/\bfootlong\b/.test(text)) {
+    return {
+      searchText: text,
+      matchedQuery: titleCase(text),
+      unitHint: 'footlong',
+    };
+  }
+
   const compoundFood = detectCompoundFood(text);
   if (compoundFood) {
     return compoundFood;
@@ -306,6 +335,7 @@ function buildNormalizedSearchText(base: string, details: string[]) {
   const combined = [base, detailText]
     .filter(Boolean)
     .join(' ')
+    .replace(/\b(?:no|without|extra|light)\s+(?:cheese|mayo|mayonnaise|bun|rice|sauce|dressing|pickles?|onions?|mushrooms?|sugar)\b/g, ' ')
     .replace(/\b(\d+(?:\.\d+)?)\s*(?:g|gram|grams)\s+(?=[a-z])/g, '$1 ')
     .replace(/\b(\d+(?:\.\d+)?)\s*(?:piece|pieces)\s+(?=[a-z])/g, '$1 ')
     .replace(/\b\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\b/g, ' ')

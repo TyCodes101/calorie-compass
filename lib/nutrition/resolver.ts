@@ -6,6 +6,8 @@ import { lookupNutrition } from '@/lib/nutrition/nutritionLookup';
 import type { NutritionLabelInput } from '@/lib/nutrition/types';
 import type { FoodPipelineTrace } from '@/lib/ai/foodPipelineTrace';
 import { prisma } from '@/lib/prisma';
+import { lookupBarcodeWithProviders } from '@/lib/barcode-lookup';
+import { defaultBarcodeProviders } from '@/lib/nutrition/providerRegistry';
 
 export type { NutritionLabelInput } from '@/lib/nutrition/types';
 
@@ -268,6 +270,15 @@ export async function resolveNutritionEstimate({ text, mealType, nutritionLabel 
 
   const detectedBarcode = barcode || extractBarcode(text);
   if (detectedBarcode) {
+    const providerResult = await lookupBarcodeWithProviders(detectedBarcode, defaultBarcodeProviders, mealType);
+    if (providerResult.found && providerResult.result) {
+      return buildMealResponse(
+        mealType,
+        providerResult.result.items,
+        providerResult.result.confidenceScore,
+      );
+    }
+
     const barcodeResult = await resolveFromOpenFoodFacts(detectedBarcode, mealType);
     if (barcodeResult) {
       return barcodeResult;

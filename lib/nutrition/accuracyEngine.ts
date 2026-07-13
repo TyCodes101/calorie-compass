@@ -351,16 +351,16 @@ export function buildAccuracyClarificationQuestion(intent: NutritionIntent, fall
     return 'Which chips did you mean, and about how much did you have?';
   }
 
+  if (intent.wantsDietSoda) {
+    return `I could not validate a ${titleCase(intent.searchText)} match. Which exact product and serving should I use?`;
+  }
+
   if (intent.restaurantIntent) {
     return `I could not validate a ${intent.restaurantIntent} nutrition match. Which exact item and serving should I use?`;
   }
 
   if (intent.brandIntent) {
     return `I could not validate a ${intent.brandIntent} match. Which exact item and serving should I use?`;
-  }
-
-  if (intent.wantsDietSoda) {
-    return `I could not validate a ${titleCase(intent.searchText)} match. Which exact product and serving should I use?`;
   }
 
   return fallback;

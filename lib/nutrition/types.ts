@@ -43,10 +43,32 @@ export type NutritionLookupContext = {
   trace?: FoodPipelineTrace;
 };
 
+export type NutritionBarcodeLookupContext = {
+  barcode: string;
+  mealType: MealTypeValue;
+  trace?: FoodPipelineTrace;
+};
+
+export type NutritionDetailsLookupContext = {
+  providerFoodId: string;
+  mealType: MealTypeValue;
+  trace?: FoodPipelineTrace;
+};
+
+export type NutritionProviderCapabilities = {
+  search: boolean;
+  barcode: boolean;
+  details: boolean;
+  suggest: boolean;
+};
+
 export type NutritionLookupProvider = {
   id: string;
+  capabilities?: NutritionProviderCapabilities;
   getStatus?: () => { configured: boolean; reason?: string };
   lookup: (context: NutritionLookupContext) => Promise<ParsedMealResponse | null> | ParsedMealResponse | null;
+  lookupBarcode?: (context: NutritionBarcodeLookupContext) => Promise<ParsedMealResponse | null> | ParsedMealResponse | null;
+  getFoodDetails?: (context: NutritionDetailsLookupContext) => Promise<ParsedMealResponse | null> | ParsedMealResponse | null;
 };
 
 export type NutritionLookupTraceOptions = {
