@@ -142,6 +142,14 @@ export function scaleNutritionItemOnce(item: ParsedFoodItem, request: ServingSca
   const displayQuantity = result.requestedUnit
     ? result.requestedQuantity
     : Math.round(item.quantity * factor * 100) / 100;
+  const providerUnit = result.providerServingUnit ?? item.unit;
+  const providerWeightGrams = Number(request.providerServingWeightGrams);
+  const basisType = providerUnit === 'g' && result.providerServingQuantity === 100
+    ? 'per_100g'
+    : isCountableServingUnit(providerUnit)
+      ? 'per_unit'
+      : 'per_serving';
+
   return {
     ...item,
     quantity: displayQuantity,
@@ -155,5 +163,21 @@ export function scaleNutritionItemOnce(item: ParsedFoodItem, request: ServingSca
     sodium: Math.round(item.sodium * factor * 100) / 100,
     userQuantity: result.requestedQuantity,
     userUnit: result.requestedUnit ?? item.unit,
+    nutrition_basis: {
+      type: basisType,
+      provider_quantity: result.providerServingQuantity,
+      provider_unit: providerUnit,
+      provider_weight_grams: Number.isFinite(providerWeightGrams) && providerWeightGrams > 0 ? providerWeightGrams : null,
+      scale_factor: factor,
+      base_nutrition: {
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+        fiber: item.fiber,
+        sugar: item.sugar,
+        sodium: item.sodium,
+      },
+    },
   } satisfies ParsedFoodItem;
 }

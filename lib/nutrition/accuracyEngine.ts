@@ -13,7 +13,7 @@ export type NutritionIntent = {
   wantsDietSoda: boolean;
   wantsProteinProduct: boolean;
   wantsCandy: boolean;
-  expectedCategory: 'protein_bar' | 'protein_drink' | 'kombucha' | 'popcorn' | 'restaurant_burger' | 'generic' | null;
+  expectedCategory: 'protein_bar' | 'protein_drink' | 'kombucha' | 'popcorn' | 'restaurant_burger' | 'generic_cooked_starch' | 'generic' | null;
 };
 
 type CandidateResult = {
@@ -164,6 +164,10 @@ export function buildNutritionIntent(input: NutritionLookupInput, normalizedQuer
           ? 'popcorn'
           : /\b(?:burger|cheeseburger|butterburger|baconator|mcdouble|whopper)\b/.test(normalized)
             ? 'restaurant_burger'
+            : /\b(?:cooked|prepared|boiled|steamed)\b/.test(normalized)
+              && /\b(?:rice|pasta|potatoes?|oatmeal|oats?)\b/.test(normalized)
+              && !/\b(?:fried|butter|oil|cream|cheese|sauce)\b/.test(normalized)
+              ? 'generic_cooked_starch'
             : null;
 
   return {
@@ -275,6 +279,12 @@ function categoryPlausibilityIssues(item: ParsedFoodItem, intent: NutritionInten
   }
   if (intent.expectedCategory === 'restaurant_burger' && unit === 'burger' && quantity <= 2 && calories > 1800) {
     issues.push('category_calorie_outlier');
+  }
+  if (intent.expectedCategory === 'generic_cooked_starch' && ['g', 'gram', 'grams'].includes(unit)) {
+    const caloriesPerGram = quantity > 0 ? calories / quantity : Number.POSITIVE_INFINITY;
+    if (caloriesPerGram > 2.5) issues.push('category_calorie_outlier');
+    if (Number(item.fat || 0) > quantity * 0.08) issues.push('category_nutrient_outlier');
+    if (Number(item.protein || 0) > quantity * 0.12) issues.push('category_nutrient_outlier');
   }
   if (countableUnits.has(unit) && quantity > 20) {
     issues.push('quantity_scale_suspicious');

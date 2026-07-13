@@ -558,6 +558,11 @@ function itemSignature(items: ParsedFoodItem[]) {
       Number(item.protein || 0).toFixed(1),
       Number(item.carbs || 0).toFixed(1),
       Number(item.fat || 0).toFixed(1),
+      item.source_type ?? '',
+      item.providerCandidateId ?? '',
+      [...(item.requested_modifiers ?? [])].map((modifier) => modifier.trim().toLowerCase()).sort().join(','),
+      item.modifier_resolution ?? '',
+      item.review_status ?? '',
     ].join(':'))
     .join('|');
 }

@@ -922,7 +922,7 @@ describe('meal assistant conversational coverage', () => {
       classify,
     });
 
-    expect(classify).toHaveBeenCalledTimes(1);
+    expect(classify).not.toHaveBeenCalled();
     expect(response.meal.items[0]?.food_name).toMatch(/cottage cheese/i);
     expect(response.meal.items[0]?.quantity).toBe(1);
     expect(response.assistant_reply).not.toMatch(/out now|need a little more detail|i can log/i);

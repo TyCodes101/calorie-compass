@@ -37,6 +37,34 @@ struct NutritionTotals: Codable, Equatable {
     static let zero = NutritionTotals(calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0)
 }
 
+struct FoodNutritionBasis: Codable, Equatable {
+    struct Values: Codable, Equatable {
+        var calories: Double
+        var protein: Double
+        var carbs: Double
+        var fat: Double
+        var fiber: Double
+        var sugar: Double
+        var sodium: Double
+    }
+
+    var type: String
+    var providerQuantity: Double
+    var providerUnit: String
+    var providerWeightGrams: Double?
+    var scaleFactor: Double
+    var baseNutrition: Values
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case providerQuantity = "provider_quantity"
+        case providerUnit = "provider_unit"
+        case providerWeightGrams = "provider_weight_grams"
+        case scaleFactor = "scale_factor"
+        case baseNutrition = "base_nutrition"
+    }
+}
+
 struct FoodItem: Codable, Identifiable, Equatable {
     var id = UUID()
     var foodName: String
@@ -64,6 +92,13 @@ struct FoodItem: Codable, Identifiable, Equatable {
     var userTextSpan: String?
     var normalizedGrams: Double?
     var normalizedOunces: Double?
+    var sourceId: String?
+    var providerCandidateId: String?
+    var confidence: Double?
+    var requestedModifiers: [String]?
+    var modifierResolution: String?
+    var reviewStatus: String?
+    var nutritionBasis: FoodNutritionBasis?
 
     enum CodingKeys: String, CodingKey {
         case foodName = "food_name"
@@ -91,6 +126,13 @@ struct FoodItem: Codable, Identifiable, Equatable {
         case userTextSpan
         case normalizedGrams
         case normalizedOunces
+        case sourceId
+        case providerCandidateId
+        case confidence
+        case requestedModifiers = "requested_modifiers"
+        case modifierResolution = "modifier_resolution"
+        case reviewStatus = "review_status"
+        case nutritionBasis = "nutrition_basis"
     }
 }
 

@@ -11,6 +11,44 @@ function normalizeItem(item: Record<string, unknown>) {
     : item.confidenceLabel
       ? String(item.confidenceLabel)
       : null;
+  const requestedModifiers = Array.isArray(item.requested_modifiers)
+    ? item.requested_modifiers.map((modifier) => String(modifier).trim()).filter(Boolean)
+    : Array.isArray(item.requestedModifiers)
+      ? item.requestedModifiers.map((modifier) => String(modifier).trim()).filter(Boolean)
+      : undefined;
+  const modifierResolution = item.modifier_resolution
+    ? String(item.modifier_resolution)
+    : item.modifierResolution
+      ? String(item.modifierResolution)
+      : null;
+  const reviewStatus = item.review_status
+    ? String(item.review_status)
+    : item.reviewStatus
+      ? String(item.reviewStatus)
+      : null;
+  const rawNutritionBasis = (item.nutrition_basis ?? item.nutritionBasis) as Record<string, unknown> | null | undefined;
+  const rawBaseNutrition = rawNutritionBasis?.base_nutrition as Record<string, unknown> | null | undefined;
+  const nutritionBasis = rawNutritionBasis && rawBaseNutrition
+    ? {
+        type: String(rawNutritionBasis.type),
+        provider_quantity: sanitizeNumber(rawNutritionBasis.provider_quantity ?? rawNutritionBasis.providerQuantity),
+        provider_unit: String(rawNutritionBasis.provider_unit ?? rawNutritionBasis.providerUnit ?? '').trim(),
+        provider_weight_grams:
+          rawNutritionBasis.provider_weight_grams == null && rawNutritionBasis.providerWeightGrams == null
+            ? null
+            : sanitizeNumber(rawNutritionBasis.provider_weight_grams ?? rawNutritionBasis.providerWeightGrams),
+        scale_factor: sanitizeNumber(rawNutritionBasis.scale_factor ?? rawNutritionBasis.scaleFactor),
+        base_nutrition: {
+          calories: sanitizeNumber(rawBaseNutrition.calories),
+          protein: sanitizeNumber(rawBaseNutrition.protein),
+          carbs: sanitizeNumber(rawBaseNutrition.carbs),
+          fat: sanitizeNumber(rawBaseNutrition.fat),
+          fiber: sanitizeNumber(rawBaseNutrition.fiber),
+          sugar: sanitizeNumber(rawBaseNutrition.sugar),
+          sodium: sanitizeNumber(rawBaseNutrition.sodium),
+        },
+      }
+    : null;
 
   return {
     food_name: String(item.food_name ?? item.foodName ?? 'Unknown item').trim() || 'Unknown item',
@@ -78,6 +116,10 @@ function normalizeItem(item: Record<string, unknown>) {
       typeof item.confidence === 'number'
         ? Math.max(0, Math.min(1, sanitizeNumber(item.confidence)))
         : null,
+    requested_modifiers: requestedModifiers,
+    modifier_resolution: modifierResolution,
+    review_status: reviewStatus,
+    nutrition_basis: nutritionBasis,
   };
 }
 

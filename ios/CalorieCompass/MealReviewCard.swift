@@ -23,6 +23,23 @@ struct MealItem: Identifiable, Codable, Equatable {
     var sourceType: String?
     var isTrusted: Bool?
     var catalogFoodID: String?
+    var matchType: String?
+    var matchedQuery: String?
+    var originalUserText: String?
+    var providerUsed: String?
+    var usedAiFallback: Bool?
+    var userQuantity: Double?
+    var userUnit: String?
+    var userTextSpan: String?
+    var normalizedGrams: Double?
+    var normalizedOunces: Double?
+    var sourceID: String?
+    var providerCandidateID: String?
+    var confidenceScore: Double?
+    var requestedModifiers: [String] = []
+    var modifierResolution: String?
+    var reviewStatus: String?
+    var nutritionBasis: MealNutritionBasis?
 
     init(from item: MealRequestItem) {
         name = item.food_name
@@ -41,14 +58,59 @@ struct MealItem: Identifiable, Codable, Equatable {
         sourceType = item.source_type
         isTrusted = item.is_trusted
         catalogFoodID = item.catalog_food_id
+        matchType = item.match_type
+        matchedQuery = item.matched_query
+        originalUserText = item.original_user_text
+        providerUsed = item.provider_used
+        usedAiFallback = item.used_ai_fallback
+        userQuantity = item.userQuantity
+        userUnit = item.userUnit
+        userTextSpan = item.userTextSpan
+        normalizedGrams = item.normalizedGrams
+        normalizedOunces = item.normalizedOunces
+        sourceID = item.sourceId
+        providerCandidateID = item.providerCandidateId
+        confidenceScore = item.confidence
+        requestedModifiers = item.requested_modifiers ?? []
+        modifierResolution = item.modifier_resolution
+        reviewStatus = item.review_status
+        nutritionBasis = item.nutrition_basis
     }
 
     mutating func applyServing(quantity nextQuantity: Double, unit nextUnit: String? = nil) {
         let safeQuantity = max(0.01, nextQuantity)
         let currentQuantity = max(0.01, quantity)
+        let currentUnit = ServingUnitFormatter.clean(unit)
+        let requestedUnit = ServingUnitFormatter.clean(nextUnit ?? unit)
+
+        if let basis = nutritionBasis,
+           let scaleFactor = Self.scaleFactor(
+               quantity: safeQuantity,
+               unit: requestedUnit,
+               currentQuantity: currentQuantity,
+               currentUnit: currentUnit,
+               basis: basis
+           ) {
+            quantity = rounded(safeQuantity)
+            unit = requestedUnit
+            calories = rounded(basis.base_nutrition.calories * scaleFactor)
+            protein = rounded(basis.base_nutrition.protein * scaleFactor)
+            carbs = rounded(basis.base_nutrition.carbs * scaleFactor)
+            fat = rounded(basis.base_nutrition.fat * scaleFactor)
+            fiber = rounded(basis.base_nutrition.fiber * scaleFactor)
+            sugar = rounded(basis.base_nutrition.sugar * scaleFactor)
+            sodium = rounded(basis.base_nutrition.sodium * scaleFactor)
+            nutritionBasis?.scale_factor = scaleFactor
+            userQuantity = safeQuantity
+            userUnit = requestedUnit
+            return
+        }
+
+        // Never relabel a serving when the conversion cannot be proven.
+        guard requestedUnit == currentUnit else { return }
         let factor = safeQuantity / currentQuantity
         quantity = rounded(safeQuantity)
-        unit = ServingUnitFormatter.clean(nextUnit ?? unit)
+        unit = requestedUnit
         calories = rounded(calories * factor)
         protein = rounded(protein * factor)
         carbs = rounded(carbs * factor)
@@ -75,8 +137,63 @@ struct MealItem: Identifiable, Codable, Equatable {
             source_name: source,
             confidence_label: confidence,
             is_trusted: isTrusted,
-            catalog_food_id: catalogFoodID
+            catalog_food_id: catalogFoodID,
+            match_type: matchType,
+            matched_query: matchedQuery,
+            original_user_text: originalUserText,
+            provider_used: providerUsed,
+            used_ai_fallback: usedAiFallback,
+            userQuantity: userQuantity,
+            userUnit: userUnit,
+            userTextSpan: userTextSpan,
+            normalizedGrams: normalizedGrams,
+            normalizedOunces: normalizedOunces,
+            sourceId: sourceID,
+            providerCandidateId: providerCandidateID,
+            confidence: confidenceScore,
+            requested_modifiers: requestedModifiers,
+            modifier_resolution: modifierResolution,
+            review_status: reviewStatus,
+            nutrition_basis: nutritionBasis
         )
+    }
+
+    private static func scaleFactor(
+        quantity: Double,
+        unit: String,
+        currentQuantity: Double,
+        currentUnit: String,
+        basis: MealNutritionBasis
+    ) -> Double? {
+        let providerQuantity = basis.provider_quantity
+        guard providerQuantity > 0 else { return nil }
+        let providerUnit = ServingUnitFormatter.clean(basis.provider_unit)
+
+        if unit == currentUnit, basis.scale_factor > 0 {
+            return basis.scale_factor * quantity / currentQuantity
+        }
+        if unit == providerUnit {
+            return quantity / providerQuantity
+        }
+
+        let requestedGrams: Double?
+        switch unit {
+        case "g": requestedGrams = quantity
+        case "oz": requestedGrams = quantity * 28.3495
+        default: requestedGrams = nil
+        }
+        guard let requestedGrams else { return nil }
+
+        if providerUnit == "g" {
+            return requestedGrams / providerQuantity
+        }
+        if providerUnit == "oz" {
+            return requestedGrams / (providerQuantity * 28.3495)
+        }
+        if let providerWeight = basis.provider_weight_grams, providerWeight > 0 {
+            return requestedGrams / (providerQuantity * providerWeight)
+        }
+        return nil
     }
 
     private func rounded(_ value: Double) -> Double {
@@ -119,7 +236,14 @@ struct MealReviewCard: View {
     private var totalProtein: Double { items.reduce(0) { $0 + $1.protein } }
     private var totalCarbs: Double { items.reduce(0) { $0 + $1.carbs } }
     private var totalFat: Double { items.reduce(0) { $0 + $1.fat } }
-    private var trustedCount: Int { items.filter { ($0.isTrusted ?? false) || ($0.confidence ?? "").localizedCaseInsensitiveContains("high") }.count }
+    private var trustedCount: Int {
+        items.filter {
+            $0.reviewStatus != "required"
+                && $0.modifierResolution != "unresolved"
+                && $0.modifierResolution != "estimated"
+                && (($0.isTrusted ?? false) || ($0.confidence ?? "").localizedCaseInsensitiveContains("high"))
+        }.count
+    }
 
     var body: some View {
         if !showCard {
@@ -173,12 +297,26 @@ struct MealReviewCard: View {
                                         .font(.caption)
                                         .foregroundColor(MacroMeshTheme.muted)
                                     HStack(spacing: 6) {
-                                        ConfidenceBadge(label: items[idx].confidence, isTrusted: items[idx].isTrusted)
+                                        ConfidenceBadge(
+                                            label: items[idx].confidence,
+                                            isTrusted: items[idx].isTrusted,
+                                            reviewStatus: items[idx].reviewStatus
+                                        )
                                         Text("\(Int(items[idx].calories)) cal")
                                             .font(.caption.weight(.semibold))
                                             .foregroundColor(MacroMeshTheme.primaryDark)
                                     }
-                                    SourceBadge(sourceType: items[idx].sourceType, sourceName: items[idx].source)
+                                    SourceBadge(
+                                        sourceType: items[idx].sourceType,
+                                        sourceName: items[idx].source,
+                                        modifierResolution: items[idx].modifierResolution
+                                    )
+                                    if !items[idx].requestedModifiers.isEmpty {
+                                        Text("Requested: \(items[idx].requestedModifiers.joined(separator: ", "))")
+                                            .font(.caption2)
+                                            .foregroundColor(MacroMeshTheme.orange)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
                                     ServingAdjuster(item: $items[idx])
                                 }
                                 Spacer()
@@ -315,13 +453,23 @@ struct ServingAdjuster: View {
     }
 
     private var quantityLabel: String {
-        item.quantity == floor(item.quantity) ? String(Int(item.quantity)) : String(format: "%.2g", item.quantity)
+        guard item.quantity != floor(item.quantity) else { return String(Int(item.quantity)) }
+        return String(format: "%.2f", item.quantity)
+            .replacingOccurrences(of: "0+$", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\.$", with: "", options: .regularExpression)
     }
 }
 
 struct SourceBadge: View {
     let sourceType: String?
     let sourceName: String?
+    let modifierResolution: String?
+
+    init(sourceType: String?, sourceName: String?, modifierResolution: String? = nil) {
+        self.sourceType = sourceType
+        self.sourceName = sourceName
+        self.modifierResolution = modifierResolution
+    }
 
     var body: some View {
         if let label = displayLabel {
@@ -342,15 +490,22 @@ struct SourceBadge: View {
     }
 
     private var displayLabel: String? {
-        Self.label(sourceType: sourceType, sourceName: sourceName)
+        Self.label(sourceType: sourceType, sourceName: sourceName, modifierResolution: modifierResolution)
     }
 
-    static func label(sourceType: String?, sourceName: String?) -> String? {
+    static func label(sourceType: String?, sourceName: String?, modifierResolution: String? = nil) -> String? {
         let normalizedType = sourceType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
         if normalizedType.contains("USDA") { return "USDA match" }
-        if normalizedType.contains("OFFICIAL_RESTAURANT") { return "Restaurant verified" }
+        if normalizedType.contains("OFFICIAL_RESTAURANT") {
+            if modifierResolution == "unresolved" || modifierResolution == "estimated" { return "Official base nutrition" }
+            if modifierResolution == "deterministic_database" { return "Official adjusted nutrition" }
+            return "Restaurant verified"
+        }
         if normalizedType.contains("BRAND") { return "Brand verified" }
-        if normalizedType.contains("GENERIC_REFERENCE") { return "Generic reference" }
+        if normalizedType.contains("GENERIC_REFERENCE") {
+            if modifierResolution == "unresolved" || modifierResolution == "estimated" { return "Structured base nutrition" }
+            return "Generic reference"
+        }
         if normalizedType.contains("AI") { return "AI estimate" }
 
         if let name = sourceName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
@@ -386,6 +541,13 @@ struct FoodAvatar: View {
 struct ConfidenceBadge: View {
     let label: String?
     let isTrusted: Bool?
+    let reviewStatus: String?
+
+    init(label: String?, isTrusted: Bool?, reviewStatus: String? = nil) {
+        self.label = label
+        self.isTrusted = isTrusted
+        self.reviewStatus = reviewStatus
+    }
 
     var body: some View {
         Text(display)
@@ -398,10 +560,11 @@ struct ConfidenceBadge: View {
     }
 
     private var display: String {
-        Self.label(label: label, isTrusted: isTrusted)
+        Self.label(label: label, isTrusted: isTrusted, reviewStatus: reviewStatus)
     }
 
-    static func label(label: String?, isTrusted: Bool?) -> String {
+    static func label(label: String?, isTrusted: Bool?, reviewStatus: String? = nil) -> String {
+        if reviewStatus == "required" { return "Review" }
         if let label, !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if label == "Needs Review" || label == "Estimated" { return "Review" }
             return label

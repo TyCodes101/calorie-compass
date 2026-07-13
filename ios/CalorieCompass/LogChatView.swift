@@ -216,6 +216,7 @@ struct LogChatView: View {
     @State private var messages: [MealAssistantTranscriptMessage] = []
     @State private var inputText = ""
     @State private var isLoading = false
+    @State private var activeMealAssistantRequestID: UUID?
     @State private var error: String?
     @State private var retryMessage: String?
     @State private var assistantState = MealAssistantState()
@@ -633,20 +634,39 @@ struct LogChatView: View {
             context: nil,
             conversationHistory: conversationHistory
         )
-        BackendService.sendMealAssistant(request: req) { result in
+        let requestID = UUID()
+        activeMealAssistantRequestID = requestID
+        BackendService.sendMealAssistant(request: req, requestID: requestID) { result in
             DispatchQueue.main.async {
+                guard MealAssistantClientLogic.shouldApplyResponse(
+                    requestID: requestID,
+                    activeRequestID: activeMealAssistantRequestID
+                ) else {
+                    return
+                }
+                activeMealAssistantRequestID = nil
                 isLoading = false
                 switch result {
                 case .success(let resp):
                     let activeItemsBeforeResponse = reviewItems.map { $0.asMealRequestItem() }
-                    if let warning = MealAssistantClientLogic.foodMatchWarning(for: userMessage, items: resp.meal.items) {
+                    let authoritativeItems = MealAssistantClientLogic.authoritativeItems(
+                        responseItems: resp.meal.items,
+                        state: resp.next_state
+                    )
+                    if let warning = MealAssistantClientLogic.foodMatchWarning(for: userMessage, items: authoritativeItems) {
                         error = warning
                         retryMessage = userMessage
                         messages.append(MealAssistantTranscriptMessage(role: "assistant", text: warning))
                         return
                     }
-                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: resp.assistant_reply))
-                    if MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: activeItemsBeforeResponse, responseItems: resp.meal.items, responseSaved: resp.next_state.saved, incomingUserMessage: userMessage) {
+                    let assistantReply = MealAssistantClientLogic.reconciledAssistantReply(
+                        resp.assistant_reply,
+                        responseItems: resp.meal.items,
+                        authoritativeItems: authoritativeItems,
+                        saved: resp.next_state.saved
+                    )
+                    messages.append(MealAssistantTranscriptMessage(role: "assistant", text: assistantReply))
+                    if MealAssistantClientLogic.shouldPreserveActiveMeal(currentItems: activeItemsBeforeResponse, responseItems: authoritativeItems, responseSaved: resp.next_state.saved, incomingUserMessage: userMessage) {
                         assistantState = resp.next_state
                         assistantState.currentMealItems = activeItemsBeforeResponse
                         selectedMealType = assistantState.mealType
@@ -654,8 +674,9 @@ struct LogChatView: View {
                         return
                     }
                     assistantState = resp.next_state
+                    assistantState.currentMealItems = authoritativeItems
                     selectedMealType = assistantState.mealType
-                    reviewItems = resp.meal.items.map(MealItem.init(from:))
+                    reviewItems = authoritativeItems.map(MealItem.init(from:))
                     if !reviewItems.isEmpty {
                         syncActiveMealItems(reviewItems)
                     }
@@ -807,6 +828,7 @@ struct LogChatView: View {
     }
 
     private func resetAssistantDraft() {
+        activeMealAssistantRequestID = nil
         assistantState = MealAssistantState()
         reviewItems.removeAll()
         retryMessage = nil

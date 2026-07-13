@@ -337,6 +337,18 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertNotEqual(ConfidenceBadge.label(label: "Estimated", isTrusted: false), SourceBadge.label(sourceType: "AI_ESTIMATE", sourceName: "AI estimate"))
     }
 
+    func testOfficialBaseNutritionWithUnresolvedModifierRequiresReview() {
+        XCTAssertEqual(ConfidenceBadge.label(label: "Verified", isTrusted: true, reviewStatus: "required"), "Review")
+        XCTAssertEqual(
+            SourceBadge.label(
+                sourceType: "OFFICIAL_RESTAURANT",
+                sourceName: "Official nutrition",
+                modifierResolution: "unresolved"
+            ),
+            "Official base nutrition"
+        )
+    }
+
     func testMealItemServingScalingPreservesSourceMetadata() {
         var item = MealItem(from: Self.trustedItem("Greek yogurt"))
 
@@ -348,6 +360,69 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(item.protein, 20)
         XCTAssertEqual(item.source, "Nutrition catalog")
         XCTAssertEqual(item.catalogFoodID, "brand-greek-yogurt")
+    }
+
+    func testStructuredServingEditUsesImmutableBaseNutritionAndPreservesIdentity() {
+        let basis = MealNutritionBasis(
+            type: "per_serving",
+            provider_quantity: 28,
+            provider_unit: "g",
+            provider_weight_grams: 28,
+            scale_factor: 1,
+            base_nutrition: MealNutritionValues(
+                calories: 170,
+                protein: 2,
+                carbs: 15,
+                fat: 11,
+                fiber: 1,
+                sugar: 0,
+                sodium: 250
+            )
+        )
+        let structured = MealRequestItem(
+            food_name: "Cheetos Crunchy Flamin' Hot",
+            quantity: 28,
+            unit: "g",
+            calories: 170,
+            protein: 2,
+            carbs: 15,
+            fat: 11,
+            fiber: 1,
+            sugar: 0,
+            sodium: 250,
+            notes: nil,
+            source_type: "GENERIC_REFERENCE",
+            source_name: "Frito-Lay nutrition reference",
+            confidence_label: "Matched",
+            is_trusted: true,
+            provider_used: "fatsecret",
+            used_ai_fallback: false,
+            providerCandidateId: "fatsecret:cheetos-flamin-hot",
+            nutrition_basis: basis
+        )
+        var item = MealItem(from: structured)
+
+        item.applyServing(quantity: 1, unit: "oz")
+        item.applyServing(quantity: 2, unit: "oz")
+        let roundTripped = item.asMealRequestItem()
+
+        XCTAssertEqual(item.quantity, 2)
+        XCTAssertEqual(item.unit, "oz")
+        XCTAssertEqual(item.calories, 344.24, accuracy: 0.02)
+        XCTAssertEqual(item.protein, 4.05, accuracy: 0.02)
+        XCTAssertEqual(roundTripped.providerCandidateId, "fatsecret:cheetos-flamin-hot")
+        XCTAssertEqual(roundTripped.provider_used, "fatsecret")
+        XCTAssertEqual(roundTripped.used_ai_fallback, false)
+        XCTAssertEqual(roundTripped.nutrition_basis?.base_nutrition.calories, 170)
+    }
+
+    func testUnknownServingConversionDoesNotRelabelNutrition() {
+        var item = MealItem(from: Self.trustedItem("Greek yogurt"))
+
+        item.applyServing(quantity: 1, unit: "bottle")
+
+        XCTAssertEqual(item.unit, "serving")
+        XCTAssertEqual(item.calories, 100)
     }
 
     func testServingUnitFormatterCleansMalformedUnits() {
@@ -740,6 +815,44 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(requestState.currentMealText, "one banana")
     }
 
+    func testServingTypoEditKeepsActiveStructuredDraft() {
+        let activeItems = [Self.trustedItem("Cheetos Crunchy Flamin' Hot")]
+
+        XCTAssertFalse(
+            MealAssistantClientLogic.shouldStartNewMealDraft(
+                message: "flamin hot cheeots 1 oz",
+                activeItems: activeItems
+            )
+        )
+    }
+
+    func testStaleMealAssistantResponseCannotOverwriteLatestRequest() {
+        let oldRequestID = UUID()
+        let latestRequestID = UUID()
+
+        XCTAssertFalse(MealAssistantClientLogic.shouldApplyResponse(requestID: oldRequestID, activeRequestID: latestRequestID))
+        XCTAssertTrue(MealAssistantClientLogic.shouldApplyResponse(requestID: latestRequestID, activeRequestID: latestRequestID))
+    }
+
+    func testPendingMealItemsAreAuthoritativeOverMismatchedResponseMeal() {
+        let stale = [Self.item("Cheetos")]
+        let current = [Self.item("McDouble")]
+        var state = MealAssistantState()
+        state.currentMealItems = current
+        state.pendingMeal = Self.pendingMeal(items: current, mealType: "lunch")
+
+        let authoritative = MealAssistantClientLogic.authoritativeItems(responseItems: stale, state: state)
+        let reply = MealAssistantClientLogic.reconciledAssistantReply(
+            "I found Cheetos and McDouble.",
+            responseItems: stale,
+            authoritativeItems: authoritative,
+            saved: false
+        )
+
+        XCTAssertEqual(authoritative.map(\.food_name), ["McDouble"])
+        XCTAssertEqual(reply, "I found McDouble. Review it below before saving.")
+    }
+
     func testEditRemoveSavePreservesAllSourceMetadata() throws {
         let trusted = MealRequestItem(
             food_name: "salmon",
@@ -757,7 +870,13 @@ final class MealAssistantParityTests: XCTestCase {
             source_name: "USDA FoodData Central",
             confidence_label: "High",
             is_trusted: true,
-            catalog_food_id: "fdc-salmon"
+            catalog_food_id: "fdc-salmon",
+            provider_used: "usda-fdc",
+            used_ai_fallback: false,
+            providerCandidateId: "usda:salmon",
+            requested_modifiers: ["skinless"],
+            modifier_resolution: "deterministic_database",
+            review_status: "none"
         )
 
         let roundTripped = MealItem(from: trusted).asMealRequestItem()
@@ -768,6 +887,11 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(roundTripped.source_name, "USDA FoodData Central")
         XCTAssertEqual(roundTripped.source_type, "USDA_FOUNDATION")
         XCTAssertEqual(roundTripped.confidence_label, "High")
+        XCTAssertEqual(roundTripped.provider_used, "usda-fdc")
+        XCTAssertEqual(roundTripped.providerCandidateId, "usda:salmon")
+        XCTAssertEqual(roundTripped.requested_modifiers, ["skinless"])
+        XCTAssertEqual(roundTripped.modifier_resolution, "deterministic_database")
+        XCTAssertEqual(roundTripped.review_status, "none")
     }
 
     func testMealAssistantPayloadPreservesWebFoodSourceFields() throws {

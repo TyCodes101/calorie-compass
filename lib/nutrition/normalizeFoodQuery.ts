@@ -54,7 +54,9 @@ const brandHints = [
 
 // Note: keep ingredient words (ex: butter, oil, cream, jelly, ranch) out of this list,
 // otherwise we can accidentally drop meaningful add-ons like "baked potato with butter".
-const fillerRegex = /\b(?:which|that|are|is|were|was|they|them|the|a|an|my|had|ate|drank|log|add|track|please|snack|breakfast|lunch|dinner|with|and|for|of|about|around|roughly|like|plain|cooked|or|did|have|i|it|no|not|actually|sorry|correction|meant|just|each|cal|cals|calorie|calories)\b/g;
+// Preparation words are identity constraints, not conversational filler. Losing
+// "cooked" here allowed raw rice to outrank cooked rice downstream.
+const fillerRegex = /\b(?:which|that|are|is|were|was|they|them|the|a|an|my|had|ate|drank|log|add|track|please|snack|breakfast|lunch|dinner|with|and|for|of|about|around|roughly|like|or|did|have|i|it|no|not|actually|sorry|correction|meant|just|each|cal|cals|calorie|calories)\b/g;
 
 const compoundFoodDefinitions = [
   { pattern: /\bcottage cheese\b/, baseSearch: 'cottage cheese', matched: 'Cottage Cheese', unitHint: null },
@@ -191,6 +193,9 @@ function normalizeQuantityUnit(unit: string | undefined) {
 }
 
 function extractQuantityUnit(text: string) {
+  if (/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s+(?:small|medium|large)\s+eggs?\b/.test(text)) {
+    return 'egg';
+  }
   const match = text.match(/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|ml|milliliters?|slices?|pieces?|cakes?|bars?|bottles?|eggs?|cups?|tbsp|tablespoons?|tsp|teaspoons?|small|medium|large)\b/);
   if (match) return normalizeQuantityUnit(match[1]);
   return normalizeQuantityUnit(text.match(/\b(small|medium|large)\b/)?.[1]);
@@ -206,6 +211,7 @@ function singularize(text: string) {
     .replace(/\brice cakes\b/g, 'rice cake')
     .replace(/\bprotein bars\b/g, 'protein bar')
     .replace(/\bhash browns\b/g, 'hash brown')
+    .replace(/\beggs\b/g, 'egg')
     .replace(/\bcrackers\b/g, 'cracker')
     .replace(/\bburgers\b/g, 'burger')
     .replace(/\bshakes\b/g, 'shake');
