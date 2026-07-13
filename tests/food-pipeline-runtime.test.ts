@@ -10,6 +10,7 @@ import { createFoodPipelineTrace, finishFoodPipelineTrace, recordOpenAIIntent, r
 import { parseMealText } from '@/lib/ai/openai';
 import { commercialDatabaseProvider } from '@/lib/nutrition/providers/commercialDatabase';
 import { fatSecretProvider } from '@/lib/nutrition/providers/fatsecret';
+import { calorieApiProvider } from '@/lib/nutrition/providers/calorieApi';
 import { usdaProvider } from '@/lib/nutrition/providers/usda';
 
 describe('food pipeline runtime policy', () => {
@@ -28,6 +29,7 @@ describe('food pipeline runtime policy', () => {
       NUTRITIONIX_API_KEY: undefined,
       FATSECRET_CLIENT_ID: ' ',
       FATSECRET_CLIENT_SECRET: undefined,
+      CALORIE_API_KEY: ' ',
     });
 
     expect(status.openaiApiKey).toEqual({ present: false, nonEmpty: false });
@@ -37,6 +39,7 @@ describe('food pipeline runtime policy', () => {
     expect(status.nutritionixApiKey).toEqual({ present: false, nonEmpty: false });
     expect(status.fatSecretClientId).toEqual({ present: false, nonEmpty: false });
     expect(status.fatSecretClientSecret).toEqual({ present: false, nonEmpty: false });
+    expect(status.calorieApiKey).toEqual({ present: false, nonEmpty: false, enabled: true, configured: false });
   });
 
   it('detects configured values without returning any credential value', () => {
@@ -50,6 +53,7 @@ describe('food pipeline runtime policy', () => {
       NUTRITIONIX_API_KEY: 'nutritionix-test',
       FATSECRET_CLIENT_ID: 'fatsecret-client-test',
       FATSECRET_CLIENT_SECRET: 'fatsecret-secret-test',
+      CALORIE_API_KEY: 'calorie-secret-test',
     });
 
     expect(status.openaiApiKey).toEqual({ present: true, nonEmpty: true });
@@ -58,8 +62,10 @@ describe('food pipeline runtime policy', () => {
     expect(JSON.stringify(status)).not.toContain(secret);
     expect(JSON.stringify(status)).not.toContain('usda-test');
     expect(JSON.stringify(status)).not.toContain('fatsecret-secret-test');
+    expect(JSON.stringify(status)).not.toContain('calorie-secret-test');
     expect(status.fatSecretClientId).toEqual({ present: true, nonEmpty: true });
     expect(status.fatSecretClientSecret).toEqual({ present: true, nonEmpty: true });
+    expect(status.calorieApiKey).toEqual({ present: true, nonEmpty: true, enabled: true, configured: true });
   });
 
   it('uses explicit mock policy only outside production', () => {
@@ -122,9 +128,14 @@ describe('nutrition provider availability', () => {
   it('keeps FatSecret optional when credentials are absent or partial', () => {
     vi.stubEnv('FATSECRET_CLIENT_ID', '');
     vi.stubEnv('FATSECRET_CLIENT_SECRET', '');
-    expect(fatSecretProvider.getStatus?.()).toMatchObject({ configured: false, reason: 'fatsecret_not_configured' });
+    expect(fatSecretProvider.getStatus?.()).toMatchObject({ configured: false, reason: 'fatsecret_missing_credentials' });
     vi.stubEnv('FATSECRET_CLIENT_ID', 'client');
-    expect(fatSecretProvider.getStatus?.()).toMatchObject({ configured: false, reason: 'fatsecret_not_configured' });
+    expect(fatSecretProvider.getStatus?.()).toMatchObject({ configured: false, reason: 'fatsecret_missing_credentials' });
+  });
+
+  it('keeps Calorie API optional when its server-only key is absent', () => {
+    vi.stubEnv('CALORIE_API_KEY', '');
+    expect(calorieApiProvider.getStatus?.()).toMatchObject({ configured: false, reason: 'calorie_api_missing_key' });
   });
 });
 
