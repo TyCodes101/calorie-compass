@@ -26,9 +26,19 @@ final class FoodIntelligenceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["KitKat Milk Chocolate"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["KitKat King Size"].exists)
         XCTAssertTrue(app.staticTexts["KitKat Mini"].exists)
-        XCTAssertTrue(app.staticTexts["KitKat White Creme"].exists)
+        let resultsList = app.scrollViews.firstMatch
+        let whiteCreme = app.staticTexts["KitKat White Creme"]
+        if !whiteCreme.waitForExistence(timeout: 1) {
+            resultsList.swipeUp()
+        }
+        XCTAssertTrue(whiteCreme.waitForExistence(timeout: 3))
 
-        app.staticTexts["KitKat Milk Chocolate"].tap()
+        let milkChocolate = app.staticTexts["KitKat Milk Chocolate"]
+        if !milkChocolate.isHittable {
+            resultsList.swipeDown()
+        }
+        XCTAssertTrue(milkChocolate.waitForExistence(timeout: 3))
+        milkChocolate.tap()
         XCTAssertTrue(app.staticTexts["Review meal"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["KitKat Milk Chocolate"].exists)
 
