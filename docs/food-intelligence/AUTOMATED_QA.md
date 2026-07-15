@@ -23,6 +23,7 @@ The shared `CalorieCompass` scheme contains unit tests and `CalorieCompassUITest
 - `Food Intelligence CI` runs secret scanning, lint, all Vitest tests, named food release gates, and a production build.
 - `iOS CI` starts the deterministic backend and runs unit plus UI tests on a simulator.
 - `Preview Food Smoke` checks five representative queries after a successful preview deployment.
+- Protected Vercel previews require a repository Actions secret named `VERCEL_AUTOMATION_BYPASS_SECRET`. It is sent only in Vercel's automation-bypass header and is never printed.
 - Codemagic repeats all critical web, nutrition, native, and UI gates before signing.
 
 Any failing critical gate blocks upload.

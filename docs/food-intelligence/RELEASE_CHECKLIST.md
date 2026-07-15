@@ -10,6 +10,7 @@
 - [ ] Production Next.js build passes.
 - [ ] iOS unit and UI tests pass on a simulator.
 - [ ] Preview smoke checks pass.
+- [ ] `VERCEL_AUTOMATION_BYPASS_SECRET` is configured in GitHub Actions when preview deployment protection is enabled.
 - [ ] Codemagic repeats all gates before archive.
 - [ ] TestFlight manually verifies camera barcode scan, VoiceOver, keyboard, haptics, and one real save.
 
