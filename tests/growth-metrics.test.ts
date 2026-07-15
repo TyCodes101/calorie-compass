@@ -60,6 +60,47 @@ describe('growth metrics helpers', () => {
     expect(analytics.thirtyDayAverageCalories).toBe(1775);
     expect(analytics.highestProteinDay?.protein).toBe(185);
     expect(analytics.macroConsistencySummary).toMatch(/protein|calorie|consistent/i);
+    expect(analytics.sevenDayLoggedDays).toBe(4);
+    expect(analytics.calorieGoalHitDays).toBe(3);
+    expect(analytics.proteinGoalHitDays).toBe(3);
+    expect(analytics.weeklySummary).toBe('You averaged 149g protein across 4 logged days.');
+  });
+
+  it('derives common foods, restaurants, meal type, and weekend patterns from confirmed meals', () => {
+    const analytics = buildNutritionAnalytics({
+      currentDate: '2026-07-15T00:00:00.000Z',
+      calorieGoal: 2200,
+      proteinGoal: 160,
+      meals: [
+        {
+          date: '2026-07-12T18:00:00.000Z',
+          mealType: 'DINNER',
+          totalCalories: 2400,
+          totalProtein: 170,
+          items: [{ foodName: 'Chicken bowl', nutritionSourceType: 'OFFICIAL_RESTAURANT', nutritionSourceName: 'Cava official nutrition' }],
+        },
+        {
+          date: '2026-07-11T18:00:00.000Z',
+          mealType: 'DINNER',
+          totalCalories: 2200,
+          totalProtein: 165,
+          items: [{ foodName: 'Chicken bowl', nutritionSourceType: 'OFFICIAL_RESTAURANT', nutritionSourceName: 'Cava official nutrition' }],
+        },
+        {
+          date: '2026-07-14T12:00:00.000Z',
+          mealType: 'LUNCH',
+          totalCalories: 1800,
+          totalProtein: 140,
+          items: [{ foodName: 'Turkey sandwich', nutritionSourceType: 'GENERIC_REFERENCE', nutritionSourceName: 'USDA FoodData Central' }],
+        },
+      ],
+    });
+
+    expect(analytics.mostLoggedFoods[0]).toEqual({ name: 'Chicken bowl', count: 2 });
+    expect(analytics.mostLoggedRestaurants[0]).toEqual({ name: 'Cava', count: 2 });
+    expect(analytics.mostCommonMealType).toEqual({ name: 'dinner', count: 2 });
+    expect(analytics.weekendAverageCalories).toBe(2300);
+    expect(analytics.weekdayAverageCalories).toBe(1800);
   });
 
   it('calculates explainable macro goals for a guided setup', () => {

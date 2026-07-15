@@ -337,6 +337,66 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertNotEqual(ConfidenceBadge.label(label: "Estimated", isTrusted: false), SourceBadge.label(sourceType: "AI_ESTIMATE", sourceName: "AI estimate"))
     }
 
+    func testTrustPresentationExplainsSourceWithoutProviderIdentifiersOrNumericConfidence() {
+        let restaurant = FoodTrustPresentation.build(
+            sourceType: "OFFICIAL_RESTAURANT",
+            sourceName: "Cava official nutrition",
+            providerUsed: "internal-provider-id",
+            isTrusted: true
+        )
+        let barcode = FoodTrustPresentation.build(
+            sourceType: "GENERIC_REFERENCE",
+            sourceName: "Product database",
+            providerUsed: "commercial-database",
+            matchType: "exact_barcode",
+            isTrusted: true
+        )
+        let estimated = FoodTrustPresentation.build(
+            sourceType: "AI_ESTIMATE",
+            sourceName: "AI estimate",
+            usedAiFallback: true,
+            isTrusted: false
+        )
+
+        XCTAssertEqual(restaurant.badge, "Restaurant Match")
+        XCTAssertTrue(restaurant.explanation.localizedCaseInsensitiveContains("official restaurant"))
+        XCTAssertEqual(barcode.badge, "Barcode Match")
+        XCTAssertEqual(estimated.badge, "Estimated")
+        XCTAssertFalse("\(restaurant.badge) \(restaurant.explanation)".contains("internal-provider-id"))
+        XCTAssertFalse(restaurant.explanation.contains("0."))
+    }
+
+    func testLearnedSuggestionUsesConfirmedCoOccurrenceAndNeverSuggestsEstimatedItems() {
+        let chicken = Self.trustedItem("Grilled chicken breast")
+        let asparagus = Self.trustedItem("Asparagus")
+        var estimated = Self.trustedItem("Mystery sauce")
+        estimated.source_type = "AI_ESTIMATE"
+        estimated.is_trusted = false
+        let recent = ReusableMealSummary(
+            id: "recent-1",
+            title: "Chicken and asparagus",
+            rawText: "Chicken and asparagus",
+            mealType: "dinner",
+            lastUsedAt: "2026-07-15T12:00:00Z",
+            totalCalories: 400,
+            totalProtein: 45,
+            itemCount: 3,
+            trustedCount: 2,
+            confidenceScore: 0.9,
+            items: [chicken, asparagus, estimated]
+        )
+
+        let suggestion = LearnedMealSuggestionBuilder.build(
+            currentItems: [MealItem(from: chicken)],
+            favoriteMeals: [],
+            recentMeals: [recent]
+        )
+
+        XCTAssertEqual(suggestion?.item.food_name, "Asparagus")
+        XCTAssertNotEqual(suggestion?.item.food_name, "Mystery sauce")
+        XCTAssertTrue(suggestion?.detail.localizedCaseInsensitiveContains("logged") == true)
+    }
+
     func testOfficialBaseNutritionWithUnresolvedModifierRequiresReview() {
         XCTAssertEqual(ConfidenceBadge.label(label: "Verified", isTrusted: true, reviewStatus: "required"), "Review")
         XCTAssertEqual(
