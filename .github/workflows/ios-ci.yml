@@ -15,6 +15,10 @@ on:
       - feature/ios-phase3-meal-management
       - feature/ios-phase4b-native-auth
 
+concurrency:
+  group: ios-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ios-build:
     runs-on: macos-latest
@@ -81,6 +85,7 @@ jobs:
           exit 1
 
       - name: Test Calorie Compass
+        timeout-minutes: 15
         env:
           MACROMESH_UI_TEST_BASE_URL: http://127.0.0.1:8765
         run: |
@@ -90,6 +95,10 @@ jobs:
             -project ios/CalorieCompass/CalorieCompass.xcodeproj \
             -scheme CalorieCompass \
             -destination '${{ steps.simulator.outputs.destination }}' \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 90 \
+            -maximum-test-execution-time-allowance 120 \
             -resultBundlePath ios-test-results.xcresult \
             test | tee ios-test.log
 

@@ -130,6 +130,7 @@ jobs:
           env -u OPENAI_API_KEY npm run test:release-food
 
       - name: Run native unit and Food Intelligence UI tests before archive
+        timeout-minutes: 15
         shell: bash
         env:
           MACROMESH_UI_TEST_BASE_URL: http://127.0.0.1:8765
@@ -156,6 +157,10 @@ jobs:
             -project ios/CalorieCompass/CalorieCompass.xcodeproj \
             -scheme CalorieCompass \
             -destination "$destination" \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 90 \
+            -maximum-test-execution-time-allowance 120 \
             test | tee ios-test.log
 
       - name: Archive and upload to TestFlight
