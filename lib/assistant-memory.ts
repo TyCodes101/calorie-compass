@@ -79,9 +79,6 @@ type AssistantMemoryMealInput = {
   occurredAt?: string | null;
 };
 
-const knownRestaurants = ["Arby's", 'Burger King', 'Chipotle', "McDonald's", 'Taco Bell', 'Starbucks', 'Chick-fil-A', 'Wendy\'s', 'Subway', 'Panera', 'White Castle'];
-const knownBrands = ['Fairlife', 'Quest', 'Premier Protein', 'Quaker', 'Daisy', 'Core Power', 'Chobani', 'Oikos', 'Gatorade'];
-
 function normalizeText(text: string) {
   return text
     .toLowerCase()
@@ -190,12 +187,50 @@ function upsertServingPreference(
   return rankByUsage(nextEntries).slice(0, limit);
 }
 
-function extractKnownMatches(items: ParsedFoodItem[], haystack: string, options: string[]) {
-  const lowerHaystack = haystack.toLowerCase();
-  return options.filter((option) => {
-    const normalizedOption = option.toLowerCase();
-    return lowerHaystack.includes(normalizedOption) || items.some((item) => item.food_name.toLowerCase().includes(normalizedOption) || (item.source_name ?? '').toLowerCase().includes(normalizedOption));
-  });
+function sourceIdentity(item: ParsedFoodItem) {
+  const sourceName = item.source_name?.trim() ?? '';
+  if (!sourceName) return null;
+
+  const identity = sourceName
+    .replace(/\s+(?:official\s+nutrition|nutrition\s+reference|nutrition\s+facts|product\s+database|community\s+database|database\s+match).*$/i, '')
+    .trim();
+  const normalized = normalizeText(identity);
+  const infrastructureNames = [
+    'ai',
+    'calorie api',
+    'fatsecret',
+    'fooddata central',
+    'generic',
+    'local catalog',
+    'nutrition catalog',
+    'open food facts',
+    'provider database',
+    'usda',
+  ];
+
+  if (!identity || identity.length > 60 || infrastructureNames.some((name) => normalized === name || normalized.startsWith(`${name} `))) {
+    return null;
+  }
+
+  return identity;
+}
+
+function learnedSourceIdentities(items: ParsedFoodItem[]) {
+  const restaurants = new Set<string>();
+  const brands = new Set<string>();
+
+  for (const item of items) {
+    const identity = sourceIdentity(item);
+    if (!identity) continue;
+
+    if (item.source_type === 'OFFICIAL_RESTAURANT') {
+      restaurants.add(identity);
+    } else if (item.source_type !== 'AI_ESTIMATE' && item.is_trusted !== false) {
+      brands.add(identity);
+    }
+  }
+
+  return { restaurants: [...restaurants], brands: [...brands] };
 }
 
 function rememberMealTiming(
@@ -309,9 +344,7 @@ export function rememberAssistantMeal(memory: AssistantMemorySnapshot, input: As
     };
   }
 
-  const haystack = [normalizedTitle, input.rawText ?? '', ...input.items.map((item) => `${item.food_name} ${item.source_name ?? ''}`)].join(' ');
-  const restaurants = extractKnownMatches(input.items, haystack, knownRestaurants);
-  const brands = extractKnownMatches(input.items, haystack, knownBrands);
+  const { restaurants, brands } = learnedSourceIdentities(input.items);
 
   for (const restaurant of restaurants) {
     nextMemory = {

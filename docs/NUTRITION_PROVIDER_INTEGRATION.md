@@ -31,7 +31,7 @@ Calorie API:
 - Barcode: `GET /search/barcode/{upc}`
 - Details: `GET /foods/{food_id}`
 - Authentication: server-side `X-API-Key`
-- Commercial requests include `X-API-Usage-Type: commercial`. The account must have a plan that permits commercial use.
+- Requests use the documented server-side `X-API-Key` header. The account must have a plan that permits the intended production use.
 
 FatSecret:
 

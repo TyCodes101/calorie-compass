@@ -169,7 +169,7 @@ describe('Calorie API provider', () => {
     const result = await lookup('one Barebells creamy crisp protein bar');
     const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
     expect(headers.get('X-API-Key')).toBe('calorie-test-key');
-    expect(headers.get('X-API-Usage-Type')).toBe('commercial');
+    expect(headers.has('X-API-Usage-Type')).toBe(false);
     expect(JSON.stringify(result)).not.toContain('calorie-test-key');
   });
 

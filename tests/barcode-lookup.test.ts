@@ -41,7 +41,9 @@ describe('barcode lookup helpers', () => {
       name: 'Verified Protein Bar',
       sourceLabel: 'Brand verified',
       barcode: '111111111111',
+      reason: 'Matched by barcode.',
     });
+    expect(result.result?.items[0]?.match_type).toBe('exact_barcode');
   });
 
   it('finds custom food barcodes after catalog lookup', () => {
@@ -107,6 +109,7 @@ describe('barcode lookup helpers', () => {
 
     const result = await lookupBarcodeWithProviders('012345678905', [failing, succeeding]);
     expect(result.result).toMatchObject({ barcode: '012345678905', providerId: 'succeeding', sourceLabel: 'Database match' });
+    expect(result.result?.items[0]).toMatchObject({ match_type: 'exact_barcode', matched_query: '012345678905' });
     expect(succeeding.lookupBarcode).toHaveBeenCalledWith(expect.objectContaining({ barcode: '012345678905' }));
   });
 

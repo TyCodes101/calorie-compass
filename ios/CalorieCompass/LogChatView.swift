@@ -211,8 +211,90 @@ private struct RecentSavedMealSnapshot {
     }
 }
 
+struct LearnedMealSuggestion: Identifiable, Equatable {
+    let id: String
+    let item: MealRequestItem
+    let title: String
+    let detail: String
+}
+
+enum LearnedMealSuggestionBuilder {
+    private struct Candidate {
+        var item: MealRequestItem
+        var score: Int
+        var occurrences: Int
+    }
+
+    static func build(
+        currentItems: [MealItem],
+        favoriteMeals: [ReusableMealSummary],
+        recentMeals: [ReusableMealSummary]
+    ) -> LearnedMealSuggestion? {
+        let currentNames = currentItems.map { normalize($0.name) }.filter { !$0.isEmpty }
+        guard !currentNames.isEmpty else { return nil }
+
+        var candidates: [String: Candidate] = [:]
+        addCandidates(from: favoriteMeals, weight: 3, currentNames: currentNames, candidates: &candidates)
+        addCandidates(from: recentMeals, weight: 1, currentNames: currentNames, candidates: &candidates)
+
+        guard let best = candidates.values.sorted(by: {
+            $0.score > $1.score || ($0.score == $1.score && $0.item.food_name < $1.item.food_name)
+        }).first else { return nil }
+
+        let key = "\(normalize(best.item.food_name)):\(best.item.quantity):\(best.item.unit.lowercased())"
+        return LearnedMealSuggestion(
+            id: key,
+            item: best.item,
+            title: "Often logged with \(best.item.food_name)",
+            detail: best.occurrences > 1
+                ? "You have paired these before. Add it to this review?"
+                : "You logged these together before. Add it to this review?"
+        )
+    }
+
+    private static func addCandidates(
+        from meals: [ReusableMealSummary],
+        weight: Int,
+        currentNames: [String],
+        candidates: inout [String: Candidate]
+    ) {
+        for meal in meals {
+            guard let items = meal.items, items.contains(where: { item in
+                currentNames.contains(where: { identitiesMatch($0, normalize(item.food_name)) })
+            }) else { continue }
+
+            for item in items {
+                let identity = normalize(item.food_name)
+                guard !identity.isEmpty,
+                      !currentNames.contains(where: { identitiesMatch($0, identity) }),
+                      item.is_trusted != false,
+                      item.source_type != "AI_ESTIMATE" else { continue }
+
+                var candidate = candidates[identity] ?? Candidate(item: item, score: 0, occurrences: 0)
+                candidate.score += weight
+                candidate.occurrences += 1
+                candidates[identity] = candidate
+            }
+        }
+    }
+
+    private static func identitiesMatch(_ left: String, _ right: String) -> Bool {
+        left == right || (left.count >= 5 && right.count >= 5 && (left.contains(right) || right.contains(left)))
+    }
+
+    private static func normalize(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 struct LogChatView: View {
     @EnvironmentObject private var sessionStore: SessionStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var messages: [MealAssistantTranscriptMessage] = []
     @State private var inputText = ""
     @State private var isLoading = false
@@ -225,6 +307,7 @@ struct LogChatView: View {
     @State private var recentMeals: [ReusableMealSummary] = []
     @State private var quickActionMessage: String?
     @State private var activeSheet: LogActionSheet?
+    @State private var dismissedSuggestionID: String?
 
     @State private var reviewItems: [MealItem] = []
     @State private var showReviewCard = false
@@ -281,6 +364,13 @@ struct LogChatView: View {
                                     Text(saveError)
                                         .font(.caption)
                                         .foregroundColor(.red)
+                                }
+                                if let suggestion = learnedSuggestion {
+                                    LearnedMealSuggestionCard(
+                                        suggestion: suggestion,
+                                        onAdd: { addLearnedSuggestion(suggestion) },
+                                        onDismiss: { dismissedSuggestionID = suggestion.id }
+                                    )
                                 }
                             }
                             if let error {
@@ -541,6 +631,31 @@ struct LogChatView: View {
         }
     }
 
+    private var learnedSuggestion: LearnedMealSuggestion? {
+        let suggestion = LearnedMealSuggestionBuilder.build(
+            currentItems: reviewItems,
+            favoriteMeals: favoriteMeals,
+            recentMeals: recentMeals
+        )
+        return suggestion?.id == dismissedSuggestionID ? nil : suggestion
+    }
+
+    private func addLearnedSuggestion(_ suggestion: LearnedMealSuggestion) {
+        let normalizedName = suggestion.item.food_name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !reviewItems.contains(where: {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalizedName
+        }) else {
+            dismissedSuggestionID = suggestion.id
+            return
+        }
+
+        reviewItems.append(MealItem(from: suggestion.item))
+        syncActiveMealItems(reviewItems)
+        dismissedSuggestionID = suggestion.id
+        quickActionMessage = "Added \(suggestion.item.food_name) to this review."
+        UIAccessibility.post(notification: .announcement, argument: "Added \(suggestion.item.food_name) to meal review")
+    }
+
     private func reviewSearchResult(_ result: FoodSearchResult, assistantText: String) {
         beginReview(
             items: result.reviewItems,
@@ -568,12 +683,16 @@ struct LogChatView: View {
         assistantState.currentMealText = rawText
         assistantState.sourceReusableMealId = sourceReusableMealId
         reviewItems = items.map(MealItem.init(from:))
+        dismissedSuggestionID = nil
         syncActiveMealItems(reviewItems)
         showReviewCard = !reviewItems.isEmpty
         saveError = nil
         error = nil
         quickActionMessage = "Ready for review."
         messages.append(MealAssistantTranscriptMessage(role: "assistant", text: assistantText))
+        if !reviewItems.isEmpty {
+            UIAccessibility.post(notification: .announcement, argument: "Meal review ready with \(reviewItems.count) item\(reviewItems.count == 1 ? "" : "s")")
+        }
         activeSheet = nil
     }
 
@@ -702,12 +821,17 @@ struct LogChatView: View {
 
     private func scrollToLatest(_ proxy: ScrollViewProxy) {
         DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.2)) {
+            let scroll = {
                 if showReviewCard {
                     proxy.scrollTo(reviewCardAnchorID, anchor: .top)
                 } else {
                     proxy.scrollTo(bottomAnchorID, anchor: .bottom)
                 }
+            }
+            if reduceMotion {
+                scroll()
+            } else {
+                withAnimation(.easeOut(duration: 0.2), scroll)
             }
         }
     }
@@ -883,6 +1007,8 @@ struct LogChatView: View {
                         items: requestItems
                     )
                     messages.append(MealAssistantTranscriptMessage(role: "assistant", text: "Saved. Ready for the next one?"))
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    UIAccessibility.post(notification: .announcement, argument: "Meal saved")
                     NotificationCenter.default.post(name: .calorieCompassMealsDidChange, object: nil)
                     loadReusableMeals()
                 case .failure(let err):
@@ -890,6 +1016,50 @@ struct LogChatView: View {
                     stabilityReporter.record(.networkFailure(screen: "Meal review", message: err.localizedDescription))
                     saveError = RetryCopy.nonDestructiveFailure(action: "save this meal", error: err)
                 }
+            }
+        }
+    }
+}
+
+private struct LearnedMealSuggestionCard: View {
+    let suggestion: LearnedMealSuggestion
+    let onAdd: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        AppCard(padding: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.primary)
+                    .frame(width: 32, height: 32)
+                    .background(MacroMeshTheme.cardSubtle)
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(suggestion.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.text)
+                    Text(suggestion.detail)
+                        .font(.caption)
+                        .foregroundColor(MacroMeshTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(action: onAdd) {
+                        Label("Add to review", systemImage: "plus")
+                    }
+                    .buttonStyle(HistoryActionButtonStyle())
+                    .accessibilityHint("Adds this previously confirmed food to the pending meal. Nothing is saved yet.")
+                }
+
+                Spacer(minLength: 0)
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(MacroMeshTheme.muted)
+                        .frame(width: 32, height: 32)
+                }
+                .accessibilityLabel("Dismiss suggestion")
             }
         }
     }
@@ -1137,13 +1307,23 @@ struct FoodSearchSheet: View {
                 case .success(let response):
                     results = response.results
                     clarificationQuestion = response.clarificationQuestion
-                    message = response.results.isEmpty ? nil : "\(response.results.count) result\(response.results.count == 1 ? "" : "s") for \(response.normalizedQuery)."
+                    let quietlyCorrected = response.usedResolver
+                        && response.normalizedQuery.caseInsensitiveCompare(trimmed) != .orderedSame
+                    message = response.results.isEmpty
+                        ? nil
+                        : quietlyCorrected
+                            ? "Showing results for \(response.normalizedQuery)."
+                            : "\(response.results.count) result\(response.results.count == 1 ? "" : "s") for \(response.normalizedQuery)."
                     lastFailedQuery = nil
+                    let announcement = response.clarificationQuestion
+                        ?? "Found \(response.results.count) food result\(response.results.count == 1 ? "" : "s")"
+                    UIAccessibility.post(notification: .announcement, argument: announcement)
                 case .failure(let error):
                     results = []
                     message = nil
                     lastFailedQuery = trimmed
                     errorMessage = RetryCopy.nonDestructiveFailure(action: "search foods", error: error)
+                    UIAccessibility.post(notification: .announcement, argument: "Food search failed. Retry is available.")
                 }
             }
         }
@@ -1907,11 +2087,12 @@ struct FoodSearchResultRow: View {
                         .font(.caption)
                         .foregroundColor(MacroMeshTheme.muted)
                     HStack(spacing: 6) {
-                        FoodSearchBadge(text: result.sourceLabel, emphasized: !result.estimated)
-                        if result.needsReview {
-                            FoodSearchBadge(text: "Needs Review", emphasized: false)
-                        }
+                        FoodTrustBadge(presentation: trustPresentation)
                     }
+                    Text(trustPresentation.explanation)
+                        .font(.caption2)
+                        .foregroundColor(MacroMeshTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text("\(Int(result.protein))g protein | \(Int(result.carbs))g carbs | \(Int(result.fat))g fat")
                         .font(.caption2)
                         .foregroundColor(MacroMeshTheme.muted)
@@ -1940,12 +2121,28 @@ struct FoodSearchResultRow: View {
         result.restaurant ?? result.brand ?? result.sourceName
     }
 
+    private var trustPresentation: FoodTrustPresentation {
+        let item = result.items.first
+        return FoodTrustPresentation.build(
+            sourceType: result.sourceType ?? item?.source_type,
+            sourceName: result.sourceName ?? item?.source_name,
+            providerUsed: result.providerId ?? item?.provider_used,
+            matchType: item?.match_type,
+            usedAiFallback: item?.used_ai_fallback,
+            isTrusted: item?.is_trusted,
+            reviewStatus: item?.review_status,
+            modifierResolution: item?.modifier_resolution,
+            sourceLabel: result.sourceLabel
+        )
+    }
+
     private var accessibilityText: String {
         var parts = [
             "Review \(result.name)",
             "\(result.servingQuantity.cleanServingQuantity) \(result.servingUnit)",
             "\(Int(result.calories)) calories",
-            result.sourceLabel
+            trustPresentation.badge,
+            trustPresentation.explanation
         ]
         if result.needsReview {
             parts.append("Needs review")

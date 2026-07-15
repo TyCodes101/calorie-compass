@@ -24,6 +24,8 @@ struct PremiumHistoryView: View {
     @State private var refreshing = false
     @State private var error: String?
     @State private var actionMessage: String?
+    @State private var searchText = ""
+    @State private var selectedFilter: HistoryFilter = .all
     
     var body: some View {
         NavigationView {
@@ -46,6 +48,8 @@ struct PremiumHistoryView: View {
 
                             HistoryWeeklySummaryCard(summary: weeklySummary)
 
+                            HistoryFilterBar(selectedFilter: $selectedFilter, searchText: $searchText)
+
                             if let actionMessage {
                                 AppCard(padding: 12) {
                                     Text(actionMessage)
@@ -54,21 +58,39 @@ struct PremiumHistoryView: View {
                                 }
                             }
 
-                            ForEach(dayGroups) { group in
-                                VStack(alignment: .leading, spacing: 10) {
-                                    HistoryDayHeaderCard(date: HistoryDateFormatter.dayHeader.string(from: group.day), meals: group.meals)
+                            if visibleMeals.isEmpty {
+                                HistoryEmptyStateCard(
+                                    icon: "magnifyingglass",
+                                    title: "No matching meals",
+                                    message: "Try a food, restaurant, date, meal type, calorie value, or protein value.",
+                                    buttonTitle: "Clear filters",
+                                    action: clearFilters
+                                )
+                            } else {
+                                ForEach(dayGroups) { group in
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        HistoryDayHeaderCard(date: HistoryDateFormatter.dayHeader.string(from: group.day), meals: group.meals)
 
-                                    VStack(spacing: 10) {
-                                        ForEach(group.meals) { meal in
-                                            HistoryMealCard(
-                                                meal: meal,
-                                                onFavorite: { favoriteMeal(meal) },
-                                                onRepeat: { repeatMeal(meal) }
-                                            )
+                                        VStack(spacing: 10) {
+                                            ForEach(group.meals) { meal in
+                                                HistoryMealCard(
+                                                    meal: meal,
+                                                    onFavorite: { favoriteMeal(meal) },
+                                                    onRepeat: { repeatMeal(meal) }
+                                                )
+                                                .contextMenu {
+                                                    Button(action: { repeatMeal(meal) }) {
+                                                        Label("Log again", systemImage: "arrow.clockwise")
+                                                    }
+                                                    Button(action: { favoriteMeal(meal) }) {
+                                                        Label("Add to Favorites", systemImage: "star")
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
+                                    .padding(.top, 4)
                                 }
-                                .padding(.top, 4)
                             }
                         }
                         .padding(.horizontal, 18)
@@ -81,6 +103,7 @@ struct PremiumHistoryView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle("")
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Food, restaurant, date, or macros")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: refreshMeals) {
@@ -97,6 +120,11 @@ struct PremiumHistoryView: View {
 
     private func openLog() {
         NotificationCenter.default.post(name: .macroMeshOpenLogTab, object: nil)
+    }
+
+    private func clearFilters() {
+        searchText = ""
+        selectedFilter = .all
     }
 
     private func loadMeals() {
@@ -169,11 +197,56 @@ struct PremiumHistoryView: View {
     }
 
     private var dayGroups: [HistorySorting.DayGroup] {
-        HistorySorting.groupMealsByDay(meals)
+        HistorySorting.groupMealsByDay(visibleMeals)
+    }
+
+    private var visibleMeals: [MealResponse] {
+        HistorySorting.filteredMeals(meals, query: searchText, filter: selectedFilter)
     }
 
     private var weeklySummary: HistoryWeeklySummary {
         HistoryWeeklySummary.build(meals: meals)
+    }
+}
+
+private struct HistoryFilterBar: View {
+    @Binding var selectedFilter: HistoryFilter
+    @Binding var searchText: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Menu {
+                Picker("History filter", selection: $selectedFilter) {
+                    ForEach(HistoryFilter.allCases) { filter in
+                        Text(filter.label).tag(filter)
+                    }
+                }
+            } label: {
+                Label(selectedFilter.label, systemImage: "line.3.horizontal.decrease.circle")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(MacroMeshTheme.primaryDark)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .background(MacroMeshTheme.cardSubtle)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .accessibilityLabel("History filter, \(selectedFilter.label)")
+
+            Spacer(minLength: 0)
+
+            if selectedFilter != .all || !searchText.isEmpty {
+                Button {
+                    selectedFilter = .all
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(MacroMeshTheme.muted)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Clear history filters")
+            }
+        }
     }
 }
 

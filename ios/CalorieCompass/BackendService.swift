@@ -1004,6 +1004,21 @@ struct NutritionAnalyticsSummary: Codable, Equatable {
     let thirtyDayAverageCalories: Double
     let highestProteinDay: HighestProteinDay?
     let macroConsistencySummary: String
+    let sevenDayLoggedDays: Int?
+    let calorieGoalHitDays: Int?
+    let proteinGoalHitDays: Int?
+    let mostLoggedFoods: [LoggedFrequencyInsight]?
+    let mostLoggedRestaurants: [LoggedFrequencyInsight]?
+    let mostCommonMealType: LoggedFrequencyInsight?
+    let weekendAverageCalories: Double?
+    let weekdayAverageCalories: Double?
+    let weeklySummary: String?
+}
+
+struct LoggedFrequencyInsight: Codable, Equatable, Identifiable {
+    var id: String { name.lowercased() }
+    let name: String
+    let count: Int
 }
 
 struct HighestProteinDay: Codable, Equatable {

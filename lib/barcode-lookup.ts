@@ -17,6 +17,19 @@ function catalogBarcode(food: BarcodeCatalogFood) {
   return normalizeBarcode(food.barcode ?? food.barcodes?.[0] ?? null);
 }
 
+export function markSearchResultAsBarcodeMatch(result: FoodSearchResult, barcode: string): FoodSearchResult {
+  return {
+    ...result,
+    barcode,
+    reason: 'Matched by barcode.',
+    items: result.items.map((item) => ({
+      ...item,
+      match_type: 'exact_barcode',
+      matched_query: barcode,
+    })),
+  };
+}
+
 export function buildBarcodeLookupResult({
   barcode,
   customFoods,
@@ -31,12 +44,12 @@ export function buildBarcodeLookupResult({
 
   const catalogMatch = catalogFoods.find((food) => food.active !== false && catalogBarcode(food) === normalized);
   if (catalogMatch) {
-    return { found: true, result: { ...catalogFoodToSearchResult(catalogMatch), barcode: normalized } };
+    return { found: true, result: markSearchResultAsBarcodeMatch(catalogFoodToSearchResult(catalogMatch), normalized) };
   }
 
   const customMatch = customFoods.find((food) => normalizeBarcode(food.barcode) === normalized);
   if (customMatch) {
-    return { found: true, result: customFoodToSearchResult(customMatch) };
+    return { found: true, result: markSearchResultAsBarcodeMatch(customFoodToSearchResult(customMatch), normalized) };
   }
 
   return { found: false, result: null };
@@ -54,7 +67,7 @@ export function providerBarcodeResultToSearchResult(response: ParsedMealResponse
     || response.confidence_score < 0.72
     || response.items.some((item) => item.confidence_label === 'Needs Review');
 
-  return {
+  return markSearchResultAsBarcodeMatch({
     id: `barcode:${first.provider_used ?? 'database'}:${barcode}`,
     name: first.food_name,
     brand: null,
@@ -77,7 +90,7 @@ export function providerBarcodeResultToSearchResult(response: ParsedMealResponse
     reason: null,
     sourceReusableMealId: null,
     items: response.items,
-  };
+  }, barcode);
 }
 
 export type BarcodeProviderLookupResult = {

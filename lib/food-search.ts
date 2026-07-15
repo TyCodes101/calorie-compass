@@ -344,6 +344,94 @@ function dedupeResults(results: FoodSearchResult[]) {
   return [...byIdentity.values()];
 }
 
+function identityTier(query: string, result: FoodSearchResult) {
+  const score = searchScore(query, `${result.name} ${result.brand ?? ''} ${result.restaurant ?? ''}`) ?? 0;
+  if (score >= 110) return 3;
+  if (score >= 88) return 2;
+  return 1;
+}
+
+function resultMatchesSavedItem(result: FoodSearchResult, item: ParsedFoodItem) {
+  const resultItem = result.items[0];
+  if (resultItem?.catalog_food_id && item.catalog_food_id && resultItem.catalog_food_id === item.catalog_food_id) {
+    return true;
+  }
+
+  const resultName = normalizeSearchText(result.name);
+  const itemName = normalizeSearchText(item.food_name);
+  if (!resultName || !itemName) return false;
+  return resultName === itemName || resultName.includes(itemName) || itemName.includes(resultName);
+}
+
+function learnedPreferenceScore(
+  result: FoodSearchResult,
+  favoriteMeals: FavoriteMealSummary[],
+  recentMeals: FavoriteMealSummary[],
+) {
+  let score = result.sourceLabel === 'Favorite' ? 60 : result.sourceLabel === 'Recent' ? 30 : 0;
+  let favoriteMatches = 0;
+  let recentMatches = 0;
+
+  for (const meal of favoriteMeals) {
+    if (meal.items?.some((item) => resultMatchesSavedItem(result, item))) {
+      favoriteMatches += 1;
+      score += 24;
+    }
+  }
+
+  recentMeals.forEach((meal, index) => {
+    if (meal.items?.some((item) => resultMatchesSavedItem(result, item))) {
+      recentMatches += 1;
+      score += Math.max(6, 18 - index);
+    }
+  });
+
+  const sourceName = normalizeSearchText(result.sourceName ?? '');
+  const choseSameSource = sourceName.length > 0 && [...favoriteMeals, ...recentMeals].some((meal) =>
+    meal.items?.some((item) => resultMatchesSavedItem(result, item) && normalizeSearchText(item.source_name ?? '') === sourceName),
+  );
+  if (choseSameSource) score += 8;
+
+  const reason = favoriteMatches > 0 || result.sourceLabel === 'Favorite'
+    ? 'Preferred from your confirmed meals.'
+    : recentMatches > 0 || result.sourceLabel === 'Recent'
+      ? 'Recently logged with this serving.'
+      : null;
+
+  return { score, reason };
+}
+
+export function rankFoodSearchResultsByUserHistory({
+  query,
+  results,
+  favoriteMeals,
+  recentMeals,
+}: {
+  query: string;
+  results: FoodSearchResult[];
+  favoriteMeals: FavoriteMealSummary[];
+  recentMeals: FavoriteMealSummary[];
+}) {
+  return results
+    .map((result, index) => ({
+      result,
+      index,
+      tier: identityTier(query, result),
+      preference: learnedPreferenceScore(result, favoriteMeals, recentMeals),
+    }))
+    .sort((left, right) =>
+      right.tier - left.tier
+      || right.preference.score - left.preference.score
+      || sourceStrength(right.result) - sourceStrength(left.result)
+      || right.result.confidenceScore - left.result.confidenceScore
+      || left.index - right.index,
+    )
+    .map(({ result, preference }) => ({
+      ...result,
+      reason: result.reason ?? preference.reason,
+    }));
+}
+
 export function catalogFoodToSearchResult(food: SearchCatalogFood): FoodSearchResult {
   const item = scaleCatalogFood(food, food.servingQuantity, food.servingUnit);
   const source = getNutritionSourceById(food.sourceId);
@@ -479,7 +567,12 @@ export function buildFoodSearchResults({
       .filter((result): result is FoodSearchResult => Boolean(result)),
   );
 
-  return dedupeResults(results).slice(0, 12);
+  return rankFoodSearchResultsByUserHistory({
+    query: trimmed,
+    results: dedupeResults(results),
+    favoriteMeals,
+    recentMeals,
+  }).slice(0, 12);
 }
 
 export function verifiedCatalogFoodsForLookup() {
@@ -910,6 +1003,13 @@ export async function buildFoodSearchResponse(
   } else {
     results = results.slice(0, 10);
   }
+
+  results = rankFoodSearchResultsByUserHistory({
+    query: resolver?.normalizedQuery ?? query,
+    results,
+    favoriteMeals: input.favoriteMeals,
+    recentMeals: input.recentMeals,
+  }).slice(0, 10);
 
   if (!results.length && resolver?.shouldAskClarification && resolver.clarificationQuestion) {
     return {

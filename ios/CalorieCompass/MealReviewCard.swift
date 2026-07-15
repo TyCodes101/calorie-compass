@@ -221,6 +221,163 @@ enum ServingUnitFormatter {
     }
 }
 
+struct FoodTrustPresentation: Equatable {
+    enum Tone: Equatable {
+        case trusted
+        case review
+    }
+
+    let badge: String
+    let explanation: String
+    let systemImage: String
+    let tone: Tone
+
+    static func build(
+        sourceType: String?,
+        sourceName: String?,
+        providerUsed: String? = nil,
+        matchType: String? = nil,
+        usedAiFallback: Bool? = nil,
+        isTrusted: Bool? = nil,
+        reviewStatus: String? = nil,
+        modifierResolution: String? = nil,
+        sourceLabel: String? = nil
+    ) -> FoodTrustPresentation {
+        let type = normalized(sourceType)
+        let source = normalized(sourceName)
+        let provider = normalized(providerUsed)
+        let match = normalized(matchType)
+        let label = normalized(sourceLabel)
+        let modifierNeedsReview = modifierResolution == "unresolved" || modifierResolution == "estimated"
+        let needsReview = reviewStatus == "required"
+            || isTrusted == false
+            || usedAiFallback == true
+            || type.contains("ai")
+            || modifierNeedsReview
+
+        if needsReview {
+            if modifierNeedsReview {
+                return .init(
+                    badge: "Needs Review",
+                    explanation: "Base nutrition was found, but the requested changes still need your review.",
+                    systemImage: "exclamationmark.circle.fill",
+                    tone: .review
+                )
+            }
+            if type.contains("ai") || usedAiFallback == true {
+                return .init(
+                    badge: "Estimated",
+                    explanation: "Estimated because no exact database entry was available. Check the serving and nutrition.",
+                    systemImage: "sparkles",
+                    tone: .review
+                )
+            }
+            return .init(
+                badge: "Needs Review",
+                explanation: "The identity or serving is uncertain. Check it before saving.",
+                systemImage: "exclamationmark.circle.fill",
+                tone: .review
+            )
+        }
+
+        if match.contains("barcode") {
+            return .init(
+                badge: "Barcode Match",
+                explanation: "Matched to the product barcode. Confirm the package serving before saving.",
+                systemImage: "barcode.viewfinder",
+                tone: .trusted
+            )
+        }
+        if label == "favorite" || label == "recent" || label == "custom" || source.contains("custom food") {
+            return .init(
+                badge: label == "custom" || source.contains("custom food") ? "Your Food" : "Previously Logged",
+                explanation: "Loaded from nutrition you previously confirmed.",
+                systemImage: label == "custom" ? "person.crop.circle.fill" : "clock.arrow.circlepath",
+                tone: .trusted
+            )
+        }
+        if type.contains("official_restaurant") {
+            return .init(
+                badge: "Restaurant Match",
+                explanation: modifierResolution == "deterministic_database"
+                    ? "Matched to official restaurant nutrition with supported adjustments."
+                    : "Matched to an exact item from official restaurant nutrition.",
+                systemImage: "fork.knife.circle.fill",
+                tone: .trusted
+            )
+        }
+        if type.contains("usda") || provider.contains("usda") || source.contains("fooddata central") {
+            return .init(
+                badge: "USDA Match",
+                explanation: "Matched to a USDA generic food and serving.",
+                systemImage: "leaf.circle.fill",
+                tone: .trusted
+            )
+        }
+        if provider.contains("open food facts") || provider.contains("open-food-facts") || source.contains("community") {
+            return .init(
+                badge: "Community Product",
+                explanation: "Matched to a community product record. Compare it with the package label.",
+                systemImage: "person.2.circle.fill",
+                tone: .trusted
+            )
+        }
+        if type.contains("brand") || label.contains("brand") || (!source.isEmpty && !source.contains("generic")) {
+            return .init(
+                badge: "Branded Product",
+                explanation: "Matched by brand and product identity from a nutrition database.",
+                systemImage: "checkmark.seal.fill",
+                tone: .trusted
+            )
+        }
+        if type.contains("generic_reference") || source.contains("generic") {
+            return .init(
+                badge: "Structured Match",
+                explanation: "Matched to a structured generic food reference. Check the serving for your meal.",
+                systemImage: "checkmark.circle.fill",
+                tone: .trusted
+            )
+        }
+        if isTrusted == true {
+            return .init(
+                badge: "Database Match",
+                explanation: "Matched to structured nutrition data. Check the serving before saving.",
+                systemImage: "checkmark.circle.fill",
+                tone: .trusted
+            )
+        }
+        return .init(
+            badge: "Review",
+            explanation: "Check the food identity, serving, and nutrition before saving.",
+            systemImage: "eye.circle.fill",
+            tone: .review
+        )
+    }
+
+    private static func normalized(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+    }
+}
+
+struct FoodTrustBadge: View {
+    let presentation: FoodTrustPresentation
+
+    private var tint: Color {
+        presentation.tone == .review ? MacroMeshTheme.orange : MacroMeshTheme.primary
+    }
+
+    var body: some View {
+        Label(presentation.badge, systemImage: presentation.systemImage)
+            .font(.caption2.weight(.bold))
+            .foregroundColor(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.11))
+            .clipShape(Capsule())
+            .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
 struct MealReviewCard: View {
     static let reviewTitle = "Review meal"
 
@@ -285,6 +442,16 @@ struct MealReviewCard: View {
 
                     VStack(spacing: 9) {
                         ForEach(items.indices, id: \.self) { idx in
+                            let trust = FoodTrustPresentation.build(
+                                sourceType: items[idx].sourceType,
+                                sourceName: items[idx].source,
+                                providerUsed: items[idx].providerUsed,
+                                matchType: items[idx].matchType,
+                                usedAiFallback: items[idx].usedAiFallback,
+                                isTrusted: items[idx].isTrusted,
+                                reviewStatus: items[idx].reviewStatus,
+                                modifierResolution: items[idx].modifierResolution
+                            )
                             HStack(alignment: .top, spacing: 10) {
                                 FoodAvatar(name: items[idx].name)
                                 VStack(alignment: .leading, spacing: 6) {
@@ -297,20 +464,16 @@ struct MealReviewCard: View {
                                         .font(.caption)
                                         .foregroundColor(MacroMeshTheme.muted)
                                     HStack(spacing: 6) {
-                                        ConfidenceBadge(
-                                            label: items[idx].confidence,
-                                            isTrusted: items[idx].isTrusted,
-                                            reviewStatus: items[idx].reviewStatus
-                                        )
+                                        FoodTrustBadge(presentation: trust)
                                         Text("\(Int(items[idx].calories)) cal")
                                             .font(.caption.weight(.semibold))
                                             .foregroundColor(MacroMeshTheme.primaryDark)
                                     }
-                                    SourceBadge(
-                                        sourceType: items[idx].sourceType,
-                                        sourceName: items[idx].source,
-                                        modifierResolution: items[idx].modifierResolution
-                                    )
+                                    Text(trust.explanation)
+                                        .font(.caption2)
+                                        .foregroundColor(MacroMeshTheme.muted)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .accessibilityLabel("\(trust.badge). \(trust.explanation)")
                                     if !items[idx].requestedModifiers.isEmpty {
                                         Text("Requested: \(items[idx].requestedModifiers.joined(separator: ", "))")
                                             .font(.caption2)

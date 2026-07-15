@@ -77,6 +77,30 @@ describe('assistant memory', () => {
     });
   });
 
+  it('learns unfamiliar restaurants and brands from structured source metadata without a fixed allowlist', () => {
+    const memory = rememberAssistantMeal(createEmptyAssistantMemory(), {
+      title: 'Local favorites',
+      mealType: 'lunch',
+      source: 'saved',
+      occurredAt: '2026-07-15T12:00:00.000Z',
+      items: [
+        buildItem({
+          food_name: 'Northstar Village Salad',
+          source_type: 'OFFICIAL_RESTAURANT',
+          source_name: 'Northstar Cafe official nutrition',
+        }),
+        buildItem({
+          food_name: 'Wildwonder Guava Rose',
+          source_type: 'GENERIC_REFERENCE',
+          source_name: 'Wildwonder nutrition reference',
+        }),
+      ],
+    });
+
+    expect(memory.commonRestaurants[0]?.name).toBe('Northstar Cafe');
+    expect(memory.commonBrands[0]?.name).toBe('Wildwonder');
+  });
+
   it('remembers repeated corrections and safely falls back on bad storage payloads', () => {
     const first = rememberAssistantCorrection(createEmptyAssistantMemory(), 'actually remove cheese', '2026-05-14T12:00:00.000Z');
     const second = rememberAssistantCorrection(first, 'actually remove cheese', '2026-05-14T13:00:00.000Z');
@@ -100,6 +124,7 @@ describe('assistant memory', () => {
           mealType: 'snack',
           lastUsedAt: '2026-05-14T15:00:00.000Z',
           totalCalories: 230,
+          totalProtein: 42,
           itemCount: 1,
           trustedCount: 1,
           confidenceScore: 0.96,

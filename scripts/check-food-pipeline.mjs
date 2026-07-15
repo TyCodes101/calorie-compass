@@ -120,7 +120,6 @@ if (calorieApiKey) {
       headers: {
         Accept: 'application/json',
         'X-API-Key': calorieApiKey,
-        'X-API-Usage-Type': 'commercial',
       },
     });
     if (!response.ok) failures.push(`Calorie API health check returned HTTP ${response.status}`);

@@ -29,10 +29,18 @@ export async function GET() {
         },
         select: {
           date: true,
+          mealType: true,
           totalCalories: true,
           totalProtein: true,
           totalCarbs: true,
           totalFat: true,
+          items: {
+            select: {
+              foodName: true,
+              nutritionSourceType: true,
+              nutritionSourceName: true,
+            },
+          },
         },
       }),
       prisma.weightEntry.findMany({

@@ -98,7 +98,6 @@ type CalorieApiBarcodeResponse = z.infer<typeof barcodeResponseSchema>;
 function providerHeaders(apiKey: string) {
   return {
     'X-API-Key': apiKey,
-    'X-API-Usage-Type': 'commercial',
   };
 }
 

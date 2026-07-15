@@ -87,4 +87,36 @@ describe('food search helpers', () => {
 
     expect(results).toEqual([]);
   });
+
+  it('ranks a compatible favorite serving first without changing its confirmed nutrition', () => {
+    const catalogResult = buildFoodSearchResults({ query: 'Quest bbq chips', customFoods: [], favoriteMeals: [], recentMeals: [] })[0];
+    expect(catalogResult).toBeDefined();
+    if (!catalogResult) throw new Error('Expected verified Quest BBQ catalog fixture');
+
+    const results = buildFoodSearchResults({
+      query: 'Quest bbq chips',
+      customFoods: [],
+      favoriteMeals: [{
+        id: 'favorite-quest',
+        title: 'Quest BBQ protein chips',
+        rawText: 'Quest BBQ protein chips',
+        mealType: 'snack',
+        lastUsedAt: '2026-07-15T12:00:00.000Z',
+        totalCalories: catalogResult.calories,
+        totalProtein: catalogResult.protein,
+        itemCount: 1,
+        trustedCount: 1,
+        confidenceScore: 1,
+        items: catalogResult.items,
+      }],
+      recentMeals: [],
+    });
+
+    expect(results[0]).toMatchObject({
+      sourceLabel: 'Favorite',
+      calories: catalogResult.calories,
+      protein: catalogResult.protein,
+      reason: 'Preferred from your confirmed meals.',
+    });
+  });
 });
