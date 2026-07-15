@@ -1,0 +1,19 @@
+name: Preview Food Smoke
+
+on:
+  deployment_status:
+
+jobs:
+  preview-food-smoke:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment_status.environment_url != ''
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      PREVIEW_BASE_URL: ${{ github.event.deployment_status.environment_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Test normalized preview search contract
+        run: npm run smoke:preview

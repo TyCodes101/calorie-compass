@@ -86,9 +86,35 @@ workflows:
       - name: Run web/test safety checks before archive
         script: |
           set -euo pipefail
+          npm run scan:secrets
           npm run lint
           npm run build
           env -u OPENAI_API_KEY npm test
+          env -u OPENAI_API_KEY npm run test:release-food
+
+      - name: Run native unit and Food Intelligence UI tests
+        script: |
+          set -euo pipefail
+          node scripts/food-intelligence-ui-mock-server.mjs > /tmp/food-intelligence-ui-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --silent --fail 'http://127.0.0.1:8765/api/reusable-meals' >/dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+          destination="$(xcrun simctl list devices available | sed -nE 's/^[[:space:]]+(iPhone (17|16|15|14)[^()]*) \(([0-9A-Fa-f-]+)\).*/platform=iOS Simulator,id=\3/p' | head -n 1)"
+          if [ -z "$destination" ]; then
+            echo "No supported iPhone simulator is available." >&2
+            exit 1
+          fi
+          export MACROMESH_UI_TEST_BASE_URL='http://127.0.0.1:8765'
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "$destination" \
+            test
 
       - name: Set up Xcode signing from Codemagic profiles
         script: |
@@ -128,4 +154,5 @@ workflows:
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
+      - /tmp/food-intelligence-ui-server.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM

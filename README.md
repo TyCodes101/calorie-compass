@@ -61,6 +61,9 @@ npm test
 npm run lint
 npm run build
 npm run qa:assistant
+npm run test:food-intelligence
+npm run test:food-search
+npm run scan:secrets
 ```
 
 Before deploy, run the full guard:
@@ -70,6 +73,8 @@ npm run predeploy:check
 ```
 
 `npm run qa:assistant` runs the golden multi-turn chatbot QA suite. It checks logging accuracy, correction behavior, nutrition questions, recommendations, repeat-meal memory, active meal preservation, dead-end replies, unrelated food drift, and common nutrition sanity ranges.
+
+The universal discovery architecture and release gates are documented in [`docs/food-intelligence/ARCHITECTURE.md`](docs/food-intelligence/ARCHITECTURE.md).
 
 ## Important note
 Nutrition estimates are approximate and are not medical or dietary advice.

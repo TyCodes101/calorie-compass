@@ -25,6 +25,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
       - name: Show Xcode version
         run: xcodebuild -version
 
@@ -59,7 +65,24 @@ jobs:
             -destination '${{ steps.simulator.outputs.destination }}' \
             build | tee ios-build.log
 
+      - name: Start deterministic Food Intelligence UI test backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/food-intelligence-ui-mock-server.mjs > food-intelligence-ui-server.log 2>&1 &
+          echo $! > food-intelligence-ui-server.pid
+          for attempt in {1..20}; do
+            if curl --silent --fail 'http://127.0.0.1:8765/api/reusable-meals' >/dev/null; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          cat food-intelligence-ui-server.log >&2
+          exit 1
+
       - name: Test Calorie Compass
+        env:
+          MACROMESH_UI_TEST_BASE_URL: http://127.0.0.1:8765
         run: |
           set -o pipefail
           rm -rf ios-test-results.xcresult
@@ -79,3 +102,4 @@ jobs:
             ios-build.log
             ios-test.log
             ios-test-results.xcresult
+            food-intelligence-ui-server.log
