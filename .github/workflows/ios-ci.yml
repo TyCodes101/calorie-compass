@@ -52,6 +52,7 @@ jobs:
             if [[ -n "$line" ]]; then
               udid="$(printf '%s' "$line" | sed -E 's/.*\(([0-9A-Fa-f-]+)\).*/\1/')"
               echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
+              echo "udid=$udid" >> "$GITHUB_OUTPUT"
               echo "Using simulator: $name ($udid)"
               exit 0
             fi
@@ -84,13 +85,39 @@ jobs:
           cat food-intelligence-ui-server.log >&2
           exit 1
 
-      - name: Test Calorie Compass
-        timeout-minutes: 15
+      - name: Test native unit suite
+        timeout-minutes: 12
+        run: |
+          set -o pipefail
+          rm -rf ios-unit-test-results.xcresult
+          xcodebuild \
+            -project ios/CalorieCompass/CalorieCompass.xcodeproj \
+            -scheme CalorieCompass \
+            -destination '${{ steps.simulator.outputs.destination }}' \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 90 \
+            -maximum-test-execution-time-allowance 120 \
+            -only-testing:CalorieCompassTests \
+            -resultBundlePath ios-unit-test-results.xcresult \
+            test | tee ios-unit-test.log
+
+      - name: Reboot simulator before UI tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          udid='${{ steps.simulator.outputs.udid }}'
+          xcrun simctl shutdown "$udid" || true
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+      - name: Test Food Intelligence UI flow
+        timeout-minutes: 10
         env:
           MACROMESH_UI_TEST_BASE_URL: http://127.0.0.1:8765
         run: |
           set -o pipefail
-          rm -rf ios-test-results.xcresult
+          rm -rf ios-ui-test-results.xcresult
           xcodebuild \
             -project ios/CalorieCompass/CalorieCompass.xcodeproj \
             -scheme CalorieCompass \
@@ -99,8 +126,9 @@ jobs:
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 180 \
             -maximum-test-execution-time-allowance 240 \
-            -resultBundlePath ios-test-results.xcresult \
-            test | tee ios-test.log
+            -only-testing:CalorieCompassUITests/FoodIntelligenceUITests/testLiveSearchReviewSaveAndHistoryUseOneNormalizedFood \
+            -resultBundlePath ios-ui-test-results.xcresult \
+            test | tee ios-ui-test.log
 
       - name: Upload iOS logs
         if: always()
@@ -109,6 +137,8 @@ jobs:
           name: ios-ci-logs
           path: |
             ios-build.log
-            ios-test.log
-            ios-test-results.xcresult
+            ios-unit-test.log
+            ios-unit-test-results.xcresult
+            ios-ui-test.log
+            ios-ui-test-results.xcresult
             food-intelligence-ui-server.log

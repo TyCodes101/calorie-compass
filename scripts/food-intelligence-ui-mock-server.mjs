@@ -57,7 +57,9 @@ const variants = [
   food('KitKat White Creme', 220),
 ];
 
-function send(response, status, payload) {
+function send(request, response, status, payload) {
+  const path = new URL(request.url ?? '/', `http://127.0.0.1:${port}`).pathname;
+  process.stdout.write(`${request.method ?? 'UNKNOWN'} ${path} -> ${status}\n`);
   response.writeHead(status, { 'Content-Type': 'application/json' });
   response.end(JSON.stringify(payload));
 }
@@ -65,10 +67,10 @@ function send(response, status, payload) {
 const server = http.createServer((request, response) => {
   const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`);
   if (request.method === 'GET' && url.pathname === '/api/reusable-meals') {
-    return send(response, 200, { favoriteMeals: [], recentMeals: [] });
+    return send(request, response, 200, { favoriteMeals: [], recentMeals: [] });
   }
   if (request.method === 'GET' && url.pathname === '/api/food-search') {
-    return send(response, 200, {
+    return send(request, response, 200, {
       query: url.searchParams.get('q') ?? '',
       normalizedQuery: 'KitKat',
       results: variants,
@@ -82,9 +84,15 @@ const server = http.createServer((request, response) => {
     let body = '';
     request.on('data', (chunk) => { body += chunk; });
     request.on('end', () => {
-      const parsed = JSON.parse(body || '{}');
+      let parsed;
+      try {
+        parsed = JSON.parse(body || '{}');
+      } catch {
+        send(request, response, 400, { error: 'Invalid JSON in deterministic UI test request.' });
+        return;
+      }
       savedItems = parsed.items ?? [];
-      send(response, 200, {
+      send(request, response, 200, {
         meal: {
           id: 'ui-saved-meal',
           mealType: 'SNACK',
@@ -105,7 +113,7 @@ const server = http.createServer((request, response) => {
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/meals') {
-    return send(response, 200, {
+    return send(request, response, 200, {
       meals: savedItems.length ? [{
         id: 'ui-saved-meal',
         mealType: 'SNACK',
@@ -121,7 +129,7 @@ const server = http.createServer((request, response) => {
       }] : [],
     });
   }
-  return send(response, 404, { error: 'Not found in UI test server.' });
+  return send(request, response, 404, { error: 'Not found in UI test server.' });
 });
 
 server.listen(port, '127.0.0.1', () => {
