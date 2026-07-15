@@ -1303,6 +1303,7 @@ struct FoodSearchSheet: View {
                         }
                     }
                 }
+                .accessibilityIdentifier("Food search results")
                 if results.isEmpty && !isLoading {
                     Button("Quick Add Calories/Macros") {
                         onQuickAdd()
