@@ -6,6 +6,12 @@ type MealMetric = {
   totalProtein: number;
   totalCarbs?: number;
   totalFat?: number;
+  mealType?: string;
+  items?: Array<{
+    foodName: string;
+    nutritionSourceType?: string | null;
+    nutritionSourceName?: string | null;
+  }>;
 };
 
 type GoalTypeValue = 'LOSE_WEIGHT' | 'MAINTAIN' | 'GAIN_MUSCLE';
@@ -65,6 +71,28 @@ function computeLongestStreakFromDays(days: string[]) {
 function daysInWindow(currentDate: Date | string, length: number) {
   const start = addDaysUtc(currentDate, -(length - 1));
   return Array.from({ length }, (_, index) => isoDay(addDaysUtc(start, index)));
+}
+
+function rankedCounts(entries: string[], limit = 3) {
+  const counts = new Map<string, { name: string; count: number }>();
+  for (const entry of entries) {
+    const name = entry.trim();
+    const key = name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!key) continue;
+    const current = counts.get(key);
+    counts.set(key, { name: current?.name ?? name, count: (current?.count ?? 0) + 1 });
+  }
+  return [...counts.values()]
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
+    .slice(0, limit);
+}
+
+function restaurantFromMealItem(item: NonNullable<MealMetric['items']>[number]) {
+  if (item.nutritionSourceType !== 'OFFICIAL_RESTAURANT') return null;
+  const sourceName = item.nutritionSourceName?.trim() ?? '';
+  if (!sourceName) return null;
+  const restaurant = sourceName.replace(/\s+official\s+nutrition.*$/i, '').trim();
+  return restaurant && restaurant.length <= 60 ? restaurant : null;
 }
 
 export function buildStreakMilestone(currentStreakDays: number) {
@@ -153,12 +181,42 @@ export function buildNutritionAnalytics({
   }, null);
   const calorieConsistentDays = sevenLogged.filter((entry) => Math.abs((entry.totals?.calories ?? 0) - calorieGoal) <= calorieGoal * 0.15).length;
   const proteinConsistentDays = sevenLogged.filter((entry) => (entry.totals?.protein ?? 0) >= proteinGoal * 0.85).length;
+  const thirtyDayKeys = new Set(daysInWindow(currentDate, 30));
+  const recentMeals = meals.filter((meal) => thirtyDayKeys.has(isoDay(meal.date)));
+  const mostLoggedFoods = rankedCounts(recentMeals.flatMap((meal) => meal.items?.map((item) => item.foodName) ?? []));
+  const mostLoggedRestaurants = rankedCounts(recentMeals.flatMap((meal) => meal.items?.map(restaurantFromMealItem).filter((name): name is string => Boolean(name)) ?? []));
+  const mealTypeCounts = rankedCounts(recentMeals.map((meal) => meal.mealType?.toLowerCase() ?? '').filter(Boolean), 1);
+  const weekendDays = thirtyLogged.filter((entry) => {
+    const day = new Date(`${entry.day}T00:00:00.000Z`).getUTCDay();
+    return day === 0 || day === 6;
+  });
+  const weekdayDays = thirtyLogged.filter((entry) => {
+    const day = new Date(`${entry.day}T00:00:00.000Z`).getUTCDay();
+    return day > 0 && day < 6;
+  });
+  const weekendAverageCalories = weekendDays.length
+    ? round(weekendDays.reduce((sum, entry) => sum + (entry.totals?.calories ?? 0), 0) / weekendDays.length)
+    : null;
+  const weekdayAverageCalories = weekdayDays.length
+    ? round(weekdayDays.reduce((sum, entry) => sum + (entry.totals?.calories ?? 0), 0) / weekdayDays.length)
+    : null;
 
   return {
     sevenDayAverageCalories,
     sevenDayAverageProtein,
     thirtyDayAverageCalories,
     highestProteinDay,
+    sevenDayLoggedDays: sevenLogged.length,
+    calorieGoalHitDays: calorieConsistentDays,
+    proteinGoalHitDays: proteinConsistentDays,
+    mostLoggedFoods,
+    mostLoggedRestaurants,
+    mostCommonMealType: mealTypeCounts[0] ?? null,
+    weekendAverageCalories,
+    weekdayAverageCalories,
+    weeklySummary: sevenLogged.length
+      ? `You averaged ${sevenDayAverageProtein}g protein across ${sevenLogged.length} logged day${sevenLogged.length === 1 ? '' : 's'}.`
+      : 'Log meals on a few days to unlock weekly patterns.',
     macroConsistencySummary: sevenLogged.length
       ? `${proteinConsistentDays} protein days, ${calorieConsistentDays} calorie-consistent days this week`
       : 'No analytics yet',

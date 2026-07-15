@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { buildBarcodeLookupResult, normalizeBarcode } from '@/lib/barcode-lookup';
+import { buildBarcodeLookupResult, markSearchResultAsBarcodeMatch, normalizeBarcode } from '@/lib/barcode-lookup';
 import { getCustomFoods } from '@/lib/custom-foods';
 import { verifiedCatalogFoodsForLookup } from '@/lib/food-search';
 import { logWriteFailure } from '@/lib/persistence';
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     const cached = await getCachedFoodByBarcode(barcode);
     if (cached) {
-      return NextResponse.json({ barcode, found: true, result: cachedFoodToSearchResult(cached) });
+      return NextResponse.json({ barcode, found: true, result: markSearchResultAsBarcodeMatch(cachedFoodToSearchResult(cached), barcode) });
     }
 
     const providerResult = await resolveBarcodeNutrition(barcode);

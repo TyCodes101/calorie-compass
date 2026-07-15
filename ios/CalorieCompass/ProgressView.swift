@@ -805,7 +805,25 @@ private struct WeeklySummaryCard: View {
                     SummaryTile(title: "Avg calories", value: avgCaloriesText, icon: "flame.fill", tint: MacroMeshTheme.orange)
                     SummaryTile(title: "Avg protein", value: avgProteinText, icon: "bolt.heart.fill", tint: MacroMeshTheme.primary)
                     SummaryTile(title: "Weight change", value: weightChangeText, icon: "scalemass", tint: MacroMeshTheme.blue)
-                    SummaryTile(title: "Avg deficit", value: "Not enough data yet", icon: "minus.circle", tint: MacroMeshTheme.purple)
+                    SummaryTile(title: "Calorie goal", value: calorieGoalDaysText, icon: "target", tint: MacroMeshTheme.purple)
+                }
+
+                if let summary = analytics?.analytics.weeklySummary, !summary.isEmpty {
+                    Label(summary, systemImage: "sparkles")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(MacroMeshTheme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !learnedPatternRows.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(learnedPatternRows, id: \.self) { row in
+                            Text(row)
+                                .font(.caption)
+                                .foregroundColor(MacroMeshTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
         }
@@ -824,6 +842,30 @@ private struct WeeklySummaryCard: View {
     private var weightChangeText: String {
         guard let delta = weightDeltaLast7Days else { return "Not enough data" }
         return String(format: "%+.1f lbs", delta)
+    }
+
+    private var calorieGoalDaysText: String {
+        guard let value = analytics?.analytics.calorieGoalHitDays else { return "Not enough data" }
+        return "\(value) of 7 days"
+    }
+
+    private var learnedPatternRows: [String] {
+        guard let summary = analytics?.analytics else { return [] }
+        var rows: [String] = []
+
+        if let food = summary.mostLoggedFoods?.first {
+            rows.append("Most logged: \(food.name) (\(food.count) time\(food.count == 1 ? "" : "s") in 30 days).")
+        }
+        if let restaurant = summary.mostLoggedRestaurants?.first {
+            rows.append("Most visited restaurant: \(restaurant.name) (\(restaurant.count) time\(restaurant.count == 1 ? "" : "s")).")
+        }
+        if let weekend = summary.weekendAverageCalories, let weekday = summary.weekdayAverageCalories {
+            let difference = Int((weekend - weekday).rounded())
+            if abs(difference) >= 50 {
+                rows.append("Weekend average was \(abs(difference)) calories \(difference > 0 ? "higher" : "lower") than weekdays.")
+            }
+        }
+        return rows
     }
 }
 

@@ -37,7 +37,7 @@ export const parsedFoodItemSchema = z.object({
   source_type: z.enum(['OFFICIAL_RESTAURANT', 'GENERIC_REFERENCE', 'AI_ESTIMATE']).nullable().optional(),
   source_name: z.string().nullable().optional(),
   confidence_label: verificationLabelSchema.nullable().optional(),
-  match_type: z.enum(['exact_branded', 'exact_restaurant', 'fuzzy_branded', 'fuzzy_restaurant', 'verified_database', 'generic_estimate', 'ai_estimate', 'unknown']).nullable().optional(),
+  match_type: z.enum(['exact_barcode', 'exact_branded', 'exact_restaurant', 'fuzzy_branded', 'fuzzy_restaurant', 'verified_database', 'generic_estimate', 'ai_estimate', 'unknown']).nullable().optional(),
   matched_query: z.string().nullable().optional(),
   original_user_text: z.string().nullable().optional(),
   provider_used: z.string().nullable().optional(),
