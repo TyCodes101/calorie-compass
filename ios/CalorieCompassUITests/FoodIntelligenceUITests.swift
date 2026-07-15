@@ -12,6 +12,13 @@ final class FoodIntelligenceUITests: XCTestCase {
         app.launch()
     }
 
+    override func tearDownWithError() throws {
+        if app.state != .notRunning {
+            app.terminate()
+        }
+        app = nil
+    }
+
     func testLiveSearchReviewSaveAndHistoryUseOneNormalizedFood() throws {
         app.tabBars.buttons["Log"].tap()
         let foodSearch = app.buttons["Food Search"]
