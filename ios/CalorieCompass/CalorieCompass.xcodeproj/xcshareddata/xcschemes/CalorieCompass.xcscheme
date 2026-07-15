@@ -12,6 +12,9 @@
          <TestableReference skipped="NO">
             <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="100000000000000000000502" BuildableName="CalorieCompassTests.xctest" BlueprintName="CalorieCompassTests" ReferencedContainer="container:CalorieCompass.xcodeproj" />
          </TestableReference>
+         <TestableReference skipped="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="100000000000000000000503" BuildableName="CalorieCompassUITests.xctest" BlueprintName="CalorieCompassUITests" ReferencedContainer="container:CalorieCompass.xcodeproj" />
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES">

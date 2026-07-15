@@ -649,11 +649,27 @@ struct LogChatView: View {
             return
         }
 
-        reviewItems.append(MealItem(from: suggestion.item))
-        syncActiveMealItems(reviewItems)
-        dismissedSuggestionID = suggestion.id
-        quickActionMessage = "Added \(suggestion.item.food_name) to this review."
-        UIAccessibility.post(notification: .announcement, argument: "Added \(suggestion.item.food_name) to meal review")
+        quickActionMessage = "Refreshing \(suggestion.item.food_name)..."
+        BackendService.revalidateFoods(
+            origin: "suggestion",
+            mealType: selectedMealType,
+            items: [suggestion.item]
+        ) { result in
+            DispatchQueue.main.async {
+                let refreshedItem: MealRequestItem
+                switch result {
+                case .success(let response):
+                    refreshedItem = response.items.first ?? suggestion.item
+                case .failure:
+                    refreshedItem = suggestion.item
+                }
+                reviewItems.append(MealItem(from: refreshedItem))
+                syncActiveMealItems(reviewItems)
+                dismissedSuggestionID = suggestion.id
+                quickActionMessage = "Added \(refreshedItem.food_name) to this review."
+                UIAccessibility.post(notification: .announcement, argument: "Added \(refreshedItem.food_name) to meal review")
+            }
+        }
     }
 
     private func reviewSearchResult(_ result: FoodSearchResult, assistantText: String) {
@@ -702,14 +718,35 @@ struct LogChatView: View {
             return
         }
 
-        beginReview(
-            items: items,
+        quickActionMessage = "Refreshing \(meal.title)..."
+        BackendService.revalidateFoods(
+            origin: label == "favorite" ? "favorite" : "history",
             mealType: meal.mealType,
-            confidenceScore: meal.confidenceScore ?? 0.82,
-            rawText: meal.rawText ?? meal.title,
-            sourceReusableMealId: label == "favorite" ? meal.id : nil,
-            assistantText: "Loaded \(meal.title). Review it before saving."
-        )
+            items: items
+        ) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    beginReview(
+                        items: response.items,
+                        mealType: response.mealType,
+                        confidenceScore: response.confidenceScore,
+                        rawText: meal.rawText ?? meal.title,
+                        sourceReusableMealId: label == "favorite" ? meal.id : nil,
+                        assistantText: "Refreshed \(meal.title). Review it before saving."
+                    )
+                case .failure:
+                    beginReview(
+                        items: items,
+                        mealType: meal.mealType,
+                        confidenceScore: min(meal.confidenceScore ?? 0.82, 0.7),
+                        rawText: meal.rawText ?? meal.title,
+                        sourceReusableMealId: label == "favorite" ? meal.id : nil,
+                        assistantText: "I couldn't refresh the database match, so I kept your previously confirmed values for review."
+                    )
+                }
+            }
+        }
     }
 
     func sendMessage(retryText: String? = nil) {
@@ -1186,6 +1223,8 @@ struct FoodSearchSheet: View {
     @State private var inFlightQuery: String?
     @State private var lastFailedQuery: String?
     @State private var requestID = UUID()
+    @State private var debounceWorkItem: DispatchWorkItem?
+    @State private var searchTask: URLSessionDataTask?
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -1196,8 +1235,10 @@ struct FoodSearchSheet: View {
                         .textFieldStyle(MacroMeshTextFieldStyle())
                         .submitLabel(.search)
                         .onSubmit(search)
+                        .onChange(of: query) { _, newValue in
+                            scheduleSearch(for: newValue)
+                        }
                         .focused($searchFocused)
-                        .disabled(isLoading)
                         .accessibilityLabel("Search foods")
                     Button(action: search) {
                         if isLoading {
@@ -1277,32 +1318,59 @@ struct FoodSearchSheet: View {
             .onAppear {
                 searchFocused = true
             }
+            .onDisappear {
+                debounceWorkItem?.cancel()
+                searchTask?.cancel()
+            }
         }
     }
 
     private var canSearch: Bool {
-        !isLoading && query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+        query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+    }
+
+    private func scheduleSearch(for rawQuery: String) {
+        debounceWorkItem?.cancel()
+        let trimmed = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2 else {
+            requestID = UUID()
+            searchTask?.cancel()
+            searchTask = nil
+            inFlightQuery = nil
+            submittedQuery = ""
+            results = []
+            message = nil
+            clarificationQuestion = nil
+            errorMessage = nil
+            isLoading = false
+            return
+        }
+        let workItem = DispatchWorkItem { search() }
+        debounceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
     }
 
     private func search() {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 2, !isLoading else { return }
+        guard trimmed.count >= 2 else { return }
         if trimmed == submittedQuery && !results.isEmpty { return }
         if trimmed == inFlightQuery { return }
+        debounceWorkItem?.cancel()
+        searchTask?.cancel()
         let currentRequestID = UUID()
         requestID = currentRequestID
         inFlightQuery = trimmed
         submittedQuery = trimmed
-        results = []
         isLoading = true
         errorMessage = nil
         clarificationQuestion = nil
         message = "Searching verified sources, custom foods, recents, and favorites..."
-        BackendService.searchFoods(query: trimmed) { result in
+        searchTask = BackendService.searchFoods(query: trimmed) { result in
             DispatchQueue.main.async {
                 guard requestID == currentRequestID else { return }
                 isLoading = false
                 inFlightQuery = nil
+                searchTask = nil
                 switch result {
                 case .success(let response):
                     results = response.results
