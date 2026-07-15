@@ -53,7 +53,7 @@ final class FoodIntelligenceUITests: XCTestCase {
         let saveButton = app.buttons["Save meal"]
         XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
         saveButton.tap()
-        XCTAssertTrue(app.staticTexts["Saved. Ready for the next one?"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["MacroMesh: Saved. Ready for the next one?"].waitForExistence(timeout: 5))
 
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(app.staticTexts["KitKat Milk Chocolate"].waitForExistence(timeout: 5))
