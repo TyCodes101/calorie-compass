@@ -11,7 +11,7 @@ const quantityWords: Record<string, number> = {
   six: 6,
 };
 
-const brandHints = [
+const brandHints: Array<{ pattern: RegExp; brand: string; naturalUnit?: string }> = [
   { pattern: /\barby'?s\b|\barbys\b|\barby\b/, brand: "Arby's" },
   { pattern: /\bmcdonalds\b/, brand: "McDonald's" },
   { pattern: /\bmcd\b/, brand: "McDonald's" },
@@ -26,6 +26,16 @@ const brandHints = [
   { pattern: /\bwendys\b|\bwendy s\b/, brand: "Wendy's" },
   { pattern: /\bdunkin\b/, brand: 'Dunkin' },
   { pattern: /\bpanda express\b/, brand: 'Panda Express' },
+  { pattern: /\bqdoba\b/, brand: 'Qdoba' },
+  { pattern: /\bfive guys\b|\bfiveguys\b/, brand: 'Five Guys' },
+  { pattern: /\bculver'?s\b|\bculvers\b/, brand: "Culver's" },
+  { pattern: /\bpanera\b/, brand: 'Panera' },
+  { pattern: /\bpopeyes\b/, brand: 'Popeyes' },
+  { pattern: /\bkfc\b/, brand: 'KFC' },
+  { pattern: /\bdomino'?s\b|\bdominos\b/, brand: "Domino's" },
+  { pattern: /\bpizza hut\b|\bpizzahut\b/, brand: 'Pizza Hut' },
+  { pattern: /\braising cane'?s\b|\braising canes\b/, brand: "Raising Cane's" },
+  { pattern: /\bjersey mike'?s\b|\bjersey mikes\b/, brand: "Jersey Mike's" },
   { pattern: /\btexas roadhouse\b/, brand: 'Texas Roadhouse' },
   { pattern: /\bfairlife\b/, brand: 'Fairlife' },
   { pattern: /\bcore power\b/, brand: 'Core Power' },
@@ -47,9 +57,11 @@ const brandHints = [
   { pattern: /\bcoca cola\b|\bdiet coke\b|\bcoke zero\b|\bcoke\b/, brand: 'Coca-Cola' },
   { pattern: /\bgoldfish\b|\bgold fish\b/, brand: 'Goldfish' },
   { pattern: /\bcheez it\b|\bcheezit\b/, brand: 'Cheez-It' },
-  { pattern: /\bskittles?\b/, brand: 'Skittles' },
-  { pattern: /\bsnickers?\b/, brand: 'Snickers' },
-  { pattern: /\bmms?\b|\bm and ms?\b/, brand: "M&M's" },
+  { pattern: /\bskittles?\b/, brand: 'Skittles', naturalUnit: 'pack' },
+  { pattern: /\bsnickers?\b/, brand: 'Snickers', naturalUnit: 'bar' },
+  { pattern: /\bmms?\b|\bm and ms?\b/, brand: "M&M's", naturalUnit: 'pack' },
+  { pattern: /\bkit\s*kat\b|\bkitkat\b/, brand: 'KitKat', naturalUnit: 'bar' },
+  { pattern: /\bben\s*(?:and|&)\s*jerrys\b|\bben jerrys\b/, brand: "Ben & Jerry's" },
 ];
 
 // Note: keep ingredient words (ex: butter, oil, cream, jelly, ranch) out of this list,
@@ -69,7 +81,7 @@ const compoundFoodDefinitions = [
   { pattern: /\bgrilled chicken(?: breast)?\b/, baseSearch: 'grilled chicken breast', matched: 'Grilled chicken breast', unitHint: 'breast' },
   { pattern: /\bhash browns?\b/, baseSearch: 'hash brown', matched: 'Hash browns', unitHint: null },
   { pattern: /\bfrench fries\b|\bfries\b/, baseSearch: 'french fries', matched: 'French fries', unitHint: null },
-  { pattern: /\bmac and cheese\b|\bmac n cheese\b/, baseSearch: 'mac and cheese', matched: 'Mac and cheese', unitHint: null },
+  { pattern: /\bmac(?: and| n)? cheese\b/, baseSearch: 'mac and cheese', matched: 'Mac and cheese', unitHint: null },
   { pattern: /\bpopcorn\b/, baseSearch: 'popcorn', matched: 'Popcorn', unitHint: null },
   { pattern: /\bcrackers?\b/, baseSearch: 'cracker', matched: 'Crackers', unitHint: null },
   { pattern: /\bchips?\b/, baseSearch: 'chips', matched: 'Chips', unitHint: null },
@@ -80,6 +92,9 @@ function cleanupFreeText(text: string) {
     .toLowerCase()
     .replace(/[’']/g, '')
     .replace(/\bchipolte\b/g, 'chipotle')
+    .replace(/\bmcdonlads\b/g, 'mcdonalds')
+    .replace(/\bcheeots\b/g, 'cheetos')
+    .replace(/\bkit\s+kat\b/g, 'kitkat')
     .replace(/\bskitles\b/g, 'skittles')
     .replace(/\bprotien\b/g, 'protein')
     .replace(/\bmcdoublee\b/g, 'mcdouble')
@@ -193,7 +208,7 @@ function normalizeQuantityUnit(unit: string | undefined) {
 }
 
 function extractQuantityUnit(text: string) {
-  if (/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s+(?:small|medium|large)\s+eggs?\b/.test(text)) {
+  if (/\b(?:(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s+)?(?:small|medium|large)\s+eggs?\b/.test(text)) {
     return 'egg';
   }
   const match = text.match(/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|ml|milliliters?|slices?|pieces?|cakes?|bars?|bottles?|eggs?|cups?|tbsp|tablespoons?|tsp|teaspoons?|small|medium|large)\b/);
@@ -219,6 +234,10 @@ function singularize(text: string) {
 
 function detectBrandHint(text: string) {
   return brandHints.find((entry) => entry.pattern.test(text))?.brand ?? null;
+}
+
+function detectBrandNaturalUnit(text: string) {
+  return brandHints.find((entry) => entry.pattern.test(text))?.naturalUnit ?? null;
 }
 
 function buildBrandedPackagedSearch(text: string) {
@@ -292,6 +311,14 @@ function detectCompoundFood(text: string) {
 }
 
 function canonicalize(text: string) {
+  if (/\bpeanut butter\b/.test(text) && /\bjelly\b/.test(text)) {
+    return {
+      searchText: 'peanut butter and jelly sandwich',
+      matchedQuery: 'Peanut Butter and Jelly Sandwich',
+      unitHint: 'sandwich',
+    };
+  }
+
   if (text === 'mcdouble' || text === 'mcdonalds mcdouble') {
     return {
       searchText: 'mcdonalds mcdouble',
@@ -329,6 +356,15 @@ function canonicalize(text: string) {
     return compoundFood;
   }
 
+  const brandNaturalUnit = detectBrandNaturalUnit(text);
+  if (brandNaturalUnit) {
+    return {
+      searchText: text,
+      matchedQuery: titleCase(text),
+      unitHint: brandNaturalUnit,
+    };
+  }
+
   return {
     searchText: text,
     matchedQuery: titleCase(text),
@@ -341,7 +377,7 @@ function buildNormalizedSearchText(base: string, details: string[]) {
   const combined = [base, detailText]
     .filter(Boolean)
     .join(' ')
-    .replace(/\b(?:no|without|extra|light)\s+(?:cheese|mayo|mayonnaise|bun|rice|sauce|dressing|pickles?|onions?|mushrooms?|sugar)\b/g, ' ')
+    .replace(/\b(?:no|without|extra|light)\s+(?:cheese|mayo|mayonnaise|bun|rice|sauce|dressing|ketchup|pickles?|onions?|mushrooms?|sugar)\b/g, ' ')
     .replace(/\b(\d+(?:\.\d+)?)\s*(?:g|gram|grams)\s+(?=[a-z])/g, '$1 ')
     .replace(/\b(\d+(?:\.\d+)?)\s*(?:piece|pieces)\s+(?=[a-z])/g, '$1 ')
     .replace(/\b\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\b/g, ' ')

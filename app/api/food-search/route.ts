@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getCustomFoods } from '@/lib/custom-foods';
-import { buildFoodSearchResponse } from '@/lib/food-search';
+import { searchFoodIntelligence } from '@/lib/food-intelligence/engine';
 import { logWriteFailure } from '@/lib/persistence';
 import { getReusableMealLibrary } from '@/lib/reusable-meals';
 
@@ -30,8 +30,9 @@ export async function GET(request: Request) {
       getReusableMealLibrary(),
     ]);
 
-    return NextResponse.json(await buildFoodSearchResponse({
+    return NextResponse.json(await searchFoodIntelligence({
       query,
+      origin: 'search',
       customFoods,
       favoriteMeals: reusableMeals.favoriteMeals,
       recentMeals: reusableMeals.recentMeals,

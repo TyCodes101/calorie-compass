@@ -4,7 +4,7 @@ import { getCurrentUserWithProfile, hasDatabaseConnectionString } from '@/lib/cu
 import { logConnectionReady, logWriteFailure, logWriteStart, logWriteSuccess } from '@/lib/persistence';
 import { prisma } from '@/lib/prisma';
 import { formatMealTitleForDisplay, isFixtureMealRecord } from '@/lib/meal-display';
-import { saveConfirmedMeal, type SaveMealPayload } from '@/lib/meals';
+import type { SaveMealPayload } from '@/lib/meals';
 
 type MealTypeValue = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 type StoredMealType = Uppercase<MealTypeValue>;
@@ -560,5 +560,5 @@ export async function repeatReusableMeal(reusableMealId: string) {
     throw new Error('Favorite meal not found.');
   }
 
-  return saveConfirmedMeal(buildRepeatMealPayloadFromReusableMealRecord(reusableMeal));
+  return buildReusableMealSummaryFromRecord(reusableMeal);
 }

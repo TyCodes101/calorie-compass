@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { ParsedMealResponse } from '@/lib/ai/types';
 import type { NormalizedFoodQuery, NutritionLookupProvider } from '@/lib/nutrition/types';
 import { normalizeServingUnit } from '@/lib/nutrition/scaling';
 import {
@@ -380,6 +381,22 @@ export const fatSecretProvider: NutritionLookupProvider = {
       configured: config.configured,
       reason: config.configured ? undefined : `fatsecret_${config.reason ?? 'not_configured'}`,
     };
+  },
+  async searchCandidates({ mealType, normalizedQuery, trace }) {
+    const foods = await searchFoods(normalizedQuery);
+    const rankedFoods = foods
+      .map((food) => ({ food, score: identityScore(food, normalizedQuery) }))
+      .filter((entry): entry is { food: FatSecretFood; score: number } => entry.score !== null)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 4);
+    const detailedFoods = await Promise.all(rankedFoods.map(async (entry) => (
+      entry.food.servings ? entry.food : await getFood(entry.food.food_id)
+    )));
+    return detailedFoods
+      .map((food) => food ? foodToCandidate(food, normalizedQuery) : null)
+      .filter((candidate): candidate is NormalizedProviderFood => Boolean(candidate))
+      .map((candidate) => buildProviderMealResponse({ candidate, normalizedQuery, mealType, trace }))
+      .filter((response): response is ParsedMealResponse => Boolean(response));
   },
   async lookup({ mealType, normalizedQuery, trace }) {
     const foods = await searchFoods(normalizedQuery);

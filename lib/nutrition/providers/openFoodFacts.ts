@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { ParsedMealResponse } from '@/lib/ai/types';
 import { normalizeBarcode } from '@/lib/nutrition/barcode';
 import { normalizeServingUnit, isCountableServingUnit } from '@/lib/nutrition/scaling';
 import type { NormalizedFoodQuery, NutritionLookupProvider } from '@/lib/nutrition/types';
@@ -383,6 +384,18 @@ export const openFoodFactsProvider: NutritionLookupProvider = {
       configured: config.configured,
       reason: config.configured ? undefined : `open_food_facts_${config.reason ?? 'not_configured'}`,
     };
+  },
+  async searchCandidates({ mealType, normalizedQuery, trace }) {
+    const products = await searchProducts(normalizedQuery);
+    return products
+      .map((product) => ({ product, score: identityScore(product, normalizedQuery) }))
+      .filter((entry): entry is { product: OpenFoodFactsProduct; score: number } => entry.score !== null)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 5)
+      .map((entry) => productToCandidate(entry.product, { exactBarcode: false, query: normalizedQuery }))
+      .filter((entry): entry is NormalizedProviderFood => Boolean(entry))
+      .map((candidate) => buildProviderMealResponse({ candidate, normalizedQuery, mealType, trace }))
+      .filter((response): response is ParsedMealResponse => Boolean(response));
   },
   async lookup({ mealType, normalizedQuery, trace }) {
     const products = await searchProducts(normalizedQuery);

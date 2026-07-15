@@ -11,7 +11,7 @@ describe('provider query intent matrix', () => {
     ['200g chicken breast', /chicken breast/, 200, 'g', null],
     ['1 cup cooked white rice', /white rice/, 1, 'cup', null],
     ['Flamin Hot Cheetos', /flamin hot cheetos/, 1, null, 'Cheetos'],
-    ['hot cheeots', /hot cheeots/, 1, null, 'Cheetos'],
+    ['hot cheeots', /hot cheetos/, 1, null, 'Cheetos'],
     ['Quest nacho cheese chips', /quest nacho cheese protein chips/, 1, 'bag', 'Quest'],
     ['McDouble no cheese', /mcdonalds mcdouble/, 1, 'burger', "McDonald's"],
     ['Chipotle chicken bowl', /chipotle.*bowl/, 1, null, 'Chipotle'],

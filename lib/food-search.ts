@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 
+import type { FoodPipelineTrace } from '@/lib/ai/foodPipelineTrace';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import type { CustomFoodSummary } from '@/lib/custom-foods';
 import type { FavoriteMealSummary } from '@/lib/reusable-meals';
@@ -122,28 +123,33 @@ type SearchCatalogFood = CatalogFoodRecord & {
   barcodes?: string[];
 };
 
-type BuildFoodSearchResponseInput = {
+export type BuildFoodSearchResponseInput = {
   query: string;
+  mealType?: ParsedMealResponse['meal_type'];
   customFoods: CustomFoodSummary[];
   favoriteMeals: FavoriteMealSummary[];
   recentMeals: FavoriteMealSummary[];
   catalogFoods?: SearchCatalogFood[];
 };
 
-type BuildFoodSearchResponseOptions = {
+export type BuildFoodSearchResponseOptions = {
   ai?: FoodSearchAiClient;
   providers?: NutritionLookupProvider[];
   catalogFoods?: SearchCatalogFood[];
+  trace?: FoodPipelineTrace;
 };
 
 const resolverCache = new Map<string, FoodSearchResolverOutput | null>();
 const rankingCache = new Map<string, FoodSearchRankingOutput | null>();
-const selectedResultCache = new Map<string, FoodSearchResult>();
 
 function normalizeSearchText(text: string) {
   return text
     .toLowerCase()
     .replace(/\bflaming\b/g, 'flamin')
+    .replace(/\bhot cheeots\b/g, 'flamin hot cheetos')
+    .replace(/\bchipolte\b/g, 'chipotle')
+    .replace(/\bmcdonlads\b/g, 'mcdonalds')
+    .replace(/\bkit\s+kat\b/g, 'kitkat')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -165,6 +171,15 @@ const queryStopTokens = new Set([
   'serving',
   'servings',
   'food',
+  'g',
+  'gram',
+  'grams',
+  'oz',
+  'ounce',
+  'ounces',
+  'ml',
+  'milliliter',
+  'milliliters',
 ]);
 
 function cacheKey(text: string) {
@@ -175,7 +190,7 @@ function tokens(text: string) {
   return normalizeSearchText(text)
     .split(' ')
     .filter(Boolean)
-    .filter((token) => !queryStopTokens.has(token));
+    .filter((token) => !queryStopTokens.has(token) && !/^\d+(?:\.\d+)?$/.test(token));
 }
 
 function textMatches(query: string, value: string | null | undefined) {
@@ -219,7 +234,7 @@ function searchScore(query: string, value: string | null | undefined) {
   if (!queryTokens.length || !valueTokens.length) return null;
 
   if (normalizedQuery === normalizedValue) return 120;
-  if (normalizedValue.includes(normalizedQuery) || normalizedQuery.includes(normalizedValue)) return 92;
+  if (normalizedValue.includes(normalizedQuery)) return 92;
 
   let score = 0;
   let matched = 0;
@@ -297,14 +312,16 @@ function hasStrongExactMatch(query: string, results: FoodSearchResult[]) {
 }
 
 function sourceStrength(result: FoodSearchResult) {
+  if (result.sourceLabel === 'Custom') return 125;
   if (result.id.startsWith('catalog:')) return 120;
-  if (result.sourceLabel === 'Custom' || result.sourceLabel === 'Favorite' || result.sourceLabel === 'Recent') return 115;
+  if (result.sourceLabel === 'Favorite') return 116;
+  if (result.sourceLabel === 'Recent') return 112;
   if (result.sourceLabel === 'Restaurant verified') return 110;
-  if (result.providerId === 'fatsecret') return 90;
-  if (result.providerId === 'commercial-database') return 88;
-  if (result.providerId === 'usda-fdc') return 84;
-  if (result.providerId === 'open-food-facts') return 76;
-  if (result.providerId === 'calorie-api') return 72;
+  if (result.providerId === 'usda-fdc') return 100;
+  if (result.providerId === 'open-food-facts') return 92;
+  if (result.providerId === 'fatsecret') return 88;
+  if (result.providerId === 'calorie-api') return 84;
+  if (result.providerId === 'commercial-database' || result.providerId === 'commercial-database-slot') return 80;
   if (result.estimated) return 10;
   return 60;
 }
@@ -321,10 +338,24 @@ function resultIdentityKey(result: FoodSearchResult) {
     name = name.split(' ').filter((token) => !brandTokens.has(token)).join(' ');
   }
   const serving = `${Math.round(result.servingQuantity * 100) / 100}:${normalizeSearchText(result.servingUnit)}`;
-  const genericFingerprint = brand
-    ? ''
-    : `:${Math.round(result.calories / 10)}:${Math.round(result.protein / 5)}:${Math.round(result.carbs / 5)}:${Math.round(result.fat / 5)}`;
-  return `food:${brand}:${name}:${serving}${genericFingerprint}`;
+  return `food:${brand}:${name}:${serving}`;
+}
+
+function materiallyDisagrees(left: FoodSearchResult, right: FoodSearchResult) {
+  const relativeDifference = (first: number, second: number) => (
+    Math.abs(first - second) / Math.max(Math.abs(first), Math.abs(second), 1)
+  );
+  return relativeDifference(left.calories, right.calories) > 0.2
+    || relativeDifference(left.protein, right.protein) > 0.35
+    || relativeDifference(left.carbs, right.carbs) > 0.35
+    || relativeDifference(left.fat, right.fat) > 0.35;
+}
+
+function conflictsWithExplicitBrand(query: string, result: FoodSearchResult) {
+  const requestedBrand = normalizeFoodQuery(query).brandHint;
+  const candidateBrand = result.restaurant ?? result.brand;
+  if (!requestedBrand || !candidateBrand) return false;
+  return normalizeSearchText(requestedBrand) !== normalizeSearchText(candidateBrand);
 }
 
 function dedupeResults(results: FoodSearchResult[]) {
@@ -339,7 +370,15 @@ function dedupeResults(results: FoodSearchResult[]) {
 
     const currentScore = sourceStrength(current) + current.confidenceScore * 10 - (current.needsReview ? 8 : 0);
     const candidateScore = sourceStrength(result) + result.confidenceScore * 10 - (result.needsReview ? 8 : 0);
-    if (candidateScore > currentScore) byIdentity.set(key, result);
+    const selected = candidateScore > currentScore ? result : current;
+    const selectedIsAuthoritativeCatalog = selected.id.startsWith('catalog:');
+    byIdentity.set(key, materiallyDisagrees(current, result) && !selectedIsAuthoritativeCatalog
+      ? {
+          ...selected,
+          needsReview: true,
+          reason: 'Nutrition providers disagree for this serving. Review the selected record before saving.',
+        }
+      : selected);
   }
   return [...byIdentity.values()];
 }
@@ -432,8 +471,11 @@ export function rankFoodSearchResultsByUserHistory({
     }));
 }
 
-export function catalogFoodToSearchResult(food: SearchCatalogFood): FoodSearchResult {
-  const item = scaleCatalogFood(food, food.servingQuantity, food.servingUnit);
+export function catalogFoodToSearchResult(food: SearchCatalogFood, query?: ReturnType<typeof normalizeFoodQuery>): FoodSearchResult {
+  const hasRequestedAmount = Boolean(query?.quantityUnit) || (query?.quantity ?? 1) !== 1;
+  const quantity = hasRequestedAmount ? query?.quantity ?? food.servingQuantity : food.servingQuantity;
+  const unit = hasRequestedAmount ? query?.quantityUnit ?? query?.unitHint ?? food.servingUnit : food.servingUnit;
+  const item = scaleCatalogFood(food, quantity, unit);
   const source = getNutritionSourceById(food.sourceId);
   const sourceLabel = labelForTrustedItem(item, food.brand ?? source?.brand ?? null);
   return {
@@ -537,6 +579,7 @@ export function buildFoodSearchResults({
   if (trimmed.length < 2) return [];
 
   const results: FoodSearchResult[] = [];
+  const normalizedQuery = normalizeFoodQuery(trimmed);
   const activeCatalogFoods = (catalogFoods ?? verifiedCatalogFoodsForLookup()).filter((food) => food.active !== false);
   results.push(
     ...activeCatalogFoods
@@ -544,7 +587,7 @@ export function buildFoodSearchResults({
       .filter((candidate): candidate is { food: SearchCatalogFood; score: number } => candidate.score !== null)
       .sort((left, right) => right.score - left.score || left.food.canonicalName.localeCompare(right.food.canonicalName))
       .slice(0, 6)
-      .map((candidate) => catalogFoodToSearchResult(candidate.food)),
+      .map((candidate) => catalogFoodToSearchResult(candidate.food, normalizedQuery)),
   );
 
   results.push(
@@ -582,7 +625,6 @@ export function verifiedCatalogFoodsForLookup() {
 export function resetFoodSearchCaches() {
   resolverCache.clear();
   rankingCache.clear();
-  selectedResultCache.clear();
 }
 
 function logFoodSearchDebug(message: string, metadata?: Record<string, unknown>) {
@@ -698,7 +740,14 @@ function providerResultToSearchResult(
 ): FoodSearchResult | null {
   if (response.needs_clarification || !response.items.length) return null;
 
-  const items = response.items;
+  const resolverModifiers = resolver?.modifiers ?? [];
+  const items = response.items.map((item) => ({
+    ...item,
+    requested_modifiers: [...new Set([...(item.requested_modifiers ?? []), ...resolverModifiers])],
+    review_status: resolverModifiers.length && !item.modifier_resolution
+      ? 'recommended' as const
+      : item.review_status,
+  }));
   const first = items[0];
   if (!first) return null;
 
@@ -731,7 +780,9 @@ function providerResultToSearchResult(
     mealType: response.meal_type,
     confidenceScore: response.confidence_score,
     estimated,
-    needsReview: estimated || response.confidence_score < 0.72 || items.some((item) => item.confidence_label === 'Needs Review'),
+    needsReview: estimated
+      || response.confidence_score < 0.72
+      || items.some((item) => item.confidence_label === 'Needs Review' || item.review_status === 'required'),
     reason: null,
     sourceReusableMealId: null,
     items,
@@ -742,33 +793,37 @@ async function searchProviders(
   queries: string[],
   providers: NutritionLookupProvider[],
   resolver: FoodSearchResolverOutput | null,
+  mealType: ParsedMealResponse['meal_type'],
+  trace?: FoodPipelineTrace,
 ) {
-  const results: FoodSearchResult[] = [];
-
-  for (const provider of providers) {
+  const providerResults = await Promise.all(providers.map(async (provider) => {
     const status = provider.getStatus?.() ?? { configured: true };
-    if (!status.configured) continue;
+    if (!status.configured || provider.capabilities?.search === false) return [];
 
     for (const query of queries) {
       const normalizedQuery = normalizeFoodQuery(query);
       try {
-        const response = await provider.lookup({
+        const context = {
           text: query,
-          mealType: 'snack',
+          mealType,
           normalizedQuery,
-        });
-        const result = response ? providerResultToSearchResult(response, provider.id, query, resolver) : null;
-        if (result) {
-          results.push(result);
-          break;
-        }
+          trace,
+        };
+        const responses = provider.searchCandidates
+          ? await provider.searchCandidates(context)
+          : [await provider.lookup(context)].filter((response): response is ParsedMealResponse => Boolean(response));
+        const results = responses
+          .map((response) => providerResultToSearchResult(response, provider.id, query, resolver))
+          .filter((result): result is FoodSearchResult => Boolean(result));
+        if (results.length) return results;
       } catch {
         // Search should fail soft when any provider is unavailable.
       }
     }
-  }
+    return [];
+  }));
 
-  return dedupeResults(results);
+  return dedupeResults(providerResults.flat());
 }
 
 function needsRanking(query: string, resolver: FoodSearchResolverOutput | null, candidates: FoodSearchResult[]) {
@@ -845,24 +900,9 @@ function applyRanking(candidates: FoodSearchResult[], ranking: FoodSearchRanking
     .map((candidate, index) => ({
       ...candidate,
       reason: index === 0 ? ranking.reason ?? candidate.reason : candidate.reason,
-      confidenceScore: index === 0 && ranking.confidence > 0 ? Math.max(candidate.confidenceScore, ranking.confidence) : candidate.confidenceScore,
     }));
   const rankedIds = new Set(ranked.map((candidate) => candidate.id));
   return [...ranked, ...candidates.filter((candidate) => !rankedIds.has(candidate.id))];
-}
-
-function canUseSelectedResultCache(result: FoodSearchResult) {
-  return !result.estimated
-    && !result.needsReview
-    && result.confidenceScore >= 0.95
-    && !result.id.startsWith('custom')
-    && !result.id.startsWith('favorite:')
-    && !result.id.startsWith('recent:');
-}
-
-function cacheSafeSelectedResult(query: string, results: FoodSearchResult[]) {
-  if (results.length !== 1 || !canUseSelectedResultCache(results[0])) return;
-  selectedResultCache.set(cacheKey(query), results[0]);
 }
 
 function buildEstimatedFallback(query: string, resolver: FoodSearchResolverOutput | null): FoodSearchResult | null {
@@ -939,7 +979,7 @@ export async function buildFoodSearchResponse(
     };
   }
 
-  const originalLocalResults = buildFoodSearchResults({
+  const exactLocalResults = buildFoodSearchResults({
     query,
     customFoods: input.customFoods,
     favoriteMeals: input.favoriteMeals,
@@ -947,41 +987,17 @@ export async function buildFoodSearchResponse(
     catalogFoods: options?.catalogFoods ?? input.catalogFoods,
   });
 
-  if (hasStrongExactMatch(query, originalLocalResults)) {
-    const results = originalLocalResults.slice(0, 10);
-    cacheSafeSelectedResult(query, results);
-    return {
-      query,
-      normalizedQuery: query,
-      results,
-      clarificationQuestion: null,
-      usedResolver: false,
-      usedRanking: false,
-      cache,
-    };
-  }
-
-  const selectedResult = selectedResultCache.get(cacheKey(query));
-  if (selectedResult) {
-    cache.selectedResultHit = true;
-    return {
-      query,
-      normalizedQuery: query,
-      results: [selectedResult],
-      clarificationQuestion: null,
-      usedResolver: false,
-      usedRanking: false,
-      cache,
-    };
-  }
-
-  const resolver = await resolveWithCache(query, options?.ai, cache);
+  const resolver = hasStrongExactMatch(query, exactLocalResults)
+    ? null
+    : await resolveWithCache(query, options?.ai, cache);
   const usedResolver = Boolean(resolver);
   const queries = searchQueries(query, resolver);
   const localResults = localResultsForQueries(input, queries, options?.catalogFoods);
   const providers = options?.providers ?? defaultNutritionProviders;
-  const providerResults = await searchProviders(queries, providers, resolver);
-  let results = dedupeResults([...localResults, ...providerResults]).slice(0, 12);
+  const providerResults = await searchProviders(queries, providers, resolver, input.mealType ?? 'snack', options?.trace);
+  let results = dedupeResults([...localResults, ...providerResults])
+    .filter((result) => !conflictsWithExplicitBrand(query, result))
+    .slice(0, 12);
 
   let ranking: FoodSearchRankingOutput | null = null;
   let usedRanking = false;
@@ -1027,8 +1043,6 @@ export async function buildFoodSearchResponse(
     const estimated = buildEstimatedFallback(query, resolver);
     results = estimated ? [estimated] : [];
   }
-
-  cacheSafeSelectedResult(query, results);
 
   return {
     query,

@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 
 import { getMockParsedMeal } from '@/lib/ai/mock';
-import { parseMealText } from '@/lib/ai/openai';
 import { getOpenAIMealModel, getServerOpenAIApiKey } from '@/lib/ai/openaiConfig';
 import { isMockMealParserAllowed } from '@/lib/ai/runtimeConfig';
 import { createFoodPipelineTrace, recordOpenAIIntent, type FoodPipelineTrace } from '@/lib/ai/foodPipelineTrace';
@@ -43,6 +42,7 @@ import {
   updatePendingMealType,
 } from '@/lib/ai/mealPendingState';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
+import type { FoodIntelligenceUserData } from '@/lib/food-intelligence/engine';
 import { saveConfirmedMeal, updateSavedMeal } from '@/lib/meals';
 import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
@@ -1846,31 +1846,6 @@ function buildCandyServingEstimate(item: MealAssistantItem, lookupText: string):
   return null;
 }
 
-function buildCandyMealResponse(item: MealAssistantItem, mealType: MealAssistantState['mealType']): ParsedMealResponse | null {
-  const lookupText = buildItemLookupText(item);
-  const candyItem = buildCandyServingEstimate(item, lookupText);
-  if (!candyItem) {
-    return null;
-  }
-
-  return {
-    needs_clarification: false,
-    clarifying_question: null,
-    meal_type: mealType,
-    confidence_score: 0.9,
-    items: [candyItem],
-    totals: {
-      calories: candyItem.calories,
-      protein: candyItem.protein,
-      carbs: candyItem.carbs,
-      fat: candyItem.fat,
-      fiber: candyItem.fiber,
-      sugar: candyItem.sugar,
-      sodium: candyItem.sodium,
-    },
-  };
-}
-
 function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: ParsedFoodItem): ParsedFoodItem {
   const lookupText = buildItemLookupText(item);
   const lookupNormalized = normalizeFoodText(lookupText);
@@ -1918,7 +1893,7 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
   if (/\btoast\b/.test(lookupNormalized) && /\bbread\b/i.test(resolvedItem.food_name.trim())) {
     return {
       ...resolvedItem,
-      food_name: 'Toast',
+      food_name: /\btoast\b/i.test(item.name) ? titleCaseFoodLabel(item.name) : 'Toast',
       quantity: item.quantity || resolvedItem.quantity,
       unit: item.unit?.trim() || (item.quantity === 1 ? 'slice' : 'slices'),
       matched_query: resolvedItem.matched_query ?? lookupText,
@@ -8549,22 +8524,27 @@ function buildNutritionGuidanceReply(input: MealAssistantRunInput, context: Meal
   return null;
 }
 
-async function defaultResolveItemNutrition({ item, mealType, trace }: { item: MealAssistantItem; mealType: MealAssistantState['mealType']; trace?: FoodPipelineTrace }) {
-  const candyResponse = buildCandyMealResponse(item, mealType);
-  if (candyResponse) {
-    return candyResponse;
-  }
-
+async function defaultResolveItemNutrition({
+  item,
+  mealType,
+  trace,
+  userData,
+}: {
+  item: MealAssistantItem;
+  mealType: MealAssistantState['mealType'];
+  trace?: FoodPipelineTrace;
+  userData?: FoodIntelligenceUserData;
+}) {
   const query = buildItemLookupText(item);
-  const resolved = await resolveNutritionEstimate({ text: query, mealType, trace });
+  const resolved = await resolveNutritionEstimate({
+    text: query,
+    mealType,
+    trace,
+    foodIntelligenceUserData: userData,
+  });
 
   if (resolved?.items.length) {
     return resolved;
-  }
-
-  const parsed = await parseMealText(query, mealType);
-  if (!parsed.needs_clarification && parsed.items.length) {
-    return parsed;
   }
 
   if (isMockMealParserAllowed()) {
@@ -8934,7 +8914,21 @@ function buildKnownFallbackListItems(normalized: string, state: MealAssistantSta
 }
 
 function buildFallbackDecompositionItemsForMessage(message: string, state: MealAssistantState) {
-  return buildKnownFallbackListItems(stripConversationalLeadIn(stripEmotionalPreface(message).toLowerCase()), state);
+  const items = buildKnownFallbackListItems(stripConversationalLeadIn(stripEmotionalPreface(message).toLowerCase()), state);
+  const restaurant = detectRestaurantCue(message)?.brand ?? null;
+  if (!restaurant || !items.length || items.some((item) => item.brand === restaurant)) {
+    return items;
+  }
+
+  const contextualItemIndex = items.findIndex((item) => !/^(?:butter|sour cream|chives|jam|honey|salsa|sauce|cheese|lettuce|rice|chips?)$/i.test(item.name));
+  if (contextualItemIndex < 0) return items;
+  return items.map((item, index) => index === contextualItemIndex
+    ? {
+        ...item,
+        brand: restaurant,
+        modifiers: [...new Set([...item.modifiers, `must include: ${restaurant}`])],
+      }
+    : item);
 }
 
 function classifyFallback({ message, state }: MealAssistantRunInput): MealAssistantModelOutput {
@@ -9408,6 +9402,9 @@ function inferFallbackNutrition(normalized: string) {
   if (/\bgummy\s+worms?\b|\bgummy\s+candy\b/.test(normalized)) {
     return { calories: 140, protein: 2, carbs: 30, fat: 1, fiber: 1, sugar: 22, sodium: 20 };
   }
+  if (/\b(?:candy|candies|candy bars?|chocolate bars?|skittles?|snickers?|mms?)\b/.test(normalized)) {
+    return { calories: 250, protein: 1, carbs: 55, fat: 3, fiber: 1, sugar: 45, sodium: 35 };
+  }
   if (/\bprotein\s+bars?\b/.test(normalized)) {
     return { calories: 220, protein: 20, carbs: 22, fat: 8, fiber: 5, sugar: 4, sodium: 220 };
   }
@@ -9673,7 +9670,8 @@ function buildReviewableFallbackEstimate(message: string, items: MealAssistantIt
   const itemLabel = primaryItem ? buildHumanFoodNameFromAssistantItem(primaryItem) : rawLabel;
   const displayName = titleCaseFoodLabel(rawLabel || itemLabel || 'Food estimate');
   const quantity = primaryItem?.quantity && primaryItem.quantity > 0 ? primaryItem.quantity : 1;
-  const unit = primaryItem?.unit?.trim() || (/restaurant|wendy|mcdonald|subway|jimmy|wingstop|olive garden|qdoba|papa john/i.test(normalized) ? 'serving' : 'serving');
+  const normalizedQuery = normalizeFoodQuery(message);
+  const unit = primaryItem?.unit?.trim() || normalizedQuery.quantityUnit || normalizedQuery.unitHint || 'serving';
   const nutrition = scaleFallbackNutrition(inferFallbackNutrition(normalized), quantityFactorForFallback(primaryItem));
 
   return {
@@ -10371,10 +10369,30 @@ export async function runMealAssistant(
 ): Promise<MealAssistantResponse> {
   const classify = dependencies.classify ?? classifyWithModel;
   const trace = dependencies.trace ?? createFoodPipelineTrace();
-  const resolveItemNutrition = dependencies.resolveItemNutrition ?? ((args: Parameters<typeof defaultResolveItemNutrition>[0]) => defaultResolveItemNutrition({ ...args, trace }));
+  const context = input.context ?? emptyContext;
+  const memoryMealToSearchMeal = (meal: MealAssistantMemoryMeal) => ({
+    id: meal.id,
+    title: meal.title,
+    rawText: meal.rawText,
+    mealType: meal.mealType,
+    lastUsedAt: meal.lastUsedAt ?? meal.createdAt ?? meal.date ?? null,
+    totalCalories: meal.totalCalories,
+    totalProtein: meal.items.reduce((sum, item) => sum + item.protein, 0),
+    itemCount: meal.items.length,
+    trustedCount: meal.items.filter((item) => item.is_trusted !== false && item.source_type !== 'AI_ESTIMATE').length,
+    confidenceScore: meal.confidenceScore,
+    items: meal.items,
+  });
+  const resolveItemNutrition = dependencies.resolveItemNutrition ?? ((args: Parameters<typeof defaultResolveItemNutrition>[0]) => defaultResolveItemNutrition({
+    ...args,
+    trace,
+    userData: {
+      favoriteMeals: context.favoriteMeals.map(memoryMealToSearchMeal),
+      recentMeals: context.recentMeals.map(memoryMealToSearchMeal),
+    },
+  }));
   const saveMeal = dependencies.saveMeal ?? defaultSaveMeal;
   const generateAssistantReply = dependencies.generateAssistantReply ?? generateAssistantReplyWithModel;
-  const context = input.context ?? emptyContext;
   const mixedIntent = splitMixedIntentMessage(input.message);
   const workingInput: MealAssistantRunInput = mixedIntent.foodMessage
     ? {

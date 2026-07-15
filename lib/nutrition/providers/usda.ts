@@ -1,4 +1,5 @@
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
+import type { ParsedMealResponse } from '@/lib/ai/types';
 import { recordServingScaling } from '@/lib/ai/foodPipelineTrace';
 import { computeServingScaleFactor, scaleNutritionItemOnce } from '@/lib/nutrition/scaling';
 import { normalizeBarcode } from '@/lib/nutrition/barcode';
@@ -351,12 +352,40 @@ function buildUsdaResponse(
   });
 }
 
+async function searchUsdaCandidates(normalizedQuery: ReturnType<typeof normalizeFoodQuery>) {
+  if (!getUsdaApiKey()) return [];
+  const dataTypes = normalizedQuery.brandHint ? allUsdaDataTypes : genericUsdaDataTypes;
+  const primaryFoods = await searchUsdaFoods(normalizedQuery.searchText, dataTypes);
+  const scoredPrimary = primaryFoods
+    .map((food) => ({
+      food,
+      score: scoreUsdaFood(food, normalizedQuery.searchText, normalizedQuery.brandHint, normalizedQuery.unitHint),
+    }))
+    .filter((candidate) => candidate.score >= 44);
+  const fallbackFoods = !scoredPrimary.length && !normalizedQuery.brandHint
+    ? await searchUsdaFoods(normalizedQuery.searchText, allUsdaDataTypes)
+    : [];
+  return [...scoredPrimary, ...fallbackFoods.map((food) => ({
+    food,
+    score: scoreUsdaFood(food, normalizedQuery.searchText, normalizedQuery.brandHint, normalizedQuery.unitHint),
+  })).filter((candidate) => candidate.score >= 44)]
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 5)
+    .map((candidate) => candidate.food);
+}
+
 export const usdaProvider: NutritionLookupProvider = {
   id: 'usda-fdc',
   capabilities: { search: true, barcode: true, details: false, suggest: false },
   getStatus() {
     const configured = Boolean(getUsdaApiKey());
     return { configured, reason: configured ? undefined : 'usda_not_configured' };
+  },
+  async searchCandidates({ mealType, normalizedQuery, trace }) {
+    const foods = await searchUsdaCandidates(normalizedQuery);
+    return foods
+      .map((food) => buildUsdaResponse(food, normalizedQuery, mealType, trace))
+      .filter((response): response is ParsedMealResponse => Boolean(response));
   },
   async lookup({ mealType, normalizedQuery, trace }) {
     if (!getUsdaApiKey()) return null;

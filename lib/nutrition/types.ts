@@ -67,6 +67,7 @@ export type NutritionLookupProvider = {
   capabilities?: NutritionProviderCapabilities;
   getStatus?: () => { configured: boolean; reason?: string };
   lookup: (context: NutritionLookupContext) => Promise<ParsedMealResponse | null> | ParsedMealResponse | null;
+  searchCandidates?: (context: NutritionLookupContext) => Promise<ParsedMealResponse[]> | ParsedMealResponse[];
   lookupBarcode?: (context: NutritionBarcodeLookupContext) => Promise<ParsedMealResponse | null> | ParsedMealResponse | null;
   getFoodDetails?: (context: NutritionDetailsLookupContext) => Promise<ParsedMealResponse | null> | ParsedMealResponse | null;
 };
