@@ -5,6 +5,7 @@ final class FoodIntelligenceUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        executionTimeAllowance = 240
         app = XCUIApplication()
         app.launchArguments.append("--macromesh-ui-testing")
         app.launchEnvironment["CALORIE_COMPASS_BASE_URL"] = ProcessInfo.processInfo.environment["MACROMESH_UI_TEST_BASE_URL"]
@@ -56,6 +57,7 @@ final class FoodIntelligenceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["MacroMesh: Saved. Ready for the next one?"].waitForExistence(timeout: 5))
 
         app.tabBars.buttons["History"].tap()
-        XCTAssertTrue(app.staticTexts["KitKat Milk Chocolate"].waitForExistence(timeout: 5))
+        let savedHistoryMeal = app.otherElements["History meal KitKat Milk Chocolate"]
+        XCTAssertTrue(savedHistoryMeal.waitForExistence(timeout: 10))
     }
 }

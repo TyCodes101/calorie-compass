@@ -117,6 +117,7 @@ struct HistoryMealCard: View {
             }
         }
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("History meal \(model.title)")
         .accessibilityHint("Double tap for details. Use actions menu for favorites and repeat.")
     }
 }
