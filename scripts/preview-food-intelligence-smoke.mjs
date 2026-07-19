@@ -14,7 +14,6 @@ function requestHeaders() {
     'X-Calorie-Compass-Client': 'release-smoke',
     ...(protectionBypass ? {
       'x-vercel-protection-bypass': protectionBypass,
-      'x-vercel-set-bypass-cookie': 'true',
     } : {}),
   };
 }
