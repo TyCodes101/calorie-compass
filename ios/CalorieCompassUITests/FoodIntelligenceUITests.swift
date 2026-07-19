@@ -57,7 +57,12 @@ final class FoodIntelligenceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["MacroMesh: Saved. Ready for the next one?"].waitForExistence(timeout: 5))
 
         app.tabBars.buttons["History"].tap()
-        let savedHistoryMeal = app.otherElements["History meal KitKat Milk Chocolate"]
+        let historyList = app.scrollViews["Meal history"]
+        XCTAssertTrue(historyList.waitForExistence(timeout: 5))
+        let savedHistoryMeal = app.descendants(matching: .any)["History meal KitKat Milk Chocolate"]
+        for _ in 0..<4 where !savedHistoryMeal.exists {
+            historyList.swipeUp()
+        }
         XCTAssertTrue(savedHistoryMeal.waitForExistence(timeout: 10))
     }
 }
