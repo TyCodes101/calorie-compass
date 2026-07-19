@@ -69,6 +69,10 @@ final class FoodIntelligenceUITests: XCTestCase {
         for _ in 0..<4 where !savedHistoryMeal.exists {
             historyList.swipeUp()
         }
-        XCTAssertTrue(savedHistoryMeal.waitForExistence(timeout: 10))
+        let foundSavedHistoryMeal = savedHistoryMeal.waitForExistence(timeout: 10)
+        if !foundSavedHistoryMeal {
+            print("HISTORY_ACCESSIBILITY_HIERARCHY\n\(app.debugDescription)")
+        }
+        XCTAssertTrue(foundSavedHistoryMeal)
     }
 }
