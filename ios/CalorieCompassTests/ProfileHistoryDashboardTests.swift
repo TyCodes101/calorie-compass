@@ -38,6 +38,8 @@ final class ProfileHistoryDashboardTests: XCTestCase {
         XCTAssertEqual(model.macroLineText, "P 42g  •  C 48g  •  F 18g")
         XCTAssertEqual(model.trustBadgeText, "Verified")
         XCTAssertFalse(model.isZeroCalorie)
+        XCTAssertTrue(model.accessibilityLabelText.contains("Chicken bowl"))
+        XCTAssertTrue(model.accessibilityLabelText.contains("520 calories"))
     }
 
     func testHistoryMealCardDoesNotShowRestaurantBadgeForMixedEstimatedModifierMeal() {

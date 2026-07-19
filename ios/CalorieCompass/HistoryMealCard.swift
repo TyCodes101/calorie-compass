@@ -10,6 +10,18 @@ struct HistoryMealCardModel: Equatable {
 
     let isZeroCalorie: Bool
 
+    var accessibilityLabelText: String {
+        [
+            title,
+            "\(caloriesText) calories",
+            subtitleText,
+            macroLineText,
+            "Trust level \(trustBadgeText)"
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
+    }
+
     static func build(meal: MealResponse) -> HistoryMealCardModel {
         let title = meal.displayTitle
         let caloriesValue = Int(meal.safeTotalCalories)
@@ -118,6 +130,7 @@ struct HistoryMealCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("History meal \(model.title)")
+        .accessibilityLabel(model.accessibilityLabelText)
         .accessibilityHint("Double tap for details. Use actions menu for favorites and repeat.")
     }
 }

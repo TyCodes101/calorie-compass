@@ -59,7 +59,13 @@ final class FoodIntelligenceUITests: XCTestCase {
         app.tabBars.buttons["History"].tap()
         let historyList = app.scrollViews["Meal history"]
         XCTAssertTrue(historyList.waitForExistence(timeout: 5))
-        let savedHistoryMeal = app.descendants(matching: .any)["History meal KitKat Milk Chocolate"]
+        let savedHistoryMeal = app.descendants(matching: .any)
+            .matching(NSPredicate(
+                format: "label CONTAINS[c] %@ AND label CONTAINS[c] %@",
+                "KitKat Milk Chocolate",
+                "210 calories"
+            ))
+            .firstMatch
         for _ in 0..<4 where !savedHistoryMeal.exists {
             historyList.swipeUp()
         }
