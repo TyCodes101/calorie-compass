@@ -2,6 +2,7 @@ import http from 'node:http';
 
 const port = Number(process.env.MACROMESH_UI_TEST_PORT || 8765);
 let savedItems = [];
+let savedAt = null;
 
 function food(name, calories, unit = 'bar') {
   const item = {
@@ -92,11 +93,14 @@ const server = http.createServer((request, response) => {
         return;
       }
       savedItems = parsed.items ?? [];
+      savedAt = new Date().toISOString();
       send(request, response, 200, {
         meal: {
           id: 'ui-saved-meal',
           mealType: 'SNACK',
           rawText: 'KitKat Milk Chocolate',
+          date: savedAt,
+          createdAt: savedAt,
           totalCalories: 210,
           totalProtein: 3,
           totalCarbs: 27,
@@ -118,6 +122,8 @@ const server = http.createServer((request, response) => {
         id: 'ui-saved-meal',
         mealType: 'SNACK',
         rawText: 'KitKat Milk Chocolate',
+        date: savedAt,
+        createdAt: savedAt,
         totalCalories: 210,
         totalProtein: 3,
         totalCarbs: 27,
