@@ -43,6 +43,13 @@ for (const scenario of scenarios) {
       || items.some((item) => Number(item?.quantity) === scenario.quantity);
     const modifierMatches = scenario.modifier === undefined
       || items.some((item) => (item?.requested_modifiers ?? []).some((modifier) => scenario.modifier.test(String(modifier))));
+    const contractMatches = Array.isArray(payload?.results) && payload.results.every((result) => (
+      typeof result?.name === 'string'
+      && Number.isFinite(result?.calories)
+      && typeof result?.sourceLabel === 'string'
+      && result.sourceLabel.length > 0
+      && Array.isArray(result?.items)
+    ));
     const valid = response.ok
       && typeof payload?.normalizedQuery === 'string'
       && Array.isArray(payload?.results)
@@ -50,14 +57,21 @@ for (const scenario of scenarios) {
       && identityMatches
       && quantityMatches
       && modifierMatches
-      && payload.results.every((result) => (
-        typeof result?.name === 'string'
-        && Number.isFinite(result?.calories)
-        && typeof result?.sourceLabel === 'string'
-        && result.sourceLabel.length > 0
-        && Array.isArray(result?.items)
-      ));
-    if (!valid) failures.push(`${query}: invalid ${response.status} response`);
+      && contractMatches;
+    if (!valid) {
+      const candidateNames = Array.isArray(payload?.results)
+        ? payload.results.slice(0, 3).map((result) => String(result?.name ?? '').slice(0, 80))
+        : [];
+      failures.push([
+        `${query}: invalid ${response.status} response`,
+        `count=${Array.isArray(payload?.results) ? payload.results.length : 'invalid'}`,
+        `identity=${identityMatches}`,
+        `quantity=${quantityMatches}`,
+        `modifier=${modifierMatches}`,
+        `contract=${contractMatches}`,
+        `candidates=${JSON.stringify(candidateNames)}`,
+      ].join('; '));
+    }
   } catch (error) {
     failures.push(`${query}: ${error instanceof Error ? error.name : 'request_failed'}`);
   }
