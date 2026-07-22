@@ -46,7 +46,9 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(parsed);
   } catch (error) {
-    console.error('parse-meal error', error);
+    console.error('[parse-meal] request_failed', {
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    });
     return NextResponse.json(
       {
         error: 'We could not estimate that meal right now. Please try again.',

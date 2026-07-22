@@ -60,7 +60,6 @@ const brandHints: Array<{ pattern: RegExp; brand: string; naturalUnit?: string }
   { pattern: /\bskittles?\b/, brand: 'Skittles', naturalUnit: 'pack' },
   { pattern: /\bsnickers?\b/, brand: 'Snickers', naturalUnit: 'bar' },
   { pattern: /\bmms?\b|\bm and ms?\b/, brand: "M&M's", naturalUnit: 'pack' },
-  { pattern: /\bkit\s*kat\b|\bkitkat\b/, brand: 'KitKat', naturalUnit: 'bar' },
   { pattern: /\bben\s*(?:and|&)\s*jerrys\b|\bben jerrys\b/, brand: "Ben & Jerry's" },
 ];
 
@@ -84,7 +83,7 @@ const compoundFoodDefinitions = [
   { pattern: /\bmac(?: and| n)? cheese\b/, baseSearch: 'mac and cheese', matched: 'Mac and cheese', unitHint: null },
   { pattern: /\bpopcorn\b/, baseSearch: 'popcorn', matched: 'Popcorn', unitHint: null },
   { pattern: /\bcrackers?\b/, baseSearch: 'cracker', matched: 'Crackers', unitHint: null },
-  { pattern: /\bchips?\b/, baseSearch: 'chips', matched: 'Chips', unitHint: null },
+  { pattern: /\bchips\b/, baseSearch: 'chips', matched: 'Chips', unitHint: null },
 ];
 
 function cleanupFreeText(text: string) {
@@ -94,7 +93,6 @@ function cleanupFreeText(text: string) {
     .replace(/\bchipolte\b/g, 'chipotle')
     .replace(/\bmcdonlads\b/g, 'mcdonalds')
     .replace(/\bcheeots\b/g, 'cheetos')
-    .replace(/\bkit\s+kat\b/g, 'kitkat')
     .replace(/\bskitles\b/g, 'skittles')
     .replace(/\bprotien\b/g, 'protein')
     .replace(/\bmcdoublee\b/g, 'mcdouble')
@@ -214,6 +212,30 @@ function extractQuantityUnit(text: string) {
   const match = text.match(/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|ml|milliliters?|slices?|pieces?|cakes?|bars?|bottles?|eggs?|cups?|tbsp|tablespoons?|tsp|teaspoons?|small|medium|large)\b/);
   if (match) return normalizeQuantityUnit(match[1]);
   return normalizeQuantityUnit(text.match(/\b(small|medium|large)\b/)?.[1]);
+}
+
+function extractRequestedModifiers(text: string) {
+  const normalized = text.toLowerCase().replace(/\s+/g, ' ').trim();
+  const modifiers: string[] = [];
+  const modifierPattern = /\b(no|without|extra|light)\s+(.+?)(?=\s+\b(?:no|without|extra|light|with|and|plus|but)\b|$)/g;
+
+  for (const match of normalized.matchAll(modifierPattern)) {
+    const prefix = match[1] === 'without' ? 'no' : match[1];
+    const target = match[2]
+      ?.replace(/\b(?:please|added|on it|on the side)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (prefix && target) modifiers.push(`${prefix} ${target}`);
+  }
+
+  if (/\bgrilled\b.*\bnot\s+fried\b/.test(normalized)) {
+    modifiers.push('grilled not fried');
+  }
+  if (/\blettuce\s+wrapped\b/.test(normalized)) {
+    modifiers.push('lettuce wrapped');
+  }
+
+  return [...new Set(modifiers)];
 }
 
 function singularize(text: string) {
@@ -402,5 +424,6 @@ export function normalizeFoodQuery(text: string): NormalizedFoodQuery {
     quantityUnit: extractQuantityUnit(normalizedText),
     unitHint: canonical.unitHint,
     brandHint: detectBrandHint(canonical.searchText) ?? detectBrandHint(normalizedText),
+    requestedModifiers: extractRequestedModifiers(normalizedText),
   };
 }

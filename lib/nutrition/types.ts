@@ -27,6 +27,7 @@ export type NormalizedFoodQuery = {
   quantityUnit: string | null;
   unitHint: string | null;
   brandHint: string | null;
+  requestedModifiers: string[];
 };
 
 export type NutritionLookupInput = {

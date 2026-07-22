@@ -400,6 +400,7 @@ export const calorieApiProvider: NutritionLookupProvider = {
       quantityUnit: null,
       unitHint: null,
       brandHint: food.brand_name ?? null,
+      requestedModifiers: [],
     };
     const candidate = searchFoodToCandidate(food, query);
     return candidate ? buildProviderMealResponse({ candidate, normalizedQuery: query, mealType }) : null;

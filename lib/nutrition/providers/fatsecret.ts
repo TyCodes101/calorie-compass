@@ -81,6 +81,9 @@ const fatSecretErrorSchema = z.object({
 }).passthrough();
 
 const searchResponseSchema = z.object({
+  foods: z.object({
+    food: oneOrManyFoodsSchema.optional(),
+  }).optional(),
   foods_search: z.object({
     results: z.object({ food: oneOrManyFoodsSchema }).optional(),
   }).optional(),
@@ -218,24 +221,9 @@ function foodToCandidate(food: FatSecretFood, query: NormalizedFoodQuery, barcod
   };
 }
 
-async function getAccessToken() {
-  const config = getFatSecretConfiguration();
-  if (!config.configured || !config.clientId || !config.clientSecret) return null;
-  const now = Date.now();
-  if (
-    tokenCache
-    && tokenCache.clientId === config.clientId
-    && tokenCache.scope === config.scope
-    && tokenCache.expiresAt > now + 60_000
-  ) {
-    return tokenCache.accessToken;
-  }
-
+async function requestAccessToken(scope: string, config: ReturnType<typeof getFatSecretConfiguration>) {
+  if (!config.clientId || !config.clientSecret) return null;
   const authorization = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
-  const body = new URLSearchParams({
-    grant_type: 'client_credentials',
-    scope: config.scope,
-  });
   const result = await requestProviderJson({
     url: FATSECRET_TOKEN_URL,
     allowedOrigins: [FATSECRET_OAUTH_ORIGIN],
@@ -245,28 +233,55 @@ async function getAccessToken() {
         Authorization: `Basic ${authorization}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: body.toString(),
+      body: new URLSearchParams({ grant_type: 'client_credentials', scope }).toString(),
     },
     schema: tokenSchema,
     timeoutMs: config.timeoutMs,
     retries: 0,
   });
-  if (!result) return null;
+  return result?.data ?? null;
+}
+
+async function getAccessToken() {
+  const config = getFatSecretConfiguration();
+  if (!config.configured || !config.clientId || !config.clientSecret) return null;
+  const now = Date.now();
+  if (
+    tokenCache
+    && tokenCache.clientId === config.clientId
+    && tokenCache.expiresAt > now + 60_000
+  ) {
+    return tokenCache;
+  }
+
+  let scope = config.scope;
+  let token: z.infer<typeof tokenSchema> | null = null;
+  try {
+    token = await requestAccessToken(scope, config);
+  } catch (error) {
+    const canFallbackToBasic = !scope.split(/\s+/).includes('basic')
+      && error instanceof NutritionProviderError
+      && ['invalid_request', 'forbidden'].includes(error.category);
+    if (!canFallbackToBasic) throw error;
+    scope = 'basic';
+    token = await requestAccessToken(scope, config);
+  }
+  if (!token) return null;
 
   tokenCache = {
     clientId: config.clientId,
-    scope: config.scope,
-    accessToken: result.data.access_token,
-    expiresAt: now + Math.max(60, result.data.expires_in) * 1_000,
+    scope,
+    accessToken: token.access_token,
+    expiresAt: now + Math.max(60, token.expires_in) * 1_000,
   };
-  return tokenCache.accessToken;
+  return tokenCache;
 }
 
 async function searchFoods(query: NormalizedFoodQuery) {
   const config = getFatSecretConfiguration();
   if (!config.configured || !fatSecretScopeSupports(config.scope, 'search')) return [];
-  const accessToken = await getAccessToken();
-  if (!accessToken) return [];
+  const token = await getAccessToken();
+  if (!token) return [];
 
   const key = buildProviderCacheKey('fatsecret:v1:search', {
     query: normalizeProviderText(query.searchText),
@@ -277,24 +292,27 @@ async function searchFoods(query: NormalizedFoodQuery) {
     key,
     ttlMs: SEARCH_CACHE_TTL_MS,
     load: async () => {
-      const url = new URL(`${FATSECRET_API_BASE_URL}/foods/search/v5`);
+      const premier = token.scope.split(/\s+/).includes('premier');
+      const url = new URL(`${FATSECRET_API_BASE_URL}/foods/search/${premier ? 'v5' : 'v1'}`);
       url.searchParams.set('search_expression', query.searchText.slice(0, 180));
       url.searchParams.set('max_results', '20');
-      url.searchParams.set('flag_default_serving', 'true');
       url.searchParams.set('format', 'json');
-      url.searchParams.set('region', config.region);
-      if (query.brandHint) url.searchParams.set('food_type', 'brand');
+      if (premier) {
+        url.searchParams.set('flag_default_serving', 'true');
+        url.searchParams.set('region', config.region);
+        if (query.brandHint) url.searchParams.set('food_type', 'brand');
+      }
 
       const result = await requestProviderJson({
         url: url.toString(),
         allowedOrigins: [FATSECRET_API_ORIGIN],
-        init: { headers: { Authorization: `Bearer ${accessToken}` } },
+        init: { headers: { Authorization: `Bearer ${token.accessToken}` } },
         schema: searchResponseSchema,
         timeoutMs: config.timeoutMs,
       });
       if (!result) return [];
       throwForFatSecretError(result.data.error);
-      return asArray(result.data.foods_search?.results?.food);
+      return asArray(result.data.foods_search?.results?.food ?? result.data.foods?.food);
     },
   });
   return cached.value ?? [];
@@ -304,24 +322,25 @@ async function getFood(providerFoodId: string) {
   if (!/^\d{1,20}$/.test(providerFoodId)) return null;
   const config = getFatSecretConfiguration();
   if (!config.configured) return null;
-  const accessToken = await getAccessToken();
-  if (!accessToken) return null;
+  const token = await getAccessToken();
+  if (!token) return null;
   const key = buildProviderCacheKey('fatsecret:v1:food', providerFoodId);
   const cached = await withProviderCache({
     key,
     ttlMs: DETAILS_CACHE_TTL_MS,
     load: async () => {
-      const url = new URL(`${FATSECRET_API_BASE_URL}/food/v5`);
+      const premier = token.scope.split(/\s+/).includes('premier');
+      const url = new URL(`${FATSECRET_API_BASE_URL}/food/${premier ? 'v5' : 'v1'}`);
       url.searchParams.set('food_id', providerFoodId);
       url.searchParams.set('format', 'json');
-      if (config.scope.split(/\s+/).includes('premier')) {
+      if (premier) {
         url.searchParams.set('flag_default_serving', 'true');
         url.searchParams.set('region', config.region);
       }
       const result = await requestProviderJson({
         url: url.toString(),
         allowedOrigins: [FATSECRET_API_ORIGIN],
-        init: { headers: { Authorization: `Bearer ${accessToken}` } },
+        init: { headers: { Authorization: `Bearer ${token.accessToken}` } },
         schema: foodResponseSchema,
         timeoutMs: config.timeoutMs,
         notFoundIsNull: true,
@@ -338,8 +357,8 @@ async function getBarcodeFood(barcode: string) {
   if (!/^\d{8,13}$/.test(barcode)) return null;
   const config = getFatSecretConfiguration();
   if (!config.configured || !fatSecretScopeSupports(config.scope, 'barcode')) return null;
-  const accessToken = await getAccessToken();
-  if (!accessToken) return null;
+  const token = await getAccessToken();
+  if (!token || !fatSecretScopeSupports(token.scope, 'barcode')) return null;
   const gtin13 = barcode.padStart(13, '0');
   const key = buildProviderCacheKey('fatsecret:v1:barcode', gtin13);
   const cached = await withProviderCache({
@@ -355,7 +374,7 @@ async function getBarcodeFood(barcode: string) {
       const result = await requestProviderJson({
         url: url.toString(),
         allowedOrigins: [FATSECRET_API_ORIGIN],
-        init: { headers: { Authorization: `Bearer ${accessToken}` } },
+        init: { headers: { Authorization: `Bearer ${token.accessToken}` } },
         schema: foodResponseSchema,
         timeoutMs: config.timeoutMs,
         notFoundIsNull: true,
@@ -425,6 +444,7 @@ export const fatSecretProvider: NutritionLookupProvider = {
       quantityUnit: null,
       unitHint: null,
       brandHint: result.food.brand_name ?? null,
+      requestedModifiers: [],
     };
     const candidate = foodToCandidate(result.food, query, result.gtin13);
     return candidate ? buildBarcodeMealResponse({ candidate, mealType }) : null;
@@ -441,6 +461,7 @@ export const fatSecretProvider: NutritionLookupProvider = {
       quantityUnit: null,
       unitHint: null,
       brandHint: food.brand_name ?? null,
+      requestedModifiers: [],
     };
     const candidate = foodToCandidate(food, query);
     return candidate ? buildProviderMealResponse({ candidate, normalizedQuery: query, mealType }) : null;

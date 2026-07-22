@@ -1376,8 +1376,7 @@ struct FoodSearchSheet: View {
                 case .success(let response):
                     results = response.results
                     clarificationQuestion = response.clarificationQuestion
-                    let quietlyCorrected = response.usedResolver
-                        && response.normalizedQuery.caseInsensitiveCompare(trimmed) != .orderedSame
+                    let quietlyCorrected = response.normalizedQuery.caseInsensitiveCompare(trimmed) != .orderedSame
                     message = response.results.isEmpty
                         ? nil
                         : quietlyCorrected

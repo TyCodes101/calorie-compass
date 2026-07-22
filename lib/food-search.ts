@@ -14,6 +14,7 @@ import {
 } from '@/lib/nutrition/catalog';
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
 import { defaultNutritionProviders } from '@/lib/nutrition/providerRegistry';
+import { NutritionProviderError } from '@/lib/nutrition/providers/providerHttp';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
 export type FoodSearchSourceLabel =
@@ -65,6 +66,30 @@ export type FoodSearchResponse = {
   usedResolver: boolean;
   usedRanking: boolean;
   cache: FoodSearchCacheState;
+};
+
+export type FoodSearchProviderDiagnostic = {
+  provider: string;
+  configured: boolean;
+  attempted: boolean;
+  outcome: 'matched' | 'no_match' | 'not_configured' | 'unsupported' | 'failed';
+  candidateCount: number;
+  queryCount: number;
+  durationMs: number;
+  httpStatus: number | null;
+  reason: string | null;
+};
+
+export type FoodSearchDiagnostics = {
+  query: string;
+  normalizedQuery: string;
+  queryVariants: string[];
+  providers: FoodSearchProviderDiagnostic[];
+  mergedCandidateCount: number;
+  rejectedCandidateCount: number;
+  finalCandidateCount: number;
+  winningCandidate: string | null;
+  totalDurationMs: number;
 };
 
 const resolverOutputSchema = z.object({
@@ -137,6 +162,7 @@ export type BuildFoodSearchResponseOptions = {
   providers?: NutritionLookupProvider[];
   catalogFoods?: SearchCatalogFood[];
   trace?: FoodPipelineTrace;
+  diagnostics?: FoodSearchDiagnostics;
 };
 
 const resolverCache = new Map<string, FoodSearchResolverOutput | null>();
@@ -145,14 +171,13 @@ const rankingCache = new Map<string, FoodSearchRankingOutput | null>();
 function normalizeSearchText(text: string) {
   return text
     .toLowerCase()
-    .replace(/\bflaming\b/g, 'flamin')
-    .replace(/\bhot cheeots\b/g, 'flamin hot cheetos')
-    .replace(/\bchipolte\b/g, 'chipotle')
-    .replace(/\bmcdonlads\b/g, 'mcdonalds')
-    .replace(/\bkit\s+kat\b/g, 'kitkat')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function compactSearchText(text: string) {
+  return normalizeSearchText(text).replace(/\s+/g, '');
 }
 
 const queryStopTokens = new Set([
@@ -234,7 +259,12 @@ function searchScore(query: string, value: string | null | undefined) {
   if (!queryTokens.length || !valueTokens.length) return null;
 
   if (normalizedQuery === normalizedValue) return 120;
+  if (normalizedValue.startsWith(normalizedQuery) || valueTokens[0]?.startsWith(normalizedQuery)) return 104;
   if (normalizedValue.includes(normalizedQuery)) return 92;
+  const compactQuery = compactSearchText(query);
+  const compactValue = compactSearchText(value ?? '');
+  if (compactQuery.length >= 3 && compactValue === compactQuery) return 116;
+  if (compactQuery.length >= 3 && compactValue.includes(compactQuery)) return 90;
 
   let score = 0;
   let matched = 0;
@@ -254,9 +284,9 @@ function searchScore(query: string, value: string | null | undefined) {
   return coverage >= minimumCoverage ? score + Math.round(coverage * 30) : null;
 }
 
-function catalogSearchScore(query: string, food: SearchCatalogFood) {
+function catalogSearchScore(queries: string[], food: SearchCatalogFood) {
   const candidates = [food.canonicalName, food.brand ?? '', ...food.aliases];
-  const score = Math.max(...candidates.map((candidate) => searchScore(query, candidate) ?? 0));
+  const score = Math.max(...queries.flatMap((query) => candidates.map((candidate) => searchScore(query, candidate) ?? 0)));
   return score > 0 ? score : null;
 }
 
@@ -307,7 +337,9 @@ function hasStrongExactMatch(query: string, results: FoodSearchResult[]) {
   return results.some((result) => {
     if (result.estimated || result.needsReview) return false;
     const score = searchScore(query, `${result.name} ${result.brand ?? ''}`) ?? 0;
-    return score >= 110 || normalizeSearchText(query) === normalizeSearchText(result.name);
+    return score >= 110
+      || normalizeSearchText(query) === normalizeSearchText(result.name)
+      || compactSearchText(query) === compactSearchText(result.name);
   });
 }
 
@@ -351,8 +383,8 @@ function materiallyDisagrees(left: FoodSearchResult, right: FoodSearchResult) {
     || relativeDifference(left.fat, right.fat) > 0.35;
 }
 
-function conflictsWithExplicitBrand(query: string, result: FoodSearchResult) {
-  const requestedBrand = normalizeFoodQuery(query).brandHint;
+function conflictsWithExplicitBrand(query: string, result: FoodSearchResult, resolvedBrand?: string | null) {
+  const requestedBrand = normalizeFoodQuery(query).brandHint ?? resolvedBrand;
   const candidateBrand = result.restaurant ?? result.brand;
   if (!requestedBrand || !candidateBrand) return false;
   return normalizeSearchText(requestedBrand) !== normalizeSearchText(candidateBrand);
@@ -384,10 +416,14 @@ function dedupeResults(results: FoodSearchResult[]) {
 }
 
 function identityTier(query: string, result: FoodSearchResult) {
-  const score = searchScore(query, `${result.name} ${result.brand ?? ''} ${result.restaurant ?? ''}`) ?? 0;
+  const score = identityMatchScore(query, result);
   if (score >= 110) return 3;
   if (score >= 88) return 2;
   return 1;
+}
+
+function identityMatchScore(query: string, result: FoodSearchResult) {
+  return searchScore(query, `${result.name} ${result.brand ?? ''} ${result.restaurant ?? ''}`) ?? 0;
 }
 
 function resultMatchesSavedItem(result: FoodSearchResult, item: ParsedFoodItem) {
@@ -456,10 +492,12 @@ export function rankFoodSearchResultsByUserHistory({
       result,
       index,
       tier: identityTier(query, result),
+      identityScore: identityMatchScore(query, result),
       preference: learnedPreferenceScore(result, favoriteMeals, recentMeals),
     }))
     .sort((left, right) =>
       right.tier - left.tier
+      || right.identityScore - left.identityScore
       || right.preference.score - left.preference.score
       || sourceStrength(right.result) - sourceStrength(left.result)
       || right.result.confidenceScore - left.result.confidenceScore
@@ -580,10 +618,12 @@ export function buildFoodSearchResults({
 
   const results: FoodSearchResult[] = [];
   const normalizedQuery = normalizeFoodQuery(trimmed);
+  const identityQueries = [...new Set([trimmed, normalizedQuery.searchText, normalizedQuery.matchedQuery].filter(Boolean))];
+  const matchesIdentity = (value: string) => identityQueries.some((identityQuery) => textMatches(identityQuery, value));
   const activeCatalogFoods = (catalogFoods ?? verifiedCatalogFoodsForLookup()).filter((food) => food.active !== false);
   results.push(
     ...activeCatalogFoods
-      .map((food) => ({ food, score: catalogSearchScore(trimmed, food) }))
+      .map((food) => ({ food, score: catalogSearchScore(identityQueries, food) }))
       .filter((candidate): candidate is { food: SearchCatalogFood; score: number } => candidate.score !== null)
       .sort((left, right) => right.score - left.score || left.food.canonicalName.localeCompare(right.food.canonicalName))
       .slice(0, 6)
@@ -592,27 +632,27 @@ export function buildFoodSearchResults({
 
   results.push(
     ...customFoods
-      .filter((food) => textMatches(trimmed, `${food.name} ${food.brand ?? ''}`))
+      .filter((food) => matchesIdentity(`${food.name} ${food.brand ?? ''}`))
       .map(customFoodToSearchResult),
   );
 
   results.push(
     ...favoriteMeals
-      .filter((meal) => textMatches(trimmed, `${meal.title} ${meal.rawText ?? ''}`))
+      .filter((meal) => matchesIdentity(`${meal.title} ${meal.rawText ?? ''}`))
       .map((meal) => reusableMealToSearchResult(meal, 'Favorite'))
       .filter((result): result is FoodSearchResult => Boolean(result)),
   );
 
   results.push(
     ...recentMeals
-      .filter((meal) => textMatches(trimmed, `${meal.title} ${meal.rawText ?? ''}`))
+      .filter((meal) => matchesIdentity(`${meal.title} ${meal.rawText ?? ''}`))
       .map((meal) => reusableMealToSearchResult(meal, 'Recent'))
       .filter((result): result is FoodSearchResult => Boolean(result)),
   );
 
   return rankFoodSearchResultsByUserHistory({
     query: trimmed,
-    results: dedupeResults(results),
+    results: dedupeResults(results).map((result) => applyRequestedModifiers(result, normalizedQuery.requestedModifiers)),
     favoriteMeals,
     recentMeals,
   }).slice(0, 12);
@@ -620,6 +660,18 @@ export function buildFoodSearchResults({
 
 export function verifiedCatalogFoodsForLookup() {
   return getCatalogFoods() as SearchCatalogFood[];
+}
+
+function applyRequestedModifiers(result: FoodSearchResult, modifiers: string[]) {
+  if (!modifiers.length) return result;
+  return {
+    ...result,
+    items: result.items.map((item) => ({
+      ...item,
+      requested_modifiers: [...new Set([...(item.requested_modifiers ?? []), ...modifiers])],
+      review_status: !item.modifier_resolution ? 'recommended' as const : item.review_status,
+    })),
+  };
 }
 
 export function resetFoodSearchCaches() {
@@ -634,13 +686,32 @@ function logFoodSearchDebug(message: string, metadata?: Record<string, unknown>)
   console.info('[food-search]', message, metadata ?? {});
 }
 
+export function createFoodSearchDiagnostics(query: string): FoodSearchDiagnostics {
+  return {
+    query: query.slice(0, 180),
+    normalizedQuery: query.slice(0, 180),
+    queryVariants: [],
+    providers: [],
+    mergedCandidateCount: 0,
+    rejectedCandidateCount: 0,
+    finalCandidateCount: 0,
+    winningCandidate: null,
+    totalDurationMs: 0,
+  };
+}
+
+function foodSearchAiTimeoutMs() {
+  const parsed = Number(process.env.OPENAI_FOOD_SEARCH_TIMEOUT_MS?.trim());
+  return Number.isFinite(parsed) && parsed >= 500 && parsed <= 10_000 ? Math.round(parsed) : 2_500;
+}
+
 async function defaultResolveQuery(input: { rawQuery: string }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
   const model = process.env.OPENAI_FOOD_SEARCH_MODEL ?? process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
   logFoodSearchDebug('resolver invoked', { model });
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, timeout: foodSearchAiTimeoutMs(), maxRetries: 0 });
   const completion = await client.chat.completions.create({
     model,
     temperature: 0.1,
@@ -669,7 +740,7 @@ async function defaultRankCandidates(input: FoodSearchRankingInput) {
 
   const model = process.env.OPENAI_FOOD_SEARCH_MODEL ?? process.env.OPENAI_MEAL_MODEL ?? 'gpt-4.1-mini';
   logFoodSearchDebug('ranking invoked', { model, candidateCount: input.candidates.length });
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, timeout: foodSearchAiTimeoutMs(), maxRetries: 0 });
   const completion = await client.chat.completions.create({
     model,
     temperature: 0,
@@ -715,8 +786,11 @@ async function resolveWithCache(rawQuery: string, ai: FoodSearchAiClient | undef
 }
 
 function searchQueries(originalQuery: string, resolver: FoodSearchResolverOutput | null) {
+  const deterministic = normalizeFoodQuery(originalQuery);
   const values = [
     originalQuery,
+    deterministic.searchText,
+    deterministic.matchedQuery,
     resolver?.normalizedQuery,
     ...(resolver?.aliases ?? []),
   ]
@@ -729,7 +803,7 @@ function searchQueries(originalQuery: string, resolver: FoodSearchResolverOutput
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 3);
+  }).slice(0, 5);
 }
 
 function providerResultToSearchResult(
@@ -737,10 +811,11 @@ function providerResultToSearchResult(
   providerId: string,
   matchedQuery: string,
   resolver: FoodSearchResolverOutput | null,
+  deterministicModifiers: string[],
 ): FoodSearchResult | null {
   if (response.needs_clarification || !response.items.length) return null;
 
-  const resolverModifiers = resolver?.modifiers ?? [];
+  const resolverModifiers = [...new Set([...deterministicModifiers, ...(resolver?.modifiers ?? [])])];
   const items = response.items.map((item) => ({
     ...item,
     requested_modifiers: [...new Set([...(item.requested_modifiers ?? []), ...resolverModifiers])],
@@ -795,12 +870,46 @@ async function searchProviders(
   resolver: FoodSearchResolverOutput | null,
   mealType: ParsedMealResponse['meal_type'],
   trace?: FoodPipelineTrace,
+  diagnostics?: FoodSearchDiagnostics,
+  deterministicModifiers: string[] = [],
 ) {
   const providerResults = await Promise.all(providers.map(async (provider) => {
     const status = provider.getStatus?.() ?? { configured: true };
-    if (!status.configured || provider.capabilities?.search === false) return [];
+    if (!status.configured) {
+      diagnostics?.providers.push({
+        provider: provider.id,
+        configured: false,
+        attempted: false,
+        outcome: 'not_configured',
+        candidateCount: 0,
+        queryCount: 0,
+        durationMs: 0,
+        httpStatus: null,
+        reason: status.reason ?? 'not_configured',
+      });
+      return [];
+    }
+    if (provider.capabilities?.search === false) {
+      diagnostics?.providers.push({
+        provider: provider.id,
+        configured: true,
+        attempted: false,
+        outcome: 'unsupported',
+        candidateCount: 0,
+        queryCount: 0,
+        durationMs: 0,
+        httpStatus: null,
+        reason: 'search_not_supported',
+      });
+      return [];
+    }
+
+    const startedAt = Date.now();
+    let queryCount = 0;
+    let failure: NutritionProviderError | null = null;
 
     for (const query of queries) {
+      queryCount += 1;
       const normalizedQuery = normalizeFoodQuery(query);
       try {
         const context = {
@@ -813,13 +922,42 @@ async function searchProviders(
           ? await provider.searchCandidates(context)
           : [await provider.lookup(context)].filter((response): response is ParsedMealResponse => Boolean(response));
         const results = responses
-          .map((response) => providerResultToSearchResult(response, provider.id, query, resolver))
+          .map((response) => providerResultToSearchResult(response, provider.id, query, resolver, deterministicModifiers))
           .filter((result): result is FoodSearchResult => Boolean(result));
-        if (results.length) return results;
-      } catch {
+        if (results.length) {
+          diagnostics?.providers.push({
+            provider: provider.id,
+            configured: true,
+            attempted: true,
+            outcome: 'matched',
+            candidateCount: results.length,
+            queryCount,
+            durationMs: Date.now() - startedAt,
+            httpStatus: null,
+            reason: null,
+          });
+          return results;
+        }
+      } catch (error) {
+        failure = error instanceof NutritionProviderError
+          ? error
+          : new NutritionProviderError('unknown_provider_failure');
         // Search should fail soft when any provider is unavailable.
+        if (failure.category !== 'invalid_request') break;
       }
     }
+
+    diagnostics?.providers.push({
+      provider: provider.id,
+      configured: true,
+      attempted: true,
+      outcome: failure ? 'failed' : 'no_match',
+      candidateCount: 0,
+      queryCount,
+      durationMs: Date.now() - startedAt,
+      httpStatus: failure?.status ?? null,
+      reason: failure?.category ?? null,
+    });
     return [];
   }));
 
@@ -831,6 +969,7 @@ function needsRanking(query: string, resolver: FoodSearchResolverOutput | null, 
   if (resolver?.category === 'restaurant' || resolver?.category === 'branded') return true;
   if (resolver?.modifiers.length || resolver?.servingHint || resolver?.amountHint) return true;
   if (tokens(query).some((token) => candidates.every((candidate) => !normalizeSearchText(candidate.name).includes(token)))) return true;
+  if (new Set(candidates.map((candidate) => identityTier(query, candidate))).size > 1) return true;
   return candidates.some((candidate) => candidate.confidenceScore < 0.86);
 }
 
@@ -960,7 +1099,10 @@ export async function buildFoodSearchResponse(
   input: BuildFoodSearchResponseInput,
   options?: BuildFoodSearchResponseOptions,
 ): Promise<FoodSearchResponse> {
+  const startedAt = Date.now();
   const query = input.query.trim();
+  const deterministicQuery = normalizeFoodQuery(query);
+  const diagnostics = options?.diagnostics;
   const cache: FoodSearchCacheState = {
     resolverHit: false,
     rankingHit: false,
@@ -979,25 +1121,58 @@ export async function buildFoodSearchResponse(
     };
   }
 
-  const exactLocalResults = buildFoodSearchResults({
-    query,
-    customFoods: input.customFoods,
+  const providers = options?.providers ?? defaultNutritionProviders;
+  const initialQueries = searchQueries(query, null);
+  let localResults = localResultsForQueries(input, initialQueries, options?.catalogFoods);
+  let providerResults = await searchProviders(
+    initialQueries,
+    providers,
+    null,
+    input.mealType ?? 'snack',
+    options?.trace,
+    diagnostics,
+    deterministicQuery.requestedModifiers,
+  );
+  let resolver: FoodSearchResolverOutput | null = null;
+  let combinedResults = dedupeResults([...localResults, ...providerResults]);
+
+  // Database candidates are the fast path. OpenAI only expands a query when the
+  // deterministic provider pass cannot establish a strong identity.
+  if (!hasStrongExactMatch(query, combinedResults)) {
+    resolver = await resolveWithCache(query, options?.ai, cache);
+    const expandedQueries = searchQueries(query, resolver);
+    const initialKeys = new Set(initialQueries.map(cacheKey));
+    const additionalQueries = expandedQueries.filter((candidate) => !initialKeys.has(cacheKey(candidate)));
+    if (additionalQueries.length) {
+      localResults = dedupeResults([
+        ...localResults,
+        ...localResultsForQueries(input, additionalQueries, options?.catalogFoods),
+      ]);
+      providerResults = dedupeResults([
+        ...providerResults,
+        ...await searchProviders(
+          additionalQueries,
+          providers,
+          resolver,
+          input.mealType ?? 'snack',
+          options?.trace,
+          diagnostics,
+          deterministicQuery.requestedModifiers,
+        ),
+      ]);
+      combinedResults = dedupeResults([...localResults, ...providerResults]);
+    }
+  }
+
+  const usedResolver = Boolean(resolver);
+  const acceptedResults = combinedResults.filter((result) => !conflictsWithExplicitBrand(query, result, resolver?.brandIntent));
+  const rejectedResults = combinedResults.length - acceptedResults.length;
+  let results = rankFoodSearchResultsByUserHistory({
+    query: resolver?.normalizedQuery ?? deterministicQuery.matchedQuery ?? query,
+    results: acceptedResults,
     favoriteMeals: input.favoriteMeals,
     recentMeals: input.recentMeals,
-    catalogFoods: options?.catalogFoods ?? input.catalogFoods,
-  });
-
-  const resolver = hasStrongExactMatch(query, exactLocalResults)
-    ? null
-    : await resolveWithCache(query, options?.ai, cache);
-  const usedResolver = Boolean(resolver);
-  const queries = searchQueries(query, resolver);
-  const localResults = localResultsForQueries(input, queries, options?.catalogFoods);
-  const providers = options?.providers ?? defaultNutritionProviders;
-  const providerResults = await searchProviders(queries, providers, resolver, input.mealType ?? 'snack', options?.trace);
-  let results = dedupeResults([...localResults, ...providerResults])
-    .filter((result) => !conflictsWithExplicitBrand(query, result))
-    .slice(0, 12);
+  }).slice(0, 24);
 
   let ranking: FoodSearchRankingOutput | null = null;
   let usedRanking = false;
@@ -1007,7 +1182,7 @@ export async function buildFoodSearchResponse(
     if (ranking?.shouldAskClarification && ranking.clarificationQuestion) {
       return {
         query,
-        normalizedQuery: resolver?.normalizedQuery ?? query,
+        normalizedQuery: resolver?.normalizedQuery ?? deterministicQuery.matchedQuery ?? query,
         results,
         clarificationQuestion: ranking.clarificationQuestion,
         usedResolver,
@@ -1021,7 +1196,7 @@ export async function buildFoodSearchResponse(
   }
 
   results = rankFoodSearchResultsByUserHistory({
-    query: resolver?.normalizedQuery ?? query,
+    query: resolver?.normalizedQuery ?? deterministicQuery.matchedQuery ?? query,
     results,
     favoriteMeals: input.favoriteMeals,
     recentMeals: input.recentMeals,
@@ -1044,9 +1219,20 @@ export async function buildFoodSearchResponse(
     results = estimated ? [estimated] : [];
   }
 
+  if (diagnostics) {
+    diagnostics.normalizedQuery = resolver?.normalizedQuery ?? deterministicQuery.matchedQuery ?? query;
+    diagnostics.queryVariants = searchQueries(query, resolver);
+    diagnostics.mergedCandidateCount = combinedResults.length;
+    diagnostics.rejectedCandidateCount = rejectedResults;
+    diagnostics.finalCandidateCount = results.length;
+    diagnostics.winningCandidate = results[0]?.name ?? null;
+    diagnostics.totalDurationMs = Date.now() - startedAt;
+    logFoodSearchDebug('search diagnostics', { ...diagnostics });
+  }
+
   return {
     query,
-    normalizedQuery: resolver?.normalizedQuery ?? query,
+    normalizedQuery: resolver?.normalizedQuery ?? deterministicQuery.matchedQuery ?? query,
     results,
     clarificationQuestion: null,
     usedResolver,

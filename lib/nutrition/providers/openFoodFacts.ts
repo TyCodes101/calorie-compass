@@ -96,11 +96,6 @@ const searchResponseSchema = z.object({
 type OpenFoodFactsProduct = z.infer<typeof productSchema>;
 export type OpenFoodFactsQuality = 'high' | 'medium' | 'low' | 'unusable';
 
-const restaurantBrands = new Set([
-  "arby's", 'burger king', 'chick fil a', 'chipotle', 'five guys', 'mcdonald s',
-  'panda express', 'popeyes', 'starbucks', 'subway', 'taco bell', 'wendy s', 'white castle',
-]);
-
 function pickProductName(product: OpenFoodFactsProduct) {
   return product.product_name?.trim() || product.product_name_en?.trim() || product.generic_name?.trim() || null;
 }
@@ -223,12 +218,10 @@ function identityScore(product: OpenFoodFactsProduct, query: NormalizedFoodQuery
   return score;
 }
 
-function isPackagedTextQuery(query: NormalizedFoodQuery) {
-  if (!query.brandHint) return false;
-  if (restaurantBrands.has(normalizeProviderText(query.brandHint))) return false;
-  return /\b(?:bar|bottle|can|bag|chips?|popcorn|cereal|cookies?|crackers?|candy|gumm|soda|cola|drink|shake|yogurt|milk|packaged)\b/.test(
-    normalizeProviderText(`${query.searchText} ${query.normalizedText} ${query.unitHint ?? ''}`),
-  );
+function isSearchableTextQuery(query: NormalizedFoodQuery) {
+  const normalized = normalizeProviderText(query.searchText);
+  if (normalized.length < 2 || normalized.length > 120) return false;
+  return /[a-z]/.test(normalized);
 }
 
 function productToCandidate(
@@ -338,7 +331,7 @@ async function fetchProduct(barcode: string) {
 
 async function searchProducts(query: NormalizedFoodQuery) {
   const config = getOpenFoodFactsConfiguration();
-  if (!config.configured || !isPackagedTextQuery(query)) return [];
+  if (!config.configured || !isSearchableTextQuery(query)) return [];
   const searchText = query.searchText.slice(0, 120);
   const key = buildProviderCacheKey('open-food-facts:v1:packaged-search', {
     query: normalizeProviderText(searchText),
@@ -426,6 +419,7 @@ export const openFoodFactsProvider: NutritionLookupProvider = {
       quantityUnit: null,
       unitHint: null,
       brandHint: pickBrand(product),
+      requestedModifiers: [],
     };
     const candidate = productToCandidate(product, { exactBarcode: true, query, barcode: providerFoodId });
     return candidate ? buildProviderMealResponse({ candidate, normalizedQuery: query, mealType }) : null;
