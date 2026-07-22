@@ -28,9 +28,9 @@ Provider configuration:
 
 - `USDA_FDC_API_KEY` is canonical; `FDC_API_KEY` remains a compatibility alias.
 - `NUTRITIONIX_APP_ID` and `NUTRITIONIX_API_KEY` are optional. Missing or partial credentials report `nutritionix_not_configured` and are not retried.
-- `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` are optional server-only credentials. `FATSECRET_SCOPE` defaults to `premier` because current food-search methods require that scope; add `barcode` only when the account has barcode access. `FATSECRET_REGION` defaults to `US`.
+- `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` are optional server-only credentials. `FATSECRET_SCOPE` defaults to `basic`; use `premier` or add `barcode` only when the account grants those entitlements. `FATSECRET_REGION` defaults to `US`.
 - `CALORIE_API_KEY` is optional and server-only. A missing key disables only this provider. `CALORIE_API_ENABLED` defaults to true when a key is configured, and `CALORIE_API_TIMEOUT_MS` defaults to 3500 ms.
-- Open Food Facts is enabled by default, requires no key, and uses a descriptive server-side user agent. It is limited to exact barcodes and explicit packaged branded queries.
+- Open Food Facts is enabled by default, requires no key, and uses a descriptive server-side user agent. Text and barcode candidates still pass the same identity, serving, and plausibility gates as every provider.
 - UPC Database is disabled by default. When deliberately configured, it can recover barcode title/brand metadata only after every direct nutrition provider misses.
 - `ALLOW_MOCK_MEAL_PARSER` defaults to false and is ignored in production. Tests set it explicitly through the test setup.
 - `FOOD_PIPELINE_DEBUG` is development-only response tracing; production logs remain sanitized.

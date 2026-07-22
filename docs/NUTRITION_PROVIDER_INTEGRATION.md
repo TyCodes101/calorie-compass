@@ -12,7 +12,7 @@ Text lookup order:
 
 1. User nutrition label, custom/recent/favorite data, and local verified catalog.
 2. USDA FoodData Central.
-3. Open Food Facts for explicit packaged products.
+3. Open Food Facts.
 4. FatSecret.
 5. Calorie API.
 6. Nutritionix when configured.
@@ -36,12 +36,14 @@ Calorie API:
 FatSecret:
 
 - OAuth token: `POST https://oauth.fatsecret.com/connect/token`
+- Basic search: `GET https://platform.fatsecret.com/rest/foods/search/v1`
 - Premier search: `GET https://platform.fatsecret.com/rest/foods/search/v5`
-- Details: `GET https://platform.fatsecret.com/rest/food/v5`
+- Basic details: `GET https://platform.fatsecret.com/rest/food/v1`
+- Premier details: `GET https://platform.fatsecret.com/rest/food/v5`
 - Barcode: `GET https://platform.fatsecret.com/rest/food/barcode/find-by-id/v2`
 - Authentication: OAuth 2.0 client credentials, followed by a server-side Bearer token.
 
-FatSecret food search and barcode access require the corresponding account scopes. Search uses the current v5 endpoint and hydrates only the selected provider record when a details fetch is needed. A Basic-only client cannot participate in text search; MacroMesh fails over to the remaining providers.
+FatSecret Basic clients participate in text search through v1. Premier clients use v5. If a configured non-Basic scope is rejected, MacroMesh retries once with `basic` and uses v1. Barcode access still requires the corresponding account entitlement.
 
 Open Food Facts:
 
@@ -62,7 +64,7 @@ Local development values belong in ignored `.env.local`:
 ```dotenv
 FATSECRET_CLIENT_ID=your_client_id_here
 FATSECRET_CLIENT_SECRET=your_client_secret_here
-FATSECRET_SCOPE=premier
+FATSECRET_SCOPE=basic
 FATSECRET_REGION=US
 CALORIE_API_KEY=your_real_key_here
 OPEN_FOOD_FACTS_ENABLED=true
@@ -122,7 +124,7 @@ FatSecret nutrition caching stays below its documented 24-hour storage limit. On
 
 ## Vercel and CI
 
-In Vercel Project Settings, create `FATSECRET_CLIENT_ID`, `FATSECRET_CLIENT_SECRET`, and `CALORIE_API_KEY` for each intentionally enabled environment. Use `FATSECRET_SCOPE=premier`; append `barcode` only when the account explicitly grants barcode access. Redeploy the affected environment after changes.
+In Vercel Project Settings, create `FATSECRET_CLIENT_ID`, `FATSECRET_CLIENT_SECRET`, and `CALORIE_API_KEY` for each intentionally enabled environment. Use `FATSECRET_SCOPE=basic` unless the account explicitly grants Premier or barcode access. Redeploy the affected environment after changes.
 
 GitHub Actions and Codemagic use mocked provider tests and do not require live credentials. Only add encrypted CI credentials for an intentional protected live smoke workflow; never expose them to untrusted pull requests or echo them.
 
