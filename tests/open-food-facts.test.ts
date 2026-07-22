@@ -141,8 +141,8 @@ describe('Open Food Facts provider', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it('does not call legacy text search for generic or restaurant queries', async () => {
-    const fetchMock = vi.fn();
+  it('fans generic and restaurant text queries into the bounded provider search', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ count: 0, products: [] }));
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
     const baseQuery = {
       rawText: 'banana', normalizedText: 'banana', searchText: 'banana', matchedQuery: 'banana',
@@ -156,7 +156,8 @@ describe('Open Food Facts provider', () => {
         matchedQuery: "McDonald's fries", brandHint: "McDonald's",
       },
     })).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.every((call) => String(call[0]).includes('/cgi/search.pl'))).toBe(true);
   });
 
   it('searches only eligible branded packaged foods and drops invalid or wrong-brand records', async () => {

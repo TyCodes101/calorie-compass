@@ -46,12 +46,12 @@ describe('nutrition provider configuration', () => {
     });
     expect(getFatSecretConfiguration({ FATSECRET_CLIENT_ID: 'id', FATSECRET_CLIENT_SECRET: 'secret' })).toMatchObject({
       configured: true,
-      scope: 'premier',
+      scope: 'basic',
     });
   });
 
   it('models FatSecret search and barcode capabilities independently', () => {
-    expect(fatSecretScopeSupports('basic', 'search')).toBe(false);
+    expect(fatSecretScopeSupports('basic', 'search')).toBe(true);
     expect(fatSecretScopeSupports('premier', 'search')).toBe(true);
     expect(fatSecretScopeSupports('basic', 'barcode')).toBe(false);
     expect(fatSecretScopeSupports('basic barcode', 'barcode')).toBe(true);

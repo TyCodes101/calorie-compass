@@ -92,15 +92,40 @@ describe('FatSecret provider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('does not call an unsupported text-search endpoint for a Basic-only client', async () => {
+  it('uses the documented v1 text-search endpoint for a Basic-only client', async () => {
     vi.stubEnv('FATSECRET_CLIENT_ID', 'client-basic');
     vi.stubEnv('FATSECRET_CLIENT_SECRET', 'secret-basic');
     vi.stubEnv('FATSECRET_SCOPE', 'basic');
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'token-basic', expires_in: 3_600 }))
+      .mockResolvedValueOnce(jsonResponse({ foods: { food: [proteinBarFood()] } }));
     vi.stubGlobal('fetch', fetchMock);
 
-    expect(await lookup('one Barebells creamy crisp protein bar')).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await lookup('one Barebells creamy crisp protein bar'))?.items[0]).toMatchObject({
+      food_name: 'Barebells Creamy Crisp Protein Bar',
+      calories: 200,
+      provider_used: 'fatsecret',
+    });
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/rest/foods/search/v1');
+  });
+
+  it('falls back securely to Basic v1 search when an unentitled Premier scope is rejected', async () => {
+    vi.stubEnv('FATSECRET_CLIENT_ID', 'client-fallback');
+    vi.stubEnv('FATSECRET_CLIENT_SECRET', 'secret-fallback');
+    vi.stubEnv('FATSECRET_SCOPE', 'premier');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'invalid_scope' }, 400))
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'token-basic-fallback', expires_in: 3_600 }))
+      .mockResolvedValueOnce(jsonResponse({ foods: { food: [proteinBarFood()] } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect((await lookup('one Barebells creamy crisp protein bar'))?.items[0]).toMatchObject({
+      food_name: 'Barebells Creamy Crisp Protein Bar',
+      provider_used: 'fatsecret',
+    });
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('/rest/foods/search/v1');
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('scope=premier');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('scope=basic');
   });
 
   it('accepts a bounded product typo while retaining strict brand identity', async () => {

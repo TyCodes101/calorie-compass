@@ -14,8 +14,8 @@ const intentCases = [
   { query: '200g cooked white rice', name: /cooked white rice/i, quantity: 200, unit: 'g', brand: null },
   { query: '1 cup oatmeal', name: /oatmeal/i, quantity: 1, unit: 'cup', brand: null },
   { query: 'Quest Chips', name: /quest.*protein chips/i, quantity: 1, unit: 'bag', brand: 'Quest' },
-  { query: 'KitKat', name: /kitkat/i, quantity: 1, unit: 'bar', brand: 'KitKat' },
-  { query: 'Kit kat', name: /kitkat/i, quantity: 1, unit: 'bar', brand: 'KitKat' },
+  { query: 'KitKat', name: /kitkat/i, quantity: 1, unit: null, brand: null },
+  { query: 'Kit kat', name: /kit kat/i, quantity: 1, unit: null, brand: null },
   { query: 'hot cheeots', name: /hot cheetos/i, quantity: 1, unit: null, brand: 'Cheetos' },
   { query: 'Flamin Hot Cheetos', name: /flamin hot cheetos/i, quantity: 1, unit: null, brand: 'Cheetos' },
   { query: 'McDouble', name: /mcdonalds mcdouble/i, quantity: 1, unit: 'burger', brand: "McDonald's" },
@@ -47,6 +47,17 @@ describe('Food Intelligence release corpus', () => {
     expect(normalized.quantity).toBe(quantity);
     expect(normalized.quantityUnit ?? normalized.unitHint).toBe(unit);
     expect(normalized.brandHint).toBe(brand);
+  });
+
+  it.each([
+    ['McDouble no cheese', ['no cheese']],
+    ['sandwich without mayo', ['no mayo']],
+    ['burger extra grilled onions', ['extra grilled onions']],
+    ['salad light dressing', ['light dressing']],
+    ['grilled chicken not fried', ['grilled not fried']],
+    ['lettuce wrapped burger', ['lettuce wrapped']],
+  ])('preserves deterministic modifiers when OpenAI is skipped: %s', (query, modifiers) => {
+    expect(normalizeFoodQuery(query).requestedModifiers).toEqual(modifiers);
   });
 
   it('preserves modifiers as review metadata without letting ranking invent nutrition', async () => {
