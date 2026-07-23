@@ -11,6 +11,7 @@ import {
   sanitizedFoodPipelineTrace,
 } from '@/lib/ai/foodPipelineTrace';
 import { getFoodPipelineEnvironmentStatus } from '@/lib/ai/runtimeConfig';
+import { getReusableMealLibrary } from '@/lib/reusable-meals';
 
 function sanitizedErrorSummary(error: unknown) {
   if (error instanceof Error) {
@@ -42,7 +43,26 @@ export async function POST(request: Request) {
       mealAssistantRequestSchema,
       'That meal update request was incomplete. Please try again.',
     );
-    const user = await getCurrentUserWithProfile();
+    const [user, reusableMeals] = await Promise.all([
+      getCurrentUserWithProfile(),
+      getReusableMealLibrary(),
+    ]);
+    const toMemoryMeal = (meal: (typeof reusableMeals.favoriteMeals)[number]) => ({
+      id: meal.id,
+      title: meal.title,
+      rawText: meal.rawText,
+      mealType: meal.mealType,
+      totalCalories: meal.totalCalories,
+      confidenceScore: meal.confidenceScore ?? 0.82,
+      lastUsedAt: meal.lastUsedAt,
+      items: meal.items ?? [],
+    });
+    const favoriteMeals = context?.favoriteMeals?.length
+      ? context.favoriteMeals
+      : reusableMeals.favoriteMeals.map(toMemoryMeal);
+    const recentMeals = context?.recentMeals?.length
+      ? context.recentMeals
+      : reusableMeals.recentMeals.map(toMemoryMeal);
 
     const response = await runMealAssistant({
       message,
@@ -51,8 +71,8 @@ export async function POST(request: Request) {
         userName: state.userName ?? user?.name ?? null,
       },
       context: {
-        favoriteMeals: context?.favoriteMeals ?? [],
-        recentMeals: context?.recentMeals ?? [],
+        favoriteMeals,
+        recentMeals,
         assistantMemory: context?.assistantMemory,
         nutritionPreferences: context?.nutritionPreferences ?? user?.profile?.aiPreferenceNotes ?? null,
         proteinGoal: context?.proteinGoal ?? user?.profile?.proteinGoal ?? null,

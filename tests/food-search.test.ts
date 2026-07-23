@@ -33,10 +33,14 @@ describe('food search helpers', () => {
     expect(results[0]?.items[0]?.confidence_label).toMatch(/Verified|Matched/);
   });
 
-  it.each(['hot cheeots'])('does not solve typo queries with deterministic catalog aliases alone: %s', (query) => {
+  it.each(['hot cheeots'])('corrects a high-confidence typo before catalog ranking: %s', (query) => {
     const results = buildFoodSearchResults({ query, customFoods: [], favoriteMeals: [], recentMeals: [] });
 
-    expect(results).toEqual([]);
+    expect(results[0]).toMatchObject({
+      name: "Cheetos Crunchy Flamin' Hot",
+      brand: 'Cheetos',
+      estimated: false,
+    });
   });
 
   it('returns searchable custom foods with barcode metadata when present', () => {

@@ -157,6 +157,13 @@ final class SessionStore: ObservableObject {
 
     func refresh() {
         guard !isRefreshing else { return }
+        if ProcessInfo.processInfo.arguments.contains("--macromesh-ui-testing") {
+            state = .guest(SessionResponse(
+                account: nil,
+                user: SessionUser(id: "ui-test-user", name: "UI Test", mode: "guest")
+            ))
+            return
+        }
         isRefreshing = true
         state = .loading
         BackendService.fetchSession { [weak self] result in

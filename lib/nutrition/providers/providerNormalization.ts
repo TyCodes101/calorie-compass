@@ -103,6 +103,10 @@ export function providerTokenMatches(queryToken: string, candidateTokens: readon
     const normalizedCandidate = singularProviderToken(normalizeProviderText(candidateToken));
     if (!normalizedCandidate) return false;
     if (normalizedCandidate === normalizedQuery) return true;
+    if (
+      normalizedQuery.length >= 3
+      && (normalizedCandidate.startsWith(normalizedQuery) || normalizedCandidate.endsWith(normalizedQuery))
+    ) return true;
 
     const shortestLength = Math.min(normalizedQuery.length, normalizedCandidate.length);
     if (shortestLength < 5) return false;
@@ -228,6 +232,7 @@ export function buildBarcodeMealResponse(args: {
       quantityUnit: args.candidate.servingUnit,
       unitHint: args.candidate.servingUnit,
       brandHint: args.candidate.brand ?? null,
+      requestedModifiers: [],
     },
   });
 }

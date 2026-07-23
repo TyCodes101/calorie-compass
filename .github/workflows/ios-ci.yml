@@ -15,6 +15,10 @@ on:
       - feature/ios-phase3-meal-management
       - feature/ios-phase4b-native-auth
 
+concurrency:
+  group: ios-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ios-build:
     runs-on: macos-latest
@@ -24,6 +28,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -42,6 +52,7 @@ jobs:
             if [[ -n "$line" ]]; then
               udid="$(printf '%s' "$line" | sed -E 's/.*\(([0-9A-Fa-f-]+)\).*/\1/')"
               echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
+              echo "udid=$udid" >> "$GITHUB_OUTPUT"
               echo "Using simulator: $name ($udid)"
               exit 0
             fi
@@ -59,16 +70,65 @@ jobs:
             -destination '${{ steps.simulator.outputs.destination }}' \
             build | tee ios-build.log
 
-      - name: Test Calorie Compass
+      - name: Start deterministic Food Intelligence UI test backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/food-intelligence-ui-mock-server.mjs > food-intelligence-ui-server.log 2>&1 &
+          echo $! > food-intelligence-ui-server.pid
+          for attempt in {1..20}; do
+            if curl --silent --fail 'http://127.0.0.1:8765/api/reusable-meals' >/dev/null; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          cat food-intelligence-ui-server.log >&2
+          exit 1
+
+      - name: Test native unit suite
+        timeout-minutes: 12
         run: |
           set -o pipefail
-          rm -rf ios-test-results.xcresult
+          rm -rf ios-unit-test-results.xcresult
           xcodebuild \
             -project ios/CalorieCompass/CalorieCompass.xcodeproj \
             -scheme CalorieCompass \
             -destination '${{ steps.simulator.outputs.destination }}' \
-            -resultBundlePath ios-test-results.xcresult \
-            test | tee ios-test.log
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 90 \
+            -maximum-test-execution-time-allowance 120 \
+            -only-testing:CalorieCompassTests \
+            -resultBundlePath ios-unit-test-results.xcresult \
+            test | tee ios-unit-test.log
+
+      - name: Reboot simulator before UI tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          udid='${{ steps.simulator.outputs.udid }}'
+          xcrun simctl shutdown "$udid" || true
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+      - name: Test Food Intelligence UI flow
+        timeout-minutes: 10
+        env:
+          MACROMESH_UI_TEST_BASE_URL: http://127.0.0.1:8765
+        run: |
+          set -o pipefail
+          rm -rf ios-ui-test-results.xcresult
+          xcodebuild \
+            -project ios/CalorieCompass/CalorieCompass.xcodeproj \
+            -scheme CalorieCompass \
+            -destination '${{ steps.simulator.outputs.destination }}' \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 180 \
+            -maximum-test-execution-time-allowance 240 \
+            -only-testing:CalorieCompassUITests/FoodIntelligenceUITests/testLiveSearchReviewSaveAndHistoryUseOneNormalizedFood \
+            -resultBundlePath ios-ui-test-results.xcresult \
+            test | tee ios-ui-test.log
 
       - name: Upload iOS logs
         if: always()
@@ -77,5 +137,8 @@ jobs:
           name: ios-ci-logs
           path: |
             ios-build.log
-            ios-test.log
-            ios-test-results.xcresult
+            ios-unit-test.log
+            ios-unit-test-results.xcresult
+            ios-ui-test.log
+            ios-ui-test-results.xcresult
+            food-intelligence-ui-server.log

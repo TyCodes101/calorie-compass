@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { ParsedMealResponse } from '@/lib/ai/types';
 import type { NutritionLookupProvider, NormalizedFoodQuery } from '@/lib/nutrition/types';
 import { normalizeServingUnit, isCountableServingUnit } from '@/lib/nutrition/scaling';
 import {
@@ -360,6 +361,18 @@ export const calorieApiProvider: NutritionLookupProvider = {
       reason: config.configured ? undefined : `calorie_api_${config.reason ?? 'not_configured'}`,
     };
   },
+  async searchCandidates({ mealType, normalizedQuery, trace }) {
+    const foods = await searchFoods(normalizedQuery);
+    return foods
+      .map((food) => ({ food, score: identityScore(food, normalizedQuery) }))
+      .filter((entry): entry is { food: CalorieApiFood; score: number } => entry.score !== null)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 5)
+      .map((entry) => searchFoodToCandidate(entry.food, normalizedQuery))
+      .filter((entry): entry is NormalizedProviderFood => Boolean(entry))
+      .map((candidate) => buildProviderMealResponse({ candidate, normalizedQuery, mealType, trace }))
+      .filter((response): response is ParsedMealResponse => Boolean(response));
+  },
   async lookup({ mealType, normalizedQuery, trace }) {
     const foods = await searchFoods(normalizedQuery);
     const candidate = foods
@@ -387,6 +400,7 @@ export const calorieApiProvider: NutritionLookupProvider = {
       quantityUnit: null,
       unitHint: null,
       brandHint: food.brand_name ?? null,
+      requestedModifiers: [],
     };
     const candidate = searchFoodToCandidate(food, query);
     return candidate ? buildProviderMealResponse({ candidate, normalizedQuery: query, mealType }) : null;

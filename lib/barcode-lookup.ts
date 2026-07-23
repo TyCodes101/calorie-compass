@@ -103,19 +103,20 @@ export async function lookupBarcodeWithProviders(
   providers: NutritionLookupProvider[],
   mealType: MealTypeValue = 'snack',
 ): Promise<BarcodeProviderLookupResult> {
-  for (const provider of providers) {
-    if (!provider.lookupBarcode || provider.capabilities?.barcode === false) continue;
+  const results = await Promise.all(providers.map(async (provider) => {
+    if (!provider.lookupBarcode || provider.capabilities?.barcode === false) return null;
     const status = provider.getStatus?.() ?? { configured: true };
-    if (!status.configured) continue;
+    if (!status.configured) return null;
 
     try {
       const response = await provider.lookupBarcode({ barcode, mealType });
-      const result = response ? providerBarcodeResultToSearchResult(response, barcode) : null;
-      if (result) return { found: true, result };
+      return response ? providerBarcodeResultToSearchResult(response, barcode) : null;
     } catch {
-      // Barcode lookup is fail-soft so the next provider can still resolve it.
+      // Barcode lookup is fail-soft so healthy providers can still resolve it.
+      return null;
     }
-  }
+  }));
+  const result = results.find((candidate): candidate is FoodSearchResult => Boolean(candidate));
 
-  return { found: false, result: null };
+  return result ? { found: true, result } : { found: false, result: null };
 }

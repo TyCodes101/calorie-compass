@@ -583,6 +583,43 @@ final class MealAssistantParityTests: XCTestCase {
         XCTAssertEqual(barcode.result?.reviewItems.first?.food_name, "Turkey Chili")
     }
 
+    func testFoodIntelligenceReviewResponseDecodesWithoutSaving() throws {
+        let jsonData = Data("""
+        {
+          "origin": "history",
+          "mealType": "snack",
+          "items": [{
+            "food_name": "KitKat Milk Chocolate",
+            "quantity": 1,
+            "unit": "bar",
+            "calories": 210,
+            "protein": 3,
+            "carbs": 27,
+            "fat": 11,
+            "fiber": 1,
+            "sugar": 21,
+            "sodium": 30,
+            "source_type": "GENERIC_REFERENCE",
+            "source_name": "Nutrition database",
+            "confidence_label": "Matched"
+          }],
+          "confidenceScore": 0.86,
+          "needsReview": false,
+          "unresolvedItems": []
+        }
+        """.utf8)
+
+        let response = try JSONDecoder().decode(FoodIntelligenceReviewResponse.self, from: jsonData)
+
+        XCTAssertEqual(response.origin, "history")
+        XCTAssertEqual(response.mealType, "snack")
+        XCTAssertEqual(response.items.count, 1)
+        XCTAssertEqual(response.items.first?.food_name, "KitKat Milk Chocolate")
+        XCTAssertEqual(response.items.first?.quantity, 1)
+        XCTAssertFalse(response.needsReview)
+        XCTAssertTrue(response.unresolvedItems.isEmpty)
+    }
+
     func testFoodSearchResponseDecodesTrustAndReviewMetadata() throws {
         let data = """
         {

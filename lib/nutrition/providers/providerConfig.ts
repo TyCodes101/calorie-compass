@@ -67,7 +67,7 @@ function normalizeCalorieApiBaseUrl(value: string | null) {
 }
 
 function normalizeFatSecretScope(value: string | null) {
-  const scopes = (value ?? 'premier')
+  const scopes = (value ?? 'basic')
     .split(/\s+/)
     .map((scope) => scope.trim().toLowerCase())
     .filter(Boolean);
@@ -162,7 +162,7 @@ export function getFatSecretConfiguration(env: RuntimeEnv = process.env): FatSec
       reason: 'invalid_enabled_flag',
       clientId: null,
       clientSecret: null,
-      scope: scope ?? 'premier',
+      scope: scope ?? 'basic',
       region,
       timeoutMs,
     };
@@ -175,7 +175,7 @@ export function getFatSecretConfiguration(env: RuntimeEnv = process.env): FatSec
       reason: 'disabled',
       clientId: null,
       clientSecret: null,
-      scope: scope ?? 'premier',
+      scope: scope ?? 'basic',
       region,
       timeoutMs,
     };
@@ -188,7 +188,7 @@ export function getFatSecretConfiguration(env: RuntimeEnv = process.env): FatSec
       reason: 'invalid_scope',
       clientId: null,
       clientSecret: null,
-      scope: 'premier',
+      scope: 'basic',
       region,
       timeoutMs,
     };
@@ -208,7 +208,7 @@ export function getFatSecretConfiguration(env: RuntimeEnv = process.env): FatSec
 
 export function fatSecretScopeSupports(scope: string, capability: 'search' | 'barcode') {
   const scopes = new Set(scope.split(/\s+/).filter(Boolean));
-  return capability === 'barcode' ? scopes.has('barcode') : scopes.has('premier');
+  return capability === 'barcode' ? scopes.has('barcode') : scopes.has('basic') || scopes.has('premier');
 }
 
 export type OpenFoodFactsConfiguration = {

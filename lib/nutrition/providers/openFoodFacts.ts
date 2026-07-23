@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { ParsedMealResponse } from '@/lib/ai/types';
 import { normalizeBarcode } from '@/lib/nutrition/barcode';
 import { normalizeServingUnit, isCountableServingUnit } from '@/lib/nutrition/scaling';
 import type { NormalizedFoodQuery, NutritionLookupProvider } from '@/lib/nutrition/types';
@@ -94,11 +95,6 @@ const searchResponseSchema = z.object({
 
 type OpenFoodFactsProduct = z.infer<typeof productSchema>;
 export type OpenFoodFactsQuality = 'high' | 'medium' | 'low' | 'unusable';
-
-const restaurantBrands = new Set([
-  "arby's", 'burger king', 'chick fil a', 'chipotle', 'five guys', 'mcdonald s',
-  'panda express', 'popeyes', 'starbucks', 'subway', 'taco bell', 'wendy s', 'white castle',
-]);
 
 function pickProductName(product: OpenFoodFactsProduct) {
   return product.product_name?.trim() || product.product_name_en?.trim() || product.generic_name?.trim() || null;
@@ -222,12 +218,10 @@ function identityScore(product: OpenFoodFactsProduct, query: NormalizedFoodQuery
   return score;
 }
 
-function isPackagedTextQuery(query: NormalizedFoodQuery) {
-  if (!query.brandHint) return false;
-  if (restaurantBrands.has(normalizeProviderText(query.brandHint))) return false;
-  return /\b(?:bar|bottle|can|bag|chips?|popcorn|cereal|cookies?|crackers?|candy|gumm|soda|cola|drink|shake|yogurt|milk|packaged)\b/.test(
-    normalizeProviderText(`${query.searchText} ${query.normalizedText} ${query.unitHint ?? ''}`),
-  );
+function isSearchableTextQuery(query: NormalizedFoodQuery) {
+  const normalized = normalizeProviderText(query.searchText);
+  if (normalized.length < 2 || normalized.length > 120) return false;
+  return /[a-z]/.test(normalized);
 }
 
 function productToCandidate(
@@ -337,7 +331,7 @@ async function fetchProduct(barcode: string) {
 
 async function searchProducts(query: NormalizedFoodQuery) {
   const config = getOpenFoodFactsConfiguration();
-  if (!config.configured || !isPackagedTextQuery(query)) return [];
+  if (!config.configured || !isSearchableTextQuery(query)) return [];
   const searchText = query.searchText.slice(0, 120);
   const key = buildProviderCacheKey('open-food-facts:v1:packaged-search', {
     query: normalizeProviderText(searchText),
@@ -384,6 +378,18 @@ export const openFoodFactsProvider: NutritionLookupProvider = {
       reason: config.configured ? undefined : `open_food_facts_${config.reason ?? 'not_configured'}`,
     };
   },
+  async searchCandidates({ mealType, normalizedQuery, trace }) {
+    const products = await searchProducts(normalizedQuery);
+    return products
+      .map((product) => ({ product, score: identityScore(product, normalizedQuery) }))
+      .filter((entry): entry is { product: OpenFoodFactsProduct; score: number } => entry.score !== null)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 5)
+      .map((entry) => productToCandidate(entry.product, { exactBarcode: false, query: normalizedQuery }))
+      .filter((entry): entry is NormalizedProviderFood => Boolean(entry))
+      .map((candidate) => buildProviderMealResponse({ candidate, normalizedQuery, mealType, trace }))
+      .filter((response): response is ParsedMealResponse => Boolean(response));
+  },
   async lookup({ mealType, normalizedQuery, trace }) {
     const products = await searchProducts(normalizedQuery);
     const candidate = products
@@ -413,6 +419,7 @@ export const openFoodFactsProvider: NutritionLookupProvider = {
       quantityUnit: null,
       unitHint: null,
       brandHint: pickBrand(product),
+      requestedModifiers: [],
     };
     const candidate = productToCandidate(product, { exactBarcode: true, query, barcode: providerFoodId });
     return candidate ? buildProviderMealResponse({ candidate, normalizedQuery: query, mealType }) : null;

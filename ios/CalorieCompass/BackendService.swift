@@ -1015,6 +1015,26 @@ struct NutritionAnalyticsSummary: Codable, Equatable {
     let weeklySummary: String?
 }
 
+struct FoodIntelligenceRevalidationRequest: Codable {
+    let origin: String
+    let mealType: String
+    let items: [MealRequestItem]
+}
+
+struct FoodIntelligenceReviewResponse: Codable, Equatable {
+    let origin: String
+    let mealType: String
+    let items: [MealRequestItem]
+    let confidenceScore: Double
+    let needsReview: Bool
+    let unresolvedItems: [String]
+}
+
+struct ReusableMealReviewResponse: Codable, Equatable {
+    let review: FoodIntelligenceReviewResponse
+    let saved: Bool
+}
+
 struct LoggedFrequencyInsight: Codable, Equatable, Identifiable {
     var id: String { name.lowercased() }
     let name: String
@@ -1289,7 +1309,8 @@ class BackendService {
         KeychainAuthStorage().readBackendSessionToken()
     }
 
-    private static func perform<T: Decodable>(_ urlRequest: URLRequest, completion: @escaping (Result<T, Error>) -> Void) {
+    @discardableResult
+    private static func perform<T: Decodable>(_ urlRequest: URLRequest, completion: @escaping (Result<T, Error>) -> Void) -> URLSessionDataTask {
         let task = URLSession.shared.dataTask(with: urlRequest) { data, response, error in
             if let error = error {
                 completion(.failure(mapTransportError(error)))
@@ -1315,6 +1336,7 @@ class BackendService {
             }
         }
         task.resume()
+        return task
     }
 
     static func mapHTTPError(statusCode: Int, data: Data?) -> BackendError {
@@ -1447,9 +1469,10 @@ class BackendService {
         perform(urlRequest, completion: completion)
     }
 
-    static func searchFoods(query: String, completion: @escaping (Result<FoodSearchResponse, Error>) -> Void) {
-        guard let urlRequest = request(path: "api/food-search", method: "GET", queryItems: [URLQueryItem(name: "q", value: query)]) else { completion(.failure(BackendError.badURL)); return }
-        perform(urlRequest, completion: completion)
+    @discardableResult
+    static func searchFoods(query: String, completion: @escaping (Result<FoodSearchResponse, Error>) -> Void) -> URLSessionDataTask? {
+        guard let urlRequest = request(path: "api/food-search", method: "GET", queryItems: [URLQueryItem(name: "q", value: query)]) else { completion(.failure(BackendError.badURL)); return nil }
+        return perform(urlRequest, completion: completion)
     }
 
     static func lookupBarcode(_ barcode: String, completion: @escaping (Result<BarcodeLookupResponse, Error>) -> Void) {
@@ -1485,9 +1508,29 @@ class BackendService {
         perform(urlRequest, completion: completion)
     }
 
-    static func repeatReusableMeal(id: String, completion: @escaping (Result<PostMealResponse, Error>) -> Void) {
+    static func repeatReusableMeal(id: String, completion: @escaping (Result<ReusableMealReviewResponse, Error>) -> Void) {
         guard var urlRequest = request(path: "api/reusable-meals/\(id)/repeat", method: "POST") else { completion(.failure(BackendError.badURL)); return }
         urlRequest.httpBody = Data()
+        perform(urlRequest, completion: completion)
+    }
+
+    static func revalidateFoods(
+        origin: String,
+        mealType: String,
+        items: [MealRequestItem],
+        completion: @escaping (Result<FoodIntelligenceReviewResponse, Error>) -> Void
+    ) {
+        guard var urlRequest = request(path: "api/food-intelligence/revalidate", method: "POST") else { completion(.failure(BackendError.badURL)); return }
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(FoodIntelligenceRevalidationRequest(
+                origin: origin,
+                mealType: mealType,
+                items: items
+            ))
+        } catch {
+            completion(.failure(error))
+            return
+        }
         perform(urlRequest, completion: completion)
     }
 

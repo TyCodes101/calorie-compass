@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   lookupNutrition: vi.fn(),
+  resolveFoodIntelligenceItem: vi.fn(),
   resolveBarcodeNutrition: vi.fn(),
   hasDatabaseConnectionString: vi.fn(),
   getCurrentUserId: vi.fn(),
@@ -9,6 +10,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/nutrition/nutritionLookup', () => ({ lookupNutrition: mocks.lookupNutrition }));
+vi.mock('@/lib/food-intelligence/engine', () => ({
+  resolveFoodIntelligenceItem: mocks.resolveFoodIntelligenceItem,
+}));
 vi.mock('@/lib/nutrition/barcodeResolver', () => ({ resolveBarcodeNutrition: mocks.resolveBarcodeNutrition }));
 vi.mock('@/lib/current-user', () => ({
   hasDatabaseConnectionString: mocks.hasDatabaseConnectionString,
@@ -22,6 +26,7 @@ describe('nutrition resolver provider failure modes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.lookupNutrition.mockResolvedValue(null);
+    mocks.resolveFoodIntelligenceItem.mockResolvedValue(null);
     mocks.resolveBarcodeNutrition.mockResolvedValue({ found: false, result: null });
     mocks.hasDatabaseConnectionString.mockReturnValue(false);
   });
@@ -45,18 +50,22 @@ describe('nutrition resolver provider failure modes', () => {
       food_name: 'Community Protein Bar', calories: 220, provider_used: 'open-food-facts', confidence_label: 'Matched',
     });
     expect(mocks.lookupNutrition).not.toHaveBeenCalled();
+    expect(mocks.resolveFoodIntelligenceItem).not.toHaveBeenCalled();
   });
 
-  it('falls back to normal resolution after a barcode miss', async () => {
+  it('falls back to universal food resolution after a barcode miss', async () => {
     await resolveNutritionEstimate({ text: '012345678905', mealType: 'snack' });
-    expect(mocks.lookupNutrition).toHaveBeenCalledWith({
-      text: '012345678905', mealType: 'snack', nutritionLabel: null, barcode: null,
-    });
+    expect(mocks.resolveFoodIntelligenceItem).toHaveBeenCalledWith(
+      expect.objectContaining({ query: '012345678905', mealType: 'snack', origin: 'chat' }),
+      expect.any(Object),
+    );
+    expect(mocks.lookupNutrition).not.toHaveBeenCalled();
   });
 
   it('does not swallow an unexpected barcode orchestrator failure', async () => {
     mocks.resolveBarcodeNutrition.mockRejectedValue(new Error('orchestrator contract failure'));
     await expect(resolveNutritionEstimate({ text: '012345678905', mealType: 'snack' })).rejects.toThrow('orchestrator contract failure');
     expect(mocks.lookupNutrition).not.toHaveBeenCalled();
+    expect(mocks.resolveFoodIntelligenceItem).not.toHaveBeenCalled();
   });
 });

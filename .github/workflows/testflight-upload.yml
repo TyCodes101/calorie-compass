@@ -52,6 +52,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
       - name: Verify required secrets are present
         shell: bash
         run: |
@@ -117,9 +123,45 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          npm run scan:secrets
           npm run lint
           npm run build
           env -u OPENAI_API_KEY npm test
+          env -u OPENAI_API_KEY npm run test:release-food
+
+      - name: Run native unit and Food Intelligence UI tests before archive
+        timeout-minutes: 15
+        shell: bash
+        env:
+          MACROMESH_UI_TEST_BASE_URL: http://127.0.0.1:8765
+        run: |
+          set -euo pipefail
+          node scripts/food-intelligence-ui-mock-server.mjs > food-intelligence-ui-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          devices="$(xcrun simctl list devices available)"
+          destination=""
+          for name in "iPhone 17" "iPhone 17 Pro" "iPhone 16e" "iPhone 15" "iPhone 14"; do
+            line="$(printf '%s\n' "$devices" | grep -E "^[[:space:]]+${name}[[:space:]]+\(" | head -n 1 || true)"
+            if [[ -n "$line" ]]; then
+              udid="$(printf '%s' "$line" | sed -E 's/.*\(([0-9A-Fa-f-]+)\).*/\1/')"
+              destination="platform=iOS Simulator,id=$udid"
+              break
+            fi
+          done
+          if [[ -z "$destination" ]]; then
+            echo "No supported iPhone simulator is available." >&2
+            exit 1
+          fi
+          xcodebuild \
+            -project ios/CalorieCompass/CalorieCompass.xcodeproj \
+            -scheme CalorieCompass \
+            -destination "$destination" \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 90 \
+            -maximum-test-execution-time-allowance 120 \
+            test | tee ios-test.log
 
       - name: Archive and upload to TestFlight
         run: bundle exec fastlane ios testflight_upload

@@ -97,6 +97,7 @@ struct PremiumHistoryView: View {
                         .padding(.top, 14)
                         .padding(.bottom, 16)
                     }
+                    .accessibilityIdentifier("Meal history")
                     .macroMeshTabBarSpacer()
                     .refreshable { refreshMeals() }
                 }

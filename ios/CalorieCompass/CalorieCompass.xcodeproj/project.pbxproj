@@ -44,10 +44,18 @@
 		2A9100000000000000000002 /* WeightChartSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9000000000000000000002 /* WeightChartSanitizer.swift */; };
 		2A9100000000000000000003 /* HistorySortingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9000000000000000000003 /* HistorySortingTests.swift */; };
 		2A9100000000000000000004 /* WeightChartSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9000000000000000000004 /* WeightChartSanitizerTests.swift */; };
+		100000000000000000000204 /* FoodIntelligenceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000024 /* FoodIntelligenceUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		100000000000000000000301 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000400 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000501;
+			remoteInfo = CalorieCompass;
+		};
+		100000000000000000000303 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 100000000000000000000400 /* Project object */;
 			proxyType = 1;
@@ -96,11 +104,14 @@
 		2A9000000000000000000002 /* WeightChartSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeightChartSanitizer.swift; sourceTree = "<group>"; };
 		2A9000000000000000000003 /* HistorySortingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySortingTests.swift; sourceTree = "<group>"; };
 		2A9000000000000000000004 /* WeightChartSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeightChartSanitizerTests.swift; sourceTree = "<group>"; };
+		100000000000000000000024 /* FoodIntelligenceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodIntelligenceUITests.swift; sourceTree = "<group>"; };
+		100000000000000000000603 /* CalorieCompassUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CalorieCompassUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		100000000000000000000701 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
 		100000000000000000000702 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+		100000000000000000000703 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -109,6 +120,7 @@
 			children = (
 				100000000000000000000802 /* CalorieCompass */,
 				100000000000000000000803 /* CalorieCompassTests */,
+				100000000000000000000805 /* CalorieCompassUITests */,
 				100000000000000000000804 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -169,8 +181,17 @@
 			children = (
 				100000000000000000000601 /* CalorieCompass.app */,
 				100000000000000000000602 /* CalorieCompassTests.xctest */,
+				100000000000000000000603 /* CalorieCompassUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		100000000000000000000805 /* CalorieCompassUITests */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000024 /* FoodIntelligenceUITests.swift */,
+			);
+			path = ../CalorieCompassUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -207,6 +228,22 @@
 			productReference = 100000000000000000000602 /* CalorieCompassTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		100000000000000000000503 /* CalorieCompassUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000A03 /* Build configuration list for PBXNativeTarget "CalorieCompassUITests" */;
+			buildPhases = (
+				100000000000000000000904 /* Sources */,
+				100000000000000000000703 /* Frameworks */,
+			);
+			buildRules = ( );
+			dependencies = (
+				100000000000000000000304 /* PBXTargetDependency */,
+			);
+			name = CalorieCompassUITests;
+			productName = CalorieCompassUITests;
+			productReference = 100000000000000000000603 /* CalorieCompassUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -219,6 +256,7 @@
 				TargetAttributes = {
 					100000000000000000000501 = { CreatedOnToolsVersion = 15.0; };
 					100000000000000000000502 = { CreatedOnToolsVersion = 15.0; TestTargetID = 100000000000000000000501; };
+					100000000000000000000503 = { CreatedOnToolsVersion = 15.0; TestTargetID = 100000000000000000000501; };
 				};
 			};
 			buildConfigurationList = 100000000000000000000A00 /* Build configuration list for PBXProject "CalorieCompass" */;
@@ -233,6 +271,7 @@
 			targets = (
 				100000000000000000000501 /* CalorieCompass */,
 				100000000000000000000502 /* CalorieCompassTests */,
+				100000000000000000000503 /* CalorieCompassUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -244,10 +283,12 @@
 /* Begin PBXSourcesBuildPhase section */
 		100000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000101, 100000000000000000000102, 100000000000000000000103, 100000000000000000000104, 100000000000000000000105, 100000000000000000000106, 100000000000000000000107, 10000000000000000000011A, 10000000000000000000011B, 10000000000000000000011C, 10000000000000000000011D, 2A9310000000000000000010, 100000000000000000000108, 100000000000000000000109, 10000000000000000000010A, 10000000000000000000010B, 10000000000000000000010D, 10000000000000000000010E, 10000000000000000000010F, 100000000000000000000110, 100000000000000000000111, 100000000000000000000112, 100000000000000000000113, 100000000000000000000114, 100000000000000000000115, 100000000000000000000116, 100000000000000000000117, 100000000000000000000118, 100000000000000000000119, 2A9100000000000000000001, 2A9100000000000000000002, ); runOnlyForDeploymentPostprocessing = 0; };
 		100000000000000000000902 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000201, 100000000000000000000202, 100000000000000000000203, 2A9100000000000000000003, 2A9100000000000000000004, ); runOnlyForDeploymentPostprocessing = 0; };
+		100000000000000000000904 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (100000000000000000000204, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		100000000000000000000302 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 100000000000000000000501 /* CalorieCompass */; targetProxy = 100000000000000000000301 /* PBXContainerItemProxy */; };
+		100000000000000000000304 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 100000000000000000000501 /* CalorieCompass */; targetProxy = 100000000000000000000303 /* PBXContainerItemProxy */; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -257,12 +298,15 @@
 		100000000000000000000B04 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CALORIE_COMPASS_BASE_URL = "https://calorie-compass-chi.vercel.app"; INFOPLIST_KEY_NSCameraUsageDescription = "MacroMesh uses the camera to scan food barcodes. No barcode scan photo is saved."; INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MacroMesh uses selected photos only for local meal photo and nutrition label review. Upload storage is not enabled in this build."; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UILaunchScreen_BACKGROUND_COLOR = "AccentColor"; INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"; INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.tycodes.macromate; PRODUCT_MODULE_NAME = CalorieCompass; PRODUCT_NAME = MacroMesh; INFOPLIST_KEY_CFBundleDisplayName = MacroMesh; INFOPLIST_KEY_CFBundleIconName = AppIcon; INFOPLIST_KEY_CFBundleName = MacroMesh; INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
 		100000000000000000000B05 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.tycodes.macromateTests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacroMesh.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MacroMesh"; }; name = Debug; };
 		100000000000000000000B06 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.tycodes.macromateTests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacroMesh.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MacroMesh"; }; name = Release; };
+		100000000000000000000B07 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.tycodes.macromateUITests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = CalorieCompass; }; name = Debug; };
+		100000000000000000000B08 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.tycodes.macromateUITests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = CalorieCompass; }; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
 		100000000000000000000A00 /* Build configuration list for PBXProject "CalorieCompass" */ = {isa = XCConfigurationList; buildConfigurations = (100000000000000000000B01 /* Debug */, 100000000000000000000B02 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		100000000000000000000A01 /* Build configuration list for PBXNativeTarget "CalorieCompass" */ = {isa = XCConfigurationList; buildConfigurations = (100000000000000000000B03 /* Debug */, 100000000000000000000B04 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		100000000000000000000A02 /* Build configuration list for PBXNativeTarget "CalorieCompassTests" */ = {isa = XCConfigurationList; buildConfigurations = (100000000000000000000B05 /* Debug */, 100000000000000000000B06 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		100000000000000000000A03 /* Build configuration list for PBXNativeTarget "CalorieCompassUITests" */ = {isa = XCConfigurationList; buildConfigurations = (100000000000000000000B07 /* Debug */, 100000000000000000000B08 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = 100000000000000000000400 /* Project object */;
