@@ -1,22 +1,26 @@
 # Calorie Compass
 
-Calorie Compass is a mobile-first AI-powered nutrition tracking app built with Next.js, TypeScript, Tailwind CSS, Prisma, Postgres, and the OpenAI API.
+Calorie Compass is a mobile-first AI-powered nutrition tracking app.
 
-## Current MVP
-This first build focuses on the core loop:
-- onboarding
-- dashboard
-- AI meal logger
-- confirmation/edit before save
+- **Web (production):** https://calorie-compass-chi.vercel.app
+- **Repo:** https://github.com/TyCodes101/calorie-compass
+
+## What it does
+- Onboarding + profile setup
+- Dashboard + macro tracking
+- AI meal logger (confirmation/edit before save)
+- History + progress views
+
+## Monorepo layout
+- `app/` — Next.js app router (web)
+- `ios/` — native iOS SwiftUI app (Xcode project under `ios/CalorieCompass`)
+- `tests/` — web + backend tests (Vitest)
 
 ## Tech stack
-- Next.js App Router
-- React
-- TypeScript
-- Tailwind CSS
-- Prisma
-- Postgres
-- OpenAI API
+- Next.js App Router + React + TypeScript + Tailwind
+- Prisma + Postgres
+- OpenAI API (optional in local dev)
+- Native iOS: SwiftUI
 
 ## Environment variables
 Create a `.env` file in the project root:
@@ -33,15 +37,13 @@ Optional:
 OPENAI_MEAL_MODEL="gpt-4.1-mini"
 ```
 
-## Local setup
+## Local setup (web)
 ```bash
 npm install
 npx prisma migrate dev --name init
 npx prisma db seed
 npm run dev
 ```
-
-Open the local URL shown by Next.js.
 
 ## Demo behavior
 - If `OPENAI_API_KEY` is present, the meal parsing route calls OpenAI.
@@ -66,13 +68,20 @@ npm run test:food-search
 npm run scan:secrets
 ```
 
-Before deploy, run the full guard:
-
+Before deploy:
 ```bash
 npm run predeploy:check
 ```
 
-`npm run qa:assistant` runs the golden multi-turn chatbot QA suite. It checks logging accuracy, correction behavior, nutrition questions, recommendations, repeat-meal memory, active meal preservation, dead-end replies, unrelated food drift, and common nutrition sanity ranges.
+`npm run qa:assistant` runs the golden multi-turn chatbot QA suite.
+
+## iOS
+- Xcode project: `ios/CalorieCompass/CalorieCompass.xcodeproj`
+- iOS app display name is currently **MacroMesh**.
+
+## Docs
+- `docs/TESTFLIGHT_UPDATE_WORKFLOW.md`
+- `docs/RELEASE_CHECKLIST.md`
 
 The universal discovery architecture and release gates are documented in [`docs/food-intelligence/ARCHITECTURE.md`](docs/food-intelligence/ARCHITECTURE.md).
 
