@@ -162,12 +162,52 @@ workflows:
           # TestFlight beta review here: that Magic Action creates a betaAppReviewSubmission,
           # which Apple rejects for INTERNAL_ONLY builds with audienceType
           # INTERNAL_ONLY / externalBuildState NOT_APPLICABLE.
-          app-store-connect publish \
-            --path build/ios/ipa/MacroMesh.ipa \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --private-key @env:APP_STORE_CONNECT_PRIVATE_KEY \
-            --apple-id "$APP_STORE_APP_ID"
+          # Apple occasionally returns a transient 500 when finalizing the upload state,
+          # even though the binary transfer succeeded. When that happens, altool prints
+          # "UPLOAD SUCCEEDED" / "No errors uploading archive" but exits non-zero.
+          #
+          # We treat those cases as success and also retry a few times for real failures.
+          publish_once() {
+            app-store-connect publish \
+              --path build/ios/ipa/MacroMesh.ipa \
+              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+              --private-key @env:APP_STORE_CONNECT_PRIVATE_KEY \
+              --apple-id "$APP_STORE_APP_ID"
+          }
+
+          attempts=3
+          for attempt in $(seq 1 $attempts); do
+            echo "Starting App Store Connect upload attempt $attempt/$attempts…"
+            set +e
+            output=$(publish_once 2>&1)
+            status=$?
+            set -e
+            echo "$output"
+
+            if [ $status -eq 0 ]; then
+              echo "Upload command exited 0."
+              break
+            fi
+
+            if echo "$output" | grep -qE "UPLOAD SUCCEEDED with no errors|No errors uploading archive"; then
+              echo "Upload transfer succeeded but Apple returned a transient server error while finalizing. Treating as success."
+              status=0
+              break
+            fi
+
+            if [ $attempt -lt $attempts ]; then
+              backoff=$((attempt * 20))
+              echo "Upload attempt $attempt failed (exit $status). Retrying in ${backoff}s…" >&2
+              sleep "$backoff"
+            fi
+          done
+
+          if [ $status -ne 0 ]; then
+            echo "Upload failed after $attempts attempts." >&2
+            exit $status
+          fi
+
           echo "Uploaded MacroMesh IPA to App Store Connect. Internal TestFlight processing is the intended terminal state for this workflow."
 
     artifacts:
