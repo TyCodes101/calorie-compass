@@ -1,6 +1,6 @@
 # Nutrition Accuracy Benchmark
 
-Generated: 2026-07-22T21:09:03.001Z
+Generated: 2026-09-15T16:18:14.667Z
 
 This benchmark is a permanent reliability gate for the nutrition accuracy program. It combines lookup resolution, typo normalization, ambiguity handling, validation risk scoring, and golden dataset checks.
 
@@ -1064,7 +1064,7 @@ This benchmark is a permanent reliability gate for the nutrition accuracy progra
 | 994 | golden | golden | Fairlife Core Power Elite 42g shake | fairlife-core-power-elite | Fairlife Core Power Elite 42g Protein Shake | PASS | Golden dataset case passed. |
 | 995 | golden | golden | Chipotle chicken bowl | chipotle-chicken-bowl | Chipotle bowl with chicken, white rice, black beans | PASS | Golden dataset case passed. |
 | 996 | golden | golden | large baked potato | large-baked-potato | Baked potato | PASS | Golden dataset case passed. |
-| 997 | golden | golden | 2 eggs and toast | eggs-and-toast | Eggs, toast | PASS | Golden dataset case passed. |
+| 997 | golden | golden | 2 eggs and toast | eggs-and-toast | Large eggs, toast | PASS | Golden dataset case passed. |
 | 998 | golden | golden | 8 oz chicken breast | eight-oz-chicken-breast | Grilled chicken breast | PASS | Golden dataset case passed. |
 | 999 | golden | golden | chips | generic-chips-clarification | clarification | PASS | Golden dataset case passed. |
 | 1000 | golden | golden | protein shake | protein-shake-clarification | clarification | PASS | Golden dataset case passed. |

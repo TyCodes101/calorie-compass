@@ -321,4 +321,193 @@ describe('LLM-assisted food search service', () => {
       is_trusted: false,
     });
   });
+
+  it('preserves requested quantity and unit across resolver aliases', async () => {
+    const observedIntents: Array<{ query: string; quantity: number; unit: string | null }> = [];
+    const provider: NutritionLookupProvider = {
+      id: 'serving-fixture',
+      lookup: vi.fn(async ({ normalizedQuery }) => {
+        observedIntents.push({
+          query: normalizedQuery.searchText,
+          quantity: normalizedQuery.quantity,
+          unit: normalizedQuery.quantityUnit,
+        });
+        if (normalizedQuery.searchText !== 'whole egg') return null;
+        return mealResponse(providerItem({
+          food_name: 'Large egg',
+          quantity: normalizedQuery.quantity,
+          unit: normalizedQuery.quantityUnit ?? 'egg',
+          calories: 210,
+          protein: 18,
+          carbs: 2,
+          fat: 15,
+          provider_used: 'serving-fixture',
+        }));
+      }),
+    };
+
+    const response = await buildFoodSearchResponse(
+      { query: '3 eggs', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      {
+        catalogFoods: [],
+        providers: [provider],
+        ai: {
+          resolveQuery: vi.fn(async () => resolverOutput({
+            normalizedQuery: 'whole egg',
+            aliases: ['whole egg'],
+          })),
+        },
+      },
+    );
+
+    expect(observedIntents.length).toBeGreaterThan(1);
+    expect(observedIntents.every((intent) => intent.quantity === 3 && intent.unit === 'egg')).toBe(true);
+    expect(response.results[0]?.items[0]).toMatchObject({ quantity: 3, unit: 'egg' });
+  });
+
+  it('does not let a differently sized recent meal outrank the requested serving', async () => {
+    const recentItem = providerItem({
+      food_name: 'Large egg',
+      quantity: 2,
+      unit: 'eggs',
+      calories: 140,
+      protein: 12,
+      carbs: 1,
+      fat: 10,
+    });
+    const recentMeals = [{
+      id: 'recent-two-eggs',
+      title: '2 eggs',
+      rawText: '2 eggs',
+      mealType: 'breakfast' as const,
+      lastUsedAt: null,
+      totalCalories: 140,
+      totalProtein: 12,
+      itemCount: 1,
+      trustedCount: 1,
+      confidenceScore: 0.95,
+      items: [recentItem],
+    }];
+
+    const response = await buildFoodSearchResponse(
+      { query: '3 eggs', customFoods: [], favoriteMeals: [], recentMeals },
+      { providers: [], ai: { resolveQuery: vi.fn(async () => null) } },
+    );
+
+    expect(new Set(response.results.map((result) => result.id)).size).toBe(response.results.length);
+    expect(response.results[0]?.items[0]).toMatchObject({ quantity: 3, unit: 'egg' });
+    expect(response.results[0]?.calories).toBe(210);
+  });
+
+  it('converts explicit gram requests from an ounce-based catalog serving once', async () => {
+    const response = await buildFoodSearchResponse(
+      { query: '200g chicken breast', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { providers: [], ai: { resolveQuery: vi.fn(async () => null) } },
+    );
+
+    expect(response.results[0]).toMatchObject({
+      name: 'Grilled chicken breast',
+      servingQuantity: 200,
+      servingUnit: 'g',
+    });
+    expect(response.results[0]?.calories).toBeGreaterThan(300);
+    expect(response.results[0]?.calories).toBeLessThan(400);
+  });
+
+  it('keeps an explicit restaurant result ahead of generic candidates', async () => {
+    const response = await buildFoodSearchResponse(
+      { query: "McDonald's medium fries", customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { providers: [], ai: { resolveQuery: vi.fn(async () => null) } },
+    );
+
+    expect(response.results[0]).toMatchObject({
+      name: "McDonald's Fries",
+      restaurant: "McDonald's",
+      servingQuantity: 1,
+      servingUnit: 'medium',
+    });
+  });
+
+  it('rejects a contradictory preparation when a raw result is requested', async () => {
+    const rawProvider: NutritionLookupProvider = {
+      id: 'raw-fixture',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: 'Chicken breast, raw',
+        quantity: 100,
+        unit: 'g',
+        calories: 120,
+        protein: 23,
+        carbs: 0,
+        fat: 3,
+        provider_used: 'raw-fixture',
+      }))),
+    };
+    const response = await buildFoodSearchResponse(
+      { query: 'raw chicken breast', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { providers: [rawProvider], ai: { resolveQuery: vi.fn(async () => null) } },
+    );
+
+    expect(response.results[0]?.name).toMatch(/raw/i);
+    expect(response.results.some((result) => /grilled/i.test(result.name))).toBe(false);
+  });
+
+  it('requires review for an unusually small implicit provider weight', async () => {
+    const tinyServing: NutritionLookupProvider = {
+      id: 'tiny-serving',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: 'Chocolate wafer bar',
+        quantity: 2,
+        unit: 'g',
+        calories: 10,
+        protein: 0.1,
+        carbs: 1.4,
+        fat: 0.5,
+        provider_used: 'tiny-serving',
+      }), 0.8)),
+    };
+
+    const response = await buildFoodSearchResponse(
+      { query: 'chocolate wafer bar', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { catalogFoods: [], providers: [tinyServing], ai: { resolveQuery: vi.fn(async () => null) } },
+    );
+
+    expect(response.results[0]).toMatchObject({
+      servingQuantity: 2,
+      servingUnit: 'g',
+      needsReview: true,
+    });
+    expect(response.results[0]?.items[0]).toMatchObject({
+      confidence_label: 'Needs Review',
+      review_status: 'required',
+      is_trusted: false,
+    });
+  });
+
+  it('ranks a natural serving above a tiny gram fragment for the same identity', async () => {
+    const tinyServing: NutritionLookupProvider = {
+      id: 'tiny-serving',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: 'Chocolate wafer bar', quantity: 2, unit: 'g', calories: 10, provider_used: 'tiny-serving',
+      }), 0.8)),
+    };
+    const naturalServing: NutritionLookupProvider = {
+      id: 'natural-serving',
+      lookup: vi.fn(async () => mealResponse(providerItem({
+        food_name: 'Chocolate wafer bar', quantity: 1, unit: 'bar', calories: 210, provider_used: 'natural-serving',
+      }), 0.76)),
+    };
+
+    const response = await buildFoodSearchResponse(
+      { query: 'chocolate wafer bar', customFoods: [], favoriteMeals: [], recentMeals: [] },
+      { catalogFoods: [], providers: [tinyServing, naturalServing], ai: { resolveQuery: vi.fn(async () => null) } },
+    );
+
+    expect(response.results[0]).toMatchObject({
+      providerId: 'natural-serving',
+      servingQuantity: 1,
+      servingUnit: 'bar',
+      calories: 210,
+      needsReview: false,
+    });
+  });
 });

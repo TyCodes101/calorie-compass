@@ -1,6 +1,7 @@
 import type { NormalizedFoodQuery } from '@/lib/nutrition/types';
 
 const quantityWords: Record<string, number> = {
+  half: 0.5,
   a: 1,
   an: 1,
   one: 1,
@@ -88,9 +89,13 @@ const compoundFoodDefinitions = [
 
 function cleanupFreeText(text: string) {
   return text
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/(\d)\.(?=\d)/g, '$1~')
     .toLowerCase()
     .replace(/[’']/g, '')
     .replace(/\bchipolte\b/g, 'chipotle')
+    .replace(/\bkit\s+katt\b/g, 'kit kat')
+    .replace(/\bchiken\b/g, 'chicken')
     .replace(/\bmcdonlads\b/g, 'mcdonalds')
     .replace(/\bcheeots\b/g, 'cheetos')
     .replace(/\bskitles\b/g, 'skittles')
@@ -114,7 +119,8 @@ function cleanupFreeText(text: string) {
     .replace(/\btacobell\b/g, 'taco bell')
     .replace(/\bmc\s*double\b/g, 'mcdouble')
     .replace(/\bmcdonalds?\b/g, 'mcdonalds')
-    .replace(/[^a-z0-9\n]+/g, ' ')
+    .replace(/[^a-z0-9~\n]+/g, ' ')
+    .replace(/~/g, '.')
     .replace(/\s*\n\s*/g, '\n')
     .replace(/\s+/g, ' ')
     .trim();
@@ -147,7 +153,7 @@ function extractConversationParts(text: string) {
 }
 
 function extractQuantity(text: string) {
-  const articleMeasurementMatch = text.match(/^(?:a|an|one)\s+(\d+(?:\.\d+)?)\s*(g|grams?|oz|ounces?|ml|milliliters?|cups?|tbsp|tablespoons?|tsp|teaspoons?)\s+(.+)$/);
+  const articleMeasurementMatch = text.match(/^(?:a|an|one)\s+(\d+(?:\.\d+)?)\s*(g|grams?|oz|ounces?|ml|milliliters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|scoops?)\s+(.+)$/);
   if (articleMeasurementMatch) {
     return {
       quantity: Number(articleMeasurementMatch[1]),
@@ -155,7 +161,7 @@ function extractQuantity(text: string) {
     };
   }
 
-  const measurementMatch = text.match(/^(\d+(?:\.\d+)?)\s*(g|grams?|oz|ounces?|ml|milliliters?|cups?|tbsp|tablespoons?|tsp|teaspoons?)\s+(.+)$/);
+  const measurementMatch = text.match(/^(\d+(?:\.\d+)?)\s*(g|grams?|oz|ounces?|ml|milliliters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|scoops?)\s+(.+)$/);
   if (measurementMatch) {
     return {
       quantity: Number(measurementMatch[1]),
@@ -171,7 +177,7 @@ function extractQuantity(text: string) {
     };
   }
 
-  const wordMatch = text.match(/^(a|an|one|two|three|four|five|six)\s+(.+)$/);
+  const wordMatch = text.match(/^(half|a|an|one|two|three|four|five|six)\s+(.+)$/);
   if (wordMatch) {
     return {
       quantity: quantityWords[wordMatch[1]] ?? 1,
@@ -199,6 +205,7 @@ function normalizeQuantityUnit(unit: string | undefined) {
   if (normalized === 'cup' || normalized === 'cups') return 'cup';
   if (normalized === 'tbsp' || normalized === 'tablespoon' || normalized === 'tablespoons') return 'tbsp';
   if (normalized === 'tsp' || normalized === 'teaspoon' || normalized === 'teaspoons') return 'tsp';
+  if (normalized === 'scoop' || normalized === 'scoops') return 'scoop';
   if (normalized === 'milliliter' || normalized === 'milliliters' || normalized === 'ml') return 'ml';
   if (normalized === 'small' || normalized === 'medium' || normalized === 'large') return normalized;
 
@@ -209,7 +216,7 @@ function extractQuantityUnit(text: string) {
   if (/\b(?:(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s+)?(?:small|medium|large)\s+eggs?\b/.test(text)) {
     return 'egg';
   }
-  const match = text.match(/\b(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|ml|milliliters?|slices?|pieces?|cakes?|bars?|bottles?|eggs?|cups?|tbsp|tablespoons?|tsp|teaspoons?|small|medium|large)\b/);
+  const match = text.match(/\b(?:\d+(?:\.\d+)?|half|a|an|one|two|three|four|five|six)\s*(g|grams?|oz|ounces?|ml|milliliters?|slices?|pieces?|cakes?|bars?|bottles?|eggs?|cups?|tbsp|tablespoons?|tsp|teaspoons?|scoops?|small|medium|large)\b/);
   if (match) return normalizeQuantityUnit(match[1]);
   return normalizeQuantityUnit(text.match(/\b(small|medium|large)\b/)?.[1]);
 }
@@ -233,6 +240,15 @@ function extractRequestedModifiers(text: string) {
   }
   if (/\blettuce\s+wrapped\b/.test(normalized)) {
     modifiers.push('lettuce wrapped');
+  }
+  if (/\bhalf\s+(?:the\s+)?dressing\b/.test(normalized)) {
+    modifiers.push('half dressing');
+  }
+  if (/\bsugar[\s-]+free\b/.test(normalized)) {
+    modifiers.push('sugar free');
+  }
+  if (/\blow[\s-]+fat\b/.test(normalized)) {
+    modifiers.push('low fat');
   }
 
   return [...new Set(modifiers)];
@@ -400,6 +416,7 @@ function buildNormalizedSearchText(base: string, details: string[]) {
     .filter(Boolean)
     .join(' ')
     .replace(/\b(?:no|without|extra|light)\s+(?:cheese|mayo|mayonnaise|bun|rice|sauce|dressing|ketchup|pickles?|onions?|mushrooms?|sugar)\b/g, ' ')
+    .replace(/\bhalf\s+(?:the\s+)?dressing\b/g, ' ')
     .replace(/\b(\d+(?:\.\d+)?)\s*(?:g|gram|grams)\s+(?=[a-z])/g, '$1 ')
     .replace(/\b(\d+(?:\.\d+)?)\s*(?:piece|pieces)\s+(?=[a-z])/g, '$1 ')
     .replace(/\b\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\b/g, ' ')

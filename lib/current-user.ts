@@ -1,4 +1,5 @@
 import { cookies, headers } from 'next/headers';
+import type { UserProfile } from '@prisma/client';
 
 import { buildGuestUserEmail, getGuestPlaceholderName, guestSessionCookieName } from '@/lib/auth-session';
 import { getUserForNativeSessionToken } from '@/lib/auth/native-session';
@@ -62,64 +63,39 @@ async function getOrCreateGuestUserWithProfile() {
   }
 
   const email = buildGuestUserEmail(sessionId);
-
-  const existing = await prisma.user.findUnique({
+  const user = await prisma.user.upsert({
     where: { email },
-    include: { profile: true },
-  });
-
-  if (existing) {
-    return existing;
-  }
-
-  return prisma.user.create({
-    data: {
+    update: {},
+    create: {
       name: getGuestPlaceholderName(),
       email,
       demo: true,
-      profile: {
-        create: {
-          age: defaultProfileSettings.age ?? null,
-          heightCm: defaultProfileSettings.heightCm ?? null,
-          weightLbs: defaultProfileSettings.weightLbs ?? null,
-          goal: defaultProfileSettings.goal,
-          activityLevel: defaultProfileSettings.activityLevel,
-          dailyCalorieGoal: defaultProfileSettings.dailyCalorieGoal,
-          proteinGoal: defaultProfileSettings.proteinGoal,
-          aiPreferenceNotes: defaultProfileSettings.nutritionPreferences ?? null,
-        },
-      },
     },
-    include: { profile: true },
   });
+
+  return ensureProfileForUser(user);
 }
 
-async function ensureProfileForUser<T extends { id: string; profile?: unknown | null }>(user: T | null) {
-  if (!user || user.profile) {
-    return user;
-  }
+async function ensureProfileForUser<T extends { id: string; profile?: UserProfile | null }>(user: T | null) {
+  if (!user) return null;
+  if (user.profile) return { ...user, profile: user.profile };
 
-  return prisma.user.update({
-    where: { id: user.id },
-    data: {
-      profile: {
-        upsert: {
-          create: {
-            age: defaultProfileSettings.age ?? null,
-            heightCm: defaultProfileSettings.heightCm ?? null,
-            weightLbs: defaultProfileSettings.weightLbs ?? null,
-            goal: defaultProfileSettings.goal,
-            activityLevel: defaultProfileSettings.activityLevel,
-            dailyCalorieGoal: defaultProfileSettings.dailyCalorieGoal,
-            proteinGoal: defaultProfileSettings.proteinGoal,
-            aiPreferenceNotes: defaultProfileSettings.nutritionPreferences ?? null,
-          },
-          update: {},
-        },
-      },
+  const profile = await prisma.userProfile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      age: defaultProfileSettings.age ?? null,
+      heightCm: defaultProfileSettings.heightCm ?? null,
+      weightLbs: defaultProfileSettings.weightLbs ?? null,
+      goal: defaultProfileSettings.goal,
+      activityLevel: defaultProfileSettings.activityLevel,
+      dailyCalorieGoal: defaultProfileSettings.dailyCalorieGoal,
+      proteinGoal: defaultProfileSettings.proteinGoal,
+      aiPreferenceNotes: defaultProfileSettings.nutritionPreferences ?? null,
     },
-    include: { profile: true },
+    update: {},
   });
+  return { ...user, profile };
 }
 
 async function getOrCreateGuestUserId() {
@@ -129,17 +105,10 @@ async function getOrCreateGuestUserId() {
   }
 
   const email = buildGuestUserEmail(sessionId);
-  const existing = await prisma.user.findUnique({
+  return prisma.user.upsert({
     where: { email },
-    select: { id: true },
-  });
-
-  if (existing) {
-    return existing;
-  }
-
-  return prisma.user.create({
-    data: {
+    update: {},
+    create: {
       name: getGuestPlaceholderName(),
       email,
       demo: true,
@@ -163,10 +132,7 @@ export async function getCurrentUserWithProfile() {
     return guestUser;
   }
 
-  return ensureProfileForUser(await prisma.user.findFirst({
-    orderBy: { createdAt: 'asc' },
-    include: { profile: true },
-  }));
+  return null;
 }
 
 export async function getCurrentUserId() {
@@ -184,10 +150,5 @@ export async function getCurrentUserId() {
     return guestUser.id;
   }
 
-  const user = await prisma.user.findFirst({
-    orderBy: { createdAt: 'asc' },
-    select: { id: true },
-  });
-
-  return user?.id ?? null;
+  return null;
 }

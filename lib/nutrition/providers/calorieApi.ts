@@ -197,6 +197,9 @@ function searchFoodToCandidate(food: CalorieApiFood, query: NormalizedFoodQuery)
   let servingWeight = 100;
 
   if (weight) {
+    // A small gram fragment does not establish one requested bar, bag, or bottle.
+    if (requestedUnit && isCountableServingUnit(requestedUnit)
+      && (!providerUnit || ['g', 'oz'].includes(providerUnit)) && weight < 10) return null;
     const canUseRequestedNaturalUnit = requestedUnit
       && isCountableServingUnit(requestedUnit)
       && (identityText.includes(requestedUnit) || providerUnit === 'serving');

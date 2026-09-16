@@ -16,6 +16,7 @@ const intentCases = [
   { query: 'Quest Chips', name: /quest.*protein chips/i, quantity: 1, unit: 'bag', brand: 'Quest' },
   { query: 'KitKat', name: /kitkat/i, quantity: 1, unit: null, brand: null },
   { query: 'Kit kat', name: /kit kat/i, quantity: 1, unit: null, brand: null },
+  { query: 'kit katt', name: /kit kat/i, quantity: 1, unit: null, brand: null },
   { query: 'hot cheeots', name: /hot cheetos/i, quantity: 1, unit: null, brand: 'Cheetos' },
   { query: 'Flamin Hot Cheetos', name: /flamin hot cheetos/i, quantity: 1, unit: null, brand: 'Cheetos' },
   { query: 'McDouble', name: /mcdonalds mcdouble/i, quantity: 1, unit: 'burger', brand: "McDonald's" },
@@ -35,7 +36,10 @@ const intentCases = [
   { query: "Ben and Jerry's", name: /ben jerrys/i, quantity: 1, unit: null, brand: "Ben & Jerry's" },
   { query: 'Peanut Butter and Jelly', name: /peanut butter and jelly sandwich/i, quantity: 1, unit: 'sandwich', brand: null },
   { query: 'one 12 oz Coke', name: /coke/i, quantity: 12, unit: 'oz', brand: 'Coca-Cola' },
+  { query: 'half a banana', name: /banana/i, quantity: 0.5, unit: null, brand: null },
+  { query: '1.5 scoops protein powder', name: /protein powder/i, quantity: 1.5, unit: 'scoop', brand: null },
   { query: 'mcdonlads fries', name: /french fries/i, quantity: 1, unit: null, brand: "McDonald's" },
+  { query: 'chiken breast', name: /chicken breast/i, quantity: 1, unit: null, brand: null },
 ] as const;
 
 describe('Food Intelligence release corpus', () => {
@@ -56,6 +60,9 @@ describe('Food Intelligence release corpus', () => {
     ['salad light dressing', ['light dressing']],
     ['grilled chicken not fried', ['grilled not fried']],
     ['lettuce wrapped burger', ['lettuce wrapped']],
+    ['salad half dressing', ['half dressing']],
+    ['sugar free yogurt', ['sugar free']],
+    ['low fat Greek yogurt', ['low fat']],
   ])('preserves deterministic modifiers when OpenAI is skipped: %s', (query, modifiers) => {
     expect(normalizeFoodQuery(query).requestedModifiers).toEqual(modifiers);
   });
@@ -115,8 +122,13 @@ describe('Food Intelligence release corpus', () => {
     expect(result.results[0]?.items[0]).toMatchObject({
       calories: 400,
       requested_modifiers: ['no cheese'],
-      review_status: 'recommended',
+      review_status: 'required',
+      modifier_resolution: 'unresolved',
+      is_trusted: false,
+      confidence_label: 'Needs Review',
     });
+    expect(result.results[0]).toMatchObject({ needsReview: true, sourceLabel: 'Database match' });
+    expect(result.results[0]?.confidenceScore).toBeLessThan(0.72);
   });
 
   it('deduplicates identical provider records without merging their nutrition', async () => {

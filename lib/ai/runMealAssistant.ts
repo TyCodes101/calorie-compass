@@ -522,12 +522,36 @@ function parseLeadingServingFood(message: string) {
   };
 }
 
-function buildItemLookupText(item: MealAssistantItem) {
-  const prefix = item.quantity > 1 ? `${item.quantity} ` : item.quantity === 1 ? '1 ' : '';
-  const brand = item.brand?.trim() ? `${item.brand.trim()} ` : '';
-  const modifiers = item.modifiers.length ? `${item.modifiers.join(' ')} ` : '';
-  const unit = item.unit?.trim() ? ` ${item.unit.trim()}` : '';
-  return `${prefix}${brand}${modifiers}${item.name}${unit}`.replace(/\s+/g, ' ').trim();
+function modifierTextForLookup(modifier: string) {
+  const normalized = modifier.trim();
+  if (/^(?:must include|must not match|expected (?:restaurant|brand|category|item)|serving default):/i.test(normalized)) {
+    return null;
+  }
+
+  const structured = normalized.match(
+    /^(?:remove|add|extra|light|substitute|preparation|portion|size|serving):\s*(.+?)(?::\s*[^:]+)?$/i,
+  );
+  return structured?.[1]?.trim() || normalized;
+}
+
+export function buildItemLookupText(item: MealAssistantItem) {
+  const prefix = item.quantity > 0 ? `${item.quantity} ` : '';
+  const unit = item.unit?.trim() && !/^counts?$/i.test(item.unit.trim()) ? `${item.unit.trim()} ` : '';
+  const normalizedName = normalizeFoodText(item.name);
+  const normalizedBrand = normalizeFoodText(item.brand ?? '');
+  const brand = item.brand?.trim() && normalizedBrand && !normalizedName.includes(normalizedBrand)
+    ? `${item.brand.trim()} `
+    : '';
+  const identityText = normalizeFoodText(`${brand}${item.name}`);
+  const lookupModifiers = item.modifiers
+    .map(modifierTextForLookup)
+    .filter((modifier): modifier is string => Boolean(modifier))
+    .filter((modifier) => {
+      const normalizedModifier = normalizeFoodText(modifier);
+      return normalizedModifier && !identityText.includes(normalizedModifier);
+    });
+  const modifiers = lookupModifiers.length ? `${lookupModifiers.join(' ')} ` : '';
+  return `${prefix}${unit}${brand}${modifiers}${item.name}`.replace(/\s+/g, ' ').trim();
 }
 
 function buildMealTextFromItems(items: ParsedFoodItem[]) {
@@ -1882,9 +1906,13 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
       : resolvedItem;
     return {
       ...scaledItem,
-      food_name: /\bscrambled\b/.test(lookupNormalized) ? 'Scrambled eggs' : 'Eggs',
+      food_name: /\bscrambled\b/.test(lookupNormalized)
+        ? 'Scrambled eggs'
+        : quantity > 1 ? scaledItem.food_name.replace(/\begg\b/i, 'eggs') : scaledItem.food_name,
       quantity,
-      unit: item.unit?.trim() || (item.quantity === 1 ? 'egg' : 'eggs'),
+      unit: /^counts?$/i.test(item.unit?.trim() ?? '')
+        ? scaledItem.unit
+        : item.unit?.trim() || scaledItem.unit || (item.quantity === 1 ? 'egg' : 'eggs'),
       matched_query: scaledItem.matched_query ?? lookupText,
       original_user_text: scaledItem.original_user_text ?? lookupText,
     };
@@ -1938,15 +1966,45 @@ function repairResolvedNutritionItem(item: MealAssistantItem, resolvedItem: Pars
   if (hasUserFacingServing && (resolvedItem.quantity !== item.quantity || resolvedUnit !== userFacingUnit)) {
     const shouldUseGrilledChickenName = /\bgrilled chicken\b/.test(lookupNormalized) && /\bchicken breast\b/i.test(resolvedItem.food_name.trim());
     const displayUnit = userFacingUnit ?? resolvedItem.unit;
-    const providerAlreadyScaled = resolvedItem.userQuantity === item.quantity
-      && normalizeQuantityUnit(resolvedItem.userUnit) === userFacingUnit;
-    const quantityScaledItem = resolvedUnit === userFacingUnit && resolvedItem.quantity > 0 && item.quantity !== resolvedItem.quantity && !providerAlreadyScaled
-      ? (scaleParsedItems([resolvedItem], item.quantity)[0] ?? resolvedItem)
+    const providerAlreadyScaled = resolvedItem.quantity === item.quantity
+      && resolvedUnit === userFacingUnit;
+    const providerBasis = resolvedItem.nutrition_basis;
+    const baseItem = providerBasis
+      ? {
+          ...resolvedItem,
+          quantity: providerBasis.provider_quantity,
+          unit: providerBasis.provider_unit,
+          ...providerBasis.base_nutrition,
+        }
       : resolvedItem;
+    const quantityScaledItem = providerAlreadyScaled
+      ? resolvedItem
+      : scaleNutritionItemOnce(baseItem, {
+          requestedQuantity: item.quantity,
+          requestedUnit: userFacingUnit,
+          providerServingQuantity: providerBasis?.provider_quantity ?? resolvedItem.quantity,
+          providerServingUnit: providerBasis?.provider_unit ?? resolvedItem.unit,
+          providerServingWeightGrams: providerBasis?.provider_weight_grams ?? resolvedItem.normalizedGrams,
+        });
+
+    if (!quantityScaledItem) {
+      return {
+        ...resolvedItem,
+        is_trusted: false,
+        confidence_label: 'Needs Review',
+        review_status: 'required',
+        matched_query: resolvedItem.matched_query ?? lookupText,
+        original_user_text: resolvedItem.original_user_text ?? lookupText,
+        notes: [
+          resolvedItem.notes,
+          `The requested ${formatDisplayQuantity(item.quantity)} ${formatUnitForQuantity(displayUnit, item.quantity)} could not be converted safely from the provider serving (${formatDisplayQuantity(resolvedItem.quantity)} ${formatUnitForQuantity(resolvedItem.unit, resolvedItem.quantity)}).`,
+        ].filter(Boolean).join(' '),
+      };
+    }
 
     return repairSuspiciousExplicitGramItem(lookupText, {
       ...quantityScaledItem,
-      food_name: shouldUseGrilledChickenName ? 'Grilled chicken breast' : resolvedItem.food_name,
+      food_name: shouldUseGrilledChickenName ? 'Grilled chicken breast' : quantityScaledItem.food_name,
       quantity: item.quantity,
       unit: displayUnit,
       matched_query: quantityScaledItem.matched_query ?? lookupText,
@@ -9811,18 +9869,15 @@ function resolvedItemsViolateGuardrails(item: MealAssistantItem, resolvedItems: 
     return true;
   }
 
-  const expectedCategoryTerms = extractModifierTerms(item, 'expected category');
-  if (expectedCategoryTerms.some((term) => !termAppearsInResolvedText(term, resolvedText))) {
-    return true;
-  }
-
   return false;
 }
 
 function removeInternalGuardrailModifiers(item: MealAssistantItem): MealAssistantItem {
   return {
     ...item,
-    modifiers: item.modifiers.filter((modifier) => !/^(?:must include|must not match|expected |serving default):/i.test(modifier.trim())),
+    modifiers: item.modifiers
+      .map(modifierTextForLookup)
+      .filter((modifier): modifier is string => Boolean(modifier)),
   };
 }
 
@@ -11165,7 +11220,11 @@ export async function runMealAssistant(
   const classifiedKnownItems = detectKnownFoodEstimatesWithTrustedRestaurantFallback(workingInput.message, state.mealType);
   if (
     classifiedKnownItems.length
-    && (hasFoodAfterConversationalLeadIn(workingInput.message) || decision.intent === 'new_food_item' || decision.intent === 'add_to_current_meal')
+    && (
+      hasFoodAfterConversationalLeadIn(workingInput.message)
+      || decision.intent === 'new_food_item'
+      || decision.intent === 'add_to_current_meal'
+    )
     && (decision.should_ask_clarification || !decision.items.length || !decision.should_lookup_nutrition)
   ) {
     const hydratedItems = await hydrateKnownEstimatesWithProviders(classifiedKnownItems, state.mealType);
@@ -11177,6 +11236,34 @@ export async function runMealAssistant(
       followUpMessage: mixedIntent.followUpMessage,
       context,
     }), workingInput, context);
+  }
+
+  const typoNormalizedMessage = normalizeKnownFoodTypos(normalizedWorkingMessage);
+  if (
+    decision.should_ask_clarification
+    && typoNormalizedMessage !== normalizedWorkingMessage
+    && hasReviewableFoodSignal(typoNormalizedMessage)
+  ) {
+    const typoItems = extractFallbackItems(typoNormalizedMessage, state);
+    if (typoItems.length && !shouldAskPizzaPortion(typoNormalizedMessage, typoItems)) {
+      const typoLookup = await resolveAssistantItemsWithClarification(
+        typoItems,
+        state.mealType,
+        resolveItemNutrition,
+        workingInput.message,
+        { forceFoodItems: true },
+      );
+      if (typoLookup.items.length && !typoLookup.clarificationQuestion) {
+        return finalizeResponse(buildDirectFoodEstimateResponse({
+          input: workingInput,
+          state,
+          items: typoLookup.items,
+          intent: state.currentMealItems.length && !state.saved ? 'add_to_current_meal' : 'new_food_item',
+          followUpMessage: mixedIntent.followUpMessage,
+          context,
+        }), workingInput, context);
+      }
+    }
   }
 
   let nextState: MealAssistantState = {

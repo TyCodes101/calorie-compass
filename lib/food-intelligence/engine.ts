@@ -83,7 +83,14 @@ export function foodIntelligenceResultToMealResponse(
     clarifying_question: null,
     meal_type: mealType,
     confidence_score: result.confidenceScore,
-    items: result.items,
+    items: result.items.map((item) => result.needsReview
+      ? {
+          ...item,
+          confidence_label: item.confidence_label === 'Estimated' ? 'Estimated' : 'Needs Review',
+          review_status: 'required',
+          notes: [item.notes, result.reason].filter(Boolean).join(' '),
+        }
+      : item),
   });
 }
 
@@ -93,9 +100,19 @@ export async function resolveFoodIntelligenceItem(
 ) {
   const response = await searchFoodIntelligence(input, dependencies);
   const result = response.results[0] ?? null;
-  return result
-    ? foodIntelligenceResultToMealResponse(result, input.mealType ?? result.mealType)
-    : null;
+  if (response.clarificationQuestion) {
+    return normalizeParsedMealResponse({
+      needs_clarification: true,
+      clarifying_question: response.clarificationQuestion,
+      meal_type: input.mealType ?? 'snack',
+      confidence_score: 0,
+      items: [],
+    });
+  }
+  if (result) {
+    return foodIntelligenceResultToMealResponse(result, input.mealType ?? result.mealType);
+  }
+  return null;
 }
 
 export async function lookupBarcodeFoodIntelligence(
@@ -113,12 +130,13 @@ export async function lookupBarcodeFoodIntelligence(
     customFoods: input.customFoods ?? [],
     catalogFoods: verifiedCatalogFoodsForLookup(),
   });
+  if (localResult.found) return { barcode, ...localResult };
+
   const [cached, provider] = await Promise.all([
     (dependencies.cachedBarcodeLookup ?? getCachedFoodByBarcode)(barcode),
     (dependencies.providerBarcodeLookup ?? resolveBarcodeNutrition)(barcode, input.mealType ?? 'snack'),
   ]);
 
-  if (localResult.found) return { barcode, ...localResult };
   if (cached) {
     return {
       barcode,
@@ -160,12 +178,12 @@ export async function revalidateFoodIntelligenceItems(
       mealType: input.mealType,
       origin: input.origin,
       customFoods: input.customFoods,
-      favoriteMeals: input.favoriteMeals,
-      recentMeals: input.recentMeals,
+      favoriteMeals: [],
+      recentMeals: [],
     }, dependencies);
     const best = response.results[0];
-    if (!best?.items.length) return { item: unresolvedReviewItem(storedItem), unresolved: true };
-    const item = best.items[0];
+    if (response.clarificationQuestion || best?.items.length !== 1) return { item: unresolvedReviewItem(storedItem), unresolved: true };
+    const item = foodIntelligenceResultToMealResponse(best, input.mealType).items[0];
     return {
       item: {
         ...item,

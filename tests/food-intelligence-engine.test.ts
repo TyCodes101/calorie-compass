@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import {
+  foodIntelligenceResultToMealResponse,
   lookupBarcodeFoodIntelligence,
   revalidateFoodIntelligenceItems,
   resolveFoodIntelligenceItem,
   searchFoodIntelligence,
 } from '@/lib/food-intelligence/engine';
 import { resetFoodSearchCaches, type FoodSearchResult } from '@/lib/food-search';
+import { buildCustomFoodSummaryFromReusableMealRecord } from '@/lib/custom-foods';
 import { resolveNutritionEstimate } from '@/lib/nutrition/resolver';
 import type { NutritionLookupProvider } from '@/lib/nutrition/types';
 
@@ -197,6 +199,44 @@ describe('universal Food Intelligence Engine', () => {
     expect(result?.items[0]).toMatchObject({ food_name: 'Banana', provider_used: 'healthy' });
   });
 
+  it('propagates search review requirements into chat hydration', () => {
+    const reviewed = foodIntelligenceResultToMealResponse({
+      ...barcodeResult(),
+      needsReview: true,
+      reason: 'The provider serving is ambiguous.',
+    });
+
+    expect(reviewed.items[0]).toMatchObject({
+      confidence_label: 'Needs Review',
+      review_status: 'required',
+    });
+    expect(reviewed.items[0]?.notes).toMatch(/provider serving is ambiguous/i);
+  });
+
+  it('preserves a search clarification when chat has no candidate', async () => {
+    const result = await resolveFoodIntelligenceItem({ query: 'mystery bowl', origin: 'chat', mealType: 'dinner' }, {
+      search: {
+        catalogFoods: [],
+        providers: [],
+        ai: {
+          resolveQuery: vi.fn().mockResolvedValue({
+            normalizedQuery: 'mystery bowl', aliases: [], brandIntent: null, restaurantIntent: null,
+            servingHint: null, amountHint: null, modifiers: [], category: 'unknown', confidence: 0.4,
+            needsDatabaseLookup: true, shouldAskClarification: true,
+            clarificationQuestion: 'What was in the bowl?',
+          }),
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      needs_clarification: true,
+      clarifying_question: 'What was in the bowl?',
+      meal_type: 'dinner',
+      items: [],
+    });
+  });
+
   it('routes barcode matches through the same normalized review model and preserves leading zeroes', async () => {
     const expected = barcodeResult();
     const result = await lookupBarcodeFoodIntelligence('012345678905', { customFoods: [] }, {
@@ -205,6 +245,23 @@ describe('universal Food Intelligence Engine', () => {
     });
     expect(result).toMatchObject({ barcode: '012345678905', found: true });
     expect(result.result).toEqual(expected);
+  });
+
+  it('returns a local barcode without contacting external providers or cache', async () => {
+    const customFood = buildCustomFoodSummaryFromReusableMealRecord({
+      id: 'custom-bar', title: 'Chocolate wafer bar', rawText: 'Custom food: Chocolate wafer bar',
+      items: [{ foodName: 'Chocolate wafer bar', quantity: 1, unit: 'bar', calories: 210,
+        protein: 3, carbs: 27, fat: 11, fiber: 1, sugar: 21, sodium: 30,
+        notes: 'Custom food barcode: 012345678905', sourceName: 'Custom food: Label' }],
+    });
+    const cachedBarcodeLookup = vi.fn();
+    const providerBarcodeLookup = vi.fn();
+    const result = await lookupBarcodeFoodIntelligence('012345678905', { customFoods: [customFood] }, {
+      cachedBarcodeLookup, providerBarcodeLookup,
+    });
+    expect(result).toMatchObject({ found: true, result: { id: 'custom-bar', calories: 210 } });
+    expect(cachedBarcodeLookup).not.toHaveBeenCalled();
+    expect(providerBarcodeLookup).not.toHaveBeenCalled();
   });
 
   it('revalidates favorites and history for review without saving or leaking quantities', async () => {
@@ -223,6 +280,11 @@ describe('universal Food Intelligence Engine', () => {
     };
     const first = await revalidateFoodIntelligenceItems({
       origin: 'history', mealType: 'breakfast', items: [item({ food_name: 'Eggs', quantity: 2, unit: 'egg' })],
+      recentMeals: [{
+        id: 'stale-eggs', title: 'Eggs', rawText: 'Eggs', mealType: 'breakfast', lastUsedAt: null,
+        totalCalories: 999, totalProtein: 0, itemCount: 1, trustedCount: 1, confidenceScore: 1,
+        items: [item({ food_name: 'Eggs', quantity: 2, unit: 'egg', calories: 999 })],
+      }],
     }, dependencies);
     const second = await revalidateFoodIntelligenceItems({
       origin: 'history', mealType: 'breakfast', items: [item({ food_name: 'Banana', quantity: 1, unit: 'medium' })],
