@@ -90,6 +90,17 @@ describe('Calorie API provider', () => {
     expect((await lookup('one Barebells creamy crisp protein bar'))?.items).toHaveLength(1);
   });
 
+  it('does not interpret a tiny gram fragment as one whole natural serving', async () => {
+    vi.stubEnv('CALORIE_API_KEY', 'calorie-test-key');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      data: [validProteinBar({ serving_size: 2 })], total: 1, skip: 0, limit: 10,
+    })));
+    expect(await lookup('one Barebells creamy crisp protein bar')).toBeNull();
+    const explicitWeight = await lookup('2g Barebells creamy crisp protein bar');
+    expect(explicitWeight?.items[0]).toMatchObject({ quantity: 2, unit: 'g' });
+    expect(explicitWeight?.items[0]?.calories).toBeCloseTo(7.27, 2);
+  });
+
   it('coerces documented numeric strings without accepting corrupted values', async () => {
     vi.stubEnv('CALORIE_API_KEY', 'calorie-test-key');
     const stringRecord = validProteinBar({

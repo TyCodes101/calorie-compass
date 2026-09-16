@@ -115,14 +115,14 @@ export const localVerifiedCatalogProvider: NutritionLookupProvider = {
         && (source?.sourceType !== 'OFFICIAL_RESTAURANT' || isOfficialRestaurantBrand(normalizedQuery.brandHint))
         && hasProductIdentityOverlap(normalizedQuery, match);
       if (source && (exactMatch || safeFuzzyBrandMatch) && isBrandedSource) {
+        const requestedUnit = normalizedQuery.quantityUnit ?? normalizedQuery.unitHint ?? match.food.servingUnit;
         const item = scaleCatalogFood(
           match.food,
           normalizedQuery.quantity,
-          normalizedQuery.quantityUnit === 'g' ? 'g' : match.food.servingUnit,
+          requestedUnit,
         );
         const servingGrams = 'servingGrams' in match.food ? Number(match.food.servingGrams) : null;
         const hasServingGrams = servingGrams !== null && Number.isFinite(servingGrams) && servingGrams > 0;
-        const requestedUnit = normalizedQuery.quantityUnit ?? normalizedQuery.unitHint ?? match.food.servingUnit;
         const providerServingQuantity = normalizedQuery.quantityUnit === 'g' && match.food.servingUnit !== 'g' && hasServingGrams
           ? servingGrams ?? match.food.servingQuantity
           : match.food.servingQuantity;

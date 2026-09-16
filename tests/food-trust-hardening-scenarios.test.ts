@@ -56,8 +56,22 @@ function expectIdentity(response: ParsedMealResponse, expected: RegExp[], forbid
 }
 
 function expectSourceHonest(item: ParsedFoodItem) {
+  if (item.confidence_label === 'Needs Review') {
+    expect(item.source_type).toMatch(/OFFICIAL_RESTAURANT|GENERIC_REFERENCE/);
+    expect(item.used_ai_fallback).not.toBe(true);
+    expect(item.is_trusted).toBe(false);
+    expect(item.review_status).toBe('required');
+    expect(item.notes).toMatch(/could not be converted|review/i);
+    return;
+  }
   if (item.source_type === 'AI_ESTIMATE' || item.used_ai_fallback || item.is_trusted === false) {
-    expect(item.confidence_label).toBe('Estimated');
+    expect(item.confidence_label, JSON.stringify({
+      name: item.food_name,
+      quantity: item.quantity,
+      unit: item.unit,
+      source: item.source_type,
+      notes: item.notes,
+    })).toBe('Estimated');
     return;
   }
   expect(item.source_type).toMatch(/OFFICIAL_RESTAURANT|GENERIC_REFERENCE/);

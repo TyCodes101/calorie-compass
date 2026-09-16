@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { MealAssistantItem, MealAssistantModelOutput, MealAssistantState } from '@/lib/ai/mealAssistantSchema';
-import { runMealAssistant } from '@/lib/ai/runMealAssistant';
+import { buildItemLookupText, runMealAssistant } from '@/lib/ai/runMealAssistant';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 
 function buildState(overrides?: Partial<MealAssistantState>): MealAssistantState {
@@ -124,6 +124,142 @@ afterEach(() => {
 });
 
 describe('meal assistant decomposition-first flow', () => {
+  it('keeps internal identity guardrails out of provider lookup text', () => {
+    expect(buildItemLookupText({
+      name: 'Cooked rice',
+      brand: null,
+      quantity: 1,
+      unit: 'cup',
+      modifiers: [
+        'preparation: cooked: rice',
+        'expected category: grain',
+        'expected item: cooked rice',
+        'serving default: 1 cup',
+      ],
+      action: 'add',
+    })).toBe('1 cup Cooked rice');
+
+    expect(buildItemLookupText({
+      name: 'Eggs',
+      brand: null,
+      quantity: 2,
+      unit: 'count',
+      modifiers: ['expected category: egg', 'expected item: egg'],
+      action: 'add',
+    })).toBe('2 Eggs');
+
+    expect(buildItemLookupText({
+      name: 'Quest nacho chips',
+      brand: 'Quest',
+      quantity: 1,
+      unit: 'serving',
+      modifiers: ['expected brand: Quest', 'expected category: protein chips'],
+      action: 'add',
+    })).toBe('1 serving Quest nacho chips');
+  });
+
+  it('does not pass internal guardrails to nutrition providers', async () => {
+    const resolver = vi.fn(async ({ mealType }: {
+      item: MealAssistantItem;
+      mealType: MealAssistantState['mealType'];
+    }) => meal([qaItem('Cooked white rice', { quantity: 1, unit: 'cup', calories: 200 })], mealType));
+
+    const response = await runMealAssistant(
+      { message: '1 cup cooked rice', state: buildState() },
+      {
+        classify: async () => decisionWithItems([{
+          name: 'Cooked rice',
+          brand: null,
+          quantity: 1,
+          unit: 'cup',
+          modifiers: [
+            'preparation: cooked: rice',
+            'expected category: grain',
+            'expected item: cooked rice',
+            'serving default: 1 cup',
+          ],
+          action: 'add',
+        }]),
+        resolveItemNutrition: resolver,
+      },
+    );
+
+    expect(resolver).toHaveBeenCalledWith(expect.objectContaining({
+      item: expect.objectContaining({
+        modifiers: ['cooked'],
+      }),
+    }));
+    expect(response.meal.items[0]).toMatchObject({
+      food_name: 'Cooked white rice',
+      source_type: 'GENERIC_REFERENCE',
+    });
+  });
+
+  it.each(['GENERIC_REFERENCE', 'OFFICIAL_RESTAURANT'] as const)('does not relabel incompatible %s nutrition as a natural serving', async (sourceType) => {
+    const response = await runMealAssistant(
+      { message: 'one chocolate wafer bar', state: buildState() },
+      {
+        classify: async () => decisionWithItems([{
+          name: 'Chocolate wafer bar', brand: null, quantity: 1, unit: 'bar', modifiers: [], action: 'add',
+        }]),
+        resolveItemNutrition: async ({ mealType }) => meal([qaItem('Chocolate wafer bar', {
+          source_type: sourceType,
+          quantity: 2,
+          unit: 'g',
+          calories: 10,
+          protein: 0.1,
+          carbs: 1.4,
+          fat: 0.5,
+          normalizedGrams: 2,
+          nutrition_basis: {
+            type: 'per_serving',
+            provider_quantity: 2,
+            provider_unit: 'g',
+            provider_weight_grams: 2,
+            scale_factor: 1,
+            base_nutrition: { calories: 10, protein: 0.1, carbs: 1.4, fat: 0.5, fiber: 0, sugar: 1, sodium: 0 },
+          },
+        })], mealType),
+      },
+    );
+
+    expect(response.meal.items[0]).toMatchObject({
+      quantity: 2,
+      unit: 'g',
+      calories: 10,
+      confidence_label: 'Needs Review',
+      review_status: 'required',
+      is_trusted: false,
+    });
+  });
+
+  it('uses a safe known-food match instead of repeating a model serving clarification', async () => {
+    const response = await runMealAssistant(
+      { message: 'hot cheeots', state: buildState({ mealType: 'snack' }) },
+      {
+        classify: async () => ({
+          ...decisionWithItems([]),
+          intent: 'unknown',
+          action: 'unclear',
+          assistant_reply: 'How much Hot Cheetos did you have?',
+          contains_food_to_log: false,
+          should_mutate_pending_meal: false,
+          should_lookup_nutrition: false,
+          should_ask_clarification: true,
+          clarification_question: 'How much Hot Cheetos did you have?',
+          confidence: 'medium',
+        }),
+      },
+    );
+
+    expect(response.should_ask_clarification).toBe(false);
+    expect(response.meal.items[0]).toMatchObject({
+      food_name: expect.stringMatching(/Cheetos.*Flamin.*Hot/i),
+      quantity: 1,
+    });
+    expect(response.next_state.pendingMeal?.status).toBe('readyForReview');
+  });
+
   it.each([
     ['Panda Express bigger plate: orange chicken, Beijing beef, chow mein', ['Panda Express Orange Chicken', 'Panda Express Beijing Beef', 'Panda Express Chow Mein']],
     ['2 grilled chicken breasts and asparagus', ['Grilled chicken breast', 'Asparagus']],
@@ -189,7 +325,7 @@ describe('meal assistant decomposition-first flow', () => {
     expect(gummies.meal.items[0]).toMatchObject({ food_name: expect.stringMatching(/gummy worms/i), source_type: 'AI_ESTIMATE' });
   });
 
-  it('keeps McGriddle as one sandwich when a provider returns a 100g restaurant serving', async () => {
+  it('keeps McGriddle as one sandwich using the provider natural-serving nutrition basis', async () => {
     const response = await runMealAssistant(
       { message: 'McGriddle', state: buildState({ mealType: 'breakfast' }) },
       {
@@ -202,7 +338,14 @@ describe('meal assistant decomposition-first flow', () => {
           action: 'add',
         }]),
         resolveItemNutrition: async ({ mealType }) => meal([
-          qaItem("McDonald's McGriddle", { quantity: 100, unit: 'g', calories: 430, source_type: 'OFFICIAL_RESTAURANT' }),
+          qaItem("McDonald's McGriddle", {
+            quantity: 100, unit: 'g', calories: 215, source_type: 'OFFICIAL_RESTAURANT',
+            nutrition_basis: {
+              type: 'per_unit', provider_quantity: 1, provider_unit: 'sandwich',
+              provider_weight_grams: 200, scale_factor: 0.5,
+              base_nutrition: { calories: 430, protein: 20, carbs: 44, fat: 19, fiber: 1, sugar: 14, sodium: 1000 },
+            },
+          }),
         ], mealType),
       },
     );
@@ -211,6 +354,7 @@ describe('meal assistant decomposition-first flow', () => {
       food_name: "McDonald's McGriddle",
       quantity: 1,
       unit: 'sandwich',
+      calories: 430,
     });
   });
 

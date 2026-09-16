@@ -36,8 +36,14 @@ const unitAliases: Record<string, string> = {
   packages: 'package',
   packs: 'package',
   eggs: 'egg',
+  breasts: 'breast',
+  orders: 'serving',
+  order: 'serving',
   tacos: 'taco',
   burritos: 'burrito',
+  'small order': 'small',
+  'medium order': 'medium',
+  'large order': 'large',
 };
 
 export function normalizeServingUnit(unit: string | null | undefined) {
@@ -61,9 +67,13 @@ const countableUnits = new Set([
   'bag',
   'package',
   'egg',
+  'breast',
   'taco',
   'burrito',
   'footlong',
+  'small',
+  'medium',
+  'large',
 ]);
 
 export function isCountableServingUnit(unit: string | null | undefined) {

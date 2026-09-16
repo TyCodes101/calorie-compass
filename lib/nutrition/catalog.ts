@@ -2,6 +2,7 @@ import catalogData from '@/data/nutrition-catalog.json';
 import type { ParsedFoodItem, ParsedMealResponse } from '@/lib/ai/types';
 import { normalizeParsedMealResponse } from '@/lib/ai/normalize';
 import type { MealTypeValue } from '@/lib/ai/orchestrate';
+import { computeServingScaleFactor } from '@/lib/nutrition/scaling';
 
 export type NutritionSourceRecord = (typeof catalogData.sources)[number];
 export type CatalogFoodRecord = (typeof catalogData.foods)[number];
@@ -193,18 +194,29 @@ export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit
   const normalizedServingUnit = normalizeUnit(food.servingUnit);
   const servingGrams = 'servingGrams' in food ? Number(food.servingGrams) : null;
   const hasServingGrams = servingGrams !== null && Number.isFinite(servingGrams) && servingGrams > 0;
-  const isGramScaledRestaurantServing = normalizedUnit === 'g' && normalizedServingUnit !== 'g' && hasServingGrams;
-  const factor = normalizedUnit === normalizedServingUnit
-    ? quantity / food.servingQuantity
-    : isGramScaledRestaurantServing
-      ? quantity / servingGrams
-      : quantity;
+  const usesServingWeight = ['g', 'oz'].includes(normalizedUnit) && normalizedServingUnit !== 'g' && hasServingGrams;
+  const providerServingQuantity = usesServingWeight
+    ? servingGrams ?? food.servingQuantity
+    : food.servingQuantity;
+  const providerServingUnit = usesServingWeight
+    ? 'g'
+    : normalizedServingUnit;
+  const scaling = computeServingScaleFactor({
+    requestedQuantity: quantity,
+    requestedUnit: normalizedUnit,
+    providerServingQuantity,
+    providerServingUnit,
+  });
+  const factor = scaling?.scaleFactor ?? 1;
+  const displayQuantity = scaling ? quantity : food.servingQuantity;
+  const displayUnit = scaling ? normalizedUnit : normalizedServingUnit;
   const baseNote = formatSourceNote(food);
+  const incompatibleServing = !scaling;
 
   return {
     food_name: food.canonicalName,
-    quantity,
-    unit: normalizedUnit,
+    quantity: displayQuantity,
+    unit: displayUnit,
     calories: Math.round(food.calories * factor * 100) / 100,
     protein: Math.round(food.protein * factor * 100) / 100,
     carbs: Math.round(food.carbs * factor * 100) / 100,
@@ -212,15 +224,24 @@ export function scaleCatalogFood(food: CatalogFoodRecord, quantity: number, unit
     fiber: Math.round(food.fiber * factor * 100) / 100,
     sugar: Math.round(food.sugar * factor * 100) / 100,
     sodium: Math.round(food.sodium * factor * 100) / 100,
-    notes: isGramScaledRestaurantServing
-      ? `${baseNote}. Scaled from the restaurant serving (${food.servingQuantity} ${food.servingUnit}, about ${servingGrams} g).`
-      : baseNote,
-    is_trusted: true,
+    notes: incompatibleServing
+      ? `${baseNote}. The requested ${quantity} ${normalizedUnit} could not be converted from ${food.servingQuantity} ${food.servingUnit}; review the provider serving before saving.`
+      : usesServingWeight
+        ? `${baseNote}. Scaled from the provider serving (${food.servingQuantity} ${food.servingUnit}, about ${servingGrams} g).`
+        : baseNote,
+    is_trusted: !incompatibleServing,
     source_type: (source?.sourceType as ParsedFoodItem['source_type']) ?? null,
     source_name: source?.name ?? null,
-    confidence_label: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'Verified' : source?.brand ? 'Verified' : 'Matched',
+    confidence_label: incompatibleServing
+      ? 'Estimated'
+      : source?.sourceType === 'OFFICIAL_RESTAURANT'
+        ? 'Verified'
+        : source?.brand
+          ? 'Verified'
+          : 'Matched',
     match_type: source?.sourceType === 'OFFICIAL_RESTAURANT' ? 'exact_restaurant' : source?.brand ? 'exact_branded' : 'verified_database',
     catalog_food_id: food.id,
+    review_status: incompatibleServing ? 'required' : undefined,
     userQuantity: quantity,
     userUnit: normalizedUnit,
   };

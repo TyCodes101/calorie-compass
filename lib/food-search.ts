@@ -15,7 +15,8 @@ import {
 import { normalizeFoodQuery } from '@/lib/nutrition/normalizeFoodQuery';
 import { defaultNutritionProviders } from '@/lib/nutrition/providerRegistry';
 import { NutritionProviderError } from '@/lib/nutrition/providers/providerHttp';
-import type { NutritionLookupProvider } from '@/lib/nutrition/types';
+import { isCountableServingUnit, normalizeServingUnit } from '@/lib/nutrition/scaling';
+import type { NormalizedFoodQuery, NutritionLookupProvider } from '@/lib/nutrition/types';
 
 export type FoodSearchSourceLabel =
   | 'Brand verified'
@@ -385,9 +386,36 @@ function materiallyDisagrees(left: FoodSearchResult, right: FoodSearchResult) {
 
 function conflictsWithExplicitBrand(query: string, result: FoodSearchResult, resolvedBrand?: string | null) {
   const requestedBrand = normalizeFoodQuery(query).brandHint ?? resolvedBrand;
-  const candidateBrand = result.restaurant ?? result.brand;
-  if (!requestedBrand || !candidateBrand) return false;
-  return normalizeSearchText(requestedBrand) !== normalizeSearchText(candidateBrand);
+  if (!requestedBrand) return false;
+
+  const requested = compactSearchText(requestedBrand);
+  const candidate = compactSearchText(`${result.restaurant ?? ''} ${result.brand ?? ''} ${result.name}`);
+  return !candidate.includes(requested);
+}
+
+function conflictsWithPreparationOrContext(query: string, result: FoodSearchResult) {
+  const normalizedQuery = normalizeSearchText(query);
+  const candidate = normalizeSearchText([
+    result.name,
+    result.brand ?? '',
+    result.restaurant ?? '',
+    ...result.items.map((item) => item.food_name),
+  ].join(' '));
+  const brandHint = normalizeFoodQuery(query).brandHint;
+
+  if (!brandHint && result.restaurant && !candidate.includes(normalizedQuery)) {
+    return true;
+  }
+
+  const conflicts: Array<{ requested: RegExp; rejected: RegExp }> = [
+    { requested: /\braw\b/, rejected: /\b(?:cooked|grilled|fried|roasted|baked)\b/ },
+    { requested: /\b(?:uncooked|dry)\b/, rejected: /\b(?:cooked|grilled|fried|steamed)\b/ },
+    { requested: /\bcooked\b/, rejected: /\b(?:raw|uncooked|dry)\b/ },
+    { requested: /\bgrilled\b/, rejected: /\b(?:raw|fried)\b/ },
+    { requested: /\bfried\b/, rejected: /\b(?:raw|grilled)\b/ },
+  ];
+
+  return conflicts.some(({ requested, rejected }) => requested.test(normalizedQuery) && rejected.test(candidate));
 }
 
 function dedupeResults(results: FoodSearchResult[]) {
@@ -493,10 +521,14 @@ export function rankFoodSearchResultsByUserHistory({
       index,
       tier: identityTier(query, result),
       identityScore: identityMatchScore(query, result),
+      servingScore: servingCompatibilityScore(query, result),
+      servingQualityScore: implicitServingQualityScore(query, result),
       preference: learnedPreferenceScore(result, favoriteMeals, recentMeals),
     }))
     .sort((left, right) =>
       right.tier - left.tier
+      || right.servingScore - left.servingScore
+      || right.servingQualityScore - left.servingQualityScore
       || right.identityScore - left.identityScore
       || right.preference.score - left.preference.score
       || sourceStrength(right.result) - sourceStrength(left.result)
@@ -509,11 +541,49 @@ export function rankFoodSearchResultsByUserHistory({
     }));
 }
 
+function implicitServingQualityScore(query: string, result: FoodSearchResult) {
+  const requested = normalizeFoodQuery(query);
+  if (requested.quantity !== 1 || requested.quantityUnit) return 0;
+
+  const item = result.items[0];
+  if (!item || result.items.length !== 1) return -20;
+  const unit = normalizeServingUnit(item.unit);
+  const quantity = Number(item.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) return -120;
+  if (item.review_status === 'required' || item.confidence_label === 'Needs Review') return -80;
+  if (unit === 'g' && quantity < 10) return -100;
+  if (unit === 'oz' && quantity < 0.25) return -100;
+  if (item.nutrition_basis?.type === 'per_100g' && unit === 'g' && quantity === 100) return -12;
+  if (isCountableServingUnit(unit)) {
+    return 30;
+  }
+  return 0;
+}
+
+function servingCompatibilityScore(query: string, result: FoodSearchResult) {
+  const requested = normalizeFoodQuery(query);
+  const hasExplicitServing = requested.quantity !== 1 || Boolean(requested.quantityUnit);
+  if (!hasExplicitServing) return 0;
+
+  const item = result.items[0];
+  if (!item) return -80;
+  const requestedUnit = normalizeServingUnit(requested.quantityUnit ?? requested.unitHint);
+  const resultUnit = normalizeServingUnit(item.unit);
+  const resultQuantity = Number(item.quantity);
+  const quantityMatches = Number.isFinite(resultQuantity) && Math.abs(resultQuantity - requested.quantity) < 0.001;
+  const unitMatches = !requestedUnit || requestedUnit === resultUnit;
+
+  if (quantityMatches && unitMatches) return 80;
+  if (quantityMatches) return 20;
+  return -80;
+}
+
 export function catalogFoodToSearchResult(food: SearchCatalogFood, query?: ReturnType<typeof normalizeFoodQuery>): FoodSearchResult {
   const hasRequestedAmount = Boolean(query?.quantityUnit) || (query?.quantity ?? 1) !== 1;
   const quantity = hasRequestedAmount ? query?.quantity ?? food.servingQuantity : food.servingQuantity;
   const unit = hasRequestedAmount ? query?.quantityUnit ?? query?.unitHint ?? food.servingUnit : food.servingUnit;
   const item = scaleCatalogFood(food, quantity, unit);
+  const estimated = isEstimatedItem(item);
   const source = getNutritionSourceById(food.sourceId);
   const sourceLabel = labelForTrustedItem(item, food.brand ?? source?.brand ?? null);
   return {
@@ -534,9 +604,9 @@ export function catalogFoodToSearchResult(food: SearchCatalogFood, query?: Retur
     barcode: food.barcode ?? food.barcodes?.[0] ?? null,
     mealType: 'snack',
     confidenceScore: 1,
-    estimated: false,
-    needsReview: false,
-    reason: null,
+    estimated,
+    needsReview: estimated || item.review_status === 'required' || item.confidence_label === 'Needs Review',
+    reason: item.review_status === 'required' ? item.notes ?? 'Review the requested serving before saving.' : null,
     sourceReusableMealId: null,
     items: [item],
   };
@@ -606,19 +676,22 @@ export function buildFoodSearchResults({
   favoriteMeals,
   recentMeals,
   catalogFoods,
+  requestedQuery,
 }: {
   query: string;
   customFoods: CustomFoodSummary[];
   favoriteMeals: FavoriteMealSummary[];
   recentMeals: FavoriteMealSummary[];
   catalogFoods?: SearchCatalogFood[];
+  requestedQuery?: NormalizedFoodQuery;
 }) {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
 
   const results: FoodSearchResult[] = [];
-  const normalizedQuery = normalizeFoodQuery(trimmed);
-  const identityQueries = [...new Set([trimmed, normalizedQuery.searchText, normalizedQuery.matchedQuery].filter(Boolean))];
+  const identityQuery = normalizeFoodQuery(trimmed);
+  const normalizedQuery = requestedQuery ?? identityQuery;
+  const identityQueries = [...new Set([trimmed, identityQuery.searchText, identityQuery.matchedQuery].filter(Boolean))];
   const matchesIdentity = (value: string) => identityQueries.some((identityQuery) => textMatches(identityQuery, value));
   const activeCatalogFoods = (catalogFoods ?? verifiedCatalogFoodsForLookup()).filter((food) => food.active !== false);
   results.push(
@@ -664,13 +737,30 @@ export function verifiedCatalogFoodsForLookup() {
 
 function applyRequestedModifiers(result: FoodSearchResult, modifiers: string[]) {
   if (!modifiers.length) return result;
+  const reason = 'Nutrition for the requested changes was not verified. Review the base food and modifiers before saving.';
+  const items = result.items.map((item) => {
+    const covered = ['official_component', 'deterministic_database'].includes(item.modifier_resolution ?? '')
+      && modifiers.every((modifier) => item.requested_modifiers?.includes(modifier));
+    const requested_modifiers = [...new Set([...(item.requested_modifiers ?? []), ...modifiers])];
+    if (covered) return { ...item, requested_modifiers };
+    return {
+      ...item,
+      requested_modifiers,
+      modifier_resolution: 'unresolved' as const,
+      review_status: 'required' as const,
+      confidence_label: isEstimatedItem(item) ? 'Estimated' as const : 'Needs Review' as const,
+      is_trusted: false,
+      notes: [...new Set([item.notes, reason].filter(Boolean))].join(' '),
+    };
+  });
+  const unresolved = items.some((item) => item.modifier_resolution === 'unresolved');
   return {
     ...result,
-    items: result.items.map((item) => ({
-      ...item,
-      requested_modifiers: [...new Set([...(item.requested_modifiers ?? []), ...modifiers])],
-      review_status: !item.modifier_resolution ? 'recommended' as const : item.review_status,
-    })),
+    items,
+    needsReview: result.needsReview || unresolved,
+    confidenceScore: unresolved ? Math.min(result.confidenceScore, 0.65) : result.confidenceScore,
+    sourceLabel: unresolved && !result.estimated ? 'Database match' as const : result.sourceLabel,
+    reason: unresolved ? [result.reason, reason].filter(Boolean).join(' ') : result.reason,
   };
 }
 
@@ -787,10 +877,17 @@ async function resolveWithCache(rawQuery: string, ai: FoodSearchAiClient | undef
 
 function searchQueries(originalQuery: string, resolver: FoodSearchResolverOutput | null) {
   const deterministic = normalizeFoodQuery(originalQuery);
+  const deterministicTokens = normalizeSearchText(deterministic.searchText).split(' ').filter(Boolean);
+  const compact = compactSearchText(deterministic.searchText);
+  const useCompactVariant = deterministicTokens.length === 2
+    && deterministicTokens[0]!.length <= 3
+    && deterministicTokens[1]!.length <= 4
+    && compact.length <= 8;
   const values = [
     originalQuery,
     deterministic.searchText,
     deterministic.matchedQuery,
+    useCompactVariant ? compact : null,
     resolver?.normalizedQuery,
     ...(resolver?.aliases ?? []),
   ]
@@ -812,17 +909,32 @@ function providerResultToSearchResult(
   matchedQuery: string,
   resolver: FoodSearchResolverOutput | null,
   deterministicModifiers: string[],
+  requestedQuery: NormalizedFoodQuery,
 ): FoodSearchResult | null {
   if (response.needs_clarification || !response.items.length) return null;
 
   const resolverModifiers = [...new Set([...deterministicModifiers, ...(resolver?.modifiers ?? [])])];
-  const items = response.items.map((item) => ({
-    ...item,
-    requested_modifiers: [...new Set([...(item.requested_modifiers ?? []), ...resolverModifiers])],
-    review_status: resolverModifiers.length && !item.modifier_resolution
-      ? 'recommended' as const
-      : item.review_status,
-  }));
+  let items = response.items;
+  const firstUnreviewed = items[0];
+  const hasExplicitServing = requestedQuery.quantity !== 1 || Boolean(requestedQuery.quantityUnit);
+  const implicitUnit = normalizeServingUnit(firstUnreviewed?.unit);
+  const implicitQuantity = Number(firstUnreviewed?.quantity ?? 0);
+  const ambiguousImplicitServing = !hasExplicitServing
+    && items.length === 1
+    && Number.isFinite(implicitQuantity)
+    && ((implicitUnit === 'g' && implicitQuantity < 10) || (implicitUnit === 'oz' && implicitQuantity < 0.25));
+  const servingReviewReason = ambiguousImplicitServing
+    ? 'The provider returned an unusually small weight instead of a clear serving. Review the package serving before saving.'
+    : null;
+  if (servingReviewReason) {
+    items = items.map((item) => ({
+      ...item,
+      is_trusted: false,
+      confidence_label: 'Needs Review' as const,
+      review_status: 'required' as const,
+      notes: [item.notes, servingReviewReason].filter(Boolean).join(' '),
+    }));
+  }
   const first = items[0];
   if (!first) return null;
 
@@ -835,9 +947,12 @@ function providerResultToSearchResult(
   const calories = roundedTotal(items, 'calories');
   const restaurant = inferRestaurant(name, first, resolver?.restaurantIntent ?? null);
   const brand = restaurant ? null : resolver?.brandIntent ?? null;
+  const providerCandidateIdentity = first.providerCandidateId
+    ?? first.sourceId
+    ?? `${normalizeSearchText(name)}:${calories}:${servingQuantity}:${normalizeSearchText(servingUnit)}`;
 
-  return {
-    id: `provider:${first.provider_used ?? providerId}:${normalizeSearchText(name)}:${calories}:${normalizeSearchText(servingUnit)}`,
+  return applyRequestedModifiers({
+    id: `provider:${first.provider_used ?? providerId}:${normalizeSearchText(String(providerCandidateIdentity))}`,
     name,
     brand,
     restaurant,
@@ -858,16 +973,17 @@ function providerResultToSearchResult(
     needsReview: estimated
       || response.confidence_score < 0.72
       || items.some((item) => item.confidence_label === 'Needs Review' || item.review_status === 'required'),
-    reason: null,
+    reason: servingReviewReason,
     sourceReusableMealId: null,
     items,
-  };
+  }, resolverModifiers);
 }
 
 async function searchProviders(
   queries: string[],
   providers: NutritionLookupProvider[],
   resolver: FoodSearchResolverOutput | null,
+  requestedQuery: NormalizedFoodQuery,
   mealType: ParsedMealResponse['meal_type'],
   trace?: FoodPipelineTrace,
   diagnostics?: FoodSearchDiagnostics,
@@ -910,7 +1026,17 @@ async function searchProviders(
 
     for (const query of queries) {
       queryCount += 1;
-      const normalizedQuery = normalizeFoodQuery(query);
+      const identityQuery = normalizeFoodQuery(query);
+      const normalizedQuery: NormalizedFoodQuery = {
+        ...identityQuery,
+        rawText: requestedQuery.rawText,
+        normalizedText: requestedQuery.normalizedText,
+        quantity: requestedQuery.quantity,
+        quantityUnit: requestedQuery.quantityUnit,
+        unitHint: requestedQuery.unitHint ?? identityQuery.unitHint,
+        brandHint: requestedQuery.brandHint ?? resolver?.brandIntent ?? identityQuery.brandHint,
+        requestedModifiers: requestedQuery.requestedModifiers,
+      };
       try {
         const context = {
           text: query,
@@ -922,7 +1048,7 @@ async function searchProviders(
           ? await provider.searchCandidates(context)
           : [await provider.lookup(context)].filter((response): response is ParsedMealResponse => Boolean(response));
         const results = responses
-          .map((response) => providerResultToSearchResult(response, provider.id, query, resolver, deterministicModifiers))
+          .map((response) => providerResultToSearchResult(response, provider.id, query, resolver, deterministicModifiers, requestedQuery))
           .filter((result): result is FoodSearchResult => Boolean(result));
         if (results.length) {
           diagnostics?.providers.push({
@@ -1085,13 +1211,19 @@ function buildEstimatedFallback(query: string, resolver: FoodSearchResolverOutpu
   };
 }
 
-function localResultsForQueries(input: BuildFoodSearchResponseInput, queries: string[], catalogFoods?: SearchCatalogFood[]) {
+function localResultsForQueries(
+  input: BuildFoodSearchResponseInput,
+  queries: string[],
+  requestedQuery: NormalizedFoodQuery,
+  catalogFoods?: SearchCatalogFood[],
+) {
   return dedupeResults(queries.flatMap((query) => buildFoodSearchResults({
     query,
     customFoods: input.customFoods,
     favoriteMeals: input.favoriteMeals,
     recentMeals: input.recentMeals,
     catalogFoods: catalogFoods ?? input.catalogFoods,
+    requestedQuery,
   })));
 }
 
@@ -1123,11 +1255,12 @@ export async function buildFoodSearchResponse(
 
   const providers = options?.providers ?? defaultNutritionProviders;
   const initialQueries = searchQueries(query, null);
-  let localResults = localResultsForQueries(input, initialQueries, options?.catalogFoods);
+  let localResults = localResultsForQueries(input, initialQueries, deterministicQuery, options?.catalogFoods);
   let providerResults = await searchProviders(
     initialQueries,
     providers,
     null,
+    deterministicQuery,
     input.mealType ?? 'snack',
     options?.trace,
     diagnostics,
@@ -1146,7 +1279,7 @@ export async function buildFoodSearchResponse(
     if (additionalQueries.length) {
       localResults = dedupeResults([
         ...localResults,
-        ...localResultsForQueries(input, additionalQueries, options?.catalogFoods),
+        ...localResultsForQueries(input, additionalQueries, deterministicQuery, options?.catalogFoods),
       ]);
       providerResults = dedupeResults([
         ...providerResults,
@@ -1154,6 +1287,7 @@ export async function buildFoodSearchResponse(
           additionalQueries,
           providers,
           resolver,
+          deterministicQuery,
           input.mealType ?? 'snack',
           options?.trace,
           diagnostics,
@@ -1165,10 +1299,12 @@ export async function buildFoodSearchResponse(
   }
 
   const usedResolver = Boolean(resolver);
-  const acceptedResults = combinedResults.filter((result) => !conflictsWithExplicitBrand(query, result, resolver?.brandIntent));
+  const acceptedResults = combinedResults.filter((result) =>
+    !conflictsWithExplicitBrand(query, result, resolver?.brandIntent)
+    && !conflictsWithPreparationOrContext(query, result));
   const rejectedResults = combinedResults.length - acceptedResults.length;
   let results = rankFoodSearchResultsByUserHistory({
-    query: resolver?.normalizedQuery ?? deterministicQuery.matchedQuery ?? query,
+    query,
     results: acceptedResults,
     favoriteMeals: input.favoriteMeals,
     recentMeals: input.recentMeals,
@@ -1196,7 +1332,7 @@ export async function buildFoodSearchResponse(
   }
 
   results = rankFoodSearchResultsByUserHistory({
-    query: resolver?.normalizedQuery ?? deterministicQuery.matchedQuery ?? query,
+    query,
     results,
     favoriteMeals: input.favoriteMeals,
     recentMeals: input.recentMeals,
